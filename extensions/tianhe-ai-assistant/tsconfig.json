@@ -1,0 +1,40 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./out",
+    "rootDir": "./src",
+    "module": "commonjs",
+    "target": "ES2021",
+    "lib": ["ES2021"],
+    "sourceMap": true,
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "types": ["node"],
+    "baseUrl": "./src",
+    "paths": {
+      "@roo-code/types": ["./packages/types"],
+      "@roo-code/types/*": ["./packages/types/*"],
+      "@roo-code/telemetry": ["./packages/telemetry"],
+      "@roo-code/telemetry/*": ["./packages/telemetry/*"],
+      "@roo-code/cloud": ["./packages/cloud"],
+      "@roo-code/cloud/*": ["./packages/cloud/*"]
+    }
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "out",
+    "webview-ui",
+    "src/**/__tests__",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts"
+  ]
+}

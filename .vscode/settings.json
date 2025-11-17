@@ -1,0 +1,6 @@
+{
+  "editor.inlineSuggest.enabled": true,
+  "editor.inlineSuggest.showToolbar": "onHover",
+  "zhikai.ai.model": "qwen-coder-turbo",
+  "zhikai.ai.enableCache": true
+}
