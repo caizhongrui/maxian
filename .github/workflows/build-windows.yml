@@ -1,0 +1,74 @@
+# GitHub Actions - Windows 构建工作流
+name: Build Windows Installer
+
+on:
+  push:
+    branches: [ main, maxian-agent-release, day2-complete-kilocode-migration ]
+  pull_request:
+    branches: [ main, maxian-agent-release ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 1
+
+    - name: 设置 Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+
+    - name: 安装依赖
+      run: npm install
+      env:
+        ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+    - name: 下载内置扩展
+      run: npm run download-builtin-extensions
+      continue-on-error: true
+
+    - name: 编译构建
+      run: npm run compile-build
+
+    - name: 编译扩展
+      run: npm run compile-extensions-build
+
+    - name: 构建 Windows 客户端 (x64)
+      run: |
+        npm run gulp vscode-win32-x64-min-ci
+        npm run gulp vscode-win32-x64-inno-updater
+
+    - name: 生成系统级安装包
+      run: npm run gulp vscode-win32-x64-system-setup
+
+    - name: 生成用户级安装包
+      run: npm run gulp vscode-win32-x64-user-setup
+
+    - name: 上传系统级安装包
+      uses: actions/upload-artifact@v3
+      with:
+        name: tianhe-zhikai-system-setup-x64
+        path: .build/win32-x64/system-setup/VSCodeSetup.exe
+        if-no-files-found: error
+
+    - name: 上传用户级安装包
+      uses: actions/upload-artifact@v3
+      with:
+        name: tianhe-zhikai-user-setup-x64
+        path: .build/win32-x64/user-setup/VSCodeSetup.exe
+        if-no-files-found: error
+
+    - name: 构建信息
+      run: |
+        echo "构建完成！"
+        echo "系统级安装包: .build/win32-x64/system-setup/VSCodeSetup.exe"
+        echo "用户级安装包: .build/win32-x64/user-setup/VSCodeSetup.exe"
+        dir .build\win32-x64\system-setup\
+        dir .build\win32-x64\user-setup\

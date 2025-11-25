@@ -1,0 +1,67 @@
+# GitLab CI/CD - Windows 构建配置
+# 用于在 GitLab Runner (Windows) 上自动构建 Windows 安装包
+
+stages:
+  - build
+  - package
+
+# 环境变量
+variables:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+  NODE_VERSION: "20.x"
+
+# Windows 构建任务
+build-windows-x64:
+  stage: build
+  tags:
+    - windows  # 需要配置 Windows Runner
+  script:
+    # 1. 安装依赖
+    - npm install
+
+    # 2. 下载内置扩展（可选）
+    - npm run download-builtin-extensions || echo "下载扩展失败，继续构建"
+
+    # 3. 编译项目
+    - npm run compile-build
+    - npm run compile-extensions-build
+
+    # 4. 构建客户端
+    - npm run gulp vscode-win32-x64-min-ci
+    - npm run gulp vscode-win32-x64-inno-updater
+  artifacts:
+    paths:
+      - .build/VSCode-win32-x64/
+    expire_in: 1 day
+
+# 打包任务
+package-windows-x64:
+  stage: package
+  tags:
+    - windows
+  dependencies:
+    - build-windows-x64
+  script:
+    # 生成系统级安装包
+    - npm run gulp vscode-win32-x64-system-setup
+
+    # 生成用户级安装包
+    - npm run gulp vscode-win32-x64-user-setup
+
+    # 显示构建结果
+    - dir .build\win32-x64\system-setup\
+    - dir .build\win32-x64\user-setup\
+  artifacts:
+    name: "tianhe-zhikai-windows-installer-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - .build/win32-x64/system-setup/VSCodeSetup.exe
+      - .build/win32-x64/user-setup/VSCodeSetup.exe
+    expire_in: 7 days
+
+# 仅在特定分支触发
+only:
+  - main
+  - maxian-agent-release
+  - day2-complete-kilocode-migration
+  - tags
