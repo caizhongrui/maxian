@@ -564,6 +564,8 @@ export class TaskService extends Disposable {
 				break;
 			}
 
+			console.log('[TaskService] 收到chunk:', chunk.type); // 添加调试日志
+
 			if (chunk.type === 'text') {
 				assistantMessage += chunk.text;
 				this._onStreamChunk.fire({ text: chunk.text, isPartial: true });
@@ -578,6 +580,7 @@ export class TaskService extends Disposable {
 
 				toolUses.push({ id: chunk.id, name: chunk.name, input });
 			} else if (chunk.type === 'usage') {
+				console.log('[TaskService] 收到usage chunk:', chunk); // 添加调试日志
 				this.updateTokenUsage(chunk);
 			} else if (chunk.type === 'error') {
 				console.error('[TaskService] API错误:', chunk.error);

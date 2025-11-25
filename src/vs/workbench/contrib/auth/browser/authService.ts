@@ -98,15 +98,27 @@ export class AuthService extends Disposable implements IAuthService {
 
 			const data: any = await response.json();
 
-			// 处理后端响应：{ code: 200, msg: "操作成功", data: true/false }
-			// data 为 true 表示登录成功，false 表示登录失败
+			// 处理后端响应：{ code: 200, msg: "操作成功", data: {...} }
+			// data 包含用户信息和权限配置
 			if (!data || data.code !== 200) {
 				throw new Error(data?.msg || '登录失败：服务器错误');
 			}
 
-			if (data.data !== true && data.data !== 'true') {
+			// 兼容旧格式(data为true/false)和新格式(data为对象)
+			const isOldFormat = typeof data.data === 'boolean' || data.data === 'true' || data.data === 'false';
+
+			if (isOldFormat) {
+				// 旧格式：data.data 为 true/false
+				if (data.data !== true && data.data !== 'true') {
+					throw new Error('登录失败：用户名或密码错误');
+				}
+			} else if (!data.data) {
+				// 新格式但data为空
 				throw new Error('登录失败：用户名或密码错误');
 			}
+
+			// 从响应中提取用户信息和权限
+			const responseData = isOldFormat ? {} : (data.data || {});
 
 			// 构造标准的 LoginResponse（简化版，不需要真实的 token）
 			const loginResponse: LoginResponse = {
@@ -115,11 +127,12 @@ export class AuthService extends Disposable implements IAuthService {
 				tokenType: 'Bearer',
 				expiresIn: 86400, // 默认 24 小时
 				user: {
-					id: data.user?.id || data.id || request.username,
+					id: responseData.id || data.user?.id || data.id || request.username,
 					username: request.username,
-					displayName: data.user?.displayName || data.displayName || data.name || request.username,
-					email: data.user?.email || data.email || '',
-					avatar: data.user?.avatar || data.avatar
+					displayName: responseData.displayName || data.user?.displayName || data.displayName || data.name || request.username,
+					email: responseData.email || data.user?.email || data.email || '',
+					avatar: responseData.avatar || data.user?.avatar || data.avatar,
+					agentPermission: responseData.agentPermission // 提取 agentPermission 字段
 				}
 			};
 

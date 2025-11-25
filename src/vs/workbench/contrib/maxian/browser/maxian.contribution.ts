@@ -19,6 +19,8 @@ import { IModelService } from '../../../../editor/common/services/model.js';
 import { ITextModel } from '../../../../editor/common/model.js';
 import { URI } from '../../../../base/common/uri.js';
 import { MAXIAN_DIFF_VIEW_URI_SCHEME } from './diffViewProvider.js';
+import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
+import { IAIService } from '../../../../platform/ai/common/ai.js';
 
 // 确保ripgrep服务被注册（导入副作用）
 import '../../../services/ripgrep/browser/ripgrep.contribution.js';
@@ -137,3 +139,35 @@ registerWorkbenchContribution2(
 	MaxianDiffContentProvider,
 	WorkbenchPhase.BlockStartup
 );
+
+// ====== 注册 AI 生成提交信息命令 ======
+CommandsRegistry.registerCommand('zhikai.ai.generateCommitMessage', async (accessor, prompt: string) => {
+	console.log('[Git] AI 生成提交信息请求, prompt length:', prompt.length);
+
+	try {
+		// 获取 AI 服务
+		const aiService = accessor.get(IAIService);
+
+		// 调用 AI 服务生成提交信息
+		// 使用 'business' 类型,因为生成提交信息是一个业务场景的代码生成任务
+		const result = await aiService.generate({
+			type: 'business',         // 使用业务类型
+			requirement: prompt,      // 将 git diff 和提示作为需求传入
+			language: 'text',         // 语言类型设置为 text (提交信息是纯文本)
+			context: {
+				task: 'generate-commit-message',
+				description: '根据 git diff 生成简洁的中文提交信息'
+			}
+		});
+
+		console.log('[Git] AI 生成提交信息成功, length:', result.code?.length || 0);
+
+		// 返回生成的提交信息
+		return result.code || '';
+
+	} catch (error) {
+		console.error('[Git] AI 生成提交信息失败:', error);
+		// 失败时返回空字符串,让 Git 扩展使用简单版本的生成
+		return '';
+	}
+});

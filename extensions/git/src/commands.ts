@@ -2288,6 +2288,38 @@ export class CommandCenter {
 		await this.smartCommit(repository, getCommitMessage, opts);
 	}
 
+	@command('git.generateCommitMessage', { repository: true })
+	async generateCommitMessage(repository: Repository): Promise<void> {
+		// 只在输入框为空时自动生成
+		if (repository.inputBox.value.trim().length > 0) {
+			return;
+		}
+
+		try {
+			// 使用进度提示显示加载效果
+			await window.withProgress({
+				location: ProgressLocation.Notification,
+				title: 'Git',
+				cancellable: false
+			}, async (progress) => {
+				progress.report({ message: '正在分析代码变更...' });
+
+				// 调用生成方法
+				const message = await repository.generateCommitMessage();
+
+				if (message) {
+					progress.report({ message: '提交信息已生成' });
+					repository.inputBox.value = message;
+				} else {
+					progress.report({ message: '未检测到代码变更' });
+				}
+			});
+		} catch (err) {
+			console.error('生成提交信息失败:', err);
+			window.showErrorMessage('生成提交信息失败: ' + (err as Error).message);
+		}
+	}
+
 	@command('git.commit', { repository: true })
 	async commit(repository: Repository, postCommitCommand?: string | null): Promise<void> {
 		await this.commitWithAnyInput(repository, { postCommitCommand });

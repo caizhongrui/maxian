@@ -293,6 +293,13 @@
         "enablement": "!operationInProgress"
       },
       {
+        "command": "git.generateCommitMessage",
+        "title": "生成提交信息",
+        "category": "Git",
+        "icon": "$(edit)",
+        "enablement": "!operationInProgress"
+      },
+      {
         "command": "git.commit",
         "title": "%command.commit%",
         "category": "Git",
@@ -1479,6 +1486,11 @@
         }
       ],
       "scm/title": [
+        {
+          "command": "git.generateCommitMessage",
+          "group": "navigation",
+          "when": "scmProvider == git"
+        },
         {
           "command": "git.commit",
           "group": "navigation",

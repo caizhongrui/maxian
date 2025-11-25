@@ -4,213 +4,243 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
-import { IAIService, AIGenerationRequest, AIGeneratedCode, AICodeModification, AIStreamCallback } from '../../../../platform/ai/common/ai.js';
+import { IAIService, AIGenerationRequest, AIGeneratedCode, AICodeModification, AIStreamCallback, AIResponse, AIUsage } from '../../../../platform/ai/common/ai.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { IRequestService, asJson } from '../../../../platform/request/common/request.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
+import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
+import { IAILogService } from '../../../../platform/aiLog/common/aiLog.js';
 
 export class AIService implements IAIService {
 
 	declare readonly _serviceBrand: undefined;
 
+	private credentials: { username: string; password: string } | undefined;
+	private currentTraceId: string | null = null;
+	private currentCallStartTime: Date | null = null;
+
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ILogService private readonly logService: ILogService,
-		@IRequestService private readonly requestService: IRequestService
+		@IRequestService private readonly requestService: IRequestService,
+		@IStorageService private readonly storageService: IStorageService,
+		@IAILogService private readonly aiLogService: IAILogService
 	) {
 		this.logService.info('[AI Service] Initialized');
+		this.credentials = this.loadAuthCredentials();
+	}
+
+	/**
+	 * 从 StorageService 加载认证凭据
+	 */
+	private loadAuthCredentials(): { username: string; password: string } | undefined {
+		try {
+			const stored = this.storageService.get('zhikai.auth.credentials', StorageScope.APPLICATION);
+			if (!stored) {
+				this.logService.warn('[AI Service] 未找到认证凭据，AI功能将不可用');
+				return undefined;
+			}
+
+			const parsed = JSON.parse(stored);
+			if (parsed && parsed.username && parsed.password) {
+				this.logService.info('[AI Service] 成功加载认证凭据，将使用AI代理服务');
+				return { username: parsed.username, password: parsed.password };
+			}
+			return undefined;
+		} catch (error) {
+			this.logService.error('[AI Service] 加载认证凭据失败:', error);
+			return undefined;
+		}
 	}
 
 	async complete(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string }): Promise<string> {
-		const apiKey = this.configurationService.getValue<string>('zhikai.ai.apiKey') || 'sk-aa9ecd1fe4c04d90abe9e3a59b92dc62';
-		const model = this.configurationService.getValue<string>('zhikai.ai.model') || 'qwen-coder-turbo';
-		const endpoint = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+		const response = await this.completeWithUsage(prompt, options);
+		return response.content;
+	}
+
+	async completeWithUsage(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string }): Promise<AIResponse> {
+		const model = this.configurationService.getValue<string>('zhikai.ai.model') || 'qwen-plus';
+		const provider = this.configurationService.getValue<string>('zhikai.ai.provider') || 'qwen';
+		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
 
 		// 优化的默认参数
-		// temperature: 0.1-0.2 适合代码补全（更确定性，减少随机性）
-		// temperature: 0.3-0.5 适合注释生成
-		// temperature: 0.5-0.7 适合创意代码生成
-		const temperature = options?.temperature ?? 0.15;  // 降低到 0.15，更精确的代码补全
-		const maxTokens = options?.maxTokens ?? 1000;  // 增加到 1000，支持更长补全
+		const temperature = options?.temperature ?? 0.15;
+		const maxTokens = options?.maxTokens ?? 1000;
 		const systemMessage = options?.systemMessage;
 
-		this.logService.info('[AI Service] Calling Qwen API, prompt length:', prompt.length);
+		// 构建消息数组
+		const messages: any[] = [];
+		if (systemMessage) {
+			messages.push({ role: 'system', content: systemMessage });
+		}
+		messages.push({ role: 'user', content: prompt });
+
+		// 初始化日志追踪
+		this.currentTraceId = this.generateTraceId();
+		this.currentCallStartTime = new Date();
+
+		// 必须使用代理服务
+		if (!apiUrl || !this.credentials) {
+			const errorMsg = '未配置 AI 代理服务。请先登录或配置 zhikai.auth.apiUrl';
+			this.logService.error('[AI Service] ' + errorMsg);
+
+			// 记录失败日志
+			await this.logAICall({
+				provider: provider,
+				model: model,
+				operation: 'chat',
+				mode: 'code_action',
+				status: 'failed',
+				errorMessage: errorMsg
+			});
+
+			return { content: 'Error: ' + errorMsg };
+		}
+
+		// 使用AI代理服务
+		this.logService.info('[AI Service] 使用AI代理服务');
+		return this.completeWithProxy(apiUrl, provider, model, messages, temperature, maxTokens);
+	}
+
+	/**
+	 * 使用AI代理服务完成（推荐）
+	 */
+	private async completeWithProxy(
+		apiUrl: string,
+		provider: string,
+		model: string,
+		messages: any[],
+		temperature: number,
+		maxTokens: number
+	): Promise<AIResponse> {
+		const endpoint = `${apiUrl.replace(/\/$/, '')}/ai/proxy/chat/completions`;
 
 		try {
-			const messages: any[] = [];
-
-			// 如果有系统消息，先添加（参考Java的system message）
-			if (systemMessage) {
-				messages.push({ role: 'system', content: systemMessage });
-			}
-
-			messages.push({ role: 'user', content: prompt });
-
 			const response = await this.requestService.request({
 				type: 'POST',
 				url: endpoint,
 				headers: {
-					'Content-Type': 'application/json',
-					'Authorization': `Bearer ${apiKey}`
+					'Content-Type': 'application/json'
 				},
 				data: JSON.stringify({
-					model,
+					provider: provider,
+					model: model,
 					messages: messages,
 					temperature: temperature,
-					max_tokens: maxTokens
+					maxTokens: maxTokens,
+					username: btoa(this.credentials!.username),
+					password: btoa(this.credentials!.password)
 				})
 			}, CancellationToken.None);
 
 			const data = await asJson<any>(response);
 
-			if (data && data.choices && data.choices[0]) {
-				const result = data.choices[0].message.content;
-				this.logService.info('[AI Service] API call successful, response length:', result.length);
-				return result;
+			if (data && data.data && data.data.choices && data.data.choices[0]) {
+				const content = data.data.choices[0].message.content;
+				const usage: AIUsage | undefined = data.data.usage ? {
+					promptTokens: data.data.usage.promptTokens || 0,
+					completionTokens: data.data.usage.completionTokens || 0,
+					totalTokens: data.data.usage.totalTokens || 0
+				} : undefined;
+
+				this.logService.info('[AI Service] 代理服务调用成功, response length:', content.length, 'usage:', usage);
+
+				// 记录成功日志
+				await this.logAICall({
+					provider: provider,
+					model: model,
+					operation: 'chat',
+					mode: 'code_action',
+					inputTokens: usage?.promptTokens,
+					outputTokens: usage?.completionTokens,
+					status: 'success'
+				});
+
+				return { content, usage };
 			}
 
-			return 'Error: Invalid API response';
-		} catch (error) {
-			this.logService.error('[AI Service] API call failed:', error);
-			return `Error: ${error}`;
-		}
-	}
+			this.logService.error('[AI Service] 代理服务返回格式错误:', data);
 
-	/**
-	 * 非流式完成（支持 Function Calling）- 千问在流式模式下不返回 tool_calls
-	 */
-	async completeWithTools(
-		messages: Array<{ role: string; content: string; tool_calls?: any[] }>,
-		tools: any[],
-		abortSignal?: AbortSignal
-	): Promise<{ content: string; tool_calls?: any[] }> {
-		const apiKey = this.configurationService.getValue<string>('zhikai.ai.apiKey') || 'sk-aa9ecd1fe4c04d90abe9e3a59b92dc62';
-		const model = this.configurationService.getValue<string>('zhikai.ai.model') || 'qwen-coder-turbo';
-		const endpoint = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-
-		this.logService.info('[AI Service] Calling Qwen with Function Calling (non-streaming)');
-		this.logService.info(`[AI Service] Tools: ${tools.map(t => t.function?.name).join(', ')}`);
-
-		try {
-			const requestBody: any = {
+			// 记录失败日志
+			await this.logAICall({
+				provider: provider,
 				model: model,
-				messages: messages,
-				temperature: 0.7,
-				stream: false // 非流式模式
-			};
-
-			// Add tools
-			if (tools && tools.length > 0) {
-				requestBody.tools = tools;
-				requestBody.tool_choice = 'auto';
-			}
-
-			console.log('[AI Service] Non-streaming request:', JSON.stringify({
-				model: requestBody.model,
-				messages: requestBody.messages.map((m: any) => ({ role: m.role, content: m.content?.substring(0, 50) })),
-				tools: requestBody.tools?.length,
-				tool_choice: requestBody.tool_choice
-			}, null, 2));
-
-			const response = await fetch(endpoint, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'Authorization': `Bearer ${apiKey}`
-				},
-				body: JSON.stringify(requestBody),
-				signal: abortSignal
+				operation: 'chat',
+				mode: 'code_action',
+				status: 'failed',
+				errorMessage: 'Invalid proxy response'
 			});
 
-			if (!response.ok) {
-				throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-			}
+			return { content: 'Error: Invalid proxy response' };
+		} catch (error) {
+			this.logService.error('[AI Service] 代理服务调用失败:', error);
 
-			const data = await response.json();
-			console.log('[AI Service] Response:', JSON.stringify(data, null, 2));
+			// 记录失败日志
+			await this.logAICall({
+				provider: provider,
+				model: model,
+				operation: 'chat',
+				mode: 'code_action',
+				status: 'failed',
+				errorMessage: String(error)
+			});
 
-			const choice = data.choices?.[0];
-			const message = choice?.message;
-
-			if (!message) {
-				throw new Error('Invalid API response: no message');
-			}
-
-			this.logService.info(`[AI Service] Response content length: ${message.content?.length || 0}`);
-			this.logService.info(`[AI Service] Tool calls count: ${message.tool_calls?.length || 0}`);
-
-			if (message.tool_calls && message.tool_calls.length > 0) {
-				console.log('[AI Service] Tool calls:', JSON.stringify(message.tool_calls, null, 2));
-			}
-
-			return {
-				content: message.content || '',
-				tool_calls: message.tool_calls
-			};
-
-		} catch (error: any) {
-			if (error.name === 'AbortError') {
-				this.logService.info('[AI Service] Request aborted by user');
-				throw error;
-			}
-
-			this.logService.error('[AI Service] API call failed:', error);
-			throw error;
+			return { content: `Error: ${error}` };
 		}
 	}
 
-	/**
-	 * 流式完成（支持 Function Calling） - 使用阿里千问SSE流式接口
-	 */
-	async completeStreamWithTools(
-		messages: Array<{ role: string; content: string }>,
-		tools: any[],
-		onChunk: AIStreamCallback,
-		onToolCall?: (toolCalls: any[]) => void,
-		abortSignal?: AbortSignal
-	): Promise<void> {
-		const apiKey = this.configurationService.getValue<string>('zhikai.ai.apiKey') || 'sk-aa9ecd1fe4c04d90abe9e3a59b92dc62';
-		const model = this.configurationService.getValue<string>('zhikai.ai.model') || 'qwen-coder-turbo';
-		const endpoint = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
 
-		this.logService.info('[AI Service] Starting SSE streaming with Function Calling support');
-		this.logService.info(`[AI Service] Tools count: ${tools?.length || 0}`);
-		if (tools && tools.length > 0) {
-			this.logService.info(`[AI Service] Tool names: ${tools.map(t => t.function?.name).join(', ')}`);
+
+	/**
+	 * 流式完成 - 使用AI代理服务
+	 */
+	async completeStream(prompt: string, onChunk: AIStreamCallback, abortSignal?: AbortSignal): Promise<void> {
+		const model = this.configurationService.getValue<string>('zhikai.ai.model') || 'qwen-plus';
+		const provider = this.configurationService.getValue<string>('zhikai.ai.provider') || 'qwen';
+		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
+		const messages = [{ role: 'user', content: prompt }];
+
+		// 必须使用代理服务
+		if (!apiUrl || !this.credentials) {
+			const errorMsg = '未配置 AI 代理服务。请先登录或配置 zhikai.auth.apiUrl';
+			this.logService.error('[AI Service] ' + errorMsg);
+			onChunk({ content: 'Error: ' + errorMsg, isComplete: true });
+			return;
 		}
 
+		this.logService.info('[AI Service] 使用AI代理服务流式响应');
+		return this.completeStreamWithProxy(apiUrl, provider, model, messages, onChunk, abortSignal);
+	}
+
+	/**
+	 * 使用AI代理服务的流式完成
+	 */
+	private async completeStreamWithProxy(
+		apiUrl: string,
+		provider: string,
+		model: string,
+		messages: any[],
+		onChunk: AIStreamCallback,
+		abortSignal?: AbortSignal
+	): Promise<void> {
+		const endpoint = `${apiUrl.replace(/\/$/, '')}/ai/proxy/stream/chat/completions`;
+
 		try {
-			const requestBody: any = {
-				model: model,
-				messages: messages,
-				temperature: 0.7,
-				stream: true,
-				stream_options: { include_usage: false }
-			};
-
-			// Add tools if provided
-			if (tools && tools.length > 0) {
-				requestBody.tools = tools;
-				requestBody.tool_choice = 'auto'; // Let AI decide when to use tools
-				this.logService.info('[AI Service] Function Calling enabled with tool_choice: auto');
-			}
-
-			// Log request body (for debugging)
-			console.log('[AI Service] Request body:', JSON.stringify({
-				model: requestBody.model,
-				messages: requestBody.messages.map((m: any) => ({ role: m.role, content_length: m.content?.length || 0 })),
-				tools: requestBody.tools?.length || 0,
-				tool_choice: requestBody.tool_choice
-			}, null, 2));
-
 			const response = await fetch(endpoint, {
 				method: 'POST',
 				headers: {
-					'Content-Type': 'application/json',
-					'Authorization': `Bearer ${apiKey}`
+					'Content-Type': 'application/json'
 				},
-				body: JSON.stringify(requestBody),
+				body: JSON.stringify({
+					provider: provider,
+					model: model,
+					messages: messages,
+					temperature: 0.7,
+					stream: true,
+					username: btoa(this.credentials!.username),
+					password: btoa(this.credentials!.password)
+				}),
 				signal: abortSignal
 			});
 
@@ -226,7 +256,7 @@ export class AIService implements IAIService {
 			const decoder = new TextDecoder('utf-8');
 			let buffer = '';
 			let fullContent = '';
-			let toolCalls: any[] = [];
+			let usage: AIUsage | undefined;
 
 			while (true) {
 				const { done, value } = await reader.read();
@@ -247,172 +277,8 @@ export class AIService implements IAIService {
 						const data = line.substring(6).trim();
 
 						if (data === '[DONE]') {
-							// Send tool calls if any
-							if (toolCalls.length > 0 && onToolCall) {
-								console.log('[AI Service] Sending tool calls to handler:', toolCalls.length);
-								onToolCall(toolCalls);
-							} else {
-								console.log('[AI Service] No tool calls detected in this response');
-							}
-
-							onChunk({
-								content: fullContent,
-								isComplete: true
-							});
-							this.logService.info('[AI Service] SSE streaming completed');
-							return;
-						}
-
-						try {
-							const json = JSON.parse(data);
-							const delta = json.choices?.[0]?.delta;
-
-							// Debug: Log delta structure
-							if (delta && Object.keys(delta).length > 0) {
-								console.log('[AI Service] Delta keys:', Object.keys(delta));
-								if (delta.content) {
-									console.log('[AI Service] Delta has content:', delta.content.substring(0, 50));
-								}
-								if (delta.tool_calls) {
-									console.log('[AI Service] Delta has tool_calls:', JSON.stringify(delta.tool_calls));
-								}
-							}
-
-							// Handle text content
-							if (delta?.content) {
-								fullContent += delta.content;
-								onChunk({
-									content: fullContent,
-									isComplete: false
-								});
-							}
-
-							// Handle tool calls
-							if (delta?.tool_calls) {
-								console.log('[AI Service] Tool calls detected:', delta.tool_calls);
-
-								for (const toolCallDelta of delta.tool_calls) {
-									const index = toolCallDelta.index;
-
-									if (!toolCalls[index]) {
-										toolCalls[index] = {
-											id: toolCallDelta.id || `call_${index}`,
-											type: 'function',
-											function: {
-												name: toolCallDelta.function?.name || '',
-												arguments: toolCallDelta.function?.arguments || ''
-											}
-										};
-										console.log(`[AI Service] New tool call [${index}]:`, toolCalls[index].function.name);
-									} else {
-										// Append to existing tool call
-										if (toolCallDelta.function?.arguments) {
-											toolCalls[index].function.arguments += toolCallDelta.function.arguments;
-										}
-									}
-								}
-							}
-
-						} catch (e) {
-							this.logService.warn('[AI Service] Failed to parse SSE chunk:', e);
-						}
-					}
-				}
-			}
-
-			// Send tool calls if any
-			if (toolCalls.length > 0 && onToolCall) {
-				onToolCall(toolCalls);
-			}
-
-			onChunk({
-				content: fullContent,
-				isComplete: true
-			});
-			this.logService.info('[AI Service] SSE streaming finished');
-
-		} catch (error: any) {
-			if (error.name === 'AbortError') {
-				this.logService.info('[AI Service] SSE streaming aborted by user');
-				return;
-			}
-
-			this.logService.error('[AI Service] SSE streaming failed:', error);
-			onChunk({
-				content: `抱歉，流式响应失败: ${error}`,
-				isComplete: true
-			});
-		}
-	}
-
-	/**
-	 * 流式完成 - 使用阿里千问SSE流式接口
-	 */
-	async completeStream(prompt: string, onChunk: AIStreamCallback, abortSignal?: AbortSignal): Promise<void> {
-		const apiKey = this.configurationService.getValue<string>('zhikai.ai.apiKey') || 'sk-aa9ecd1fe4c04d90abe9e3a59b92dc62';
-		const model = this.configurationService.getValue<string>('zhikai.ai.model') || 'qwen-coder-turbo';
-		const endpoint = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-
-		this.logService.info('[AI Service] Starting real SSE streaming completion');
-
-		try {
-			const response = await fetch(endpoint, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'Authorization': `Bearer ${apiKey}`
-				},
-				body: JSON.stringify({
-					model: model,
-					messages: [{ role: 'user', content: prompt }],
-					temperature: 0.7,
-					stream: true, // 启用流式响应
-					stream_options: { include_usage: false }
-				}),
-				signal: abortSignal // 支持取消请求
-			});
-
-			if (!response.ok) {
-				throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-			}
-
-			const reader = response.body?.getReader();
-			if (!reader) {
-				throw new Error('No response body reader available');
-			}
-
-			const decoder = new TextDecoder('utf-8');
-			let buffer = '';
-			let fullContent = '';
-
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) {
-					break;
-				}
-
-				// 解码数据块
-				buffer += decoder.decode(value, { stream: true });
-
-				// 处理所有完整的SSE消息
-				const lines = buffer.split('\n');
-				buffer = lines.pop() || ''; // 保留不完整的行
-
-				for (const line of lines) {
-					if (!line.trim() || line.startsWith(':')) {
-						continue; // 跳过空行和注释
-					}
-
-					if (line.startsWith('data: ')) {
-						const data = line.substring(6).trim();
-
-						// 检查是否是结束标记
-						if (data === '[DONE]') {
-							onChunk({
-								content: fullContent,
-								isComplete: true
-							});
-							this.logService.info('[AI Service] SSE streaming completed');
+							onChunk({ content: fullContent, isComplete: true, usage });
+							this.logService.info('[AI Service] 代理服务流式响应完成, usage:', usage);
 							return;
 						}
 
@@ -420,41 +286,40 @@ export class AIService implements IAIService {
 							const json = JSON.parse(data);
 							const delta = json.choices?.[0]?.delta?.content;
 
+							// 提取文本内容
 							if (delta) {
 								fullContent += delta;
-								onChunk({
-									content: fullContent,
-									isComplete: false
-								});
+								onChunk({ content: fullContent, isComplete: false });
+							}
+
+							// 提取usage信息（通常在最后一个chunk中）
+							if (json.usage) {
+								usage = {
+									promptTokens: json.usage.promptTokens || json.usage.prompt_tokens || 0,
+									completionTokens: json.usage.completionTokens || json.usage.completion_tokens || 0,
+									totalTokens: json.usage.totalTokens || json.usage.total_tokens || 0
+								};
 							}
 						} catch (e) {
-							this.logService.warn('[AI Service] Failed to parse SSE chunk:', e);
+							this.logService.warn('[AI Service] Failed to parse proxy SSE chunk:', e);
 						}
 					}
 				}
 			}
 
-			// 如果正常结束但没收到[DONE]
-			onChunk({
-				content: fullContent,
-				isComplete: true
-			});
-			this.logService.info('[AI Service] SSE streaming finished');
+			onChunk({ content: fullContent, isComplete: true, usage });
+			this.logService.info('[AI Service] 代理服务流式响应结束, usage:', usage);
 
 		} catch (error: any) {
-			// 如果是用户主动取消，不显示错误
 			if (error.name === 'AbortError') {
-				this.logService.info('[AI Service] SSE streaming aborted by user');
+				this.logService.info('[AI Service] 代理服务流式响应被用户中止');
 				return;
 			}
-
-			this.logService.error('[AI Service] SSE streaming failed:', error);
-			onChunk({
-				content: `抱歉，流式响应失败: ${error}`,
-				isComplete: true
-			});
+			this.logService.error('[AI Service] 代理服务流式响应失败:', error);
+			onChunk({ content: `抱歉，流式响应失败: ${error}`, isComplete: true });
 		}
 	}
+
 
 	async generate(request: AIGenerationRequest, token?: any): Promise<AIGeneratedCode> {
 		this.logService.info('[AI Service] Generating code, type:', request.type);
@@ -814,6 +679,65 @@ ${contextSection}
 				comment = comment + '\n*/';
 			}
 			return comment;
+		}
+	}
+
+	/**
+	 * 生成追踪ID (UUID v4)
+	 */
+	private generateTraceId(): string {
+		return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+			const r = Math.random() * 16 | 0;
+			const v = c === 'x' ? r : (r & 0x3 | 0x8);
+			return v.toString(16);
+		});
+	}
+
+	/**
+	 * 获取用户邮箱
+	 */
+	private getUserEmail(): string | undefined {
+		return this.credentials?.username;
+	}
+
+	/**
+	 * 记录AI调用日志
+	 */
+	private async logAICall(options: {
+		provider: string;
+		model: string;
+		operation: string;
+		mode: string;
+		inputTokens?: number;
+		outputTokens?: number;
+		status: 'success' | 'failed';
+		errorMessage?: string;
+	}): Promise<void> {
+		if (!this.currentTraceId || !this.currentCallStartTime) {
+			return;
+		}
+
+		try {
+			const endTime = new Date();
+			const durationMs = endTime.getTime() - this.currentCallStartTime.getTime();
+
+			await this.aiLogService.logAICall({
+				traceId: this.currentTraceId,
+				userEmail: this.getUserEmail(),
+				provider: options.provider,
+				model: options.model,
+				operation: options.operation,
+				mode: options.mode,
+				inputTokens: options.inputTokens,
+				outputTokens: options.outputTokens,
+				durationMs: durationMs,
+				status: options.status,
+				errorMessage: options.errorMessage,
+				startTime: this.currentCallStartTime,
+				endTime: endTime
+			});
+		} catch (error) {
+			this.logService.error('[AI Service] 记录AI调用日志失败:', error);
 		}
 	}
 }

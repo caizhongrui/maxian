@@ -15,11 +15,13 @@ import { IThemeService } from '../../../../platform/theme/common/themeService.js
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { IMaxianService } from './maxianService.js';
-import { $, append } from '../../../../base/browser/dom.js';
+import { $, append, clearNode } from '../../../../base/browser/dom.js';
+import { ISecretStorageService } from '../../../../platform/secrets/common/secrets.js';
 import { getAllModes, DEFAULT_MODE, type Mode } from '../common/modes/modeTypes.js';
 import { MarkdownRendererDom } from './markdownRendererDom.js';
 import { FileAccess } from '../../../../base/common/network.js';
 import { ClineMessage } from '../common/task/taskTypes.js';
+import { IAuthService } from '../../auth/common/authService.js';
 
 /**
  * 码弦 Agent 视图面板
@@ -40,6 +42,14 @@ export class MaxianView extends ViewPane {
 	private clearButton!: HTMLButtonElement; // 清空对话按钮
 	// @ts-ignore used in handleConversationCleared
 	private welcomeElement: HTMLElement | null = null; // 欢迎消息元素引用
+	private knowledgeBaseSelector!: HTMLSelectElement; // 知识库选择器
+	private selectedKnowledgeBaseId: string | null = null; // 当前选中的知识库ID
+	private knowledgeBases: Array<{
+		id: string;
+		applicationName: string;
+		applicationUrl: string;
+		applicationKey: string;
+	}> = []; // 知识库列表
 
 	constructor(
 		options: IViewPaneOptions,
@@ -53,7 +63,9 @@ export class MaxianView extends ViewPane {
 		@IThemeService themeService: IThemeService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IHoverService hoverService: IHoverService,
-		@IMaxianService private readonly maxianService: IMaxianService
+		@IMaxianService private readonly maxianService: IMaxianService,
+		@ISecretStorageService private readonly secretStorageService: ISecretStorageService,
+		@IAuthService private readonly authService: IAuthService
 	) {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, telemetryService, hoverService);
 	}
@@ -94,6 +106,11 @@ export class MaxianView extends ViewPane {
 		// 监听对话清空事件
 		this._register(this.maxianService.onConversationCleared(() => {
 			this.handleConversationCleared();
+		}));
+
+		// 监听用户登录状态变化,更新可用模式
+		this._register(this.authService.onDidChangeUser(() => {
+			this.updateAvailableModes();
 		}));
 
 		// ========== 创建消息区域 ==========
@@ -281,47 +298,184 @@ export class MaxianView extends ViewPane {
 		bottomControls.style.display = 'flex';
 		bottomControls.style.justifyContent = 'space-between';
 		bottomControls.style.alignItems = 'center';
-		bottomControls.style.gap = '8px';
+		bottomControls.style.gap = '4px'; // 减小间距
 
-		// 左侧：模式选择器
+		// 左侧：模式选择器和知识库选择器
 		const leftControls = append(bottomControls, $('div'));
 		leftControls.style.display = 'flex';
 		leftControls.style.alignItems = 'center';
-		leftControls.style.gap = '8px';
+		leftControls.style.gap = '4px'; // 减小间距
 		leftControls.style.flex = '1';
 		leftControls.style.minWidth = '0';
+		leftControls.style.overflow = 'hidden'; // 防止溢出
 
 		const modeSelectorWrapper = append(leftControls, $('div'));
-		modeSelectorWrapper.style.flexShrink = '0';
-		modeSelectorWrapper.style.minWidth = '120px';
+		modeSelectorWrapper.style.flexShrink = '1'; // 允许收缩
+		modeSelectorWrapper.style.minWidth = '80px';
+		modeSelectorWrapper.style.maxWidth = '110px';
+		modeSelectorWrapper.style.position = 'relative';
+		modeSelectorWrapper.style.display = 'flex';
+		modeSelectorWrapper.style.alignItems = 'center';
+
+		// 添加模式图标
+		const modeIcon = append(modeSelectorWrapper, $('span.codicon.codicon-symbol-event'));
+		modeIcon.style.position = 'absolute';
+		modeIcon.style.left = '8px';
+		modeIcon.style.pointerEvents = 'none';
+		modeIcon.style.color = 'var(--vscode-descriptionForeground)';
+		modeIcon.style.fontSize = '12px';
+		modeIcon.style.zIndex = '1';
 
 		this.modeSelector = append(modeSelectorWrapper, $('select')) as HTMLSelectElement;
 		this.modeSelector.style.width = '100%';
-		this.modeSelector.style.padding = '4px 8px';
+		this.modeSelector.style.padding = '4px 8px 4px 26px'; // 左边留出图标空间
 		this.modeSelector.style.backgroundColor = 'var(--vscode-input-background)';
 		this.modeSelector.style.color = 'var(--vscode-input-foreground)';
-		this.modeSelector.style.border = 'none'; // 移除边框
-		this.modeSelector.style.borderRadius = '3px';
+		this.modeSelector.style.border = '1px solid var(--vscode-input-border, transparent)';
+		this.modeSelector.style.borderRadius = '4px';
 		this.modeSelector.style.fontFamily = 'var(--vscode-font-family)';
-		this.modeSelector.style.fontSize = '12px';
+		this.modeSelector.style.fontSize = '11px';
 		this.modeSelector.style.cursor = 'pointer';
 		this.modeSelector.style.outline = 'none';
+		this.modeSelector.style.appearance = 'none';
+		(this.modeSelector.style as any).webkitAppearance = 'none';
+		this.modeSelector.style.backgroundImage = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%23888' d='M0 2l4 4 4-4z'/%3E%3C/svg%3E")`;
+		this.modeSelector.style.backgroundRepeat = 'no-repeat';
+		this.modeSelector.style.backgroundPosition = 'right 6px center';
+		this.modeSelector.style.paddingRight = '20px';
+		this.modeSelector.title = '选择模式';
 
-		// 添加所有模式选项
+		// 悬停效果
+		this.modeSelector.onmouseenter = () => {
+			this.modeSelector.style.borderColor = 'var(--vscode-focusBorder)';
+		};
+		this.modeSelector.onmouseleave = () => {
+			this.modeSelector.style.borderColor = 'var(--vscode-input-border, transparent)';
+		};
+
+		// 模式图标映射
+		const modeIconMap: Record<string, string> = {
+			'code': '💻',
+			'architect': '🏗️',
+			'ask': '❓',
+			'debug': '🔧',
+			'orchestrator': '🎯'
+		};
+
+		// 根据用户权限动态过滤模式选项
 		const allModes = getAllModes();
-		allModes.forEach(mode => {
+		const currentUser = this.authService.currentUser;
+		const agentPermission = currentUser?.agentPermission;
+
+		// 过滤可用模式：
+		// 1. ask 模式固定都有
+		// 2. 如果 agentPermission 存在且非空,则显示其中包含的模式
+		// 3. 如果 agentPermission 为 null/undefined,则只显示 ask 模式
+		const availableModes = allModes.filter(mode => {
+			if (mode.slug === 'ask') {
+				return true; // ask 模式固定可用
+			}
+			if (!agentPermission || agentPermission.length === 0) {
+				return false; // 没有权限配置,只显示 ask
+			}
+			return agentPermission.includes(mode.slug); // 检查是否在权限列表中
+		});
+
+		// 排序：ask 模式固定在第一位，其他模式按原顺序
+		availableModes.sort((a, b) => {
+			if (a.slug === 'ask') {
+				return -1; // ask 始终在前
+			}
+			if (b.slug === 'ask') {
+				return 1; // ask 始终在前
+			}
+			return 0; // 其他模式保持原顺序
+		});
+
+		// 渲染可用的模式选项
+		availableModes.forEach(mode => {
 			const option = append(this.modeSelector, $('option')) as HTMLOptionElement;
 			option.value = mode.slug;
-			option.textContent = mode.name;
+			const icon = modeIconMap[mode.slug] || '📝';
+			option.textContent = `${icon} ${mode.name}`;
 			if (mode.slug === this.currentMode) {
 				option.selected = true;
 			}
 		});
 
+		// 如果当前模式不在可用模式中,切换到 ask 模式
+		if (!availableModes.some(m => m.slug === this.currentMode)) {
+			this.currentMode = 'ask';
+			const askOption = this.modeSelector.querySelector('option[value="ask"]') as HTMLOptionElement;
+			if (askOption) {
+				askOption.selected = true;
+			}
+		}
+
 		// 监听模式变化
 		this.modeSelector.onchange = () => {
 			this.currentMode = this.modeSelector.value as Mode;
 		};
+
+		// 知识库选择器
+		const knowledgeBaseSelectorWrapper = append(leftControls, $('div'));
+		knowledgeBaseSelectorWrapper.style.flexShrink = '1'; // 允许收缩
+		knowledgeBaseSelectorWrapper.style.minWidth = '100px';
+		knowledgeBaseSelectorWrapper.style.maxWidth = '140px';
+		knowledgeBaseSelectorWrapper.style.position = 'relative';
+		knowledgeBaseSelectorWrapper.style.display = 'flex';
+		knowledgeBaseSelectorWrapper.style.alignItems = 'center';
+
+		// 添加知识库图标
+		const kbIcon = append(knowledgeBaseSelectorWrapper, $('span.codicon.codicon-database'));
+		kbIcon.style.position = 'absolute';
+		kbIcon.style.left = '8px';
+		kbIcon.style.pointerEvents = 'none';
+		kbIcon.style.color = 'var(--vscode-descriptionForeground)';
+		kbIcon.style.fontSize = '12px';
+		kbIcon.style.zIndex = '1';
+
+		this.knowledgeBaseSelector = append(knowledgeBaseSelectorWrapper, $('select')) as HTMLSelectElement;
+		this.knowledgeBaseSelector.style.width = '100%';
+		this.knowledgeBaseSelector.style.padding = '4px 8px 4px 26px'; // 左边留出图标空间
+		this.knowledgeBaseSelector.style.backgroundColor = 'var(--vscode-input-background)';
+		this.knowledgeBaseSelector.style.color = 'var(--vscode-input-foreground)';
+		this.knowledgeBaseSelector.style.border = '1px solid var(--vscode-input-border, transparent)';
+		this.knowledgeBaseSelector.style.borderRadius = '4px';
+		this.knowledgeBaseSelector.style.fontFamily = 'var(--vscode-font-family)';
+		this.knowledgeBaseSelector.style.fontSize = '11px';
+		this.knowledgeBaseSelector.style.cursor = 'pointer';
+		this.knowledgeBaseSelector.style.outline = 'none';
+		this.knowledgeBaseSelector.style.appearance = 'none';
+		(this.knowledgeBaseSelector.style as any).webkitAppearance = 'none';
+		this.knowledgeBaseSelector.style.backgroundImage = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%23888' d='M0 2l4 4 4-4z'/%3E%3C/svg%3E")`;
+		this.knowledgeBaseSelector.style.backgroundRepeat = 'no-repeat';
+		this.knowledgeBaseSelector.style.backgroundPosition = 'right 6px center';
+		this.knowledgeBaseSelector.style.paddingRight = '20px';
+		this.knowledgeBaseSelector.title = '选择知识库';
+
+		// 悬停效果
+		this.knowledgeBaseSelector.onmouseenter = () => {
+			this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-focusBorder)';
+		};
+		this.knowledgeBaseSelector.onmouseleave = () => {
+			this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-input-border, transparent)';
+		};
+
+		// 添加默认选项
+		const defaultOption = append(this.knowledgeBaseSelector, $('option')) as HTMLOptionElement;
+		defaultOption.value = '';
+		defaultOption.textContent = '不使用知识库';
+		defaultOption.selected = true;
+
+		// 监听知识库变化
+		this.knowledgeBaseSelector.onchange = () => {
+			this.selectedKnowledgeBaseId = this.knowledgeBaseSelector.value || null;
+			console.log('[MaxianView] Selected knowledge base:', this.selectedKnowledgeBaseId);
+		};
+
+		// 加载知识库列表
+		this.loadKnowledgeBases();
 
 		// 右侧：取消、清空、发送按钮
 		const rightControls = append(bottomControls, $('div'));
@@ -658,7 +812,24 @@ export class MaxianView extends ViewPane {
 	private async sendMessage(message: string): Promise<void> {
 		// 调用maxianService发送消息，传递当前模式
 		// maxianService会通过onMessage事件通知UI更新
-		await this.maxianService.sendMessage(message, this.currentMode);
+
+		// 如果是 ask 模式，且选中了知识库，则传递知识库配置
+		let knowledgeBaseConfig: import('./maxianService.js').IKnowledgeBaseConfig | undefined;
+		if (this.currentMode === 'ask' && this.selectedKnowledgeBaseId) {
+			// 从知识库列表中找到选中的知识库
+			const selectedKb = this.knowledgeBases.find(kb => kb.id === this.selectedKnowledgeBaseId);
+			if (selectedKb) {
+				knowledgeBaseConfig = {
+					apiUrl: selectedKb.applicationUrl,
+					apiKey: selectedKb.applicationKey,
+					id: selectedKb.id,
+					name: selectedKb.applicationName
+				};
+				console.log('[MaxianView] 使用知识库配置:', knowledgeBaseConfig.apiUrl);
+			}
+		}
+
+		await this.maxianService.sendMessage(message, this.currentMode, knowledgeBaseConfig);
 	}
 
 	private handleMessageEvent(event: import('./maxianService.js').IMessageEvent): void {
@@ -1970,6 +2141,164 @@ export class MaxianView extends ViewPane {
 		};
 
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;
+	}
+
+	/**
+	 * 加载知识库列表
+	 */
+	private async loadKnowledgeBases(): Promise<void> {
+		try {
+			// 获取API配置
+			const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
+			const username = this.configurationService.getValue<string>('zhikai.auth.username');
+			// 密码存储在 secretStorageService 中
+			const password = await this.secretStorageService.get('zhikai.auth.password');
+
+			if (!apiUrl || !username || !password) {
+				console.debug('[MaxianView] API credentials not configured, skipping knowledge base loading');
+				return;
+			}
+
+			// 构建认证头（浏览器环境使用btoa）
+			const credentials = btoa(`${username}:${password}`);
+
+			// 调用知识库API（POST请求，参数通过URL传递，请求体包含Base64编码的用户名密码）
+			const baseUrl = apiUrl.replace(/\/$/, '');
+			const response = await fetch(`${baseUrl}/knowledge/knowledgeApplication/listByUser?applicationStatus=0`, {
+				method: 'POST',
+				headers: {
+					'Authorization': `Basic ${credentials}`,
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					username: btoa(username),
+					password: btoa(password)
+				})
+			});
+
+			if (!response.ok) {
+				console.warn('[MaxianView] Failed to fetch knowledge bases:', response.status);
+				return;
+			}
+
+			const result = await response.json();
+			console.log('[MaxianView] Knowledge bases response:', result);
+
+			// 支持数字和字符串类型的code
+			if ((result.code === 200 || result.code === '200') && result.data) {
+				this.knowledgeBases = result.data;
+				console.log('[MaxianView] Loaded', this.knowledgeBases.length, 'knowledge bases');
+				this.updateKnowledgeBaseSelector();
+			}
+		} catch (error) {
+			console.warn('[MaxianView] Error loading knowledge bases:', error);
+		}
+	}
+
+	/**
+	 * 更新知识库选择器选项
+	 */
+	private updateKnowledgeBaseSelector(): void {
+		console.log('[MaxianView] updateKnowledgeBaseSelector called');
+		if (!this.knowledgeBaseSelector) {
+			console.warn('[MaxianView] knowledgeBaseSelector is not initialized');
+			return;
+		}
+
+		console.log('[MaxianView] Current options count:', this.knowledgeBaseSelector.options.length);
+
+		// 清除现有选项（保留第一个默认选项）
+		while (this.knowledgeBaseSelector.options.length > 1) {
+			this.knowledgeBaseSelector.remove(1);
+		}
+
+		// 添加知识库选项
+		console.log('[MaxianView] Adding', this.knowledgeBases.length, 'knowledge bases to selector');
+		this.knowledgeBases.forEach(kb => {
+			const option = document.createElement('option');
+			option.value = kb.id;
+			option.textContent = kb.applicationName;
+			this.knowledgeBaseSelector.appendChild(option);
+			console.log('[MaxianView] Added option:', kb.applicationName);
+		});
+
+		console.log('[MaxianView] Final options count:', this.knowledgeBaseSelector.options.length);
+	}
+
+	/**
+	 * 获取当前选中的知识库ID
+	 */
+	public getSelectedKnowledgeBaseId(): string | null {
+		return this.selectedKnowledgeBaseId;
+	}
+
+	/**
+	 * 更新可用模式 - 根据用户权限动态调整
+	 */
+	private updateAvailableModes(): void {
+		if (!this.modeSelector) {
+			return; // 如果选择器还未创建,跳过
+		}
+
+		// 清空现有选项 (使用安全的DOM操作)
+		clearNode(this.modeSelector);
+
+		// 获取用户权限
+		const currentUser = this.authService.currentUser;
+		const agentPermission = currentUser?.agentPermission;
+
+		// 过滤可用模式
+		const allModes = getAllModes();
+		const availableModes = allModes.filter(mode => {
+			if (mode.slug === 'ask') {
+				return true; // ask 模式固定可用
+			}
+			if (!agentPermission || agentPermission.length === 0) {
+				return false; // 没有权限配置,只显示 ask
+			}
+			return agentPermission.includes(mode.slug); // 检查是否在权限列表中
+		});
+
+		// 排序：ask 模式固定在第一位，其他模式按原顺序
+		availableModes.sort((a, b) => {
+			if (a.slug === 'ask') {
+				return -1; // ask 始终在前
+			}
+			if (b.slug === 'ask') {
+				return 1; // ask 始终在前
+			}
+			return 0; // 其他模式保持原顺序
+		});
+
+		// 模式图标映射
+		const modeIconMap: Record<string, string> = {
+			'code': '💻',
+			'architect': '🏗️',
+			'ask': '❓',
+			'debug': '🔧',
+			'orchestrator': '🎯'
+		};
+
+		// 渲染可用的模式选项
+		availableModes.forEach(mode => {
+			const option = append(this.modeSelector, $('option')) as HTMLOptionElement;
+			option.value = mode.slug;
+			const icon = modeIconMap[mode.slug] || '📝';
+			option.textContent = `${icon} ${mode.name}`;
+		});
+
+		// 如果当前模式不在可用模式中,切换到 ask 模式
+		if (!availableModes.some(m => m.slug === this.currentMode)) {
+			this.currentMode = 'ask';
+		}
+
+		// 设置选中的模式
+		const currentOption = this.modeSelector.querySelector(`option[value="${this.currentMode}"]`) as HTMLOptionElement;
+		if (currentOption) {
+			currentOption.selected = true;
+		}
+
+		console.log('[MaxianView] Updated available modes:', availableModes.map(m => m.slug), 'Current mode:', this.currentMode);
 	}
 
 	override dispose(): void {

@@ -41,6 +41,13 @@ export interface UserInfo {
 	 * 其他元数据
 	 */
 	metadata?: Record<string, any>;
+
+	/**
+	 * Agent权限配置 - 控制用户可用的AI模式
+	 * 例如: ["ask", "code", "architect"]
+	 * null 或 undefined 表示只有 ask 模式可用
+	 */
+	agentPermission?: string[] | null;
 }
 
 /**

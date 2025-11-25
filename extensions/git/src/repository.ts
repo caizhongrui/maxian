@@ -2573,6 +2573,202 @@ export class Repository implements Disposable {
 		}
 	}
 
+	/**
+	 * 自动生成提交信息 - 使用 AI 分析代码变更生成详细提交信息
+	 */
+	async generateCommitMessage(): Promise<string> {
+		const staged = [...this.indexGroup.resourceStates];
+
+		if (staged.length === 0) {
+			return '';
+		}
+
+		try {
+			// 获取暂存区的完整 diff
+			const diff = await this.diff(true);
+
+			if (!diff || diff.trim().length === 0) {
+				return this.generateSimpleCommitMessage(staged);
+			}
+
+			// 限制 diff 大小,避免发送过大的内容
+			const maxDiffLength = 8000;
+			const truncatedDiff = diff.length > maxDiffLength
+				? diff.substring(0, maxDiffLength) + '\n\n...(内容过长,已截断)'
+				: diff;
+
+			// 调用 AI 生成提交信息
+			const aiMessage = await this.generateAICommitMessage(truncatedDiff, staged);
+			return aiMessage || this.generateSimpleCommitMessage(staged);
+
+		} catch (error) {
+			console.error('[Git] 生成提交信息失败:', error);
+			// 失败时回退到简单版本
+			return this.generateSimpleCommitMessage(staged);
+		}
+	}
+
+	/**
+	 * 生成简单的提交信息(不使用AI)
+	 */
+	private generateSimpleCommitMessage(staged: Resource[]): string {
+		const changes: string[] = [];
+
+		// 统计变更类型
+		const added: string[] = [];
+		const modified: string[] = [];
+		const deleted: string[] = [];
+		const renamed: string[] = [];
+
+		for (const resource of staged) {
+			const basename = path.basename(resource.resourceUri.fsPath);
+
+			switch (resource.type) {
+				case Status.INDEX_ADDED:
+					added.push(basename);
+					break;
+				case Status.INDEX_MODIFIED:
+					modified.push(basename);
+					break;
+				case Status.INDEX_DELETED:
+					deleted.push(basename);
+					break;
+				case Status.INDEX_RENAMED:
+					renamed.push(basename);
+					break;
+			}
+		}
+
+		// 生成提交信息
+		if (added.length > 0) {
+			changes.push(`新增: ${added.slice(0, 3).join(', ')}${added.length > 3 ? ` 等${added.length}个文件` : ''}`);
+		}
+		if (modified.length > 0) {
+			changes.push(`修改: ${modified.slice(0, 3).join(', ')}${modified.length > 3 ? ` 等${modified.length}个文件` : ''}`);
+		}
+		if (deleted.length > 0) {
+			changes.push(`删除: ${deleted.slice(0, 3).join(', ')}${deleted.length > 3 ? ` 等${deleted.length}个文件` : ''}`);
+		}
+		if (renamed.length > 0) {
+			changes.push(`重命名: ${renamed.slice(0, 3).join(', ')}${renamed.length > 3 ? ` 等${renamed.length}个文件` : ''}`);
+		}
+
+		return changes.join('\n');
+	}
+
+	/**
+	 * 使用 AI 生成提交信息
+	 */
+	private async generateAICommitMessage(diff: string, staged: Resource[]): Promise<string> {
+		// 构建文件列表
+		const fileList = staged.map(r => {
+			const basename = path.basename(r.resourceUri.fsPath);
+			const type = this.getChangeType(r.type);
+			return `- ${type}: ${basename}`;
+		}).join('\n');
+
+		// 构建提示词 - 按照 Git 提交规范格式
+		const prompt = `请分析以下 git diff 内容,生成符合 Git 提交规范的提交信息。
+
+提交信息格式:
+<type>(<scope>): <subject>
+
+<body>
+
+格式要求:
+1. type (必填) - 提交类型,必须是以下之一:
+   - feat: 新功能
+   - fix: 修复bug
+   - docs: 文档变更
+   - style: 代码格式调整(不影响代码逻辑)
+   - refactor: 代码重构
+   - test: 测试用例变更
+   - build: 构建系统或依赖变更
+   - chore: 其他杂项变更
+
+2. scope (建议填写) - 影响范围,用英文表示
+   - 从变更的文件路径或模块中提取
+   - 如果涉及多个模块,选择最主要的一个
+   - 示例: auth, user, api, config, utils, docs
+   - 尽量不要省略 scope
+
+3. subject (必填) - 简短描述,用英文,不超过50字符
+   - 使用小写
+   - 使用祈使句 (如 "add" 而不是 "added" 或 "adds")
+   - 末尾不加句号
+
+4. body (必填) - 详细描述,用中文
+   - 每项一行,使用 "- " 开头
+   - 列出所有主要变更
+   - 只描述做了什么,不解释为什么
+
+示例 1:
+feat(auth): add user login functionality
+
+- 实现用户名密码登录
+- 添加登录表单验证
+- 集成JWT token认证
+
+示例 2:
+chore(config): update application configuration
+
+- 添加代码风格配置文件
+- 更新应用配置文件
+- 优化系统参数设置
+
+变更的文件:
+${fileList}
+
+Diff 内容:
+\`\`\`diff
+${diff}
+\`\`\`
+
+请生成提交信息:`;
+
+		try {
+			// 这里需要调用 AI 服务
+			// 暂时返回一个占位符,后续集成真实的 AI 服务
+			return await this.callAIService(prompt);
+		} catch (error) {
+			console.error('[Git] AI 服务调用失败:', error);
+			return '';
+		}
+	}
+
+	/**
+	 * 调用 AI 服务生成提交信息
+	 */
+	private async callAIService(prompt: string): Promise<string> {
+		try {
+			// 使用 VSCode 的命令系统调用 AI 服务
+			const result = await commands.executeCommand<string>('zhikai.ai.generateCommitMessage', prompt);
+			return result || '';
+		} catch (error) {
+			console.error('[Git] AI 服务调用失败:', error);
+			// 如果 AI 服务不可用,返回空字符串,让调用方使用简单版本
+			return '';
+		}
+	}
+
+	/**
+	 * 获取变更类型的中文描述
+	 */
+	private getChangeType(status: Status): string {
+		switch (status) {
+			case Status.INDEX_ADDED:
+				return '新增';
+			case Status.INDEX_MODIFIED:
+				return '修改';
+			case Status.INDEX_DELETED:
+				return '删除';
+			case Status.INDEX_RENAMED:
+				return '重命名';
+			default:
+				return '变更';
+		}
+	}
+
 	private updateBranchProtectionMatchers(root: Uri): void {
 		this.branchProtection.clear();
 

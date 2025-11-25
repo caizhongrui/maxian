@@ -8,11 +8,29 @@ import { createDecorator } from '../../instantiation/common/instantiation.js';
 export const IAIService = createDecorator<IAIService>('aiService');
 
 /**
+ * AI Token使用量统计
+ */
+export interface AIUsage {
+	promptTokens: number;      // 输入token数
+	completionTokens: number;  // 输出token数
+	totalTokens: number;       // 总token数
+}
+
+/**
+ * AI响应（包含内容和使用量）
+ */
+export interface AIResponse {
+	content: string;
+	usage?: AIUsage;
+}
+
+/**
  * AI Stream Chunk - 流式响应的数据块
  */
 export interface AIStreamChunk {
 	content: string;
 	isComplete: boolean;
+	usage?: AIUsage;  // 流式响应完成时包含usage
 }
 
 /**
@@ -25,17 +43,25 @@ export interface IAIService {
 	readonly _serviceBrand: undefined;
 
 	/**
-	 * Complete with AI
+	 * Complete with AI (返回内容字符串，向后兼容)
 	 * @param prompt The prompt text
 	 * @param options Optional parameters (temperature, maxTokens, systemMessage)
-	 * @returns AI response
+	 * @returns AI response content
 	 */
 	complete(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string }): Promise<string>;
 
 	/**
+	 * Complete with AI and return usage statistics (返回内容和token使用量)
+	 * @param prompt The prompt text
+	 * @param options Optional parameters (temperature, maxTokens, systemMessage)
+	 * @returns AI response with usage statistics
+	 */
+	completeWithUsage(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string }): Promise<AIResponse>;
+
+	/**
 	 * Complete with AI in streaming mode (流式响应)
 	 * @param prompt The prompt text
-	 * @param onChunk Callback for each chunk
+	 * @param onChunk Callback for each chunk (最后一个chunk会包含usage)
 	 * @param abortSignal Optional AbortSignal to cancel the request
 	 * @returns Promise that resolves when streaming is complete
 	 */

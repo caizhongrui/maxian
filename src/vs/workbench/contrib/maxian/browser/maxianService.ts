@@ -27,6 +27,9 @@ import { IEditorService } from '../../../services/editor/common/editorService.js
 import { IModelService } from '../../../../editor/common/services/model.js';
 import { DiffViewProvider } from './diffViewProvider.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
+import { DifyHandler, DifyConfiguration } from '../common/api/difyHandler.js';
+import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
+import { IAILogService } from '../../../../platform/aiLog/common/aiLog.js';
 
 export const IMaxianService = createDecorator<IMaxianService>('maxianService');
 
@@ -52,6 +55,37 @@ export interface IClineMessageEvent {
 export interface IQuestionAskedEvent {
 	question: string;
 	toolUseId: string;
+}
+
+/**
+ * 知识库配置（用于ask模式）
+ */
+export interface IKnowledgeBaseConfig {
+	apiUrl: string;
+	apiKey: string;
+	id?: string;  // 知识库ID (可选)
+	name?: string;  // 知识库名称 (可选)
+}
+
+/**
+ * Token使用量统计（会话级别）
+ */
+export interface ISessionUsage {
+	promptTokens: number;      // 累计输入token
+	completionTokens: number;  // 累计输出token
+	totalTokens: number;       // 累计总token
+	requestCount: number;      // 请求次数
+}
+
+/**
+ * 单次请求的Token使用量事件
+ */
+export interface ITokenUsageEvent {
+	promptTokens: number;      // 本次输入token
+	completionTokens: number;  // 本次输出token
+	totalTokens: number;       // 本次总token
+	mode: string;              // 模式（ask/code/architect等）
+	timestamp: number;         // 时间戳
 }
 
 /**
@@ -84,8 +118,9 @@ export interface IMaxianService {
 	 * 发送消息到 AI
 	 * @param message 用户消息
 	 * @param mode 当前模式（默认为code模式）
+	 * @param knowledgeBaseConfig 知识库配置（ask模式专用）
 	 */
-	sendMessage(message: string, mode?: Mode): Promise<void>;
+	sendMessage(message: string, mode?: Mode, knowledgeBaseConfig?: IKnowledgeBaseConfig): Promise<void>;
 
 	/**
 	 * 提交用户回复（回答AI的问题）- 旧版本
@@ -150,6 +185,12 @@ export interface IMaxianService {
 	 * 对话清空事件
 	 */
 	readonly onConversationCleared: Event<void>;
+
+	/**
+	 * 单次对话完成的Token使用量事件
+	 * （一次code/ask等模式对话完成时触发，包含本次对话的总token）
+	 */
+	readonly onTokenUsage: Event<ITokenUsageEvent>;
 }
 
 /**
@@ -173,6 +214,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private readonly _onConversationCleared = this._register(new Emitter<void>());
 	readonly onConversationCleared: Event<void> = this._onConversationCleared.event;
 
+	private readonly _onTokenUsage = this._register(new Emitter<ITokenUsageEvent>());
+	readonly onTokenUsage: Event<ITokenUsageEvent> = this._onTokenUsage.event;
+
 	private _initialized = false;
 	private toolExecutor: IToolExecutor | null = null;
 	private apiHandler: IApiHandler | null = null;
@@ -180,6 +224,15 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private currentMode: Mode = DEFAULT_MODE;
 	private currentTask: TaskService | null = null;
 	private diffViewProvider: DiffViewProvider | null = null;
+	private difyHandler: DifyHandler | null = null;
+	private isAskModeRunning: boolean = false;  // 标记ask模式是否正在运行
+	private askModeAbortController: AbortController | null = null;  // ask模式的中止控制器
+
+	// AI调用日志记录相关字段
+	private currentTraceId: string | null = null;  // 当前会话的追踪ID
+	private currentCallStartTime: Date | null = null;  // 当前调用开始时间
+	private currentFirstTokenTime: Date | null = null;  // 首Token到达时间
+	private currentKnowledgeBaseConfig: IKnowledgeBaseConfig | null = null;  // 当前知识库配置
 
 	constructor(
 		@IFileService private readonly fileService: IFileService,
@@ -190,13 +243,43 @@ export class MaxianService extends Disposable implements IMaxianService {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IEditorService _editorService: IEditorService,
 		@IModelService _modelService: IModelService,
-		@IInstantiationService private readonly instantiationService: IInstantiationService
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IStorageService private readonly storageService: IStorageService,
+		@IAILogService private readonly aiLogService: IAILogService
 	) {
 		super();
 		this.apiFactory = new ApiFactory(this.configurationService);
 		// 使用IInstantiationService创建DiffViewProvider实例，确保依赖注入正确工作
 		this.diffViewProvider = this.instantiationService.createInstance(DiffViewProvider);
 		this._register(this.diffViewProvider);
+	}
+
+	/**
+	 * 从StorageService加载认证凭据
+	 * 使用与authService相同的存储key
+	 */
+	private loadAuthCredentials(): { username: string; password: string } | undefined {
+		try {
+			const stored = this.storageService.get('zhikai.auth.credentials', StorageScope.APPLICATION);
+			if (!stored) {
+				console.log('[Maxian] 未找到存储的认证凭据');
+				return undefined;
+			}
+
+			const parsed = JSON.parse(stored);
+			if (parsed && parsed.username && parsed.password) {
+				console.log('[Maxian] 从StorageService加载认证凭据成功，用户:', parsed.username);
+				return {
+					username: parsed.username,
+					password: parsed.password
+				};
+			}
+
+			return undefined;
+		} catch (error) {
+			console.error('[Maxian] 加载认证凭据失败:', error);
+			return undefined;
+		}
 	}
 
 	async initialize(): Promise<void> {
@@ -224,13 +307,16 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		console.log('[Maxian] 工具执行器已初始化，工作区:', workspaceRoot);
 
-		// 初始化千问API Handler
+		// 从StorageService读取认证凭据（与authService使用相同的key）
+		const credentials = this.loadAuthCredentials();
+
+		// 初始化API Handler（优先使用代理服务）
 		const validation = this.apiFactory.validateConfiguration();
 		if (!validation.valid) {
 			console.warn('[Maxian] API配置验证失败:', validation.error);
 		}
 
-		this.apiHandler = this.apiFactory.createHandler();
+		this.apiHandler = this.apiFactory.createHandler(credentials);
 		const modelInfo = this.apiHandler.getModel();
 		console.log('[Maxian] API Handler已初始化，模型:', modelInfo.name);
 
@@ -238,17 +324,243 @@ export class MaxianService extends Disposable implements IMaxianService {
 		console.log('[Maxian] 码弦服务初始化完成');
 	}
 
-	async sendMessage(message: string, mode: Mode = DEFAULT_MODE): Promise<void> {
-		console.log('[Maxian] 发送消息:', message, '模式:', mode);
+	async sendMessage(message: string, mode: Mode = DEFAULT_MODE, knowledgeBaseConfig?: IKnowledgeBaseConfig): Promise<void> {
+		console.log('[Maxian] 发送消息:', message, '模式:', mode, '知识库配置:', knowledgeBaseConfig ? '已提供' : '未提供');
 
 		// 更新当前模式
 		this.currentMode = mode;
+
+		// 生成新的TraceId和记录开始时间
+		this.currentTraceId = this.generateTraceId();
+		this.currentCallStartTime = new Date();
+		this.currentFirstTokenTime = null;
+		this.currentKnowledgeBaseConfig = knowledgeBaseConfig || null;
+
+		console.log('[Maxian] AI调用开始 - TraceId:', this.currentTraceId, '开始时间:', this.currentCallStartTime.toISOString());
 
 		// 确保已初始化
 		if (!this._initialized) {
 			await this.initialize();
 		}
 
+		// 触发用户消息事件
+		this._onMessage.fire({
+			type: 'user',
+			content: message
+		});
+
+		// 根据模式选择不同的处理方式
+		if (mode === 'ask') {
+			// ask 模式：使用 DifyHandler 调用知识库接口
+			await this.sendDifyMessage(message, knowledgeBaseConfig);
+		} else {
+			// 其他模式：使用 TaskService 进行完整的任务处理
+			await this.sendTaskMessage(message);
+		}
+	}
+
+	/**
+	 * 使用 DifyHandler 发送消息（ask 模式专用）
+	 * 直接调用知识库接口，不使用工具
+	 * @param message 用户消息
+	 * @param knowledgeBaseConfig 知识库配置（可选，如果提供则使用，否则从VSCode配置读取）
+	 */
+	private async sendDifyMessage(message: string, knowledgeBaseConfig?: IKnowledgeBaseConfig): Promise<void> {
+		// 标记ask模式正在运行
+		this.isAskModeRunning = true;
+		this.askModeAbortController = new AbortController();
+
+		// 用于跟踪token统计（中止时使用）
+		let inputLength = 0;
+		let outputLength = 0;
+		let wasAborted = false;
+
+		try {
+			// 确定 Dify 配置：优先使用传入的知识库配置，否则从VSCode设置读取
+			let difyApiUrl: string;
+			let difyApiKey: string;
+			const difyUser = this.configurationService.getValue<string>('zhikai.dify.user') || 'default-user';
+
+			if (knowledgeBaseConfig) {
+				// 使用传入的知识库配置
+				difyApiUrl = knowledgeBaseConfig.apiUrl;
+				difyApiKey = knowledgeBaseConfig.apiKey;
+				console.log('[Maxian] 使用选中的知识库配置:', difyApiUrl);
+
+				// 重新创建 DifyHandler（因为配置可能不同）
+				const difyConfig: DifyConfiguration = {
+					apiUrl: difyApiUrl,
+					apiKey: difyApiKey,
+					user: difyUser
+				};
+				this.difyHandler = new DifyHandler(difyConfig);
+				console.log('[Maxian] DifyHandler 已使用新配置初始化');
+			} else {
+				// 从VSCode配置中读取（向后兼容）
+				difyApiUrl = this.configurationService.getValue<string>('zhikai.dify.apiUrl') || 'http://dify.boyocloud.com/v1';
+				difyApiKey = this.configurationService.getValue<string>('zhikai.dify.apiKey') || '';
+
+				if (!difyApiKey) {
+					console.error('[Maxian] Dify API Key 未配置');
+					this._onMessage.fire({
+						type: 'error',
+						content: '错误: 请选择一个知识库，或在设置中配置 zhikai.dify.apiKey'
+					});
+					return;
+				}
+
+				// 只在没有 DifyHandler 或配置不同时重新初始化
+				if (!this.difyHandler) {
+					const difyConfig: DifyConfiguration = {
+						apiUrl: difyApiUrl,
+						apiKey: difyApiKey,
+						user: difyUser
+					};
+					this.difyHandler = new DifyHandler(difyConfig);
+					console.log('[Maxian] DifyHandler 已从VSCode配置初始化');
+				}
+			}
+
+			console.log('[Maxian] 使用 Dify 知识库接口发送消息');
+
+			// 记录输入长度（用于中止时的估算）
+			inputLength = message.length;
+
+			// 调用 Dify API 并处理流式响应（传递AbortSignal以支持真正的中止）
+			let fullResponse = '';
+			for await (const chunk of this.difyHandler.sendMessage(message, undefined, this.askModeAbortController.signal)) {
+				// 检查是否被中止
+				if (this.askModeAbortController?.signal.aborted) {
+					console.log('[Maxian] Ask模式已被中止');
+					wasAborted = true;
+					break;
+				}
+
+				if (chunk.type === 'text') {
+					// 记录首Token时间
+					if (!this.currentFirstTokenTime && chunk.text) {
+						this.currentFirstTokenTime = new Date();
+						console.log('[Maxian] 首Token到达时间:', this.currentFirstTokenTime.toISOString());
+					}
+
+					// 流式输出文本
+					fullResponse += chunk.text;
+					this._onMessage.fire({
+						type: 'assistant',
+						content: chunk.text,
+						isPartial: true
+					});
+				} else if (chunk.type === 'usage') {
+					// 触发单次对话完成的token使用量事件
+					const usageEvent: ITokenUsageEvent = {
+						promptTokens: chunk.inputTokens,
+						completionTokens: chunk.outputTokens,
+						totalTokens: chunk.totalTokens,
+						mode: 'ask',
+						timestamp: Date.now()
+					};
+					this._onTokenUsage.fire(usageEvent);
+
+					console.log(`[Maxian] Ask模式Token使用量 - 输入:${usageEvent.promptTokens}, 输出:${usageEvent.completionTokens}, 总计:${usageEvent.totalTokens}`);
+
+					// 记录AI调用日志（成功）
+					await this.logAICall({
+						inputTokens: chunk.inputTokens,
+						outputTokens: chunk.outputTokens,
+						status: 'success',
+						requestSummary: message.substring(0, 200) // 限制长度
+					});
+				} else if (chunk.type === 'error') {
+					// 处理错误
+					console.error('[Maxian] Dify 错误:', chunk.error);
+					this._onMessage.fire({
+						type: 'error',
+						content: chunk.error
+					});
+
+					// 记录AI调用日志（失败）
+					await this.logAICall({
+						inputTokens: Math.ceil(inputLength / 3), // 估算
+						outputTokens: Math.ceil(outputLength / 3), // 估算
+						status: 'failed',
+						errorMessage: chunk.error,
+						requestSummary: message.substring(0, 200)
+					});
+					return;
+				}
+			}
+
+			// 记录输出长度
+			outputLength = fullResponse.length;
+
+			// 流结束
+			this._onMessage.fire({
+				type: 'assistant',
+				content: '',
+				isPartial: false
+			});
+
+			console.log('[Maxian] Dify 响应完成，总长度:', fullResponse.length);
+
+		} catch (error) {
+			// 检查是否是中止导致的错误
+			if (this.askModeAbortController?.signal.aborted) {
+				console.log('[Maxian] Ask模式已被用户中止');
+				wasAborted = true;
+			} else {
+				console.error('[Maxian] Dify 请求错误:', error);
+				this._onMessage.fire({
+					type: 'error',
+					content: `Dify 错误: ${error instanceof Error ? error.message : String(error)}`
+				});
+
+				// 记录AI调用日志（失败）
+				await this.logAICall({
+					inputTokens: Math.ceil(inputLength / 3),
+					outputTokens: Math.ceil(outputLength / 3),
+					status: 'failed',
+					errorMessage: error instanceof Error ? error.message : String(error),
+					requestSummary: message.substring(0, 200)
+				});
+			}
+		} finally {
+			// 如果被中止且有部分输出，记录估算的token使用量
+			if (wasAborted && (inputLength > 0 || outputLength > 0)) {
+				// 粗略估算：1个token ≈ 4个字符（中文约2-3字符，英文约4字符）
+				const estimatedInputTokens = Math.ceil(inputLength / 3);
+				const estimatedOutputTokens = Math.ceil(outputLength / 3);
+
+				const usageEvent: ITokenUsageEvent = {
+					promptTokens: estimatedInputTokens,
+					completionTokens: estimatedOutputTokens,
+					totalTokens: estimatedInputTokens + estimatedOutputTokens,
+					mode: 'ask',
+					timestamp: Date.now()
+				};
+				this._onTokenUsage.fire(usageEvent);
+
+				console.log(`[Maxian] Ask模式中止，估算Token使用量 - 输入字符:${inputLength}(≈${estimatedInputTokens}tokens), 输出字符:${outputLength}(≈${estimatedOutputTokens}tokens), 总计:${usageEvent.totalTokens}tokens（注意：此为估算值，非精确统计）`);
+
+				// 记录AI调用日志（中止）
+				await this.logAICall({
+					inputTokens: estimatedInputTokens,
+					outputTokens: estimatedOutputTokens,
+					status: 'aborted',
+					requestSummary: message.substring(0, 200)
+				});
+			}
+
+			// 清理ask模式状态
+			this.isAskModeRunning = false;
+			this.askModeAbortController = null;
+		}
+	}
+
+	/**
+	 * 使用 TaskService 发送消息（code/architect/debug 等模式）
+	 * 完整的任务处理，包括工具调用
+	 */
+	private async sendTaskMessage(message: string): Promise<void> {
 		if (!this.apiHandler || !this.toolExecutor) {
 			console.error('[Maxian] API Handler 或工具执行器未初始化');
 			this._onMessage.fire({
@@ -261,12 +573,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 		// 获取工作区根目录
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
 		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
-
-		// 触发用户消息事件
-		this._onMessage.fire({
-			type: 'user',
-			content: message
-		});
 
 		try {
 			// 创建新的TaskService实例
@@ -282,8 +588,77 @@ export class MaxianService extends Disposable implements IMaxianService {
 			});
 
 			// 连接TaskService事件
-			this._register(this.currentTask.onStatusChanged(status => {
+			const statusChangedDisposable = this.currentTask.onStatusChanged(async (status) => {
 				console.log('[Maxian] Task状态变更:', status);
+				if (status === TaskStatus.COMPLETED || status === TaskStatus.ERROR || status === TaskStatus.ABORTED) {
+					// 任务结束（无论成功、失败还是中止），记录AI调用日志
+					if (this.currentTask) {
+						const taskUsage = this.currentTask.getTokenUsage();
+
+						// 尝试使用后端返回的精确token数据
+						if (taskUsage && (taskUsage.totalTokensIn > 0 || taskUsage.totalTokensOut > 0)) {
+							// 有精确的token数据
+							const usageEvent: ITokenUsageEvent = {
+								promptTokens: taskUsage.totalTokensIn || 0,
+								completionTokens: taskUsage.totalTokensOut || 0,
+								totalTokens: (taskUsage.totalTokensIn || 0) + (taskUsage.totalTokensOut || 0),
+								mode: this.currentMode,
+								timestamp: Date.now()
+							};
+							this._onTokenUsage.fire(usageEvent);
+
+							console.log(`[Maxian] ${this.currentMode}模式Token使用量(精确) - 输入:${usageEvent.promptTokens}, 输出:${usageEvent.completionTokens}, 总计:${usageEvent.totalTokens}`);
+
+							// 记录AI调用日志(使用精确token数据)
+							await this.logAICall({
+								inputTokens: usageEvent.promptTokens,
+								outputTokens: usageEvent.completionTokens,
+								status: status === TaskStatus.COMPLETED ? 'success' : (status === TaskStatus.ABORTED ? 'aborted' : 'failed'),
+								errorMessage: status === TaskStatus.ERROR ? '任务执行失败' : undefined,
+								requestSummary: message.substring(0, 200)
+							});
+						} else {
+							// 没有精确token数据,使用估算值并记录日志
+							console.warn(`[Maxian] ${this.currentMode}模式后端未返回token数据，使用估算值记录日志`);
+
+							// 估算token: 基于消息长度
+							// 1个中文字符 ≈ 1.5 tokens, 1个英文单词 ≈ 1.3 tokens
+							// 简化估算: 每3个字符 ≈ 1 token
+							const estimatedInputTokens = Math.ceil(message.length / 3);
+
+							// 估算输出token: 收集所有文本响应
+							let totalOutputText = '';
+							const messages = this.currentTask.getClineMessages();
+							for (const msg of messages) {
+								if (msg.type === 'say' && (msg.say === 'text' || msg.say === 'completion_result') && msg.text) {
+									totalOutputText += msg.text;
+								}
+							}
+							const estimatedOutputTokens = Math.ceil(totalOutputText.length / 3);
+
+							const usageEvent: ITokenUsageEvent = {
+								promptTokens: estimatedInputTokens,
+								completionTokens: estimatedOutputTokens,
+								totalTokens: estimatedInputTokens + estimatedOutputTokens,
+								mode: this.currentMode,
+								timestamp: Date.now()
+							};
+							this._onTokenUsage.fire(usageEvent);
+
+							console.log(`[Maxian] ${this.currentMode}模式Token使用量(估算) - 输入:${usageEvent.promptTokens}(${message.length}字符), 输出:${usageEvent.completionTokens}(${totalOutputText.length}字符), 总计:${usageEvent.totalTokens}tokens (注意:为估算值)`);
+
+							// 记录AI调用日志(使用估算token数据)
+							await this.logAICall({
+								inputTokens: estimatedInputTokens,
+								outputTokens: estimatedOutputTokens,
+								status: status === TaskStatus.COMPLETED ? 'success' : (status === TaskStatus.ABORTED ? 'aborted' : 'failed'),
+								errorMessage: status === TaskStatus.ERROR ? '任务执行失败' : undefined,
+								requestSummary: message.substring(0, 200)
+							});
+						}
+					}
+				}
+
 				if (status === TaskStatus.COMPLETED) {
 					this._onMessage.fire({
 						type: 'assistant',
@@ -298,9 +673,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 					});
 				}
 				// ABORTED状态静默处理，不显示任何提示
-			}));
+			});
+			this._register(statusChangedDisposable);
 
-			this._register(this.currentTask.onMessageAdded(clineMessage => {
+			const messageAddedDisposable = this.currentTask.onMessageAdded(clineMessage => {
 				console.log('[Maxian] Task消息:', clineMessage);
 
 				// 发送完整的ClineMessage（新版本）
@@ -321,11 +697,18 @@ export class MaxianService extends Disposable implements IMaxianService {
 						});
 					}
 				}
-			}));
+			});
+			this._register(messageAddedDisposable);
 
 			// 监听流式chunks，实时发送文本到UI
-			this._register(this.currentTask.onStreamChunk(chunk => {
+			const streamChunkDisposable = this.currentTask.onStreamChunk(chunk => {
 				if (chunk.text) {
+					// 记录首Token时间
+					if (!this.currentFirstTokenTime) {
+						this.currentFirstTokenTime = new Date();
+						console.log('[Maxian] 首Token到达时间:', this.currentFirstTokenTime.toISOString());
+					}
+
 					// 实时发送文本chunks
 					this._onMessage.fire({
 						type: 'assistant',
@@ -340,13 +723,51 @@ export class MaxianService extends Disposable implements IMaxianService {
 						isPartial: false
 					});
 				}
-			}));
+			});
+			this._register(streamChunkDisposable);
+
+			// 监听token使用量更新，在每次API调用完成时记录日志
+			let hasLoggedCall = false; // 标记是否已记录过本次会话的日志
+			const tokenUsageDisposable = this.currentTask.onTokenUsageUpdated(async (tokenUsage) => {
+				// 只记录一次日志(在第一次收到token使用量时)
+				if (hasLoggedCall) {
+					return;
+				}
+
+				if (tokenUsage && (tokenUsage.totalTokensIn > 0 || tokenUsage.totalTokensOut > 0)) {
+					hasLoggedCall = true;
+
+					// 触发单次对话完成的token使用量事件
+					const usageEvent: ITokenUsageEvent = {
+						promptTokens: tokenUsage.totalTokensIn || 0,
+						completionTokens: tokenUsage.totalTokensOut || 0,
+						totalTokens: (tokenUsage.totalTokensIn || 0) + (tokenUsage.totalTokensOut || 0),
+						mode: this.currentMode,
+						timestamp: Date.now()
+					};
+					this._onTokenUsage.fire(usageEvent);
+
+					console.log(`[Maxian] ${this.currentMode}模式Token使用量更新 - 输入:${usageEvent.promptTokens}, 输出:${usageEvent.completionTokens}, 总计:${usageEvent.totalTokens}`);
+
+					// 立即记录AI调用日志（不等待用户确认）
+					console.log(`[Maxian] 准备记录${this.currentMode}模式的AI调用日志(基于token更新事件)...`);
+					await this.logAICall({
+						inputTokens: usageEvent.promptTokens,
+						outputTokens: usageEvent.completionTokens,
+						status: 'success', // API调用成功
+						requestSummary: message.substring(0, 200)
+					});
+					console.log(`[Maxian] ${this.currentMode}模式的AI调用日志记录完成(基于token更新事件)`);
+				}
+			});
+			this._register(tokenUsageDisposable);
 
 			// 监听用户输入请求
-			this._register(this.currentTask.onUserInputRequired(({ question, toolUseId }) => {
+			const userInputDisposable = this.currentTask.onUserInputRequired(({ question, toolUseId }) => {
 				console.log('[Maxian] 转发用户输入请求到UI:', question);
 				this._onQuestionAsked.fire({ question, toolUseId });
-			}));
+			});
+			this._register(userInputDisposable);
 
 			// 启动任务
 			await this.currentTask.start();
@@ -356,6 +777,14 @@ export class MaxianService extends Disposable implements IMaxianService {
 			this._onMessage.fire({
 				type: 'error',
 				content: `错误: ${error instanceof Error ? error.message : String(error)}`
+			});
+
+			// 记录AI调用日志（失败）
+			console.log('[Maxian] 任务执行出现异常，记录失败日志');
+			await this.logAICall({
+				status: 'failed',
+				errorMessage: error instanceof Error ? error.message : String(error),
+				requestSummary: message.substring(0, 200)
 			});
 		}
 	}
@@ -750,13 +1179,28 @@ export class MaxianService extends Disposable implements IMaxianService {
 	 * 取消当前正在执行的任务
 	 */
 	cancelTask(): void {
+		// 检查是否有TaskService任务在运行（code/architect/debug等模式）
 		if (this.currentTask) {
-			console.log('[Maxian] 取消当前任务');
+			console.log('[Maxian] 取消当前TaskService任务');
 			this.currentTask.abortTask(ClineApiReqCancelReason.UserCancelled);
 			this._onTaskCancelled.fire();
-		} else {
-			console.log('[Maxian] 没有正在执行的任务');
+			return;
 		}
+
+		// 检查是否有ask模式任务在运行
+		if (this.isAskModeRunning && this.askModeAbortController && this.difyHandler) {
+			console.log('[Maxian] 中止Ask模式任务');
+			// 1. 调用Dify停止API（异步，不等待结果）
+			this.difyHandler.stopCurrentTask().catch(err => {
+				console.error('[Maxian] Dify停止API调用失败:', err);
+			});
+			// 2. 中止前端HTTP请求
+			this.askModeAbortController.abort();
+			this._onTaskCancelled.fire();
+			return;
+		}
+
+		console.log('[Maxian] 没有正在执行的任务');
 	}
 
 	/**
@@ -765,18 +1209,177 @@ export class MaxianService extends Disposable implements IMaxianService {
 	clearConversation(): void {
 		console.log('[Maxian] 清空对话历史');
 
-		// 如果有正在执行的任务，先中止它
+		// 如果有正在执行的TaskService任务，先中止它
 		if (this.currentTask) {
 			this.currentTask.abortTask(ClineApiReqCancelReason.UserCancelled);
 		}
 
+		// 如果有正在执行的ask模式任务，先中止它
+		if (this.isAskModeRunning && this.askModeAbortController) {
+			this.askModeAbortController.abort();
+		}
+
 		// 重置当前任务
 		this.currentTask = null;
+		this.isAskModeRunning = false;
+		this.askModeAbortController = null;
 
 		// 触发对话清空事件
 		this._onConversationCleared.fire();
 
 		console.log('[Maxian] 对话历史已清空');
+	}
+
+	/**
+	 * 生成追踪ID (UUID v4)
+	 */
+	private generateTraceId(): string {
+		return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+			const r = Math.random() * 16 | 0;
+			const v = c === 'x' ? r : (r & 0x3 | 0x8);
+			return v.toString(16);
+		});
+	}
+
+	/**
+	 * 获取设备信息
+	 */
+	private getDeviceInfo(): any {
+		let osType = 'unknown';
+		let osVersion = '';
+
+		if (isWindows) {
+			osType = 'Windows';
+			// 可以通过navigator.userAgent获取详细版本
+			osVersion = navigator.userAgent.match(/Windows NT (\d+\.\d+)/)?.[1] || '';
+		} else if (isMacintosh) {
+			osType = 'macOS';
+			osVersion = navigator.userAgent.match(/Mac OS X (\d+[_\.]\d+[_\.]\d+)/)?.[1]?.replace(/_/g, '.') || '';
+		} else if (isLinux) {
+			osType = 'Linux';
+		}
+
+		return {
+			type: osType,
+			id: '', // 可以生成设备ID
+			name: '', // 可以获取计算机名
+			osVersion: osVersion || osType
+		};
+	}
+
+	/**
+	 * 获取IDE信息
+	 */
+	private getIdeInfo(): any {
+		// 从VSCode配置中获取版本信息
+		return {
+			type: 'vscode',
+			version: '1.90.0', // 可以从vscode API获取
+			pluginVersion: '1.0.0', // 插件版本
+			projectName: this.workspaceContextService.getWorkspace().folders[0]?.name || ''
+		};
+	}
+
+	/**
+	 * 获取用户邮箱
+	 */
+	private getUserEmail(): string | undefined {
+		const credentials = this.loadAuthCredentials();
+		return credentials?.username; // username通常是邮箱
+	}
+
+	/**
+	 * 记录AI调用日志
+	 */
+	private async logAICall(options: {
+		inputTokens?: number;
+		outputTokens?: number;
+		status: 'success' | 'failed' | 'aborted';
+		errorMessage?: string;
+		requestSummary?: string;
+		responseSummary?: string;
+	}): Promise<void> {
+		if (!this.currentTraceId || !this.currentCallStartTime) {
+			console.warn('[Maxian] 无法记录AI调用日志：缺少TraceId或开始时间');
+			return;
+		}
+
+		try {
+			const endTime = new Date();
+			const durationMs = endTime.getTime() - this.currentCallStartTime.getTime();
+
+			// 计算首Token耗时
+			let firstTokenMs: number | undefined;
+			if (this.currentFirstTokenTime) {
+				firstTokenMs = this.currentFirstTokenTime.getTime() - this.currentCallStartTime.getTime();
+			}
+
+			// 获取provider和model信息
+			let provider = 'qwen'; // 默认提供商
+			let model = 'qwen-turbo';
+
+			// 根据当前模式获取provider和model
+			if (this.currentMode === 'ask' && this.difyHandler) {
+				provider = 'dify';
+				model = 'dify-workflow';
+			} else if (this.apiHandler) {
+				const modelInfo = this.apiHandler.getModel();
+				model = modelInfo.id;
+				// ModelInfo没有provider字段,使用默认值
+				provider = 'qwen';
+			}
+
+			// 获取知识库信息(仅ask模式)
+			let knowledgeBaseInfo: any = undefined;
+			if (this.currentMode === 'ask' && this.currentKnowledgeBaseConfig) {
+				knowledgeBaseInfo = {
+					id: this.currentKnowledgeBaseConfig.id ? parseInt(this.currentKnowledgeBaseConfig.id) : undefined,
+					name: this.currentKnowledgeBaseConfig.name,
+					type: 'dify'  // 知识库类型
+				};
+			}
+
+			// 构建日志数据
+			const logData = {
+				traceId: this.currentTraceId,
+				userEmail: this.getUserEmail(),
+				deviceInfo: this.getDeviceInfo(),
+				ideInfo: this.getIdeInfo(),
+				knowledgeBaseInfo: knowledgeBaseInfo,
+				provider: provider,
+				model: model,
+				operation: 'chat',
+				mode: this.currentMode,
+				inputTokens: options.inputTokens,
+				outputTokens: options.outputTokens,
+				durationMs: durationMs,
+				firstTokenMs: firstTokenMs,
+				status: options.status,
+				errorMessage: options.errorMessage,
+				requestSummary: options.requestSummary,
+				responseSummary: options.responseSummary,
+				startTime: this.currentCallStartTime,
+				endTime: endTime
+			};
+
+			console.log('[Maxian] 记录AI调用日志:', {
+				traceId: logData.traceId,
+				mode: logData.mode,
+				status: logData.status,
+				durationMs: logData.durationMs,
+				tokens: {
+					input: logData.inputTokens,
+					output: logData.outputTokens
+				}
+			});
+
+			// 调用日志服务
+			await this.aiLogService.logAICall(logData);
+
+		} catch (error) {
+			console.error('[Maxian] 记录AI调用日志失败:', error);
+			// 不抛出错误，避免影响正常功能
+		}
 	}
 
 	override dispose(): void {

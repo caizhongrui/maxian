@@ -193,7 +193,7 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		const conversationalPatterns = [
 			/^(it seems|i think|i would|i can|let me|here|sorry|i'm|could you|please|would you|you can|you should|you may)/i,
 			/^(this|that|the code|here's|this is|that is|this will|here are)/i,
-			/^(to |for |in order to |we |you |I )/i, // 以介词或人称开头
+			/^(to |in order to |we |you |I )\s/i, // 以介词或人称开头 (移除 for,避免误过滤 for 循环)
 			/\?$/, // 以问号结尾
 			/^(注意|请注意|说明|解释|这里|这个|这段)/  // 中文对话
 		];
