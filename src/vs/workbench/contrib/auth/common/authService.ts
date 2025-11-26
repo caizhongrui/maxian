@@ -66,11 +66,6 @@ export interface IAuthService {
 	getAccessToken(): string | undefined;
 
 	/**
-	 * 验证令牌是否有效
-	 */
-	validateToken(): Promise<boolean>;
-
-	/**
 	 * 设置认证配置
 	 */
 	setConfig(config: AuthConfig): void;

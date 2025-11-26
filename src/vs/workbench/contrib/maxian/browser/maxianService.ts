@@ -308,7 +308,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 		console.log('[Maxian] 工具执行器已初始化，工作区:', workspaceRoot);
 
 		// 从StorageService读取认证凭据（与authService使用相同的key）
-		const credentials = this.loadAuthCredentials();
+		this.loadAuthCredentials();
 
 		// 初始化API Handler（优先使用代理服务）
 		const validation = this.apiFactory.validateConfiguration();
@@ -316,7 +316,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			console.warn('[Maxian] API配置验证失败:', validation.error);
 		}
 
-		this.apiHandler = this.apiFactory.createHandler(credentials);
+		this.apiHandler = this.apiFactory.createHandler();
 		const modelInfo = this.apiHandler.getModel();
 		console.log('[Maxian] API Handler已初始化，模型:', modelInfo.name);
 

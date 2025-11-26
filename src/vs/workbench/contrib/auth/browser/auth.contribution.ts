@@ -19,6 +19,7 @@ import { ServicesAccessor } from '../../../../platform/instantiation/common/inst
 import { Categories } from '../../../../platform/action/common/actionCommonCategories.js';
 import { ISecretStorageService } from '../../../../platform/secrets/common/secrets.js';
 import { IStatusbarService, StatusbarAlignment, IStatusbarEntryAccessor } from '../../../services/statusbar/browser/statusbar.js';
+import { HeartbeatService } from './heartbeatService.js';
 
 // 注册认证服务
 registerSingleton(IAuthService, AuthService, InstantiationType.Delayed);
@@ -32,6 +33,7 @@ class AuthStartupContribution extends Disposable implements IWorkbenchContributi
 	private loginDialog: LoginDialog | undefined;
 	private userStatusBarEntry: IStatusbarEntryAccessor | undefined;
 	private logoutStatusBarEntry: IStatusbarEntryAccessor | undefined;
+	private heartbeatService: HeartbeatService;
 	private static readonly PASSWORD_KEY = 'zhikai.auth.password';
 
 	constructor(
@@ -44,28 +46,43 @@ class AuthStartupContribution extends Disposable implements IWorkbenchContributi
 	) {
 		super();
 
+		// 创建心跳服务实例
+		this.heartbeatService = this.instantiationService.createInstance(HeartbeatService);
+		this._register(this.heartbeatService);
+		console.log('[AuthStartupContribution] Heartbeat service created');
+
 		// IDE 启动时进行认证检查，延迟执行以确保 UI 已完全加载
 		setTimeout(() => {
+			console.log('[AuthStartupContribution] Starting authentication check...');
 			this.checkAuthentication();
 		}, 1000); // 延迟 1 秒，确保 QuickInput UI 已准备好
 
 		// 监听登录状态变化
 		this._register(this.authService.onDidChangeStatus((status) => {
+			console.log('[AuthStartupContribution] Auth status changed:', status);
 			if (status === AuthStatus.Unauthenticated) {
 				// 隐藏状态栏项
 				this.updateStatusBar();
+				// 停止心跳
+				this.heartbeatService.stopHeartbeat();
 			}
 		}));
 
 		// 监听用户信息变化
 		this._register(this.authService.onDidChangeUser((user) => {
+			console.log('[AuthStartupContribution] User changed:', user ? user.username : 'null');
 			if (user) {
 				// this.notificationService.info(`欢迎回来，${user.displayName || user.username}！`);
 				// 显示状态栏项
 				this.updateStatusBar();
+				// 用户登录成功，启动心跳
+				console.log('[AuthStartupContribution] Starting heartbeat for user:', user.username);
+				this.heartbeatService.startHeartbeat();
 			} else {
 				// 用户退出登录
 				this.updateStatusBar();
+				// 停止心跳
+				this.heartbeatService.stopHeartbeat();
 			}
 		}));
 	}
@@ -109,11 +126,24 @@ class AuthStartupContribution extends Disposable implements IWorkbenchContributi
 	 * 检查认证状态
 	 */
 	private async checkAuthentication(): Promise<void> {
-		// 从配置读取
+		// 先从配置读取 API URL
 		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
-		const username = this.configurationService.getValue<string>('zhikai.auth.username');
+		if (apiUrl) {
+			this.authService.setConfig({
+				apiUrl,
+				timeout: 30000
+			});
+		}
 
-		// 从加密存储读取密码
+		// 1. 首先尝试使用存储的凭据自动登录（包括 token）
+		const autoLoginSuccess = await this.authService.autoLogin();
+		if (autoLoginSuccess) {
+			console.log('[Auth] 自动登录成功');
+			return;
+		}
+
+		// 2. 自动登录失败，尝试使用配置文件中的用户名密码
+		const username = this.configurationService.getValue<string>('zhikai.auth.username');
 		const password = await this.secretStorageService.get(AuthStartupContribution.PASSWORD_KEY);
 
 		// 配置不完整，显示登录对话框
@@ -122,19 +152,14 @@ class AuthStartupContribution extends Disposable implements IWorkbenchContributi
 			return;
 		}
 
-		// 设置到服务中
-		this.authService.setConfig({
-			apiUrl,
-			timeout: 30000
-		});
-
-		// 尝试登录
+		// 尝试使用配置文件登录
 		try {
 			await this.authService.login({
 				username,
 				password,
 				rememberMe: true
 			});
+			console.log('[Auth] 使用配置文件登录成功');
 		} catch (error) {
 			// 登录失败，显示登录对话框
 			await this.showLoginDialog();
