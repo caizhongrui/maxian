@@ -14,12 +14,12 @@ jobs:
 
     steps:
     - name: 检出代码
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 1
 
     - name: 设置 Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: '20.x'
         cache: 'npm'
@@ -52,14 +52,14 @@ jobs:
       run: npm run gulp vscode-win32-x64-user-setup
 
     - name: 上传系统级安装包
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: tianhe-zhikai-system-setup-x64
         path: .build/win32-x64/system-setup/VSCodeSetup.exe
         if-no-files-found: error
 
     - name: 上传用户级安装包
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: tianhe-zhikai-user-setup-x64
         path: .build/win32-x64/user-setup/VSCodeSetup.exe
