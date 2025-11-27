@@ -40,6 +40,11 @@ jobs:
     - name: 编译扩展
       run: npm run compile-extensions-build
 
+    - name: Bundle 和 Minify
+      run: |
+        npm run gulp bundle-vscode
+        npm run gulp minify-vscode
+
     - name: 构建 Windows 客户端 (x64)
       run: |
         npm run gulp vscode-win32-x64-min-ci
