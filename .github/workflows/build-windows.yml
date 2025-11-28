@@ -40,40 +40,9 @@ jobs:
     - name: 编译扩展
       run: npm run compile-extensions-build
 
-    - name: Bundle 和 Minify
-      run: |
-        npm run gulp bundle-vscode
-        npm run gulp minify-vscode
-
-    - name: 验证 out-vscode-min 目录
-      run: |
-        echo "检查 out-vscode-min 目录..."
-        if (Test-Path "out-vscode-min") {
-          echo "[OK] out-vscode-min 存在"
-          Get-ChildItem "out-vscode-min" | Select-Object -First 10
-
-          echo ""
-          echo "检查关键文件 workbench.js..."
-          if (Test-Path "out-vscode-min/vs/code/electron-sandbox/workbench/workbench.js") {
-            $size = (Get-Item "out-vscode-min/vs/code/electron-sandbox/workbench/workbench.js").Length
-            echo "[OK] workbench.js 存在, 大小: $size 字节"
-            if ($size -lt 7000) {
-              echo "[ERROR] 文件太小！应该约9000字节"
-              exit 1
-            }
-          } else {
-            echo "[ERROR] workbench.js 不存在！"
-            exit 1
-          }
-        } else {
-          echo "[ERROR] out-vscode-min 目录不存在 - minify 失败！"
-          exit 1
-        }
-      shell: pwsh
-
     - name: 构建 Windows 客户端 (x64)
       run: |
-        npm run gulp vscode-win32-x64-min-ci
+        npm run gulp vscode-win32-x64-min
         npm run gulp vscode-win32-x64-inno-updater
 
     - name: 生成系统级安装包
