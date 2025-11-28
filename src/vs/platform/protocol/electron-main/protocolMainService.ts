@@ -129,17 +129,20 @@ export class ProtocolMainService extends Disposable implements IProtocolMainServ
 			}
 		}
 
-		// Get MIME type for the file
+		// Get MIME type for the file and set it in headers
 		const mimeType = this.getMimeType(path);
+		if (mimeType) {
+			headers = { ...headers, 'Content-Type': mimeType };
+		}
 
 		// first check by validRoots
 		if (this.validRoots.findSubstr(path)) {
-			return callback({ path, headers, mimeType });
+			return callback({ path, headers });
 		}
 
 		// then check by validExtensions
 		if (this.validExtensions.has(extname(path).toLowerCase())) {
-			return callback({ path, mimeType });
+			return callback({ path, headers });
 		}
 
 		// finally block to load the resource
