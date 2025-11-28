@@ -142,11 +142,14 @@ const bundleVSCodeTask = task.define('bundle-vscode', task.series(
 				],
 				resources: vscodeResources,
 				fileContentMapper: filePath => {
+					// Normalize path separators for cross-platform compatibility
+					const normalizedPath = filePath.replace(/\\/g, '/');
+
 					if (
-						filePath.endsWith('vs/code/electron-sandbox/workbench/workbench.js') ||
+						normalizedPath.endsWith('vs/code/electron-sandbox/workbench/workbench.js') ||
 						// TODO: @justchen https://github.com/microsoft/vscode/issues/213332 make sure to remove when we use window.open on desktop
-						filePath.endsWith('vs/workbench/contrib/issue/electron-sandbox/issueReporter.js') ||
-						filePath.endsWith('vs/code/electron-sandbox/processExplorer/processExplorer.js')) {
+						normalizedPath.endsWith('vs/workbench/contrib/issue/electron-sandbox/issueReporter.js') ||
+						normalizedPath.endsWith('vs/code/electron-sandbox/processExplorer/processExplorer.js')) {
 						return async (content) => {
 							const bootstrapWindowContent = await fs.promises.readFile(path.join(root, 'out-build', 'bootstrap-window.js'), 'utf-8');
 							return `${bootstrapWindowContent}\n${content}`; // prepend bootstrap-window.js content to entry points that are Electron windows

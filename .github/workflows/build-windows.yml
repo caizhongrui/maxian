@@ -3,7 +3,7 @@ name: Build Windows Installer
 
 on:
   push:
-    branches: [ main, maxian-agent-release, day2-complete-kilocode-migration ]
+    branches: [ main, maxian-agent-release, day2-complete-kilocode-migration, plan-f-direct-import ]
   pull_request:
     branches: [ main, maxian-agent-release ]
   workflow_dispatch:  # 允许手动触发
@@ -34,13 +34,7 @@ jobs:
       run: npm run download-builtin-extensions
       continue-on-error: true
 
-    - name: 编译构建
-      run: npm run compile-build
-
-    - name: 编译扩展
-      run: npm run compile-extensions-build
-
-    - name: 构建 Windows 客户端 (x64)
+    - name: 构建 Windows 客户端 (x64) - 修复Windows路径问题
       run: |
         npm run gulp vscode-win32-x64-min
         npm run gulp vscode-win32-x64-inno-updater
