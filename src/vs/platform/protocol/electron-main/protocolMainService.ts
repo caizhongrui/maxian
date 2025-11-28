@@ -91,6 +91,31 @@ export class ProtocolMainService extends Disposable implements IProtocolMainServ
 
 	//#region vscode-file://
 
+	private getMimeType(path: string): string | undefined {
+		const ext = extname(path).toLowerCase();
+		const mimeTypes: Record<string, string> = {
+			'.js': 'text/javascript',
+			'.mjs': 'text/javascript',
+			'.cjs': 'text/javascript',
+			'.json': 'application/json',
+			'.html': 'text/html',
+			'.htm': 'text/html',
+			'.css': 'text/css',
+			'.svg': 'image/svg+xml',
+			'.png': 'image/png',
+			'.jpg': 'image/jpeg',
+			'.jpeg': 'image/jpeg',
+			'.gif': 'image/gif',
+			'.bmp': 'image/bmp',
+			'.webp': 'image/webp',
+			'.mp4': 'video/mp4',
+			'.wasm': 'application/wasm',
+			'.txt': 'text/plain',
+			'.xml': 'text/xml'
+		};
+		return mimeTypes[ext];
+	}
+
 	private handleResourceRequest(request: Electron.ProtocolRequest, callback: ProtocolCallback): void {
 		const path = this.requestToNormalizedFilePath(request);
 
@@ -104,14 +129,17 @@ export class ProtocolMainService extends Disposable implements IProtocolMainServ
 			}
 		}
 
+		// Get MIME type for the file
+		const mimeType = this.getMimeType(path);
+
 		// first check by validRoots
 		if (this.validRoots.findSubstr(path)) {
-			return callback({ path, headers });
+			return callback({ path, headers, mimeType });
 		}
 
 		// then check by validExtensions
 		if (this.validExtensions.has(extname(path).toLowerCase())) {
-			return callback({ path });
+			return callback({ path, mimeType });
 		}
 
 		// finally block to load the resource
