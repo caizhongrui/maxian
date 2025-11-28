@@ -72,15 +72,14 @@ jobs:
 
     - name: 打包绿色版（便携版）
       run: |
-        cd ..
-        Compress-Archive -Path VSCode-win32-x64 -DestinationPath tianhe-zhikai-portable-x64.zip
+        Compress-Archive -Path .build/win32-x64/VSCode-win32-x64 -DestinationPath tianhe-zhikai-portable-x64.zip
       shell: pwsh
 
     - name: 上传绿色版
       uses: actions/upload-artifact@v4
       with:
         name: tianhe-zhikai-portable-x64
-        path: ../tianhe-zhikai-portable-x64.zip
+        path: tianhe-zhikai-portable-x64.zip
         if-no-files-found: error
 
     - name: 构建信息
@@ -88,7 +87,7 @@ jobs:
         echo "构建完成！"
         echo "系统级安装包: .build/win32-x64/system-setup/VSCodeSetup.exe"
         echo "用户级安装包: .build/win32-x64/user-setup/VSCodeSetup.exe"
-        echo "绿色版（便携版）: ../tianhe-zhikai-portable-x64.zip"
+        echo "绿色版（便携版）: tianhe-zhikai-portable-x64.zip"
         dir .build\win32-x64\system-setup\
         dir .build\win32-x64\user-setup\
-        dir ..\tianhe-zhikai-portable-x64.zip
+        dir tianhe-zhikai-portable-x64.zip
