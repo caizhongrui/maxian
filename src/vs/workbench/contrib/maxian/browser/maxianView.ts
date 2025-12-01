@@ -108,9 +108,10 @@ export class MaxianView extends ViewPane {
 			this.handleConversationCleared();
 		}));
 
-		// 监听用户登录状态变化,更新可用模式
+		// 监听用户登录状态变化,更新可用模式和知识库
 		this._register(this.authService.onDidChangeUser(() => {
 			this.updateAvailableModes();
+			this.loadKnowledgeBases(); // 重新加载知识库列表
 		}));
 
 		// ========== 创建消息区域 ==========

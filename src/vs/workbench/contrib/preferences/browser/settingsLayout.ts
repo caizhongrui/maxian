@@ -43,7 +43,7 @@ export const tocData: ITOCEntry<string> = {
 	children: [
 		{
 			id: 'zhikai',
-			label: '智开',
+			label: '码弦',
 			order: 0,
 			settings: ['zhikai.*']
 		},

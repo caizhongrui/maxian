@@ -165,7 +165,7 @@ registerAction2(class ExplainCodeAction extends Action2 {
 		super({
 			id: 'zhikai.explainCode',
 			title: localize2('explainCode.title', 'AI 解释代码'),
-			category: localize2('zhikai.category', '天和·智开'),
+			category: localize2('zhikai.category', '天和·码弦'),
 			f1: true,
 			precondition: EditorContextKeys.hasNonEmptySelection,
 			menu: [
@@ -219,7 +219,7 @@ registerAction2(class OptimizeCodeAction extends Action2 {
 		super({
 			id: 'zhikai.optimizeCode',
 			title: localize2('optimizeCode.title', 'AI 优化代码'),
-			category: localize2('zhikai.category', '天和·智开'),
+			category: localize2('zhikai.category', '天和·码弦'),
 			f1: true,
 			precondition: EditorContextKeys.hasNonEmptySelection,
 			menu: [
@@ -273,7 +273,7 @@ registerAction2(class FindBugsAction extends Action2 {
 		super({
 			id: 'zhikai.findBugs',
 			title: localize2('findBugs.title', 'AI 查找错误'),
-			category: localize2('zhikai.category', '天和·智开'),
+			category: localize2('zhikai.category', '天和·码弦'),
 			f1: true,
 			precondition: EditorContextKeys.hasNonEmptySelection,
 			menu: [
@@ -327,7 +327,7 @@ registerAction2(class GenerateDocsAction extends Action2 {
 		super({
 			id: 'zhikai.generateDocs',
 			title: localize2('generateDocs.title', 'AI 生成文档'),
-			category: localize2('zhikai.category', '天和·智开'),
+			category: localize2('zhikai.category', '天和·码弦'),
 			f1: true,
 			precondition: EditorContextKeys.hasNonEmptySelection,
 			menu: [
@@ -381,7 +381,7 @@ registerAction2(class ClearChatHistoryAction extends Action2 {
 		super({
 			id: 'zhikai.clearChatHistory',
 			title: localize2('clearChatHistory.title', '清除聊天历史'),
-			category: localize2('zhikai.category', '天和·智开'),
+			category: localize2('zhikai.category', '天和·码弦'),
 			f1: true
 		});
 	}

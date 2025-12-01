@@ -69,7 +69,7 @@ export class LoginFormView extends Disposable {
 
 		// 标题
 		const title = append(header, $('h2'));
-		title.textContent = '欢迎使用智开 IDE';
+		title.textContent = '欢迎使用码弦 IDE';
 		title.style.margin = '0';
 		title.style.fontSize = '24px';
 		title.style.fontWeight = '600';
@@ -110,10 +110,10 @@ export class LoginFormView extends Disposable {
 		apiUrlLabel.style.color = 'var(--vscode-foreground)';
 
 		this.apiUrlInput = this._register(new InputBox(apiUrlGroup, this.contextViewService, {
-			placeholder: '例如: http://192.168.0.185:8088/',
+			placeholder: '例如: http://10.205.81.162/api',
 			inputBoxStyles: defaultInputBoxStyles
 		}));
-		this.apiUrlInput.value = 'http://192.168.0.185:8088/';
+		this.apiUrlInput.value = 'http://10.205.81.162/api';
 		this.apiUrlInput.inputElement.style.fontSize = '13px';
 
 		// 用户名

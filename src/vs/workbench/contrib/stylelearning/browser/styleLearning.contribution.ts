@@ -395,7 +395,7 @@ registerAction2(class LearnProjectStyleAction extends Action2 {
 		super({
 			id: 'zhikai.learnProjectStyle',
 			title: localize2('learnProjectStyle.title', '学习项目代码风格'),
-			category: localize2('zhikai.category', '天和·智开'),
+			category: localize2('zhikai.category', '天和·码弦'),
 			f1: true,
 			keybinding: {
 				primary: KeyMod.Alt | KeyMod.Shift | KeyCode.KeyL,
@@ -452,7 +452,7 @@ registerAction2(class ViewProjectStyleAction extends Action2 {
 		super({
 			id: 'zhikai.viewProjectStyle',
 			title: localize2('viewProjectStyle.title', '查看项目代码风格'),
-			category: localize2('zhikai.category', '天和·智开'),
+			category: localize2('zhikai.category', '天和·码弦'),
 			f1: true,
 			menu: [
 				{
@@ -515,7 +515,7 @@ registerAction2(class RefreshProjectStyleAction extends Action2 {
 		super({
 			id: 'zhikai.refreshProjectStyle',
 			title: localize2('refreshProjectStyle.title', '刷新项目代码风格'),
-			category: localize2('zhikai.category', '天和·智开'),
+			category: localize2('zhikai.category', '天和·码弦'),
 			f1: true,
 			menu: [
 				{
@@ -545,7 +545,7 @@ registerAction2(class DeleteProjectStyleAction extends Action2 {
 		super({
 			id: 'zhikai.deleteProjectStyle',
 			title: localize2('deleteProjectStyle.title', '删除项目代码风格配置'),
-			category: localize2('zhikai.category', '天和·智开'),
+			category: localize2('zhikai.category', '天和·码弦'),
 			f1: true,
 			menu: [
 				{

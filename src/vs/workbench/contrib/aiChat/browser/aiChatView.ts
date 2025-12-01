@@ -237,7 +237,7 @@ export class AIChatView extends ViewPane {
 		titleContainer.style.flex = '1';
 
 		const title = append(titleContainer, $('.header-text'));
-		title.textContent = '智开';
+		title.textContent = '码弦';
 		title.style.fontSize = '14px';
 		title.style.fontWeight = '600';
 		title.style.color = 'var(--vscode-foreground)';
@@ -943,7 +943,7 @@ export class AIChatView extends ViewPane {
 			}
 
 			// Build Ask mode prompt (based on Kilocode Ask mode)
-			let prompt = `You are 智开 AI, a knowledgeable technical assistant focused on answering questions and providing information about software development, technology, and related topics.
+			let prompt = `You are 码弦 AI, a knowledgeable technical assistant focused on answering questions and providing information about software development, technology, and related topics.
 
 **User's Question:**
 ${message}`;
@@ -1624,7 +1624,7 @@ Please respond in Chinese and use Markdown formatting.`;
 `;
 
 			// Build system prompt with VERY explicit tool usage requirements
-			const systemPrompt = `You are 智开 AI, a highly skilled software engineer.
+			const systemPrompt = `You are 码弦 AI, a highly skilled software engineer.
 
 **Project Context:**
 ${contextInfo}
@@ -2337,7 +2337,7 @@ Output your first tool call in XML format NOW:`;
 			}
 
 			// Architect mode prompt (based on Kilocode)
-			const architectPrompt = `You are 智开 AI, an experienced technical leader who is inquisitive and an excellent planner. Your goal is to gather information and get context to create a detailed plan for accomplishing the user's task, which the user will review and approve before they switch into another mode to implement the solution.
+			const architectPrompt = `You are 码弦 AI, an experienced technical leader who is inquisitive and an excellent planner. Your goal is to gather information and get context to create a detailed plan for accomplishing the user's task, which the user will review and approve before they switch into another mode to implement the solution.
 
 **User's Request:**
 ${requirement}

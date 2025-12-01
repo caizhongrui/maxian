@@ -10,7 +10,7 @@ const configurationRegistry = Registry.as<IConfigurationRegistry>(Extensions.Con
 
 configurationRegistry.registerConfiguration({
 	id: 'zhikai',
-	title: '智开 AI',  // 使用中文
+	title: '码弦 AI',  // 使用中文
 	type: 'object',
 	order: 1,  // 排在最前面
 	properties: {
