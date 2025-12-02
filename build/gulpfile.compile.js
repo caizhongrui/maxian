@@ -13,6 +13,14 @@ const task = require('./lib/task');
 const compilation = require('./lib/compilation');
 
 /**
+ * Copy maxian media assets to build output
+ */
+function copyMaxianMediaTask() {
+	return gulp.src('src/vs/workbench/contrib/maxian/browser/media/**/*.{png,svg,gif,jpg}', { encoding: false })
+		.pipe(gulp.dest('out-build/vs/workbench/contrib/maxian/browser/media'));
+}
+
+/**
  * @param {boolean} disableMangle
  */
 function makeCompileBuildTask(disableMangle) {
@@ -20,7 +28,8 @@ function makeCompileBuildTask(disableMangle) {
 		util.rimraf('out-build'),
 		date.writeISODate('out-build'),
 		compilation.compileApiProposalNamesTask,
-		compilation.compileTask('src', 'out-build', true, { disableMangle })
+		compilation.compileTask('src', 'out-build', true, { disableMangle }),
+		copyMaxianMediaTask
 	);
 }
 
