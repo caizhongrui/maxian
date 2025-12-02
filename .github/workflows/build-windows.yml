@@ -46,14 +46,14 @@ jobs:
       run: npm run gulp vscode-win32-x64-user-setup
 
     - name: 上传系统级安装包
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: tianhe-zhikai-system-setup-x64
         path: .build/win32-x64/system-setup/VSCodeSetup.exe
         if-no-files-found: error
 
     - name: 上传用户级安装包
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: tianhe-zhikai-user-setup-x64
         path: .build/win32-x64/user-setup/VSCodeSetup.exe
@@ -65,7 +65,7 @@ jobs:
       shell: pwsh
 
     - name: 上传绿色版
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: tianhe-zhikai-portable-x64
         path: tianhe-zhikai-portable-x64.zip
