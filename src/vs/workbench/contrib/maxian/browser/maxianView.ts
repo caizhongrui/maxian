@@ -686,6 +686,53 @@ export class MaxianView extends ViewPane {
 		// 加载知识库列表
 		this.loadKnowledgeBases();
 
+		// 刷新按钮
+		const refreshButton = append(leftControls, $('button.codicon.codicon-refresh')) as HTMLButtonElement;
+		refreshButton.title = '刷新操作类型和知识库';
+		refreshButton.style.padding = '6px';
+		refreshButton.style.minWidth = '28px';
+		refreshButton.style.minHeight = '28px';
+		refreshButton.style.backgroundColor = 'transparent';
+		refreshButton.style.color = 'var(--vscode-descriptionForeground)';
+		refreshButton.style.border = 'none';
+		refreshButton.style.borderRadius = '4px';
+		refreshButton.style.cursor = 'pointer';
+		refreshButton.style.fontSize = '16px';
+		refreshButton.style.display = 'inline-flex';
+		refreshButton.style.alignItems = 'center';
+		refreshButton.style.justifyContent = 'center';
+		refreshButton.style.transition = 'all 0.15s';
+		refreshButton.style.opacity = '0.6';
+		refreshButton.style.flexShrink = '0';
+		refreshButton.style.marginLeft = '4px';
+
+		refreshButton.onmouseenter = () => {
+			refreshButton.style.opacity = '1';
+			refreshButton.style.color = 'var(--vscode-focusBorder, #007ACC)';
+			refreshButton.style.backgroundColor = 'rgba(0, 122, 204, 0.1)';
+		};
+		refreshButton.onmouseleave = () => {
+			refreshButton.style.opacity = '0.6';
+			refreshButton.style.color = 'var(--vscode-descriptionForeground)';
+			refreshButton.style.backgroundColor = 'transparent';
+		};
+		refreshButton.onclick = async () => {
+			console.log('[MaxianView] 刷新按钮被点击');
+			// 添加旋转动画
+			refreshButton.style.transform = 'rotate(360deg)';
+			refreshButton.style.transition = 'transform 0.5s ease';
+
+			// 刷新操作类型和知识库
+			this.updateAvailableModes();
+			await this.loadKnowledgeBases();
+
+			// 重置旋转
+			setTimeout(() => {
+				refreshButton.style.transform = 'rotate(0deg)';
+				refreshButton.style.transition = 'all 0.15s';
+			}, 500);
+		};
+
 		// 右侧：取消、清空、发送按钮
 		const rightControls = append(bottomControls, $('div'));
 		rightControls.style.display = 'flex';
@@ -2365,6 +2412,9 @@ export class MaxianView extends ViewPane {
 
 			if (!apiUrl || !username || !password) {
 				console.debug('[MaxianView] API credentials not configured, skipping knowledge base loading');
+				// 清空知识库列表并更新UI
+				this.knowledgeBases = [];
+				this.updateKnowledgeBaseSelector();
 				return;
 			}
 
@@ -2387,6 +2437,9 @@ export class MaxianView extends ViewPane {
 
 			if (!response.ok) {
 				console.warn('[MaxianView] Failed to fetch knowledge bases:', response.status);
+				// 清空知识库列表并更新UI
+				this.knowledgeBases = [];
+				this.updateKnowledgeBaseSelector();
 				return;
 			}
 
@@ -2398,9 +2451,16 @@ export class MaxianView extends ViewPane {
 				this.knowledgeBases = result.data;
 				console.log('[MaxianView] Loaded', this.knowledgeBases.length, 'knowledge bases');
 				this.updateKnowledgeBaseSelector();
+			} else {
+				// API返回失败，清空知识库列表
+				this.knowledgeBases = [];
+				this.updateKnowledgeBaseSelector();
 			}
 		} catch (error) {
 			console.warn('[MaxianView] Error loading knowledge bases:', error);
+			// 发生异常时，清空知识库列表并更新UI
+			this.knowledgeBases = [];
+			this.updateKnowledgeBaseSelector();
 		}
 	}
 
@@ -2523,6 +2583,12 @@ export class MaxianView extends ViewPane {
 
 			console.log('[MaxianView] 已自动选择第一个知识库:', this.knowledgeBases[0].applicationName);
 		} else {
+			// 没有知识库时，清空选择并更新UI
+			this.selectedKnowledgeBaseId = null;
+			const textSpan = this.knowledgeBaseSelector.querySelector('[data-role="kb-text"]') as HTMLSpanElement;
+			if (textSpan) {
+				textSpan.textContent = '无可用知识库';
+			}
 			console.warn('[MaxianView] 没有可用的知识库');
 		}
 	}

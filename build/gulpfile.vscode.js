@@ -86,6 +86,9 @@ const vscodeResourceIncludes = [
 	// Welcome
 	'out-build/vs/workbench/contrib/welcomeGettingStarted/common/media/**/*.{svg,png}',
 
+	// Maxian
+	'out-build/vs/workbench/contrib/maxian/browser/media/**/*.{png,svg,gif,jpg}',
+
 	// Extensions
 	'out-build/vs/workbench/contrib/extensions/browser/media/{theme-icon.png,language-icon.svg}',
 	'out-build/vs/workbench/services/extensionManagement/common/media/*.{svg,png}',
