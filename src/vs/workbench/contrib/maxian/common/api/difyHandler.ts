@@ -10,6 +10,17 @@ import type {
 	UsageStreamChunk,
 	ErrorStreamChunk
 } from './types.js';
+import { CancellationToken } from '../../../../../base/common/cancellation.js';
+
+/**
+ * IRequestService 类型定义（避免循环依赖）
+ */
+interface IRequestService {
+	request(options: any, token: CancellationToken): Promise<{
+		res: { headers: any; statusCode?: number };
+		stream: any;
+	}>;
+}
 
 /**
  * Dify API 配置
@@ -18,6 +29,8 @@ export interface DifyConfiguration {
 	apiUrl: string;      // Dify API 地址，如 http://dify.boyocloud.com/v1
 	apiKey: string;      // Dify API Key，如 app-Y42FsQ8Vho29AWjZCzBzgIil
 	user?: string;       // 用户标识
+	proxyBaseUrl?: string;  // 可选的代理服务地址，如 http://127.0.0.1:8088
+	requestService?: IRequestService;  // 可选的请求服务（用于避免CORS）
 }
 
 /**
@@ -36,6 +49,14 @@ interface DifyChatRequest {
  */
 interface DifyMessageEvent {
 	event: 'message';
+	task_id: string;
+	id: string;
+	answer: string;
+	created_at: number;
+}
+
+interface DifyAgentMessageEvent {
+	event: 'agent_message';
 	task_id: string;
 	id: string;
 	answer: string;
@@ -63,7 +84,7 @@ interface DifyErrorEvent {
 	code: string;
 }
 
-type DifySSEEvent = DifyMessageEvent | DifyMessageEndEvent | DifyErrorEvent;
+type DifySSEEvent = DifyMessageEvent | DifyAgentMessageEvent | DifyMessageEndEvent | DifyErrorEvent;
 
 /**
  * Dify API Handler
@@ -73,10 +94,12 @@ export class DifyHandler {
 	private config: DifyConfiguration;
 	private conversationId: string | null = null;
 	private currentTaskId: string | null = null;  // 当前任务ID（用于停止）
+	private requestService: IRequestService | undefined;
 
 	constructor(config: DifyConfiguration) {
 		this.config = config;
-		console.log('[Maxian] DifyHandler 初始化，API URL:', config.apiUrl);
+		this.requestService = config.requestService;
+		console.log('[Maxian] DifyHandler 初始化，API URL:', config.apiUrl, 'proxyBaseUrl:', config.proxyBaseUrl || '未配置', 'requestService:', this.requestService ? '已提供' : '未提供');
 	}
 
 	/**
@@ -101,30 +124,21 @@ export class DifyHandler {
 
 			console.log('[Maxian] Dify 请求:', apiEndpoint, requestBody);
 
-			// 发送请求（支持中止）
-			const response = await fetch(apiEndpoint, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'Authorization': `Bearer ${this.config.apiKey}`
-				},
-				body: JSON.stringify(requestBody),
-				signal: abortSignal  // 传递中止信号
-			});
-
-			if (!response.ok) {
-				const errorText = await response.text();
-				console.error('[Maxian] Dify API 错误:', response.status, errorText);
-				const errorChunk: ErrorStreamChunk = {
-					type: 'error',
-					error: `Dify API 错误 (${response.status}): ${errorText}`
-				};
-				yield errorChunk;
-				return;
+			// 根据是否有 proxyBaseUrl 或 requestService 选择不同的请求方式
+			// 优先使用 proxy（如果配置了），因为 IRequestService 在渲染进程仍会遇到CORS
+			if (this.config.proxyBaseUrl) {
+				// 使用 fetch + proxy（最可靠的避免CORS方式）
+				console.log('[Maxian] 使用fetch+proxy发送请求（避免CORS）');
+				yield* this.sendWithFetch(apiEndpoint, requestBody, abortSignal);
+			} else if (this.requestService) {
+				// 使用 IRequestService（在主进程中可以避免CORS，但在渲染进程不行）
+				console.log('[Maxian] 使用IRequestService发送请求（可能遇到CORS）');
+				yield* this.sendWithRequestService(apiEndpoint, requestBody, abortSignal);
+			} else {
+				// 直接使用fetch（会遇到CORS）
+				console.log('[Maxian] 直接使用fetch发送请求（会遇到CORS）');
+				yield* this.sendWithFetch(apiEndpoint, requestBody, abortSignal);
 			}
-
-			// 处理流式响应
-			yield* this.processStream(response);
 
 		} catch (error) {
 			console.error('[Maxian] DifyHandler 错误:', error);
@@ -134,6 +148,89 @@ export class DifyHandler {
 			};
 			yield errorChunk;
 		}
+	}
+
+	/**
+	 * 使用 fetch 发送请求
+	 */
+	private async *sendWithFetch(apiEndpoint: string, requestBody: DifyChatRequest, abortSignal?: AbortSignal): ApiStream {
+		let requestUrl: string;
+		let requestHeaders: Record<string, string>;
+		let requestBodyStr: string;
+
+		// 如果配置了代理服务,使用代理
+		if (this.config.proxyBaseUrl) {
+			console.log('[Maxian] 使用代理服务发送请求:', this.config.proxyBaseUrl);
+
+			// 使用代理端点（移除末尾斜杠避免双斜杠）
+			const proxyBase = this.config.proxyBaseUrl.replace(/\/$/, '');
+			requestUrl = `${proxyBase}/dify/proxy/stream?targetUrl=${encodeURIComponent(apiEndpoint)}&apiKey=${encodeURIComponent(this.config.apiKey)}`;
+
+			// 代理请求只需要Content-Type
+			requestHeaders = {
+				'Content-Type': 'application/json'
+			};
+
+			requestBodyStr = JSON.stringify(requestBody);
+		} else {
+			// 直接请求Dify(会遇到CORS)
+			console.log('[Maxian] 直接请求Dify API(可能遇到CORS)');
+			requestUrl = apiEndpoint;
+			requestHeaders = {
+				'Content-Type': 'application/json',
+				'Authorization': `Bearer ${this.config.apiKey}`
+			};
+			requestBodyStr = JSON.stringify(requestBody);
+		}
+
+		const response = await fetch(requestUrl, {
+			method: 'POST',
+			headers: requestHeaders,
+			body: requestBodyStr,
+			signal: abortSignal
+		});
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			console.error('[Maxian] Dify API 错误:', response.status, errorText);
+			const errorChunk: ErrorStreamChunk = {
+				type: 'error',
+				error: `Dify API 错误 (${response.status}): ${errorText}`
+			};
+			yield errorChunk;
+			return;
+		}
+
+		yield* this.processStream(response);
+	}
+
+	/**
+	 * 使用 IRequestService 发送请求（避免CORS）
+	 */
+	private async *sendWithRequestService(apiEndpoint: string, requestBody: DifyChatRequest, abortSignal?: AbortSignal): ApiStream {
+		const token = CancellationToken.None; // TODO: 从 abortSignal 转换为 CancellationToken
+
+		const context = await this.requestService!.request({
+			type: 'POST',
+			url: apiEndpoint,
+			headers: {
+				'Content-Type': 'application/json',
+				'Authorization': `Bearer ${this.config.apiKey}`
+			},
+			data: JSON.stringify(requestBody)
+		}, token);
+
+		if (!context.res.statusCode || context.res.statusCode < 200 || context.res.statusCode >= 300) {
+			console.error('[Maxian] Dify API 错误:', context.res.statusCode);
+			const errorChunk: ErrorStreamChunk = {
+				type: 'error',
+				error: `Dify API 错误 (${context.res.statusCode})`
+			};
+			yield errorChunk;
+			return;
+		}
+
+		yield* this.processVSBufferStream(context.stream);
 	}
 
 	/**
@@ -152,7 +249,77 @@ export class DifyHandler {
 	}
 
 	/**
-	 * 处理 SSE 流式响应
+	 * 处理 VSBufferReadableStream (IRequestService 返回的流)
+	 */
+	private async *processVSBufferStream(stream: any): AsyncGenerator<StreamChunk> {
+		const decoder = new TextDecoder();
+		let buffer = '';
+
+		try {
+			// VSBufferReadableStream 的读取方式
+			for await (const chunk of stream) {
+				// chunk 是 VSBuffer 类型
+				const text = decoder.decode(chunk.buffer, { stream: true });
+				buffer += text;
+
+				// 按行分割处理SSE
+				const lines = buffer.split('\n');
+				buffer = lines.pop() || '';
+
+				for (const line of lines) {
+					if (!line.trim() || !line.startsWith('data: ')) {
+						continue;
+					}
+
+					const data = line.slice(6);
+
+					try {
+						const event: DifySSEEvent = JSON.parse(data);
+
+						if (event.task_id) {
+							this.currentTaskId = event.task_id;
+						}
+
+						if (event.event === 'message' || event.event === 'agent_message') {
+							const textChunk: TextStreamChunk = {
+								type: 'text',
+								text: event.answer
+							};
+							yield textChunk;
+						} else if (event.event === 'message_end') {
+							this.conversationId = event.conversation_id;
+							console.log('[Maxian] Dify 会话ID:', this.conversationId);
+
+							if (event.metadata?.usage) {
+								const usageChunk: UsageStreamChunk = {
+									type: 'usage',
+									inputTokens: event.metadata.usage.prompt_tokens,
+									outputTokens: event.metadata.usage.completion_tokens,
+									totalTokens: event.metadata.usage.total_tokens
+								};
+								yield usageChunk;
+							}
+						} else if (event.event === 'error') {
+							console.error('[Maxian] Dify 错误:', event.message);
+							const errorChunk: ErrorStreamChunk = {
+								type: 'error',
+								error: `Dify 错误: ${event.message} (${event.code})`
+							};
+							yield errorChunk;
+						}
+					} catch (parseError) {
+						console.error('[Maxian] 解析 Dify 响应失败:', parseError, 'data:', data);
+					}
+				}
+			}
+		} catch (error) {
+			console.error('[Maxian] 处理VSBuffer流失败:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * 处理 SSE 流式响应 (fetch 返回的 Response)
 	 */
 	private async *processStream(response: Response): AsyncGenerator<StreamChunk> {
 		const reader = response.body?.getReader();
@@ -195,8 +362,8 @@ export class DifyHandler {
 						}
 
 						// 处理不同类型的事件
-						if (event.event === 'message') {
-							// 文本消息块
+						if (event.event === 'message' || event.event === 'agent_message') {
+							// 文本消息块（支持 message 和 agent_message）
 							const textChunk: TextStreamChunk = {
 								type: 'text',
 								text: event.answer
@@ -270,15 +437,31 @@ export class DifyHandler {
 
 			console.log('[Maxian] 调用Dify停止API:', stopUrl);
 
-			const response = await fetch(stopUrl, {
-				method: 'POST',
-				headers: {
+			let requestUrl: string;
+			let requestHeaders: Record<string, string>;
+			const requestBody = JSON.stringify({
+				user: this.config.user || 'default-user'
+			});
+
+			// 如果配置了代理服务,使用代理
+			if (this.config.proxyBaseUrl) {
+				const proxyBase = this.config.proxyBaseUrl.replace(/\/$/, '');
+				requestUrl = `${proxyBase}/dify/proxy/stop?targetUrl=${encodeURIComponent(stopUrl)}&apiKey=${encodeURIComponent(this.config.apiKey)}`;
+				requestHeaders = {
+					'Content-Type': 'application/json'
+				};
+			} else {
+				requestUrl = stopUrl;
+				requestHeaders = {
 					'Content-Type': 'application/json',
 					'Authorization': `Bearer ${this.config.apiKey}`
-				},
-				body: JSON.stringify({
-					user: this.config.user || 'default-user'
-				})
+				};
+			}
+
+			const response = await fetch(requestUrl, {
+				method: 'POST',
+				headers: requestHeaders,
+				body: requestBody
 			});
 
 			if (!response.ok) {

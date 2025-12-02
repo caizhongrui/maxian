@@ -1,31 +1,31 @@
 {
-	"nameShort": "zhikai",
-	"nameLong": "zhikai",
-	"applicationName": "zhikai",
-	"dataFolderName": ".zhikai",
-	"win32MutexName": "zhikai",
+	"nameShort": "maxian",
+	"nameLong": "码弦",
+	"applicationName": "maxian",
+	"dataFolderName": ".maxian",
+	"win32MutexName": "maxian",
 	"licenseName": "MIT",
 	"licenseUrl": "https://github.com/tianhe-zhikai/tianhe-zhikai-ide/blob/main/LICENSE.txt",
 	"serverLicenseUrl": "https://github.com/tianhe-zhikai/tianhe-zhikai-ide/blob/main/LICENSE.txt",
 	"serverGreeting": [],
 	"serverLicense": [],
 	"serverLicensePrompt": "",
-	"serverApplicationName": "zhikai-server",
-	"serverDataFolderName": ".zhikai-server",
-	"tunnelApplicationName": "zhikai-tunnel",
-	"win32DirName": "zhikai",
-	"win32NameVersion": "zhikai",
-	"win32RegValueName": "zhikai",
+	"serverApplicationName": "maxian-server",
+	"serverDataFolderName": ".maxian-server",
+	"tunnelApplicationName": "maxian-tunnel",
+	"win32DirName": "maxian",
+	"win32NameVersion": "码弦",
+	"win32RegValueName": "maxian",
 	"win32x64AppId": "{{A77B7E06-80BA-4137-BCF4-654B95CCEBC5}",
 	"win32arm64AppId": "{{A1ACE434-89C5-48D1-88D3-E2991DF85475}",
 	"win32x64UserAppId": "{{AB6B787D-37A0-49E8-AE24-8559A032BE0C}",
 	"win32arm64UserAppId": "{{AAEBF0C8-F733-4AD4-BADE-FDB816D53D7B}",
-	"win32AppUserModelId": "zhikai.IDE",
-	"win32ShellNameShort": "zhikai",
-	"win32TunnelServiceMutex": "zhikai-tunnelservice",
-	"win32TunnelMutex": "zhikai-tunnel",
-	"darwinBundleIdentifier": "com.zhikai.ide",
-	"linuxIconName": "zhikai",
+	"win32AppUserModelId": "maxian.IDE",
+	"win32ShellNameShort": "码弦",
+	"win32TunnelServiceMutex": "maxian-tunnelservice",
+	"win32TunnelMutex": "maxian-tunnel",
+	"darwinBundleIdentifier": "com.maxian.ide",
+	"linuxIconName": "maxian",
 	"licenseFileName": "LICENSE.txt",
 	"reportIssueUrl": "https://github.com/tianhe-zhikai/tianhe-zhikai-ide/issues/new",
 	"nodejsRepository": "https://nodejs.org",
@@ -87,6 +87,193 @@
 				},
 				"publisherDisplayName": "Microsoft"
 			}
+		},
+		{
+			"name": "redhat.java",
+			"version": "1.51.2025113008",
+			"sha256": null,
+			"repo": "https://github.com/redhat-developer/vscode-java.git",
+			"metadata": {
+				"id": "redhat.java",
+				"publisherId": {
+					"publisherId": "",
+					"publisherName": "redhat",
+					"displayName": "Red Hat",
+					"flags": "verified"
+				},
+				"publisherDisplayName": "Red Hat"
+			}
+		},
+		{
+			"name": "vscjava.vscode-java-debug",
+			"version": "0.58.3",
+			"sha256": null,
+			"repo": "https://github.com/Microsoft/vscode-java-debug.git",
+			"metadata": {
+				"id": "vscjava.vscode-java-debug",
+				"publisherId": {
+					"publisherId": "",
+					"publisherName": "vscjava",
+					"displayName": "vscjava",
+					"flags": "verified"
+				},
+				"publisherDisplayName": "vscjava"
+			}
+		},
+		{
+			"name": "vscjava.vscode-java-test",
+			"version": "0.43.2",
+			"sha256": null,
+			"repo": "https://github.com/Microsoft/vscode-java-test.git",
+			"metadata": {
+				"id": "vscjava.vscode-java-test",
+				"publisherId": {
+					"publisherId": "",
+					"publisherName": "vscjava",
+					"displayName": "vscjava",
+					"flags": "verified"
+				},
+				"publisherDisplayName": "vscjava"
+			}
+		},
+		{
+			"name": "vscjava.vscode-maven",
+			"version": "0.44.0",
+			"sha256": null,
+			"repo": "https://github.com/Microsoft/vscode-maven.git",
+			"metadata": {
+				"id": "vscjava.vscode-maven",
+				"publisherId": {
+					"publisherId": "",
+					"publisherName": "vscjava",
+					"displayName": "vscjava",
+					"flags": "verified"
+				},
+				"publisherDisplayName": "vscjava"
+			}
+		},
+		{
+			"name": "vscjava.vscode-java-dependency",
+			"version": "0.26.3",
+			"sha256": null,
+			"repo": "https://github.com/Microsoft/vscode-java-dependency.git",
+			"metadata": {
+				"id": "vscjava.vscode-java-dependency",
+				"publisherId": {
+					"publisherId": "",
+					"publisherName": "vscjava",
+					"displayName": "vscjava",
+					"flags": "verified"
+				},
+				"publisherDisplayName": "vscjava"
+			}
+		},
+		{
+			"name": "Vue.volar",
+			"version": "3.1.5",
+			"sha256": null,
+			"repo": "https://github.com/vuejs/language-tools.git",
+			"metadata": {
+				"id": "vue.volar",
+				"publisherId": {
+					"publisherId": "",
+					"publisherName": "Vue",
+					"displayName": "Vue",
+					"flags": "verified"
+				},
+				"publisherDisplayName": "Vue"
+			}
+		},
+		{
+			"name": "dbaeumer.vscode-eslint",
+			"version": "3.0.16",
+			"sha256": null,
+			"repo": "https://github.com/Microsoft/vscode-eslint.git",
+			"metadata": {
+				"id": "dbaeumer.vscode-eslint",
+				"publisherId": {
+					"publisherId": "",
+					"publisherName": "dbaeumer",
+					"displayName": "dbaeumer",
+					"flags": "verified"
+				},
+				"publisherDisplayName": "dbaeumer"
+			}
+		},
+		{
+			"name": "esbenp.prettier-vscode",
+			"version": "11.0.0",
+			"sha256": null,
+			"repo": "https://github.com/prettier/prettier-vscode.git",
+			"metadata": {
+				"id": "esbenp.prettier-vscode",
+				"publisherId": {
+					"publisherId": "",
+					"publisherName": "esbenp",
+					"displayName": "esbenp",
+					"flags": "verified"
+				},
+				"publisherDisplayName": "esbenp"
+			}
+		},
+		{
+			"name": "vmware.vscode-spring-boot",
+			"version": "2.0.2025120108",
+			"sha256": null,
+			"repo": "https://github.com/spring-projects/spring-tools.git",
+			"metadata": {
+				"id": "vmware.vscode-spring-boot",
+				"publisherId": {
+					"publisherId": "",
+					"publisherName": "VMware",
+					"displayName": "VMware",
+					"flags": "verified"
+				},
+				"publisherDisplayName": "VMware"
+			}
+		},
+		{
+			"name": "vscjava.vscode-spring-initializr",
+			"version": "0.11.2",
+			"sha256": null,
+			"repo": "https://github.com/Microsoft/vscode-spring-initializr.git",
+			"metadata": {
+				"id": "vscjava.vscode-spring-initializr",
+				"publisherId": {
+					"publisherId": "",
+					"publisherName": "vscjava",
+					"displayName": "vscjava",
+					"flags": "verified"
+				},
+				"publisherDisplayName": "vscjava"
+			}
+		},
+		{
+			"name": "vscjava.vscode-spring-boot-dashboard",
+			"version": "0.14.0",
+			"sha256": null,
+			"repo": "https://github.com/Microsoft/vscode-spring-boot-dashboard.git",
+			"metadata": {
+				"id": "vscjava.vscode-spring-boot-dashboard",
+				"publisherId": {
+					"publisherId": "",
+					"publisherName": "vscjava",
+					"displayName": "vscjava",
+					"flags": "verified"
+				},
+				"publisherDisplayName": "vscjava"
+			}
 		}
+	],
+	"extensionRecommendations": [
+		"redhat.java",
+		"vscjava.vscode-java-debug",
+		"vscjava.vscode-java-test",
+		"vscjava.vscode-maven",
+		"vscjava.vscode-java-dependency",
+		"vue.volar",
+		"vue.vscode-typescript-vue-plugin",
+		"dbaeumer.vscode-eslint",
+		"esbenp.prettier-vscode"
 	]
 }

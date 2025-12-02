@@ -15,7 +15,7 @@ import { IThemeService } from '../../../../platform/theme/common/themeService.js
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { IMaxianService } from './maxianService.js';
-import { $, append, clearNode } from '../../../../base/browser/dom.js';
+import { $, append } from '../../../../base/browser/dom.js';
 import { ISecretStorageService } from '../../../../platform/secrets/common/secrets.js';
 import { getAllModes, DEFAULT_MODE, type Mode } from '../common/modes/modeTypes.js';
 import { MarkdownRendererDom } from './markdownRendererDom.js';
@@ -35,15 +35,25 @@ export class MaxianView extends ViewPane {
 	private currentAiMessageElement: HTMLElement | null = null;
 	private currentAiMessageText: string = ''; // 累积的原始文本
 	private currentMode: Mode = DEFAULT_MODE;
-	private modeSelector!: HTMLSelectElement;
+	private modeSelector!: HTMLDivElement; // 模式选择器显示框
+	private modeDropdown!: HTMLDivElement; // 模式下拉列表
+	private modeDropdownList!: HTMLUListElement; // 模式下拉列表ul
+	private modeSelectorArrow!: HTMLSpanElement; // 模式选择器箭头
+	private isModeDropdownOpeningUpward: boolean = false; // 模式下拉列表是否向上展开
+	private isModeDropdownOpen: boolean = false; // 模式下拉列表是否打开
 	private awaitingUserResponse: boolean = false; // 是否正在等待用户回答AI的问题
 	private currentToolStatusElement: HTMLElement | null = null; // 当前工具状态元素（更新而非新建）
 	private cancelButton!: HTMLButtonElement; // 取消任务按钮
 	private clearButton!: HTMLButtonElement; // 清空对话按钮
 	// @ts-ignore used in handleConversationCleared
 	private welcomeElement: HTMLElement | null = null; // 欢迎消息元素引用
-	private knowledgeBaseSelector!: HTMLSelectElement; // 知识库选择器
+	private knowledgeBaseSelector!: HTMLDivElement; // 知识库选择器显示框
+	private knowledgeBaseDropdown!: HTMLDivElement; // 知识库下拉列表
+	private knowledgeBaseDropdownList!: HTMLUListElement; // 知识库下拉列表ul
+	private knowledgeBaseSelectorArrow!: HTMLSpanElement; // 知识库选择器箭头
 	private selectedKnowledgeBaseId: string | null = null; // 当前选中的知识库ID
+	private isDropdownOpeningUpward: boolean = false; // 下拉列表是否向上展开
+	private isKnowledgeBaseDropdownOpen: boolean = false; // 知识库下拉列表是否打开
 	private knowledgeBases: Array<{
 		id: string;
 		applicationName: string;
@@ -295,7 +305,7 @@ export class MaxianView extends ViewPane {
 		bottomControls.style.zIndex = '10'; // 确保在输入框和渐变层之上
 		bottomControls.style.paddingLeft = '8px';
 		bottomControls.style.paddingRight = '8px';
-		bottomControls.style.paddingBottom = '8px';
+		bottomControls.style.paddingBottom = '2px';
 		bottomControls.style.display = 'flex';
 		bottomControls.style.justifyContent = 'space-between';
 		bottomControls.style.alignItems = 'center';
@@ -308,171 +318,369 @@ export class MaxianView extends ViewPane {
 		leftControls.style.gap = '4px'; // 减小间距
 		leftControls.style.flex = '1';
 		leftControls.style.minWidth = '0';
-		leftControls.style.overflow = 'hidden'; // 防止溢出
+		leftControls.style.overflow = 'visible'; // 允许下拉列表溢出显示
 
+		// 模式选择器包装器
 		const modeSelectorWrapper = append(leftControls, $('div'));
-		modeSelectorWrapper.style.flexShrink = '1'; // 允许收缩
+		modeSelectorWrapper.style.flexShrink = '1';
 		modeSelectorWrapper.style.minWidth = '80px';
 		modeSelectorWrapper.style.maxWidth = '110px';
 		modeSelectorWrapper.style.position = 'relative';
 		modeSelectorWrapper.style.display = 'flex';
 		modeSelectorWrapper.style.alignItems = 'center';
+		modeSelectorWrapper.style.zIndex = '100';
 
-		// 添加模式图标
+		// 模式图标
 		const modeIcon = append(modeSelectorWrapper, $('span.codicon.codicon-symbol-event'));
 		modeIcon.style.position = 'absolute';
 		modeIcon.style.left = '8px';
 		modeIcon.style.pointerEvents = 'none';
-		modeIcon.style.color = 'var(--vscode-descriptionForeground)';
-		modeIcon.style.fontSize = '12px';
+		modeIcon.style.color = 'var(--vscode-charts-blue, #007ACC)';
+		modeIcon.style.fontSize = '14px';
 		modeIcon.style.zIndex = '1';
+		modeIcon.style.transition = 'all 0.2s ease';
 
-		this.modeSelector = append(modeSelectorWrapper, $('select')) as HTMLSelectElement;
-		this.modeSelector.style.width = '100%';
-		this.modeSelector.style.padding = '4px 8px 4px 26px'; // 左边留出图标空间
+		// 模式选择器显示框（自定义div）
+		this.modeSelector = append(modeSelectorWrapper, $('div')) as HTMLDivElement;
+		this.modeSelector.style.position = 'relative';
+		this.modeSelector.style.display = 'flex';
+		this.modeSelector.style.alignItems = 'center';
+		this.modeSelector.style.height = '34px';
+		this.modeSelector.style.padding = '0 32px 0 36px';
+		this.modeSelector.style.fontSize = '12px';
+		this.modeSelector.style.fontWeight = '400';
+		this.modeSelector.style.borderRadius = '8px';
 		this.modeSelector.style.backgroundColor = 'var(--vscode-input-background)';
 		this.modeSelector.style.color = 'var(--vscode-input-foreground)';
-		this.modeSelector.style.border = '1px solid var(--vscode-input-border, transparent)';
-		this.modeSelector.style.borderRadius = '4px';
-		this.modeSelector.style.fontFamily = 'var(--vscode-font-family)';
-		this.modeSelector.style.fontSize = '11px';
+		this.modeSelector.style.border = '1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
 		this.modeSelector.style.cursor = 'pointer';
-		this.modeSelector.style.outline = 'none';
-		this.modeSelector.style.appearance = 'none';
-		(this.modeSelector.style as any).webkitAppearance = 'none';
-		this.modeSelector.style.backgroundImage = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%23888' d='M0 2l4 4 4-4z'/%3E%3C/svg%3E")`;
-		this.modeSelector.style.backgroundRepeat = 'no-repeat';
-		this.modeSelector.style.backgroundPosition = 'right 6px center';
-		this.modeSelector.style.paddingRight = '20px';
+		this.modeSelector.style.userSelect = 'none';
+		this.modeSelector.style.whiteSpace = 'nowrap';
+		this.modeSelector.style.overflow = 'hidden';
+		this.modeSelector.style.textOverflow = 'ellipsis';
+		this.modeSelector.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.12)';
+		this.modeSelector.style.transition = 'all 0.2s ease';
 		this.modeSelector.title = '选择模式';
 
-		// 悬停效果
+		// 文本显示span
+		const modeTextSpan = append(this.modeSelector, $('span')) as HTMLSpanElement;
+		modeTextSpan.textContent = '加载中...';
+		modeTextSpan.setAttribute('data-role', 'mode-text');
+
+		// 下拉箭头
+		this.modeSelectorArrow = append(this.modeSelector, $('span.codicon.codicon-chevron-down')) as HTMLSpanElement;
+		this.modeSelectorArrow.style.position = 'absolute';
+		this.modeSelectorArrow.style.right = '8px';
+		this.modeSelectorArrow.style.fontSize = '14px';
+		this.modeSelectorArrow.style.transition = 'transform 0.2s ease';
+		this.modeSelectorArrow.style.pointerEvents = 'none';
+
+		// 下拉列表容器（使用fixed定位）
+		this.modeDropdown = append(modeSelectorWrapper, $('div')) as HTMLDivElement;
+		this.modeDropdown.style.position = 'fixed';
+		this.modeDropdown.style.maxHeight = '280px';
+		this.modeDropdown.style.backgroundColor = 'var(--vscode-dropdown-background)';
+		this.modeDropdown.style.border = '1px solid var(--vscode-dropdown-border, rgba(128, 128, 128, 0.4))';
+		this.modeDropdown.style.borderRadius = '8px';
+		this.modeDropdown.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.08)';
+		this.modeDropdown.style.zIndex = '10000';
+		this.modeDropdown.style.display = 'none';
+		this.modeDropdown.style.opacity = '0';
+		this.modeDropdown.style.transition = 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)';
+		this.modeDropdown.style.overflowY = 'auto';
+		this.modeDropdown.style.overflowX = 'hidden';
+
+		// 下拉列表ul
+		this.modeDropdownList = append(this.modeDropdown, $('ul')) as HTMLUListElement;
+		this.modeDropdownList.style.listStyle = 'none';
+		this.modeDropdownList.style.margin = '4px 0';
+		this.modeDropdownList.style.padding = '0';
+
+		// 点击显示框切换下拉列表
+		this.modeSelector.onclick = (e) => {
+			console.log('[MaxianView] 模式选择器被点击');
+			e.stopPropagation();
+			this.isModeDropdownOpen = !this.isModeDropdownOpen;
+
+			if (this.isModeDropdownOpen) {
+				console.log('[MaxianView] 打开模式下拉列表');
+
+				// 判断应该向上还是向下展开
+				const selectorRect = this.modeSelector.getBoundingClientRect();
+				const viewportHeight = window.innerHeight;
+				const dropdownMaxHeight = 280;
+				const margin = 8;
+				const spaceBelow = viewportHeight - selectorRect.bottom - margin;
+				const spaceAbove = selectorRect.top - margin;
+
+				let actualMaxHeight = dropdownMaxHeight;
+
+				if (spaceBelow < dropdownMaxHeight && spaceAbove > spaceBelow) {
+					// 向上展开
+					this.isModeDropdownOpeningUpward = true;
+					actualMaxHeight = Math.min(dropdownMaxHeight, spaceAbove);
+				} else {
+					this.isModeDropdownOpeningUpward = false;
+					actualMaxHeight = Math.min(dropdownMaxHeight, spaceBelow);
+				}
+
+				// 设置动态的maxHeight和宽度
+				this.modeDropdown.style.maxHeight = `${actualMaxHeight}px`;
+				this.modeDropdown.style.width = `${selectorRect.width}px`;
+				this.modeDropdown.style.left = `${selectorRect.left}px`;
+
+				// 根据方向设置位置
+				if (this.isModeDropdownOpeningUpward) {
+					const bottomPosition = viewportHeight - selectorRect.top + 2;
+					this.modeDropdown.style.bottom = `${bottomPosition}px`;
+					this.modeDropdown.style.top = 'auto';
+					this.modeDropdown.style.transform = 'translateY(8px)';
+				} else {
+					const topPosition = selectorRect.bottom + 2;
+					this.modeDropdown.style.top = `${topPosition}px`;
+					this.modeDropdown.style.bottom = 'auto';
+					this.modeDropdown.style.transform = 'translateY(-8px)';
+				}
+
+				// 显示下拉列表
+				this.modeDropdown.style.display = 'block';
+				setTimeout(() => {
+					this.modeDropdown.style.opacity = '1';
+					this.modeDropdown.style.transform = 'translateY(0)';
+				}, 10);
+				this.modeSelectorArrow.style.transform = 'rotate(180deg)';
+				this.modeSelector.style.borderColor = 'var(--vscode-focusBorder, #007ACC)';
+				this.modeSelector.style.boxShadow = '0 0 0 2px rgba(0, 122, 204, 0.25)';
+			} else {
+				console.log('[MaxianView] 关闭模式下拉列表');
+				this.closeModeDropdown();
+			}
+		};
+
+		// 点击外部关闭下拉列表
+		document.addEventListener('click', (e) => {
+			if (this.isModeDropdownOpen && !modeSelectorWrapper.contains(e.target as Node)) {
+				this.isModeDropdownOpen = false;
+				this.closeModeDropdown();
+			}
+		});
+
+		// Hover效果
 		this.modeSelector.onmouseenter = () => {
-			this.modeSelector.style.borderColor = 'var(--vscode-focusBorder)';
+			if (!this.isModeDropdownOpen) {
+				this.modeSelector.style.borderColor = 'var(--vscode-focusBorder, #007ACC)';
+				this.modeSelector.style.backgroundColor = 'var(--vscode-list-hoverBackground, rgba(90, 93, 94, 0.31))';
+				this.modeSelector.style.boxShadow = '0 2px 8px rgba(0, 122, 204, 0.15)';
+			}
+			modeIcon.style.color = 'var(--vscode-focusBorder, #007ACC)';
+			modeIcon.style.transform = 'scale(1.05)';
 		};
 		this.modeSelector.onmouseleave = () => {
-			this.modeSelector.style.borderColor = 'var(--vscode-input-border, transparent)';
+			if (!this.isModeDropdownOpen) {
+				this.modeSelector.style.borderColor = 'var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
+				this.modeSelector.style.backgroundColor = 'var(--vscode-input-background)';
+				this.modeSelector.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.12)';
+			}
+			modeIcon.style.color = 'var(--vscode-charts-blue, #007ACC)';
+			modeIcon.style.transform = 'scale(1)';
 		};
 
-		// 模式图标映射
-		const modeIconMap: Record<string, string> = {
-			'code': '💻',
-			'architect': '🏗️',
-			'ask': '❓',
-			'debug': '🔧',
-			'orchestrator': '🎯'
-		};
+		// 模式列表将在 updateAvailableModes 方法中填充
 
-		// 根据用户权限动态过滤模式选项
-		const allModes = getAllModes();
-		const currentUser = this.authService.currentUser;
-		const agentPermission = currentUser?.agentPermission;
-
-		// 过滤可用模式：
-		// 1. ask 模式固定都有
-		// 2. 如果 agentPermission 存在且非空,则显示其中包含的模式
-		// 3. 如果 agentPermission 为 null/undefined,则只显示 ask 模式
-		const availableModes = allModes.filter(mode => {
-			if (mode.slug === 'ask') {
-				return true; // ask 模式固定可用
-			}
-			if (!agentPermission || agentPermission.length === 0) {
-				return false; // 没有权限配置,只显示 ask
-			}
-			return agentPermission.includes(mode.slug); // 检查是否在权限列表中
-		});
-
-		// 排序：ask 模式固定在第一位，其他模式按原顺序
-		availableModes.sort((a, b) => {
-			if (a.slug === 'ask') {
-				return -1; // ask 始终在前
-			}
-			if (b.slug === 'ask') {
-				return 1; // ask 始终在前
-			}
-			return 0; // 其他模式保持原顺序
-		});
-
-		// 渲染可用的模式选项
-		availableModes.forEach(mode => {
-			const option = append(this.modeSelector, $('option')) as HTMLOptionElement;
-			option.value = mode.slug;
-			const icon = modeIconMap[mode.slug] || '📝';
-			option.textContent = `${icon} ${mode.name}`;
-			if (mode.slug === this.currentMode) {
-				option.selected = true;
-			}
-		});
-
-		// 如果当前模式不在可用模式中,切换到 ask 模式
-		if (!availableModes.some(m => m.slug === this.currentMode)) {
-			this.currentMode = 'ask';
-			const askOption = this.modeSelector.querySelector('option[value="ask"]') as HTMLOptionElement;
-			if (askOption) {
-				askOption.selected = true;
-			}
-		}
-
-		// 监听模式变化
-		this.modeSelector.onchange = () => {
-			this.currentMode = this.modeSelector.value as Mode;
-		};
-
-		// 知识库选择器
+		// 自定义知识库选择器
 		const knowledgeBaseSelectorWrapper = append(leftControls, $('div'));
-		knowledgeBaseSelectorWrapper.style.flexShrink = '1'; // 允许收缩
-		knowledgeBaseSelectorWrapper.style.minWidth = '100px';
-		knowledgeBaseSelectorWrapper.style.maxWidth = '140px';
+		knowledgeBaseSelectorWrapper.style.flexShrink = '1';
+		knowledgeBaseSelectorWrapper.style.minWidth = '160px';
+		knowledgeBaseSelectorWrapper.style.maxWidth = '220px';
 		knowledgeBaseSelectorWrapper.style.position = 'relative';
-		knowledgeBaseSelectorWrapper.style.display = 'flex';
-		knowledgeBaseSelectorWrapper.style.alignItems = 'center';
+		knowledgeBaseSelectorWrapper.style.zIndex = '100'; // 确保高于其他元素
 
-		// 添加知识库图标
-		const kbIcon = append(knowledgeBaseSelectorWrapper, $('span.codicon.codicon-database'));
-		kbIcon.style.position = 'absolute';
-		kbIcon.style.left = '8px';
-		kbIcon.style.pointerEvents = 'none';
-		kbIcon.style.color = 'var(--vscode-descriptionForeground)';
-		kbIcon.style.fontSize = '12px';
-		kbIcon.style.zIndex = '1';
-
-		this.knowledgeBaseSelector = append(knowledgeBaseSelectorWrapper, $('select')) as HTMLSelectElement;
-		this.knowledgeBaseSelector.style.width = '100%';
-		this.knowledgeBaseSelector.style.padding = '4px 8px 4px 26px'; // 左边留出图标空间
+		// 知识库选择器显示框
+		this.knowledgeBaseSelector = append(knowledgeBaseSelectorWrapper, $('div')) as HTMLDivElement;
+		this.knowledgeBaseSelector.style.position = 'relative';
+		this.knowledgeBaseSelector.style.display = 'flex';
+		this.knowledgeBaseSelector.style.alignItems = 'center';
+		this.knowledgeBaseSelector.style.height = '34px';
+		this.knowledgeBaseSelector.style.padding = '0 32px 0 36px';
 		this.knowledgeBaseSelector.style.backgroundColor = 'var(--vscode-input-background)';
 		this.knowledgeBaseSelector.style.color = 'var(--vscode-input-foreground)';
-		this.knowledgeBaseSelector.style.border = '1px solid var(--vscode-input-border, transparent)';
-		this.knowledgeBaseSelector.style.borderRadius = '4px';
+		this.knowledgeBaseSelector.style.border = '1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
+		this.knowledgeBaseSelector.style.borderRadius = '8px';
 		this.knowledgeBaseSelector.style.fontFamily = 'var(--vscode-font-family)';
-		this.knowledgeBaseSelector.style.fontSize = '11px';
+		this.knowledgeBaseSelector.style.fontSize = '12px';
+		this.knowledgeBaseSelector.style.fontWeight = '400';
 		this.knowledgeBaseSelector.style.cursor = 'pointer';
-		this.knowledgeBaseSelector.style.outline = 'none';
-		this.knowledgeBaseSelector.style.appearance = 'none';
-		(this.knowledgeBaseSelector.style as any).webkitAppearance = 'none';
-		this.knowledgeBaseSelector.style.backgroundImage = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%23888' d='M0 2l4 4 4-4z'/%3E%3C/svg%3E")`;
-		this.knowledgeBaseSelector.style.backgroundRepeat = 'no-repeat';
-		this.knowledgeBaseSelector.style.backgroundPosition = 'right 6px center';
-		this.knowledgeBaseSelector.style.paddingRight = '20px';
-		this.knowledgeBaseSelector.title = '选择知识库';
+		this.knowledgeBaseSelector.style.transition = 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)';
+		this.knowledgeBaseSelector.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.12)';
+		this.knowledgeBaseSelector.style.userSelect = 'none';
+		this.knowledgeBaseSelector.title = '点击选择知识库';
 
-		// 悬停效果
+		// 知识库图标
+		const kbIcon = append(this.knowledgeBaseSelector, $('span.codicon.codicon-database'));
+		kbIcon.style.position = 'absolute';
+		kbIcon.style.left = '12px';
+		kbIcon.style.color = 'var(--vscode-charts-blue, #007ACC)';
+		kbIcon.style.fontSize = '16px';
+		kbIcon.style.transition = 'all 0.2s ease';
+
+		// 文本显示span
+		const kbTextSpan = append(this.knowledgeBaseSelector, $('span')) as HTMLSpanElement;
+		kbTextSpan.textContent = '加载中...';
+		kbTextSpan.style.flex = '1';
+		kbTextSpan.style.overflow = 'hidden';
+		kbTextSpan.style.textOverflow = 'ellipsis';
+		kbTextSpan.style.whiteSpace = 'nowrap';
+		kbTextSpan.setAttribute('data-role', 'kb-text');
+
+		// 下拉箭头
+		this.knowledgeBaseSelectorArrow = append(this.knowledgeBaseSelector, $('span.codicon.codicon-chevron-down')) as HTMLSpanElement;
+		this.knowledgeBaseSelectorArrow.style.position = 'absolute';
+		this.knowledgeBaseSelectorArrow.style.right = '10px';
+		this.knowledgeBaseSelectorArrow.style.fontSize = '14px';
+		this.knowledgeBaseSelectorArrow.style.color = 'var(--vscode-descriptionForeground)';
+		this.knowledgeBaseSelectorArrow.style.transition = 'transform 0.2s ease';
+
+		// 下拉列表容器（使用fixed定位，脱离文档流，不受父容器限制）
+		this.knowledgeBaseDropdown = append(knowledgeBaseSelectorWrapper, $('div')) as HTMLDivElement;
+		this.knowledgeBaseDropdown.style.position = 'fixed'; // 改为fixed定位
+		// 注意：不在这里设置top/bottom/left/right，在点击时动态计算绝对位置
+		this.knowledgeBaseDropdown.style.maxHeight = '280px';
+		this.knowledgeBaseDropdown.style.backgroundColor = 'var(--vscode-dropdown-background)';
+		this.knowledgeBaseDropdown.style.border = '1px solid var(--vscode-dropdown-border, rgba(128, 128, 128, 0.4))';
+		this.knowledgeBaseDropdown.style.borderRadius = '8px';
+		this.knowledgeBaseDropdown.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.08)';
+		this.knowledgeBaseDropdown.style.overflowY = 'auto';
+		this.knowledgeBaseDropdown.style.zIndex = '10000'; // 提高z-index确保在最顶层
+		this.knowledgeBaseDropdown.style.display = 'none';
+		this.knowledgeBaseDropdown.style.opacity = '0';
+		this.knowledgeBaseDropdown.style.transition = 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)';
+
+		// 下拉列表ul
+		this.knowledgeBaseDropdownList = append(this.knowledgeBaseDropdown, $('ul')) as HTMLUListElement;
+		this.knowledgeBaseDropdownList.style.listStyle = 'none';
+		this.knowledgeBaseDropdownList.style.margin = '4px 0';
+		this.knowledgeBaseDropdownList.style.padding = '0';
+
+
+		// 点击显示框切换下拉列表
+		this.knowledgeBaseSelector.onclick = (e) => {
+			console.log('[MaxianView] 知识库选择器被点击');
+			e.stopPropagation();
+			this.isKnowledgeBaseDropdownOpen = !this.isKnowledgeBaseDropdownOpen;
+			console.log('[MaxianView] isDropdownOpen:', this.isKnowledgeBaseDropdownOpen);
+
+			if (this.isKnowledgeBaseDropdownOpen) {
+				console.log('[MaxianView] 打开下拉列表');
+				console.log('[MaxianView] dropdown元素:', this.knowledgeBaseDropdown);
+				console.log('[MaxianView] 列表项数量:', this.knowledgeBaseDropdownList.children.length);
+
+				// 判断应该向上还是向下展开
+				const selectorRect = this.knowledgeBaseSelector.getBoundingClientRect();
+				const viewportHeight = window.innerHeight;
+				const dropdownMaxHeight = 280; // 下拉列表默认最大高度
+				const margin = 8; // 与边界的安全边距
+				const spaceBelow = viewportHeight - selectorRect.bottom - margin; // 选择器下方的可用空间
+				const spaceAbove = selectorRect.top - margin; // 选择器上方的可用空间（避免被输入框挡住）
+
+				console.log('[MaxianView] 窗口高度:', viewportHeight);
+				console.log('[MaxianView] 选择器位置:', selectorRect.top, '-', selectorRect.bottom);
+				console.log('[MaxianView] 下方可用空间:', spaceBelow, 'px, 上方可用空间:', spaceAbove, 'px');
+
+				let actualMaxHeight = dropdownMaxHeight;
+
+				if (spaceBelow < dropdownMaxHeight && spaceAbove > spaceBelow) {
+					// 下方空间不足且上方空间更大，向上展开
+					this.isDropdownOpeningUpward = true;
+					actualMaxHeight = Math.min(dropdownMaxHeight, spaceAbove); // 使用上方实际可用空间
+					console.log('[MaxianView] 向上展开下拉列表, maxHeight:', actualMaxHeight);
+				} else {
+					this.isDropdownOpeningUpward = false;
+					actualMaxHeight = Math.min(dropdownMaxHeight, spaceBelow); // 使用下方实际可用空间
+					console.log('[MaxianView] 向下展开下拉列表, maxHeight:', actualMaxHeight);
+				}
+
+				// 清除之前的top/bottom设置
+				this.knowledgeBaseDropdown.style.top = '';
+				this.knowledgeBaseDropdown.style.bottom = '';
+				this.knowledgeBaseDropdown.style.left = '';
+				this.knowledgeBaseDropdown.style.right = '';
+
+				// 设置动态的maxHeight和宽度
+				this.knowledgeBaseDropdown.style.maxHeight = `${actualMaxHeight}px`;
+				this.knowledgeBaseDropdown.style.width = `${selectorRect.width}px`;
+				this.knowledgeBaseDropdown.style.left = `${selectorRect.left}px`;
+
+				// 根据方向设置位置和初始transform（使用fixed定位的绝对坐标）
+				if (this.isDropdownOpeningUpward) {
+					// 向上展开：设置bottom为距离窗口底部的距离
+					const bottomPosition = viewportHeight - selectorRect.top + 2; // 2px间隙
+					this.knowledgeBaseDropdown.style.bottom = `${bottomPosition}px`;
+					this.knowledgeBaseDropdown.style.transform = 'translateY(8px)'; // 向下偏移8px（动画效果）
+					console.log('[MaxianView] 设置bottom定位:', bottomPosition, 'px');
+				} else {
+					// 向下展开：设置top为选择器底部位置
+					const topPosition = selectorRect.bottom + 2; // 2px间隙
+					this.knowledgeBaseDropdown.style.top = `${topPosition}px`;
+					this.knowledgeBaseDropdown.style.transform = 'translateY(-8px)'; // 向上偏移8px（动画效果）
+					console.log('[MaxianView] 设置top定位:', topPosition, 'px');
+				}
+
+				// 设置display: block（但保持opacity: 0）
+				this.knowledgeBaseDropdown.style.display = 'block';
+				console.log('[MaxianView] 设置display为block');
+
+				// 强制浏览器重新计算布局（触发reflow）
+				const forceReflow = this.knowledgeBaseDropdown.offsetHeight;
+				console.log('[MaxianView] 强制reflow完成, offsetHeight:', forceReflow);
+
+				// 使用requestAnimationFrame确保在下一帧设置opacity，让transition生效
+				requestAnimationFrame(() => {
+					this.knowledgeBaseDropdown.style.opacity = '1';
+					this.knowledgeBaseDropdown.style.transform = 'translateY(0)';
+					console.log('[MaxianView] 下拉列表显示完成');
+
+					// transition完成后检查位置
+					setTimeout(() => {
+						const rect = this.knowledgeBaseDropdown.getBoundingClientRect();
+						console.log('[MaxianView] 下拉列表最终位置:', 'top:', rect.top, 'bottom:', rect.bottom);
+						console.log('[MaxianView] 下拉列表是否在可视区域:', rect.top >= 0 && rect.bottom <= window.innerHeight);
+					}, 250);
+				});
+				this.knowledgeBaseSelectorArrow.style.transform = 'rotate(180deg)';
+				this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-focusBorder, #007ACC)';
+				this.knowledgeBaseSelector.style.boxShadow = '0 0 0 2px rgba(0, 122, 204, 0.25)';
+			} else {
+				console.log('[MaxianView] 关闭下拉列表');
+				this.closeKnowledgeBaseDropdown();
+			}
+		};
+
+		// 点击外部关闭下拉列表
+		document.addEventListener('click', (e) => {
+			if (this.isKnowledgeBaseDropdownOpen && !knowledgeBaseSelectorWrapper.contains(e.target as Node)) {
+				this.isKnowledgeBaseDropdownOpen = false;
+				this.closeKnowledgeBaseDropdown();
+			}
+		});
+
+		// Hover效果
 		this.knowledgeBaseSelector.onmouseenter = () => {
-			this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-focusBorder)';
+			if (!this.isKnowledgeBaseDropdownOpen) {
+				this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-focusBorder, #007ACC)';
+				this.knowledgeBaseSelector.style.backgroundColor = 'var(--vscode-list-hoverBackground, rgba(90, 93, 94, 0.31))';
+				this.knowledgeBaseSelector.style.boxShadow = '0 2px 8px rgba(0, 122, 204, 0.15)';
+			}
+			kbIcon.style.color = 'var(--vscode-focusBorder, #007ACC)';
+			kbIcon.style.transform = 'scale(1.05)';
 		};
 		this.knowledgeBaseSelector.onmouseleave = () => {
-			this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-input-border, transparent)';
-		};
-
-		// 添加默认选项
-		const defaultOption = append(this.knowledgeBaseSelector, $('option')) as HTMLOptionElement;
-		defaultOption.value = '';
-		defaultOption.textContent = '不使用知识库';
-		defaultOption.selected = true;
-
-		// 监听知识库变化
-		this.knowledgeBaseSelector.onchange = () => {
-			this.selectedKnowledgeBaseId = this.knowledgeBaseSelector.value || null;
-			console.log('[MaxianView] Selected knowledge base:', this.selectedKnowledgeBaseId);
+			if (!this.isKnowledgeBaseDropdownOpen) {
+				this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
+				this.knowledgeBaseSelector.style.backgroundColor = 'var(--vscode-input-background)';
+				this.knowledgeBaseSelector.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.12)';
+			}
+			kbIcon.style.color = 'var(--vscode-charts-blue, #007ACC)';
+			kbIcon.style.transform = 'scale(1)';
 		};
 
 		// 加载知识库列表
@@ -2200,30 +2408,123 @@ export class MaxianView extends ViewPane {
 	 * 更新知识库选择器选项
 	 */
 	private updateKnowledgeBaseSelector(): void {
-		console.log('[MaxianView] updateKnowledgeBaseSelector called');
-		if (!this.knowledgeBaseSelector) {
-			console.warn('[MaxianView] knowledgeBaseSelector is not initialized');
+		console.log('[MaxianView] 更新知识库选择器,共', this.knowledgeBases.length, '个知识库');
+		if (!this.knowledgeBaseDropdownList) {
+			console.warn('[MaxianView] knowledgeBaseDropdownList is not initialized');
 			return;
 		}
 
-		console.log('[MaxianView] Current options count:', this.knowledgeBaseSelector.options.length);
-
-		// 清除现有选项（保留第一个默认选项）
-		while (this.knowledgeBaseSelector.options.length > 1) {
-			this.knowledgeBaseSelector.remove(1);
+		// 清除所有现有列表项
+		while (this.knowledgeBaseDropdownList.firstChild) {
+			this.knowledgeBaseDropdownList.removeChild(this.knowledgeBaseDropdownList.firstChild);
 		}
 
-		// 添加知识库选项
-		console.log('[MaxianView] Adding', this.knowledgeBases.length, 'knowledge bases to selector');
-		this.knowledgeBases.forEach(kb => {
-			const option = document.createElement('option');
-			option.value = kb.id;
-			option.textContent = kb.applicationName;
-			this.knowledgeBaseSelector.appendChild(option);
-			console.log('[MaxianView] Added option:', kb.applicationName);
+		// 添加知识库列表项
+		this.knowledgeBases.forEach((kb, index) => {
+			const li = append(this.knowledgeBaseDropdownList, $('li')) as HTMLLIElement;
+			li.style.padding = '10px 16px';
+			li.style.cursor = 'pointer';
+			li.style.transition = 'all 0.15s ease';
+			li.style.display = 'flex';
+			li.style.alignItems = 'center';
+			li.style.gap = '10px';
+			li.style.borderRadius = '4px';
+			li.style.margin = '2px 6px';
+			li.style.fontSize = '12px';
+			li.setAttribute('data-kb-id', kb.id);
+
+			// 知识库图标
+			const icon = append(li, $('span.codicon.codicon-database'));
+			icon.style.color = 'var(--vscode-charts-blue, #007ACC)';
+			icon.style.fontSize = '14px';
+			icon.style.flexShrink = '0';
+
+			// 知识库名称
+			const name = append(li, $('span'));
+			name.textContent = kb.applicationName;
+			name.style.flex = '1';
+			name.style.overflow = 'hidden';
+			name.style.textOverflow = 'ellipsis';
+			name.style.whiteSpace = 'nowrap';
+
+			// 选中标记（默认隐藏）
+			const checkmark = append(li, $('span.codicon.codicon-check'));
+			checkmark.style.color = 'var(--vscode-charts-green, #4EC9B0)';
+			checkmark.style.fontSize = '14px';
+			checkmark.style.opacity = '0';
+			checkmark.style.transition = 'opacity 0.2s ease';
+
+			// Hover效果
+			li.onmouseenter = () => {
+				li.style.backgroundColor = 'var(--vscode-list-hoverBackground, rgba(90, 93, 94, 0.31))';
+			};
+			li.onmouseleave = () => {
+				if (this.selectedKnowledgeBaseId !== kb.id) {
+					li.style.backgroundColor = 'transparent';
+				}
+			};
+
+			// 点击选择
+			li.onclick = (e) => {
+				e.stopPropagation();
+				this.selectedKnowledgeBaseId = kb.id;
+				// 更新显示文本
+				const textSpan = this.knowledgeBaseSelector.querySelector('[data-role="kb-text"]') as HTMLSpanElement;
+				if (textSpan) {
+					textSpan.textContent = kb.applicationName;
+				}
+				console.log('[MaxianView] Selected knowledge base:', kb.applicationName);
+
+				// 更新所有列表项的选中状态
+				Array.from(this.knowledgeBaseDropdownList.children).forEach((item, idx) => {
+					const listItem = item as HTMLLIElement;
+					const itemCheckmark = listItem.querySelector('span.codicon-check') as HTMLSpanElement;
+					if (idx === this.knowledgeBases.findIndex(k => k.id === kb.id)) {
+						listItem.style.backgroundColor = 'var(--vscode-list-activeSelectionBackground, rgba(0, 122, 204, 0.2))';
+						listItem.style.color = 'var(--vscode-list-activeSelectionForeground)';
+						if (itemCheckmark) {
+							itemCheckmark.style.opacity = '1';
+						}
+					} else {
+						listItem.style.backgroundColor = 'transparent';
+						listItem.style.color = 'var(--vscode-foreground)';
+						if (itemCheckmark) {
+							itemCheckmark.style.opacity = '0';
+						}
+					}
+				});
+
+				// 关闭下拉列表（需要同步isDropdownOpen状态）
+				this.isKnowledgeBaseDropdownOpen = false;
+				this.closeKnowledgeBaseDropdown();
+			};
+
 		});
 
-		console.log('[MaxianView] Final options count:', this.knowledgeBaseSelector.options.length);
+		// 自动选择第一个知识库
+		if (this.knowledgeBases.length > 0) {
+			this.selectedKnowledgeBaseId = this.knowledgeBases[0].id;
+			// 更新显示文本
+			const textSpan = this.knowledgeBaseSelector.querySelector('[data-role="kb-text"]') as HTMLSpanElement;
+			if (textSpan) {
+				textSpan.textContent = this.knowledgeBases[0].applicationName;
+			}
+
+			// 高亮第一项
+			const firstItem = this.knowledgeBaseDropdownList.children[0] as HTMLLIElement;
+			if (firstItem) {
+				firstItem.style.backgroundColor = 'var(--vscode-list-activeSelectionBackground, rgba(0, 122, 204, 0.2))';
+				firstItem.style.color = 'var(--vscode-list-activeSelectionForeground)';
+				const checkmark = firstItem.querySelector('span.codicon-check') as HTMLSpanElement;
+				if (checkmark) {
+					checkmark.style.opacity = '1';
+				}
+			}
+
+			console.log('[MaxianView] 已自动选择第一个知识库:', this.knowledgeBases[0].applicationName);
+		} else {
+			console.warn('[MaxianView] 没有可用的知识库');
+		}
 	}
 
 	/**
@@ -2234,15 +2535,49 @@ export class MaxianView extends ViewPane {
 	}
 
 	/**
+	 * 关闭知识库下拉列表
+	 */
+	private closeKnowledgeBaseDropdown(): void {
+		this.knowledgeBaseDropdown.style.opacity = '0';
+		// 根据展开方向使用相反的transform（关闭动画）
+		this.knowledgeBaseDropdown.style.transform = this.isDropdownOpeningUpward ? 'translateY(8px)' : 'translateY(-8px)';
+		setTimeout(() => {
+			this.knowledgeBaseDropdown.style.display = 'none';
+		}, 200);
+		this.knowledgeBaseSelectorArrow.style.transform = 'rotate(0deg)';
+		this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
+		this.knowledgeBaseSelector.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.12)';
+	}
+
+	/**
+	 * 关闭模式下拉列表
+	 */
+	private closeModeDropdown(): void {
+		this.modeDropdown.style.opacity = '0';
+		// 根据展开方向使用相反的transform（关闭动画）
+		this.modeDropdown.style.transform = this.isModeDropdownOpeningUpward ? 'translateY(8px)' : 'translateY(-8px)';
+		setTimeout(() => {
+			this.modeDropdown.style.display = 'none';
+		}, 200);
+		this.modeSelectorArrow.style.transform = 'rotate(0deg)';
+		this.modeSelector.style.borderColor = 'var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
+		this.modeSelector.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.12)';
+	}
+
+	/**
 	 * 更新可用模式 - 根据用户权限动态调整
 	 */
 	private updateAvailableModes(): void {
-		if (!this.modeSelector) {
+		if (!this.modeSelector || !this.modeDropdownList) {
 			return; // 如果选择器还未创建,跳过
 		}
 
-		// 清空现有选项 (使用安全的DOM操作)
-		clearNode(this.modeSelector);
+		console.log('[MaxianView] 更新可用模式列表');
+
+		// 清空现有列表项
+		while (this.modeDropdownList.firstChild) {
+			this.modeDropdownList.removeChild(this.modeDropdownList.firstChild);
+		}
 
 		// 获取用户权限
 		const currentUser = this.authService.currentUser;
@@ -2280,12 +2615,93 @@ export class MaxianView extends ViewPane {
 			'orchestrator': '🎯'
 		};
 
-		// 渲染可用的模式选项
-		availableModes.forEach(mode => {
-			const option = append(this.modeSelector, $('option')) as HTMLOptionElement;
-			option.value = mode.slug;
-			const icon = modeIconMap[mode.slug] || '📝';
-			option.textContent = `${icon} ${mode.name}`;
+		// 添加模式列表项
+		availableModes.forEach((mode) => {
+			const li = append(this.modeDropdownList, $('li')) as HTMLLIElement;
+			li.style.fontSize = '12px';
+			li.style.padding = '8px 12px';
+			li.style.cursor = 'pointer';
+			li.style.display = 'flex';
+			li.style.alignItems = 'center';
+			li.style.gap = '8px';
+			li.style.transition = 'background-color 0.15s ease';
+			li.style.borderRadius = '4px';
+			li.style.margin = '0 4px';
+
+			// 模式图标
+			const icon = append(li, $('span'));
+			icon.textContent = modeIconMap[mode.slug] || '📝';
+			icon.style.fontSize = '14px';
+			icon.style.flexShrink = '0';
+
+			// 模式名称
+			const name = append(li, $('span'));
+			name.textContent = mode.name;
+			name.style.flex = '1';
+			name.style.overflow = 'hidden';
+			name.style.textOverflow = 'ellipsis';
+			name.style.whiteSpace = 'nowrap';
+
+			// 选中标记（默认隐藏）
+			const checkmark = append(li, $('span.codicon.codicon-check'));
+			checkmark.style.color = 'var(--vscode-charts-green, #4EC9B0)';
+			checkmark.style.fontSize = '14px';
+			checkmark.style.opacity = '0';
+			checkmark.style.transition = 'opacity 0.2s ease';
+
+			// 如果是当前模式，高亮显示
+			if (mode.slug === this.currentMode) {
+				li.style.backgroundColor = 'var(--vscode-list-activeSelectionBackground, rgba(0, 122, 204, 0.2))';
+				li.style.color = 'var(--vscode-list-activeSelectionForeground)';
+				checkmark.style.opacity = '1';
+			}
+
+			// Hover效果
+			li.onmouseenter = () => {
+				li.style.backgroundColor = 'var(--vscode-list-hoverBackground, rgba(90, 93, 94, 0.31))';
+			};
+			li.onmouseleave = () => {
+				if (this.currentMode !== mode.slug) {
+					li.style.backgroundColor = 'transparent';
+				}
+			};
+
+			// 点击选择
+			li.onclick = (e) => {
+				e.stopPropagation();
+				this.currentMode = mode.slug as Mode;
+
+				// 更新显示文本
+				const textSpan = this.modeSelector.querySelector('[data-role="mode-text"]') as HTMLSpanElement;
+				if (textSpan) {
+					textSpan.textContent = `${modeIconMap[mode.slug] || '📝'} ${mode.name}`;
+				}
+
+				console.log('[MaxianView] Selected mode:', mode.slug);
+
+				// 更新所有列表项的选中状态
+				Array.from(this.modeDropdownList.children).forEach((item, idx) => {
+					const listItem = item as HTMLLIElement;
+					const itemCheckmark = listItem.querySelector('span.codicon-check') as HTMLSpanElement;
+					if (idx === availableModes.findIndex(m => m.slug === mode.slug)) {
+						listItem.style.backgroundColor = 'var(--vscode-list-activeSelectionBackground, rgba(0, 122, 204, 0.2))';
+						listItem.style.color = 'var(--vscode-list-activeSelectionForeground)';
+						if (itemCheckmark) {
+							itemCheckmark.style.opacity = '1';
+						}
+					} else {
+						listItem.style.backgroundColor = 'transparent';
+						listItem.style.color = 'var(--vscode-foreground)';
+						if (itemCheckmark) {
+							itemCheckmark.style.opacity = '0';
+						}
+					}
+				});
+
+				// 关闭下拉列表
+				this.isModeDropdownOpen = false;
+				this.closeModeDropdown();
+			};
 		});
 
 		// 如果当前模式不在可用模式中,切换到 ask 模式
@@ -2293,10 +2709,14 @@ export class MaxianView extends ViewPane {
 			this.currentMode = 'ask';
 		}
 
-		// 设置选中的模式
-		const currentOption = this.modeSelector.querySelector(`option[value="${this.currentMode}"]`) as HTMLOptionElement;
-		if (currentOption) {
-			currentOption.selected = true;
+		// 更新显示框的文本为当前模式
+		const currentModeInfo = availableModes.find(m => m.slug === this.currentMode);
+		if (currentModeInfo) {
+			const textSpan = this.modeSelector.querySelector('[data-role="mode-text"]') as HTMLSpanElement;
+			if (textSpan) {
+				const icon = modeIconMap[currentModeInfo.slug] || '📝';
+				textSpan.textContent = `${icon} ${currentModeInfo.name}`;
+			}
 		}
 
 		console.log('[MaxianView] Updated available modes:', availableModes.map(m => m.slug), 'Current mode:', this.currentMode);

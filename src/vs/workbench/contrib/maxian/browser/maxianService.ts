@@ -30,6 +30,7 @@ import { IInstantiationService } from '../../../../platform/instantiation/common
 import { DifyHandler, DifyConfiguration } from '../common/api/difyHandler.js';
 import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
 import { IAILogService } from '../../../../platform/aiLog/common/aiLog.js';
+import { IRequestService } from '../../../../platform/request/common/request.js';
 
 export const IMaxianService = createDecorator<IMaxianService>('maxianService');
 
@@ -245,7 +246,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 		@IModelService _modelService: IModelService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IStorageService private readonly storageService: IStorageService,
-		@IAILogService private readonly aiLogService: IAILogService
+		@IAILogService private readonly aiLogService: IAILogService,
+		@IRequestService private readonly requestService: IRequestService
 	) {
 		super();
 		this.apiFactory = new ApiFactory(this.configurationService);
@@ -308,7 +310,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 		console.log('[Maxian] 工具执行器已初始化，工作区:', workspaceRoot);
 
 		// 从StorageService读取认证凭据（与authService使用相同的key）
-		this.loadAuthCredentials();
+		const credentials = this.loadAuthCredentials();
 
 		// 初始化API Handler（优先使用代理服务）
 		const validation = this.apiFactory.validateConfiguration();
@@ -316,7 +318,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			console.warn('[Maxian] API配置验证失败:', validation.error);
 		}
 
-		this.apiHandler = this.apiFactory.createHandler();
+		this.apiHandler = this.apiFactory.createHandler(credentials);
 		const modelInfo = this.apiHandler.getModel();
 		console.log('[Maxian] API Handler已初始化，模型:', modelInfo.name);
 
@@ -381,6 +383,12 @@ export class MaxianService extends Disposable implements IMaxianService {
 			let difyApiKey: string;
 			const difyUser = this.configurationService.getValue<string>('zhikai.dify.user') || 'default-user';
 
+			// 读取代理服务地址（从Auth配置中读取）
+			const proxyBaseUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
+			if (proxyBaseUrl) {
+				console.log('[Maxian] 使用代理服务地址:', proxyBaseUrl);
+			}
+
 			if (knowledgeBaseConfig) {
 				// 使用传入的知识库配置
 				difyApiUrl = knowledgeBaseConfig.apiUrl;
@@ -391,7 +399,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 				const difyConfig: DifyConfiguration = {
 					apiUrl: difyApiUrl,
 					apiKey: difyApiKey,
-					user: difyUser
+					user: difyUser,
+					proxyBaseUrl: proxyBaseUrl,  // 使用代理服务
+					requestService: this.requestService
 				};
 				this.difyHandler = new DifyHandler(difyConfig);
 				console.log('[Maxian] DifyHandler 已使用新配置初始化');
@@ -411,13 +421,15 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 				// 只在没有 DifyHandler 或配置不同时重新初始化
 				if (!this.difyHandler) {
-					const difyConfig: DifyConfiguration = {
-						apiUrl: difyApiUrl,
-						apiKey: difyApiKey,
-						user: difyUser
-					};
-					this.difyHandler = new DifyHandler(difyConfig);
-					console.log('[Maxian] DifyHandler 已从VSCode配置初始化');
+				const difyConfig: DifyConfiguration = {
+					apiUrl: difyApiUrl,
+					apiKey: difyApiKey,
+					user: difyUser,
+					proxyBaseUrl: proxyBaseUrl,  // 使用代理服务
+					requestService: this.requestService
+				};
+				this.difyHandler = new DifyHandler(difyConfig);
+				console.log('[Maxian] DifyHandler 已从VSCode配置初始化');
 				}
 			}
 
