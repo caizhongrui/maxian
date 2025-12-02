@@ -313,22 +313,6 @@
 			}
 		},
 		{
-			"name": "SonarSource.sonarlint-vscode",
-			"version": "4.36.0",
-			"sha256": null,
-			"repo": "https://github.com/SonarSource/sonarlint-vscode.git",
-			"metadata": {
-				"id": "sonarsource.sonarlint-vscode",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "SonarSource",
-					"displayName": "SonarSource",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "SonarSource"
-			}
-		},
-		{
 			"name": "octref.vetur",
 			"version": "0.37.3",
 			"sha256": null,

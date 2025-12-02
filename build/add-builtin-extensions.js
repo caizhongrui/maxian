@@ -18,7 +18,7 @@ const extensionsToAdd = [
 	{ publisher: 'vscjava', name: 'vscode-maven' },
 	{ publisher: 'vscjava', name: 'vscode-java-dependency' },
 	{ publisher: 'GabrielBB', name: 'vscode-lombok' },              // Lombok 支持
-	{ publisher: 'SonarSource', name: 'sonarlint-vscode' },         // 代码质量检查
+	// { publisher: 'SonarSource', name: 'sonarlint-vscode' },         // 代码质量检查 - 已移除
 	{ publisher: 'shengchen', name: 'vscode-checkstyle' },          // Checkstyle
 
 	// ===== Spring Boot & Spring Cloud 开发扩展 =====
