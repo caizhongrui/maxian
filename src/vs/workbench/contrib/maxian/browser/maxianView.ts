@@ -60,6 +60,9 @@ export class MaxianView extends ViewPane {
 		applicationUrl: string;
 		applicationKey: string;
 	}> = []; // 知识库列表
+	private isContinuousConversation: boolean = false; // 是否启用连续对话（ask模式专用）
+	private continuousConversationCheckbox!: HTMLInputElement; // 连续对话复选框
+	private continuousConversationWrapper!: HTMLLabelElement; // 连续对话复选框容器
 
 	constructor(
 		options: IViewPaneOptions,
@@ -733,6 +736,48 @@ export class MaxianView extends ViewPane {
 			}, 500);
 		};
 
+		// 连续对话复选框（仅在ask模式下显示）
+		this.continuousConversationWrapper = append(leftControls, $('label')) as HTMLLabelElement;
+		this.continuousConversationWrapper.style.display = 'none'; // 默认隐藏，只在ask模式显示
+		this.continuousConversationWrapper.style.alignItems = 'center';
+		this.continuousConversationWrapper.style.gap = '6px';
+		this.continuousConversationWrapper.style.cursor = 'pointer';
+		this.continuousConversationWrapper.style.userSelect = 'none';
+		this.continuousConversationWrapper.style.marginLeft = '8px';
+		this.continuousConversationWrapper.style.padding = '4px 8px';
+		this.continuousConversationWrapper.style.borderRadius = '4px';
+		this.continuousConversationWrapper.style.transition = 'background-color 0.15s';
+		this.continuousConversationWrapper.title = '启用后，对话将保持上下文连贯性';
+
+		this.continuousConversationCheckbox = append(this.continuousConversationWrapper, $('input')) as HTMLInputElement;
+		this.continuousConversationCheckbox.type = 'checkbox';
+		this.continuousConversationCheckbox.checked = false;
+		this.continuousConversationCheckbox.style.cursor = 'pointer';
+		this.continuousConversationCheckbox.style.margin = '0';
+		this.continuousConversationCheckbox.onchange = () => {
+			this.isContinuousConversation = this.continuousConversationCheckbox.checked;
+			console.log('[MaxianView] 连续对话模式:', this.isContinuousConversation ? '已启用' : '已禁用');
+		};
+
+		const checkboxLabel = append(this.continuousConversationWrapper, $('span'));
+		checkboxLabel.textContent = '连续对话';
+		checkboxLabel.style.fontSize = '12px';
+		checkboxLabel.style.color = 'var(--vscode-foreground)';
+		checkboxLabel.style.whiteSpace = 'nowrap';
+
+		// Hover效果
+		this.continuousConversationWrapper.onmouseenter = () => {
+			this.continuousConversationWrapper.style.backgroundColor = 'var(--vscode-list-hoverBackground, rgba(90, 93, 94, 0.31))';
+		};
+		this.continuousConversationWrapper.onmouseleave = () => {
+			this.continuousConversationWrapper.style.backgroundColor = 'transparent';
+		};
+
+		// 根据当前模式设置初始显示状态
+		if (this.currentMode === 'ask') {
+			this.continuousConversationWrapper.style.display = 'flex';
+		}
+
 		// 右侧：取消、清空、发送按钮
 		const rightControls = append(bottomControls, $('div'));
 		rightControls.style.display = 'flex';
@@ -1071,17 +1116,25 @@ export class MaxianView extends ViewPane {
 
 		// 如果是 ask 模式，且选中了知识库，则传递知识库配置
 		let knowledgeBaseConfig: import('./maxianService.js').IKnowledgeBaseConfig | undefined;
-		if (this.currentMode === 'ask' && this.selectedKnowledgeBaseId) {
-			// 从知识库列表中找到选中的知识库
-			const selectedKb = this.knowledgeBases.find(kb => kb.id === this.selectedKnowledgeBaseId);
-			if (selectedKb) {
-				knowledgeBaseConfig = {
-					apiUrl: selectedKb.applicationUrl,
-					apiKey: selectedKb.applicationKey,
-					id: selectedKb.id,
-					name: selectedKb.applicationName
-				};
-				console.log('[MaxianView] 使用知识库配置:', knowledgeBaseConfig.apiUrl);
+		if (this.currentMode === 'ask') {
+			// 如果没有启用连续对话，重置conversation_id（开始新对话）
+			if (!this.isContinuousConversation) {
+				this.maxianService.resetAskConversation();
+				console.log('[MaxianView] 未启用连续对话，已重置会话ID');
+			}
+
+			// 如果选中了知识库，传递知识库配置
+			if (this.selectedKnowledgeBaseId) {
+				const selectedKb = this.knowledgeBases.find(kb => kb.id === this.selectedKnowledgeBaseId);
+				if (selectedKb) {
+					knowledgeBaseConfig = {
+						apiUrl: selectedKb.applicationUrl,
+						apiKey: selectedKb.applicationKey,
+						id: selectedKb.id,
+						name: selectedKb.applicationName
+					};
+					console.log('[MaxianView] 使用知识库配置:', knowledgeBaseConfig.apiUrl);
+				}
 			}
 		}
 
@@ -2744,6 +2797,13 @@ export class MaxianView extends ViewPane {
 				}
 
 				console.log('[MaxianView] Selected mode:', mode.slug);
+
+				// 控制连续对话复选框的显示（仅ask模式显示）
+				if (this.currentMode === 'ask') {
+					this.continuousConversationWrapper.style.display = 'flex';
+				} else {
+					this.continuousConversationWrapper.style.display = 'none';
+				}
 
 				// 更新所有列表项的选中状态
 				Array.from(this.modeDropdownList.children).forEach((item, idx) => {

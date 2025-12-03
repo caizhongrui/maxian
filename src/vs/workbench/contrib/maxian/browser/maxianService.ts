@@ -178,6 +178,11 @@ export interface IMaxianService {
 	clearConversation(): void;
 
 	/**
+	 * 重置ask模式的会话ID（不影响其他状态）
+	 */
+	resetAskConversation(): void;
+
+	/**
 	 * 任务取消事件
 	 */
 	readonly onTaskCancelled: Event<void>;
@@ -1240,6 +1245,16 @@ export class MaxianService extends Disposable implements IMaxianService {
 		this._onConversationCleared.fire();
 
 		console.log('[Maxian] 对话历史已清空');
+	}
+
+	/**
+	 * 重置ask模式的会话ID（不影响其他状态）
+	 */
+	resetAskConversation(): void {
+		if (this.difyHandler) {
+			this.difyHandler.resetConversation();
+			console.log('[Maxian] Ask模式会话ID已重置');
+		}
 	}
 
 	/**
