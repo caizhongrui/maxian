@@ -68,7 +68,11 @@ export class TriggerInlineSuggestionAction extends EditorAction {
 			id: 'editor.action.inlineSuggest.trigger',
 			label: nls.localize('action.inlineSuggest.trigger', "Trigger Inline Suggestion"),
 			alias: 'Trigger Inline Suggestion',
-			precondition: EditorContextKeys.writable
+			precondition: EditorContextKeys.writable,
+			kbOpts: {
+				weight: KeybindingWeight.EditorContrib,
+				primary: KeyMod.Alt | KeyCode.Slash,
+			}
 		});
 	}
 
