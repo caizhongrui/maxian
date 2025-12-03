@@ -570,22 +570,6 @@
 			}
 		},
 		{
-			"name": "wayou.vscode-todo-highlight",
-			"version": "1.0.5",
-			"sha256": null,
-			"repo": "https://github.com/wayou/vscode-todo-highlight.git",
-			"metadata": {
-				"id": "wayou.vscode-todo-highlight",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "wayou",
-					"displayName": "wayou",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "wayou"
-			}
-		},
-		{
 			"name": "PKief.material-icon-theme",
 			"version": "5.29.0",
 			"sha256": null,

@@ -63,7 +63,7 @@ const extensionsToAdd = [
 	{ publisher: 'usernamehw', name: 'errorlens' },                 // 错误提示增强
 	{ publisher: 'oderwat', name: 'indent-rainbow' },               // 缩进彩虹
 	// { publisher: 'CoenraadS', name: 'bracket-pair-colorizer-2' },   // 括号配对着色 - 已弃用，VSCode 已内置
-	{ publisher: 'wayou', name: 'vscode-todo-highlight' },          // TODO 高亮
+	// { publisher: 'wayou', name: 'vscode-todo-highlight' },          // TODO 高亮 - 使用SVG徽章导致打包失败，已移除
 
 	// ===== 图标主题 =====
 	{ publisher: 'PKief', name: 'material-icon-theme' },            // Material 图标主题
