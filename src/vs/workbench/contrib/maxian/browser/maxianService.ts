@@ -231,6 +231,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private currentTask: TaskService | null = null;
 	private diffViewProvider: DiffViewProvider | null = null;
 	private difyHandler: DifyHandler | null = null;
+	private currentDifyConfig: string | null = null;  // 当前Dify配置的hash（用于判断是否需要重新创建Handler）
 	private isAskModeRunning: boolean = false;  // 标记ask模式是否正在运行
 	private askModeAbortController: AbortController | null = null;  // ask模式的中止控制器
 
@@ -400,16 +401,24 @@ export class MaxianService extends Disposable implements IMaxianService {
 				difyApiKey = knowledgeBaseConfig.apiKey;
 				console.log('[Maxian] 使用选中的知识库配置:', difyApiUrl);
 
-				// 重新创建 DifyHandler（因为配置可能不同）
-				const difyConfig: DifyConfiguration = {
-					apiUrl: difyApiUrl,
-					apiKey: difyApiKey,
-					user: difyUser,
-					proxyBaseUrl: proxyBaseUrl,  // 使用代理服务
-					requestService: this.requestService
-				};
-				this.difyHandler = new DifyHandler(difyConfig);
-				console.log('[Maxian] DifyHandler 已使用新配置初始化');
+				// 生成配置hash用于判断是否需要重新创建Handler
+				const configHash = `${difyApiUrl}|${difyApiKey}`;
+
+				// 只有当配置改变或Handler不存在时才重新创建
+				if (this.currentDifyConfig !== configHash || !this.difyHandler) {
+					const difyConfig: DifyConfiguration = {
+						apiUrl: difyApiUrl,
+						apiKey: difyApiKey,
+						user: difyUser,
+						proxyBaseUrl: proxyBaseUrl,  // 使用代理服务
+						requestService: this.requestService
+					};
+					this.difyHandler = new DifyHandler(difyConfig);
+					this.currentDifyConfig = configHash;
+					console.log('[Maxian] DifyHandler 已使用新配置初始化');
+				} else {
+					console.log('[Maxian] 复用现有DifyHandler实例（配置未改变，保留conversation_id）');
+				}
 			} else {
 				// 从VSCode配置中读取（向后兼容）
 				difyApiUrl = this.configurationService.getValue<string>('zhikai.dify.apiUrl') || 'http://dify.boyocloud.com/v1';
