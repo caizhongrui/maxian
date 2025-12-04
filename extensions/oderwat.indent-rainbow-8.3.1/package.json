@@ -136,8 +136,5 @@
         "vscode-test": "^1.4.1",
         "webpack": "^5.45.1",
         "webpack-cli": "^4.7.2"
-    },
-    "dependencies": {
-        "@vscode/test-web": "^0.0.8"
     }
 }
