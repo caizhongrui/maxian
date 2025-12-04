@@ -2058,27 +2058,6 @@
     "webpack": "^5.94.0",
     "webpack-cli": "^4.6.0"
   },
-  "dependencies": {
-    "@redhat-developer/vscode-extension-proposals": "0.0.23",
-    "@redhat-developer/vscode-redhat-telemetry": "0.10.2",
-    "@vscode/codicons": "^0.0.32",
-    "@vscode/webview-ui-toolkit": "1.2.2",
-    "chokidar": "^3.5.3",
-    "expand-home-dir": "^0.0.3",
-    "fmtr": "^1.1.2",
-    "fs-extra": "^8.1.0",
-    "glob": "^11.1.0",
-    "htmlparser2": "6.0.1",
-    "jdk-utils": "^0.6.0",
-    "react": "^17.0.2",
-    "react-dom": "^17.0.2",
-    "semver": "^7.5.2",
-    "vscode-languageclient": "8.2.0-next.3",
-    "vscode-variables": "^1.0.1",
-    "winreg-utf8": "^0.1.1",
-    "winston": "^3.2.1",
-    "winston-daily-rotate-file": "^4.7.1"
-  },
   "overrides": {
     "vscode-languageserver-protocol": "3.17.6-next.1"
   },

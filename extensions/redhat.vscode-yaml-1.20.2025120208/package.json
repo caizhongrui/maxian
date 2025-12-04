@@ -302,15 +302,5 @@
     "vscode-extension-tester": "^5.3.0",
     "webpack": "^5.76.1",
     "webpack-cli": "^5.0.1"
-  },
-  "dependencies": {
-    "@redhat-developer/vscode-redhat-telemetry": "^0.8.0",
-    "fs-extra": "^9.1.0",
-    "request-light": "^0.5.7",
-    "vscode-languageclient": "7.0.0",
-    "vscode-nls": "^3.2.1",
-    "vscode-uri": "^2.0.3",
-    "whatwg-fetch": "^3.6.2",
-    "yaml-language-server": "^1.20.1-67ecad2.0"
   }
 }
