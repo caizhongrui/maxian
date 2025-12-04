@@ -35,10 +35,9 @@
 	"extensionsGallery": {
 		"serviceUrl": "https://open-vsx.org/vscode/gallery",
 		"itemUrl": "https://open-vsx.org/vscode/item",
-		"publisherUrl": "https://open-vsx.org/vscode/publisher",
 		"resourceUrlTemplate": "https://open-vsx.org/vscode/asset/{publisher}/{name}/{version}/{path}",
 		"controlUrl": "",
-		"nlsBaseUrl": "https://open-vsx.org/vscode/unpkg"
+		"nlsBaseUrl": "https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/package"
 	},
 	"builtInExtensions": [
 		{
@@ -279,70 +278,6 @@
 					"flags": "verified"
 				},
 				"publisherDisplayName": "bradlc"
-			}
-		},
-		{
-			"name": "johnsoncodehk.vscode-typescript-vue-plugin",
-			"version": "0.34.11",
-			"sha256": null,
-			"repo": "https://github.com/johnsoncodehk/volar.git",
-			"metadata": {
-				"id": "johnsoncodehk.vscode-typescript-vue-plugin",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "johnsoncodehk",
-					"displayName": "johnsoncodehk",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "johnsoncodehk"
-			}
-		},
-		{
-			"name": "hollowtree.vue-snippets",
-			"version": "0.1.12",
-			"sha256": null,
-			"repo": "https://github.com/hollowtree/vscode-vue-snippets",
-			"metadata": {
-				"id": "hollowtree.vue-snippets",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "hollowtree",
-					"displayName": "hollowtree",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "hollowtree"
-			}
-		},
-		{
-			"name": "octref.vetur",
-			"version": "0.37.3",
-			"sha256": null,
-			"repo": "https://github.com/vuejs/vetur.git",
-			"metadata": {
-				"id": "octref.vetur",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "octref",
-					"displayName": "octref",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "octref"
-			}
-		},
-		{
-			"name": "antfu.vite",
-			"version": "0.2.5",
-			"sha256": null,
-			"repo": "https://github.com/antfu/vscode-vite",
-			"metadata": {
-				"id": "antfu.vite",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "antfu",
-					"displayName": "antfu",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "antfu"
 			}
 		},
 		{
@@ -704,8 +639,6 @@
 		"vscjava.vscode-java-test",
 		"vscjava.vscode-maven",
 		"vscjava.vscode-java-dependency",
-		"vue.volar",
-		"vue.vscode-typescript-vue-plugin",
 		"dbaeumer.vscode-eslint",
 		"esbenp.prettier-vscode"
 	]

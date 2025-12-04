@@ -380,7 +380,8 @@ export class TextMateTokenizationFeature extends Disposable implements ITextMate
 			const response = await fetch(canASAR && this._environmentService.isBuilt
 				? FileAccess.asBrowserUri(`${nodeModulesAsarUnpackedPath}/vscode-oniguruma/release/onig.wasm`).toString(true)
 				: FileAccess.asBrowserUri(`${nodeModulesPath}/vscode-oniguruma/release/onig.wasm`).toString(true));
-			return response;
+			// FIXME: Use arrayBuffer() to avoid MIME type issues with wasm files
+			return await response.arrayBuffer();
 		}
 	}
 

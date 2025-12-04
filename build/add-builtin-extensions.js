@@ -27,11 +27,12 @@ const extensionsToAdd = [
 	{ publisher: 'vscjava', name: 'vscode-spring-boot-dashboard' },
 
 	// ===== Vue 开发扩展 =====
-	// { publisher: 'Vue', name: 'volar' },                            // Vue 语言特性 (官方) - 有兼容性问题，暂时移除
-	{ publisher: 'johnsoncodehk', name: 'vscode-typescript-vue-plugin' }, // TypeScript Vue 插件
-	{ publisher: 'hollowtree', name: 'vue-snippets' },              // Vue 代码片段
-	{ publisher: 'octref', name: 'vetur' },                         // Vetur (Vue 2 支持)
-	{ publisher: 'antfu', name: 'vite' },                           // Vite 支持
+	// Vue 扩展已全部移除，请用户自行从扩展市场安装 Vue - Official (Volar)
+	// { publisher: 'Vue', name: 'volar' },                            // Vue 语言特性 (官方) - 有兼容性问题，移除
+	// { publisher: 'johnsoncodehk', name: 'vscode-typescript-vue-plugin' }, // TypeScript Vue 插件 - 移除
+	// { publisher: 'hollowtree', name: 'vue-snippets' },              // Vue 代码片段 - 移除
+	// { publisher: 'octref', name: 'vetur' },                         // Vetur (Vue 2/3 支持) - 已弃用，移除
+	// { publisher: 'antfu', name: 'vite' },                           // Vite 支持 - 移除
 
 	// ===== 前端开发工具 =====
 	{ publisher: 'ritwickdey', name: 'LiveServer' },                // Live Server

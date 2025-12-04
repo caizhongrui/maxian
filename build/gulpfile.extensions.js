@@ -148,6 +148,32 @@ const tasks = compilations.map(function (tsconfigFile) {
 
 	const cleanTask = task.define(`clean-extension-${name}`, util.rimraf(out));
 
+	// Helper function to create dist directory for TypeScript extension (needed for Volar compatibility)
+	function createTypeScriptDistDir() {
+		if (name === 'typescript-language-features') {
+			const fs = require('fs');
+			const distPath = path.join(srcRoot, 'dist');
+			const extensionJsPath = path.join(distPath, 'extension.js');
+			const outExtensionJsPath = path.join(out, 'extension.js');
+
+			return es.through(function (data) {
+				this.emit('data', data);
+			}, function () {
+				// Ensure dist directory exists
+				if (!fs.existsSync(distPath)) {
+					fs.mkdirSync(distPath, { recursive: true });
+				}
+				// Copy extension.js to dist/extension.js if it exists
+				if (fs.existsSync(outExtensionJsPath)) {
+					fs.copyFileSync(outExtensionJsPath, extensionJsPath);
+					console.log(`[typescript-language-features] Created dist/extension.js for Volar compatibility`);
+				}
+				this.emit('end');
+			});
+		}
+		return es.through();
+	}
+
 	const transpileTask = task.define(`transpile-extension:${name}`, task.series(cleanTask, () => {
 		const pipeline = createPipeline(false, true, true);
 		const nonts = gulp.src(src, srcOpts).pipe(filter(['**', '!**/*.ts']));
@@ -155,7 +181,8 @@ const tasks = compilations.map(function (tsconfigFile) {
 
 		return input
 			.pipe(pipeline())
-			.pipe(gulp.dest(out));
+			.pipe(gulp.dest(out))
+			.pipe(createTypeScriptDistDir());
 	}));
 
 	const compileTask = task.define(`compile-extension:${name}`, task.series(cleanTask, () => {
@@ -165,7 +192,8 @@ const tasks = compilations.map(function (tsconfigFile) {
 
 		return input
 			.pipe(pipeline())
-			.pipe(gulp.dest(out));
+			.pipe(gulp.dest(out))
+			.pipe(createTypeScriptDistDir());
 	}));
 
 	const watchTask = task.define(`watch-extension:${name}`, task.series(cleanTask, () => {
@@ -176,7 +204,8 @@ const tasks = compilations.map(function (tsconfigFile) {
 
 		return watchInput
 			.pipe(util.incremental(pipeline, input))
-			.pipe(gulp.dest(out));
+			.pipe(gulp.dest(out))
+			.pipe(createTypeScriptDistDir());
 	}));
 
 	const compileBuildTask = task.define(`compile-build-extension-${name}`, task.series(cleanTask, () => {
@@ -186,7 +215,8 @@ const tasks = compilations.map(function (tsconfigFile) {
 
 		return input
 			.pipe(pipeline())
-			.pipe(gulp.dest(out));
+			.pipe(gulp.dest(out))
+			.pipe(createTypeScriptDistDir());
 	}));
 
 	// Tasks
