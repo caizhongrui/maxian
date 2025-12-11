@@ -8,6 +8,8 @@ import { IAIService } from '../../../../platform/ai/common/ai.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
 import { IProgressService, ProgressLocation } from '../../../../platform/progress/common/progress.js';
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { IRequestService, asJson } from '../../../../platform/request/common/request.js';
 
 /**
  * 逐行注释命令处理器
@@ -18,7 +20,9 @@ export class LineCommentCommand {
 	constructor(
 		private readonly aiService: IAIService,
 		private readonly notificationService: INotificationService,
-		private readonly progressService: IProgressService
+		private readonly progressService: IProgressService,
+		private readonly configurationService: IConfigurationService,
+		private readonly requestService: IRequestService
 	) { }
 
 	/**
@@ -81,7 +85,80 @@ export class LineCommentCommand {
 	private async generateLineComments(code: string, languageId: string, token: CancellationToken): Promise<string> {
 		const commentStyle = this.getCommentStyle(languageId);
 
-		const prompt = `你是一个专业的代码注释专家。请为以下${languageId}代码的每一行添加注释。
+		console.log('[Line Comment] 开始获取逐行注释提示词');
+
+		// 尝试从后端获取提示词
+		let prompt = await this.fetchLineCommentPromptFromBackend(code, languageId, commentStyle.line);
+
+		// 如果后端获取失败，使用默认提示词
+		if (!prompt) {
+			console.log('[Line Comment] 后端获取提示词失败，使用本地默认提示词');
+			prompt = this.getDefaultLineCommentPrompt(code, languageId, commentStyle.line);
+		}
+
+		const result = await this.aiService.complete(prompt);
+
+		// 清理可能的markdown标记
+		let cleanCode = result.trim();
+		const codeBlockMatch = cleanCode.match(/\`\`\`(?:\w+)?\s*\n([\s\S]*?)\`\`\`/);
+		if (codeBlockMatch) {
+			cleanCode = codeBlockMatch[1].trim();
+		}
+		cleanCode = cleanCode.replace(/\`\`\`/g, '').trim();
+
+		return cleanCode;
+	}
+
+	/**
+	 * 从后端获取逐行注释提示词
+	 */
+	private async fetchLineCommentPromptFromBackend(code: string, languageId: string, commentStyle: string): Promise<string | null> {
+		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
+		console.log('[Line Comment] apiUrl:', apiUrl);
+
+		if (!apiUrl) {
+			console.log('[Line Comment] 未配置apiUrl，跳过后端请求');
+			return null;
+		}
+
+		try {
+			const url = `${apiUrl.replace(/\/$/, '')}/system/ai/prompt/comment/line`;
+			console.log('[Line Comment] 请求后端提示词API:', url);
+
+			const requestData = {
+				languageId: languageId,
+				code: code,
+				commentStyle: commentStyle
+			};
+
+			const response = await this.requestService.request({
+				type: 'POST',
+				url: url,
+				headers: { 'Content-Type': 'application/json' },
+				data: JSON.stringify(requestData)
+			}, CancellationToken.None);
+
+			const data = await asJson<any>(response);
+			console.log('[Line Comment] 后端响应:', { code: data?.code, hasData: !!data?.data });
+
+			if (data && data.code === 200 && data.data) {
+				console.log('[Line Comment] 成功从后端获取提示词，长度:', data.data.length);
+				return data.data;
+			}
+
+			console.warn('[Line Comment] 后端返回数据格式错误或无数据');
+			return null;
+		} catch (error) {
+			console.error('[Line Comment] 从后端获取提示词失败:', error);
+			return null;
+		}
+	}
+
+	/**
+	 * 获取默认的逐行注释提示词
+	 */
+	private getDefaultLineCommentPrompt(code: string, languageId: string, commentStyle: string): string {
+		return `你是一个专业的代码注释专家。请为以下${languageId}代码的每一行添加注释。
 
 代码：
 \`\`\`${languageId}
@@ -89,7 +166,7 @@ ${code}
 \`\`\`
 
 要求：
-1. 为每一行重要的代码在**上方添加一行注释**（使用 ${commentStyle.line} ）
+1. 为每一行重要的代码在**上方添加一行注释**（使用 ${commentStyle} ）
 2. 注释要简洁、准确，用中文描述该行代码的作用
 3. 对于声明变量的行，说明变量的用途
 4. 对于方法调用的行，说明调用的目的
@@ -116,18 +193,6 @@ System.out.println(count);
 \`\`\`
 
 请直接返回添加了注释的完整代码：`;
-
-		const result = await this.aiService.complete(prompt);
-
-		// 清理可能的markdown标记
-		let cleanCode = result.trim();
-		const codeBlockMatch = cleanCode.match(/\`\`\`(?:\w+)?\s*\n([\s\S]*?)\`\`\`/);
-		if (codeBlockMatch) {
-			cleanCode = codeBlockMatch[1].trim();
-		}
-		cleanCode = cleanCode.replace(/\`\`\`/g, '').trim();
-
-		return cleanCode;
 	}
 
 	/**

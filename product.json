@@ -1,6 +1,7 @@
 {
 	"nameShort": "maxian",
 	"nameLong": "码弦",
+	"nameLongAscii": "Maxian",
 	"applicationName": "maxian",
 	"dataFolderName": ".maxian",
 	"win32MutexName": "maxian",
@@ -15,6 +16,7 @@
 	"tunnelApplicationName": "maxian-tunnel",
 	"win32DirName": "maxian",
 	"win32NameVersion": "码弦",
+	"win32NameVersionAscii": "Maxian",
 	"win32RegValueName": "maxian",
 	"win32x64AppId": "{{A77B7E06-80BA-4137-BCF4-654B95CCEBC5}",
 	"win32arm64AppId": "{{A1ACE434-89C5-48D1-88D3-E2991DF85475}",
@@ -22,6 +24,7 @@
 	"win32arm64UserAppId": "{{AAEBF0C8-F733-4AD4-BADE-FDB816D53D7B}",
 	"win32AppUserModelId": "maxian.IDE",
 	"win32ShellNameShort": "码弦",
+	"win32ShellNameShortAscii": "Maxian",
 	"win32TunnelServiceMutex": "maxian-tunnelservice",
 	"win32TunnelMutex": "maxian-tunnel",
 	"darwinBundleIdentifier": "com.maxian.ide",
@@ -641,5 +644,9 @@
 		"vscjava.vscode-java-dependency",
 		"dbaeumer.vscode-eslint",
 		"esbenp.prettier-vscode"
-	]
+	],
+	"configurationDefaults": {
+		"telemetry.telemetryLevel": "off",
+		"redhat.telemetry.enabled": false
+	}
 }

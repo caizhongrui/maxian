@@ -11,6 +11,7 @@ import { IAIService } from '../../../../platform/ai/common/ai.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IMultiLanguageService } from '../../multilang/browser/multilang.contribution.js';
 import { CompletionContextExtractor } from './completionContextExtractor.js';
+import { IRequestService, asJson } from '../../../../platform/request/common/request.js';
 
 export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 
@@ -19,6 +20,7 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	constructor(
 		private readonly aiService: IAIService,
 		private readonly configurationService: IConfigurationService,
+		private readonly requestService: IRequestService,
 		multiLanguageService: IMultiLanguageService
 	) {
 		this.contextExtractor = new CompletionContextExtractor(multiLanguageService);
@@ -121,7 +123,7 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		});
 
 		// Build enhanced prompt with structural information
-		const prompt = this.buildEnhancedPrompt(enhancedContext);
+		const prompt = await this.buildEnhancedPrompt(enhancedContext);
 
 		try {
 			console.log('[AI Inline Completions] Calling AI service...');
@@ -130,7 +132,8 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			const aiResponse = await this.aiService.complete(prompt, {
 				temperature: 0.1,  // 极低温度，确保输出确定性
 				maxTokens: 1200,   // 支持较长的代码补全
-				systemMessage: 'You are a code completion engine. Output ONLY code, NO explanations, NO markdown, NO conversational text.'
+				systemMessage: 'You are a code completion engine. Output ONLY code, NO explanations, NO markdown, NO conversational text.',
+				businessCode: 'IDE_CODE_COMPLETION'  // 代码补全业务场景
 			});
 
 			console.log('[AI Inline Completions] AI response length:', aiResponse.length);
@@ -259,7 +262,21 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	 * Build enhanced prompt with structural code information
 	 * 强制 AI 返回纯代码，不返回任何解释
 	 */
-	private buildEnhancedPrompt(context: any): string {
+	private async buildEnhancedPrompt(context: any): Promise<string> {
+		console.log('[AI Inline Completions] buildEnhancedPrompt called');
+
+		// 尝试从后端获取提示词
+		const backendPrompt = await this.fetchCompletionPromptFromBackend(context);
+		console.log('[AI Inline Completions] fetchCompletionPromptFromBackend result:', backendPrompt ? 'success' : 'failed');
+
+		if (backendPrompt) {
+			console.log('[AI Inline Completions] 使用后端提示词，长度:', backendPrompt.length);
+			console.log('[AI Inline Completions] 后端提示词内容（前500字符）:', backendPrompt.substring(0, 500));
+			return backendPrompt;
+		}
+
+		// 降级：使用本地提示词
+		console.log('[AI Inline Completions] 使用本地提示词');
 		const parts: string[] = [];
 
 		// 系统角色定义（更严格）
@@ -326,7 +343,69 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		parts.push('【OUTPUT】');
 		parts.push('Insert at <CURSOR> (CODE ONLY, NO EXPLANATIONS):');
 
-		return parts.join('\n');
+		const finalPrompt = parts.join('\n');
+		console.log('[AI Inline Completions] 本地提示词内容（前500字符）:', finalPrompt.substring(0, 500));
+		return finalPrompt;
+	}
+
+	/**
+	 * 从后端API获取代码补全提示词
+	 */
+	private async fetchCompletionPromptFromBackend(context: any): Promise<string | null> {
+		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
+		console.log('[AI Inline Completions] fetchCompletionPromptFromBackend - apiUrl:', apiUrl);
+
+		if (!apiUrl) {
+			console.log('[AI Inline Completions] 未配置apiUrl，跳过后端请求');
+			return null;
+		}
+
+		try {
+			const url = `${apiUrl.replace(/\/$/, '')}/system/ai/prompt/completion`;
+			console.log('[AI Inline Completions] 准备请求后端提示词API:', url);
+
+			// 准备请求数据
+			const requestData = {
+				languageId: context.languageId,
+				prefix: context.prefix,
+				suffix: context.suffix,
+				beforeCode: context.beforeLines.join('\n'),
+				afterCode: context.afterLines.join('\n'),
+				currentClass: context.currentClass,
+				currentMethod: context.currentMethod,
+				frameworks: context.frameworks,
+				recentEdits: context.recentEdits
+			};
+
+			console.log('[AI Inline Completions] 请求数据:', {
+				languageId: requestData.languageId,
+				currentClass: requestData.currentClass,
+				currentMethod: requestData.currentMethod
+			});
+
+			const response = await this.requestService.request({
+				type: 'POST',
+				url: url,
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				data: JSON.stringify(requestData)
+			}, CancellationToken.None);
+
+			const data = await asJson<any>(response);
+			console.log('[AI Inline Completions] 后端响应:', { code: data?.code, hasData: !!data?.data });
+
+			if (data && data.code === 200 && data.data) {
+				console.log('[AI Inline Completions] 成功从后端获取提示词，长度:', data.data.length);
+				return data.data;
+			}
+
+			console.warn('[AI Inline Completions] 后端返回数据格式错误或无数据');
+			return null;
+		} catch (error) {
+			console.error('[AI Inline Completions] 从后端获取提示词失败:', error);
+			return null;
+		}
 	}
 
 	freeInlineCompletions(): void {

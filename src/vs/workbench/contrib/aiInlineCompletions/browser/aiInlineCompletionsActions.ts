@@ -18,8 +18,8 @@ class TriggerAIInlineCompletionsAction extends Action2 {
 		super({
 			id: 'editor.action.triggerAIInlineCompletions',
 			title: {
-				value: localize('triggerAIInlineCompletions', "AI Code Completion"),
-				mnemonicTitle: localize({ key: 'miTriggerAIInlineCompletions', comment: ['&& denotes a mnemonic'] }, "AI Code &&Completion"),
+				value: localize('triggerAIInlineCompletions', "AI代码补全"),
+				mnemonicTitle: localize({ key: 'miTriggerAIInlineCompletions', comment: ['&& denotes a mnemonic'] }, "AI代码&&补全"),
 				original: 'AI Code Completion'
 			},
 			precondition: ContextKeyExpr.and(
@@ -33,7 +33,11 @@ class TriggerAIInlineCompletionsAction extends Action2 {
 					order: 10
 				}
 			],
-			f1: true  // Show in command palette
+			f1: true,  // Show in command palette
+			keybinding: {
+				primary: 2048 | 512 | 10,  // Ctrl+Alt+Enter
+				weight: 100
+			}
 		});
 	}
 

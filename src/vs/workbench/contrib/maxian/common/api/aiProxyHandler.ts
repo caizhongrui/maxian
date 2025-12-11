@@ -24,8 +24,9 @@ export interface AiProxyConfiguration {
 	apiUrl: string;      // 码弦 API 地址
 	username: string;    // 用户名（Base64编码）
 	password: string;    // 密码（Base64编码）
-	provider?: string;   // AI提供商标识，默认 'qwen'
-	model?: string;      // 模型名称
+	businessCode?: string;  // 业务场景代码（推荐使用，后端会根据此代码自动选择模型）
+	provider?: string;   // AI提供商标识（可选，不使用businessCode时才需要）
+	model?: string;      // 模型名称（可选，不使用businessCode时才需要）
 }
 
 /**
@@ -35,8 +36,9 @@ interface AiProxyRequest {
 	username: string;
 	password: string;
 	requestId?: string;
-	provider: string;
-	model?: string;
+	businessCode?: string;  // 业务场景代码（推荐使用）
+	provider?: string;       // AI提供商（可选）
+	model?: string;          // 模型名称（可选）
 	messages: AiProxyMessage[];
 	maxTokens?: number;
 	temperature?: number;
@@ -126,8 +128,8 @@ export class AiProxyHandler implements IApiHandler {
 
 		// 初始化模型信息
 		this.modelInfo = {
-			id: config.model || 'qwen-plus',
-			name: config.model || 'qwen-plus',
+			id: config.businessCode || config.model || 'qwen-plus',
+			name: config.businessCode || config.model || 'qwen-plus',
 			maxTokens: 8192,
 			supportsTools: true,
 			supportsVision: false,
@@ -159,17 +161,25 @@ export class AiProxyHandler implements IApiHandler {
 				username: this.config.username,
 				password: this.config.password,
 				requestId: this.currentRequestId,
-				provider: this.config.provider || 'qwen',
-				model: this.config.model,
 				messages: aiProxyMessages,
 				stream: true,
 				apiType: 'chat',  // 重要：指定为 chat 模式，否则后端默认使用 completions 模式
 				...(aiProxyTools && aiProxyTools.length > 0 ? { tools: aiProxyTools, toolChoice: 'auto' } : {})
 			};
 
+		// 优先使用businessCode，如果没有则使用provider/model（向后兼容）
+		if (this.config.businessCode) {
+			requestBody.businessCode = this.config.businessCode;
+		} else {
+			requestBody.provider = this.config.provider || 'qwen';
+			requestBody.model = this.config.model;
+		}
+
 			// 调试日志：确认工具是否正确发送
 			console.log('[Maxian] AiProxy 请求:', {
-				provider: requestBody.provider,
+				businessCode: requestBody.businessCode,
+			provider: requestBody.provider,
+			model: requestBody.model,
 				apiType: requestBody.apiType,
 				toolsCount: aiProxyTools?.length || 0,
 				messagesCount: aiProxyMessages.length,

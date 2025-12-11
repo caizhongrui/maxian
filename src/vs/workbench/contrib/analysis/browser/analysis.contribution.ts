@@ -213,7 +213,7 @@ class RunCodeAnalysisAction extends Action2 {
 		super({
 			id: 'codeAnalysis.runAnalysis',
 			title: {
-				value: localize('runCodeAnalysis', "Run Code Analysis"),
+				value: localize('runCodeAnalysis', "运行代码分析"),
 				original: 'Run Code Analysis'
 			},
 			precondition: ContextKeyExpr.and(
@@ -227,7 +227,11 @@ class RunCodeAnalysisAction extends Action2 {
 					order: 11
 				}
 			],
-			f1: true
+			f1: true,
+			keybinding: {
+				primary: 2048 | 512 | 11,  // Ctrl+Alt+;
+				weight: 100
+			}
 		});
 	}
 
@@ -318,7 +322,7 @@ class RunProjectCodeAnalysisAction extends Action2 {
 		super({
 			id: 'codeAnalysis.runProjectAnalysis',
 			title: {
-				value: localize('runProjectCodeAnalysis', "Run Code Analysis on Project"),
+				value: localize('runProjectCodeAnalysis', "运行项目代码分析"),
 				original: 'Run Code Analysis on Project'
 			},
 			menu: [
@@ -360,7 +364,7 @@ class RunProjectCodeAnalysisAction extends Action2 {
 		await progressService.withProgress(
 			{
 				location: ProgressLocation.Notification,
-				title: localize('analyzingProject', "Analyzing Project..."),
+				title: localize('analyzingProject', "正在分析项目..."),
 				cancellable: true
 			},
 			async (progress) => {
@@ -507,7 +511,7 @@ class RunFolderCodeAnalysisAction extends Action2 {
 		super({
 			id: 'codeAnalysis.runFolderAnalysis',
 			title: {
-				value: localize('runFolderCodeAnalysis', "Run Code Analysis on Folder"),
+				value: localize('runFolderCodeAnalysis', "运行文件夹代码分析"),
 				original: 'Run Code Analysis on Folder'
 			},
 			menu: [
@@ -555,7 +559,7 @@ class RunFolderCodeAnalysisAction extends Action2 {
 		await progressService.withProgress(
 			{
 				location: ProgressLocation.Notification,
-				title: localize('analyzingFolder', "Analyzing Folder..."),
+				title: localize('analyzingFolder', "正在分析文件夹..."),
 				cancellable: true
 			},
 			async (progress) => {

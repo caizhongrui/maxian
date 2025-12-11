@@ -14,6 +14,8 @@ import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { IProgressService } from '../../../../platform/progress/common/progress.js';
 import { ITextFileService } from '../../../services/textfile/common/textfiles.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { IRequestService } from '../../../../platform/request/common/request.js';
 import { CancellationTokenSource } from '../../../../base/common/cancellation.js';
 import { KeyMod, KeyCode } from '../../../../base/common/keyCodes.js';
 import { GenerateTestCommand } from './generateTest.js';
@@ -288,8 +290,10 @@ registerEditorAction(class LineCommentAction extends EditorAction {
 		const aiService = accessor.get(IAIService);
 		const notificationService = accessor.get(INotificationService);
 		const progressService = accessor.get(IProgressService);
+		const configurationService = accessor.get(IConfigurationService);
+		const requestService = accessor.get(IRequestService);
 
-		const command = new LineCommentCommand(aiService, notificationService, progressService);
+		const command = new LineCommentCommand(aiService, notificationService, progressService, configurationService, requestService);
 		const tokenSource = new CancellationTokenSource();
 
 		try {

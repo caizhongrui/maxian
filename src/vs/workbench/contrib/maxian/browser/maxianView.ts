@@ -1147,6 +1147,7 @@ export class MaxianView extends ViewPane {
 			// 用户发送新消息时，重置AI消息元素（开始新一轮对话）
 			this.currentAiMessageElement = null;
 			this.currentAiMessageText = '';
+			this.currentToolStatusElement = null;
 
 			// 显示用户消息
 			const userMsg = append(this.messageArea, $('div'));
@@ -1814,6 +1815,13 @@ export class MaxianView extends ViewPane {
 	 * 清除当前工具状态元素（当工具执行完成时调用）
 	 */
 	private clearToolStatusElement(): void {
+		if (this.currentToolStatusElement) {
+			// 找到并移除闪动的小点元素
+			const loadingDots = this.currentToolStatusElement.querySelector('span[style*="animation"]');
+			if (loadingDots) {
+				loadingDots.remove();
+			}
+		}
 		this.currentToolStatusElement = null;
 	}
 

@@ -14,56 +14,12 @@ configurationRegistry.registerConfiguration({
 	type: 'object',
 	order: 1,  // 排在最前面
 	properties: {
-		'zhikai.ai.apiKey': {
-			type: 'string',
-			default: '',
-			description: 'Qwen API Key（通义千问 API 密钥）',
-			scope: ConfigurationScope.MACHINE,
-			order: 1
-		},
-		'zhikai.ai.model': {
-			type: 'string',
-			default: 'qwen-coder-turbo',
-			enum: [
-				'qwen-coder-turbo',
-				'qwen3-coder-480b-a35b-instruct',
-				'qwen-max',
-				'qwen-plus'
-			],
-			enumDescriptions: [
-				'Qwen Coder Turbo（推荐，代码补全专用）',
-				'Qwen3 Coder 480B（最新大模型，精准度最高）',
-				'Qwen Max（质量高，适合复杂任务）',
-				'Qwen Plus（平衡性能和质量）'
-			],
-			description: 'AI 模型选择',
-			scope: ConfigurationScope.MACHINE,
-			order: 2
-		},
-		'zhikai.ai.temperature': {
-			type: 'number',
-			default: 0.15,
-			minimum: 0,
-			maximum: 2,
-			description: 'AI 温度参数（0-2）。较低值（0.1-0.2）适合代码补全，较高值（0.5-0.7）适合创意生成',
-			scope: ConfigurationScope.MACHINE,
-			order: 3
-		},
-		'zhikai.ai.maxTokens': {
-			type: 'number',
-			default: 1000,
-			minimum: 100,
-			maximum: 4000,
-			description: 'AI 最大生成 Token 数量（100-4000）',
-			scope: ConfigurationScope.MACHINE,
-			order: 4
-		},
 		'zhikai.ai.enableCache': {
 			type: 'boolean',
 			default: true,
 			description: '启用 AI 响应缓存（提升速度，降低成本）',
 			scope: ConfigurationScope.MACHINE,
-			order: 5
+			order: 1
 		},
 		'zhikai.ai.timeout': {
 			type: 'number',
@@ -72,14 +28,14 @@ configurationRegistry.registerConfiguration({
 			maximum: 120000,
 			description: 'API 请求超时时间（毫秒，5000-120000）',
 			scope: ConfigurationScope.MACHINE,
-			order: 6
+			order: 2
 		},
 		'zhikai.ai.enableInlineCompletions': {
 			type: 'boolean',
 			default: true,
 			description: '启用 AI 行内代码补全（类似 GitHub Copilot）',
 			scope: ConfigurationScope.WINDOW,
-			order: 7
+			order: 3
 		},
 		'zhikai.ai.completionTriggerMode': {
 			type: 'string',
@@ -94,7 +50,7 @@ configurationRegistry.registerConfiguration({
 			],
 			description: 'AI 补全触发模式：手动（manual）或自动（automatic）',
 			scope: ConfigurationScope.WINDOW,
-			order: 8
+			order: 4
 		},
 		'zhikai.ai.completionDelay': {
 			type: 'number',
@@ -103,7 +59,7 @@ configurationRegistry.registerConfiguration({
 			maximum: 2000,
 			description: '代码补全延迟时间（毫秒）。较低值响应更快，但可能增加 API 调用。仅在自动模式下生效',
 			scope: ConfigurationScope.WINDOW,
-			order: 9
+			order: 5
 		},
 		'zhikai.ai.contextLines': {
 			type: 'number',
@@ -112,14 +68,14 @@ configurationRegistry.registerConfiguration({
 			maximum: 100,
 			description: '代码补全时提取的上下文行数（10-100）',
 			scope: ConfigurationScope.WINDOW,
-			order: 10
+			order: 6
 		},
 		'zhikai.ai.showDebugLogs': {
 			type: 'boolean',
 			default: false,
 			description: '在开发者控制台显示 AI 调试日志',
 			scope: ConfigurationScope.WINDOW,
-			order: 11
+			order: 7
 		},
 		// 认证配置
 		'zhikai.auth.apiUrl': {
@@ -127,14 +83,14 @@ configurationRegistry.registerConfiguration({
 			default: 'http://192.168.0.185:8088/',
 			description: '后端 API 地址（例如: http://192.168.0.185:8088/）',
 			scope: ConfigurationScope.MACHINE,
-			order: 12
+			order: 8
 		},
 		'zhikai.auth.username': {
 			type: 'string',
 			default: '',
 			description: '登录用户名（密码将加密存储，不会显示在设置中）',
 			scope: ConfigurationScope.MACHINE,
-			order: 13
+			order: 9
 		}
 	}
 });

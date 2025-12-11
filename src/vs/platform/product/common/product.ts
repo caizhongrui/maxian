@@ -32,6 +32,9 @@ else if (globalThis._VSCODE_PRODUCT_JSON && globalThis._VSCODE_PACKAGE_JSON) {
 		Object.assign(product, {
 			nameShort: `${product.nameShort} Dev`,
 			nameLong: `${product.nameLong} Dev`,
+			nameLongAscii: `${(product as any).nameLongAscii || product.nameLong} Dev`,
+			win32NameVersionAscii: `${(product as any).win32NameVersionAscii || (product as any).win32NameVersion || product.nameLong} Dev`,
+			win32ShellNameShortAscii: `${(product as any).win32ShellNameShortAscii || (product as any).win32ShellNameShort || product.nameShort} Dev`,
 			dataFolderName: `${product.dataFolderName}-dev`,
 			serverDataFolderName: product.serverDataFolderName ? `${product.serverDataFolderName}-dev` : undefined
 		});

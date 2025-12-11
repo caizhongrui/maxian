@@ -9,6 +9,7 @@ import { ILanguageFeaturesService } from '../../../../editor/common/services/lan
 import { AIInlineCompletionsProvider } from './aiInlineCompletions.js';
 import { IAIService } from '../../../../platform/ai/common/ai.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { IRequestService } from '../../../../platform/request/common/request.js';
 import { IMultiLanguageService } from '../../multilang/browser/multilang.contribution.js';
 import './aiInlineCompletionsActions.js';  // Register actions
 
@@ -19,11 +20,12 @@ class AIInlineCompletionsContribution extends Disposable implements IWorkbenchCo
 		@ILanguageFeaturesService languageFeaturesService: ILanguageFeaturesService,
 		@IAIService aiService: IAIService,
 		@IConfigurationService configurationService: IConfigurationService,
+		@IRequestService requestService: IRequestService,
 		@IMultiLanguageService multiLanguageService: IMultiLanguageService
 	) {
 		super();
 
-		const provider = new AIInlineCompletionsProvider(aiService, configurationService, multiLanguageService);
+		const provider = new AIInlineCompletionsProvider(aiService, configurationService, requestService, multiLanguageService);
 
 		// Register for all languages using '*' selector
 		const registration = languageFeaturesService.inlineCompletionsProvider.register(

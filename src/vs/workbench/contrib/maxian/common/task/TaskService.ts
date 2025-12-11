@@ -36,7 +36,7 @@ const MAX_CONSECUTIVE_MISTAKES = 3; // 最大连续错误次数
 export interface TaskServiceOptions extends CreateTaskOptions {
 	apiHandler: IApiHandler;
 	toolExecutor: IToolExecutor;
-	getSystemPrompt: () => string;
+	getSystemPrompt: () => Promise<string>;  // 修改为异步
 	getToolDefinitions: () => ToolDefinition[];
 	workspaceRoot?: string;
 	consecutiveMistakeLimit?: number;
@@ -88,7 +88,7 @@ export class TaskService extends Disposable {
 	// API & Tools
 	private readonly apiHandler: IApiHandler;
 	private readonly toolExecutor: IToolExecutor;
-	private readonly getSystemPrompt: () => string;
+	private readonly getSystemPrompt: () => Promise<string>;  // 修改为异步
 	private readonly getToolDefinitions: () => ToolDefinition[];
 
 	// Tool repetition detection
@@ -532,7 +532,7 @@ export class TaskService extends Disposable {
 	 * 尝试API请求
 	 */
 	private async attemptApiRequest(retryAttempt: number): Promise<AsyncIterable<StreamChunk>> {
-		const systemPrompt = this.getSystemPrompt();
+		const systemPrompt = await this.getSystemPrompt();  // 添加await
 		const toolDefinitions = this.getToolDefinitions();
 
 		if (retryAttempt === 0) {

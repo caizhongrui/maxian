@@ -21,8 +21,9 @@ export class ApiFactory {
 	 * 创建 API Handler 实例
 	 * 优先使用 AI 代理服务（如果配置了 zhikai.auth.apiUrl），否则使用直接调用千问 API
 	 * @param credentials 可选的认证凭证（用户名和密码），如果不提供则从配置读取
+	 * @param mode 可选的模式，用于自动选择businessCode
 	 */
-	createHandler(credentials?: { username: string; password: string }): IApiHandler {
+	createHandler(credentials?: { username: string; password: string }, mode?: string): IApiHandler {
 		// 检查是否配置了 AI 代理服务
 		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
 		const username = credentials?.username || this.configurationService.getValue<string>('zhikai.auth.username');
@@ -30,18 +31,26 @@ export class ApiFactory {
 
 		if (apiUrl && username && password) {
 			// 使用 AI 代理服务（推荐方式）
-			console.log('[ApiFactory] 使用 AI 代理服务:', apiUrl);
+			console.log('[ApiFactory] 使用 AI 代理服务:', apiUrl, '模式:', mode);
 
-			const model = this.configurationService.getValue<string>('zhikai.ai.model') || 'qwen-plus';
-			const provider = this.configurationService.getValue<string>('zhikai.ai.provider') || 'qwen';
+			// 根据模式映射businessCode
+			let businessCode: string | undefined;
+			if (mode) {
+				businessCode = this.getBusinessCodeForMode(mode);
+			}
 
 			const config: AiProxyConfiguration = {
 				apiUrl,
 				username: btoa(username), // Base64编码
 				password: btoa(password), // Base64编码
-				provider,
-				model
+				businessCode  // 使用businessCode，后端会自动选择对应的provider和model
 			};
+
+			// 如果没有businessCode，使用传统方式（向后兼容）
+			if (!businessCode) {
+				config.provider = this.configurationService.getValue<string>('zhikai.ai.provider') || 'qwen';
+				config.model = this.configurationService.getValue<string>('zhikai.ai.model') || 'qwen-plus';
+			}
 
 			return new AiProxyHandler(config);
 		} else {
@@ -64,6 +73,20 @@ export class ApiFactory {
 
 			return new QwenHandler(config);
 		}
+	}
+
+	/**
+	 * 根据模式获取对应的businessCode
+	 */
+	private getBusinessCodeForMode(mode: string): string {
+		const modeMap: Record<string, string> = {
+			'code': 'IDE_CHAT_CODE',
+			'architect': 'IDE_CHAT_ARCHITECT',
+			'ask': 'IDE_CHAT_ASK',
+			'debug': 'IDE_CHAT_DEBUG',
+			'orchestrator': 'IDE_CHAT_ORCHESTRATOR'
+		};
+		return modeMap[mode] || 'IDE_CHAT_CODE';  // 默认使用编码模式
 	}
 
 	/**

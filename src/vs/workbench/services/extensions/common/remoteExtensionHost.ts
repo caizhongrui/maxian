@@ -213,7 +213,7 @@ export class RemoteExtensionHost extends Disposable implements IExtensionHost {
 			environment: {
 				isExtensionDevelopmentDebug,
 				appRoot: remoteInitData.appRoot,
-				appName: this._productService.nameLong,
+				appName: (this._productService as any).nameLongAscii || this._productService.nameLong,
 				appHost: this._productService.embedderIdentifier || 'desktop',
 				appUriScheme: this._productService.urlProtocol,
 				extensionTelemetryLogResource: this._environmentService.extHostTelemetryLogFile,

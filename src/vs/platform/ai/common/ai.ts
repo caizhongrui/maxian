@@ -45,18 +45,18 @@ export interface IAIService {
 	/**
 	 * Complete with AI (返回内容字符串，向后兼容)
 	 * @param prompt The prompt text
-	 * @param options Optional parameters (temperature, maxTokens, systemMessage)
+	 * @param options Optional parameters (temperature, maxTokens, systemMessage, businessCode)
 	 * @returns AI response content
 	 */
-	complete(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string }): Promise<string>;
+	complete(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string; businessCode?: string }): Promise<string>;
 
 	/**
 	 * Complete with AI and return usage statistics (返回内容和token使用量)
 	 * @param prompt The prompt text
-	 * @param options Optional parameters (temperature, maxTokens, systemMessage)
+	 * @param options Optional parameters (temperature, maxTokens, systemMessage, businessCode)
 	 * @returns AI response with usage statistics
 	 */
-	completeWithUsage(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string }): Promise<AIResponse>;
+	completeWithUsage(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string; businessCode?: string }): Promise<AIResponse>;
 
 	/**
 	 * Complete with AI in streaming mode (流式响应)

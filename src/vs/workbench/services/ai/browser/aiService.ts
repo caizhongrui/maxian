@@ -59,7 +59,7 @@ export class AIService implements IAIService {
 		return response.content;
 	}
 
-	async completeWithUsage(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string }): Promise<AIResponse> {
+	async completeWithUsage(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string; businessCode?: string }): Promise<AIResponse> {
 		const model = this.configurationService.getValue<string>('zhikai.ai.model') || 'qwen-plus';
 		const provider = this.configurationService.getValue<string>('zhikai.ai.provider') || 'qwen';
 		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
@@ -68,6 +68,7 @@ export class AIService implements IAIService {
 		const temperature = options?.temperature ?? 0.15;
 		const maxTokens = options?.maxTokens ?? 1000;
 		const systemMessage = options?.systemMessage;
+		const businessCode = options?.businessCode;  // 新增：从选项中获取businessCode
 
 		// 构建消息数组
 		const messages: any[] = [];
@@ -100,7 +101,7 @@ export class AIService implements IAIService {
 
 		// 使用AI代理服务
 		this.logService.info('[AI Service] 使用AI代理服务');
-		return this.completeWithProxy(apiUrl, provider, model, messages, temperature, maxTokens);
+		return this.completeWithProxy(apiUrl, provider, model, messages, temperature, maxTokens, businessCode);
 	}
 
 	/**
@@ -112,26 +113,34 @@ export class AIService implements IAIService {
 		model: string,
 		messages: any[],
 		temperature: number,
-		maxTokens: number
+		maxTokens: number,
+		businessCode?: string  // 新增：可选的businessCode参数
 	): Promise<AIResponse> {
 		const endpoint = `${apiUrl.replace(/\/$/, '')}/ai/proxy/chat/completions`;
 
 		try {
+			const requestData: any = {
+				provider: provider,
+				model: model,
+				messages: messages,
+				temperature: temperature,
+				maxTokens: maxTokens,
+				username: btoa(this.credentials!.username),
+				password: btoa(this.credentials!.password)
+			};
+
+			// 如果提供了businessCode，则添加到请求中
+			if (businessCode) {
+				requestData.businessCode = businessCode;
+			}
+
 			const response = await this.requestService.request({
 				type: 'POST',
 				url: endpoint,
 				headers: {
 					'Content-Type': 'application/json'
 				},
-				data: JSON.stringify({
-					provider: provider,
-					model: model,
-					messages: messages,
-					temperature: temperature,
-					maxTokens: maxTokens,
-					username: btoa(this.credentials!.username),
-					password: btoa(this.credentials!.password)
-				})
+				data: JSON.stringify(requestData)
 			}, CancellationToken.None);
 
 			const data = await asJson<any>(response);
@@ -326,23 +335,30 @@ export class AIService implements IAIService {
 
 		// 构建不同类型的 prompt
 		let prompt = '';
-		let options: { temperature?: number; maxTokens?: number; systemMessage?: string } = {};
+		let options: { temperature?: number; maxTokens?: number; systemMessage?: string; businessCode?: string } = {};
 
 		switch (request.type) {
 			case 'test':
-				prompt = this.buildTestPrompt(request);
+				prompt = await this.buildTestPrompt(request);
+				options = {
+					businessCode: 'IDE_TEST_GENERATION'
+				};
 				break;
 			case 'comment':
-				prompt = this.buildCommentPrompt(request);
+				prompt = await this.buildCommentPrompt(request);
 				// 注释生成使用特殊参数（参考Java实现）
 				options = {
 					temperature: 0.3,
 					maxTokens: 800,
-					systemMessage: 'You are an expert at writing clear, concise code documentation comments.'
+					systemMessage: 'You are an expert at writing clear, concise code documentation comments.',
+					businessCode: 'IDE_COMMENT_GENERATION'
 				};
 				break;
 			case 'business':
-				prompt = this.buildBusinessCodePrompt(request);
+				prompt = await this.buildBusinessCodePrompt(request);
+				options = {
+					businessCode: 'IDE_CODE_GENERATION'
+				};
 				break;
 		}
 
@@ -390,8 +406,24 @@ ${code}
 		};
 	}
 
-	private buildTestPrompt(request: AIGenerationRequest): string {
+	private async buildTestPrompt(request: AIGenerationRequest): Promise<string> {
 		const framework = request.context?.framework || 'junit5';
+		const testType = request.context?.testType || 'unit';
+
+		// 尝试从后端获取提示词
+		const backendPrompt = await this.fetchPromptFromBackend('/generation/test', {
+			language: request.language,
+			sourceCode: request.sourceCode,
+			framework: framework,
+			testType: testType
+		});
+
+		if (backendPrompt) {
+			return backendPrompt;
+		}
+
+		// 降级：使用默认提示词
+		this.logService.warn('[AI Service] 使用默认测试生成提示词');
 		const methodName = request.context?.methodName || '目标方法';
 
 		return `你是一个专业的单元测试编写专家。请为以下${request.language}代码生成${framework}单元测试。
@@ -416,7 +448,7 @@ ${request.sourceCode}
 请直接返回测试方法代码：`;
 	}
 
-	private buildCommentPrompt(request: AIGenerationRequest): string {
+	private async buildCommentPrompt(request: AIGenerationRequest): Promise<string> {
 		const elementType = request.context?.elementType || 'method';
 
 		let style = 'JavaDoc';
@@ -428,16 +460,29 @@ ${request.sourceCode}
 
 		// 使用结构化prompt模板
 		if (elementType === 'class') {
-			return this.buildClassCommentPrompt(request, style);
+			return await this.buildClassCommentPrompt(request, style);
 		} else {
-			return this.buildMethodCommentPrompt(request, style);
+			return await this.buildMethodCommentPrompt(request, style);
 		}
 	}
 
 	/**
 	 * 构建方法注释prompt（使用结构化模板）
 	 */
-	private buildMethodCommentPrompt(request: AIGenerationRequest, style: string): string {
+	private async buildMethodCommentPrompt(request: AIGenerationRequest, style: string): Promise<string> {
+		// 尝试从后端获取提示词
+		const backendPrompt = await this.fetchPromptFromBackend('/comment/method', {
+			language: request.language,
+			sourceCode: request.sourceCode,
+			commentStyle: style
+		});
+
+		if (backendPrompt) {
+			return backendPrompt;
+		}
+
+		// 降级：使用默认提示词
+		this.logService.warn('[AI Service] 使用默认方法注释提示词');
 		return `- Role: 代码注释专家
 - Profile: 你是一位经验丰富的软件开发工程师，精通${request.language}语言及其注释规范。你擅长通过简洁明了的语言描述代码的功能和逻辑。
 - Goals: 为以下${request.language}方法生成高质量的${style}注释，包含方法功能描述、参数说明、返回值说明、异常说明。
@@ -463,7 +508,20 @@ ${request.sourceCode}
 	/**
 	 * 构建类注释prompt（使用结构化模板）
 	 */
-	private buildClassCommentPrompt(request: AIGenerationRequest, style: string): string {
+	private async buildClassCommentPrompt(request: AIGenerationRequest, style: string): Promise<string> {
+		// 尝试从后端获取提示词
+		const backendPrompt = await this.fetchPromptFromBackend('/comment/class', {
+			language: request.language,
+			sourceCode: request.sourceCode,
+			commentStyle: style
+		});
+
+		if (backendPrompt) {
+			return backendPrompt;
+		}
+
+		// 降级：使用默认提示词
+		this.logService.warn('[AI Service] 使用默认类注释提示词');
 		return `- Role: 代码注释专家
 - Profile: 你是一位经验丰富的软件开发工程师，精通${request.language}语言及其注释规范。你擅长分析类的结构和职责，通过清晰的注释帮助其他开发者理解代码设计意图。
 - Goals: 为以下${request.language}类生成高质量的${style}注释，描述类的功能、职责、设计意图。
@@ -487,24 +545,39 @@ ${request.sourceCode}
 `;
 	}
 
-	private buildBusinessCodePrompt(request: AIGenerationRequest): string {
+	private async buildBusinessCodePrompt(request: AIGenerationRequest): Promise<string> {
 		const contextInfo = request.context || {};
 		const generationType = contextInfo.generationType || 'code_snippet';
 
 		// 根据生成类型构建不同的prompt
 		if (generationType === 'full_class') {
-			return this.buildFullClassPrompt(request, contextInfo);
+			return await this.buildFullClassPrompt(request, contextInfo);
 		} else if (generationType === 'full_method') {
-			return this.buildFullMethodPrompt(request, contextInfo);
+			return await this.buildFullMethodPrompt(request, contextInfo);
 		} else {
-			return this.buildCodeSnippetPrompt(request, contextInfo);
+			return await this.buildCodeSnippetPrompt(request, contextInfo);
 		}
 	}
 
 	/**
 	 * 构建完整类的prompt
 	 */
-	private buildFullClassPrompt(request: AIGenerationRequest, contextInfo: any): string {
+	private async buildFullClassPrompt(request: AIGenerationRequest, contextInfo: any): Promise<string> {
+		// 尝试从后端获取提示词
+		const backendPrompt = await this.fetchPromptFromBackend('/generation/class', {
+			language: request.language,
+			className: contextInfo.className || 'MyClass',
+			requirement: request.requirement,
+			interfaces: contextInfo.interfaces,
+			baseClass: contextInfo.baseClass
+		});
+
+		if (backendPrompt) {
+			return backendPrompt;
+		}
+
+		// 降级：使用默认提示词
+		this.logService.warn('[AI Service] 使用默认完整类生成提示词');
 		let contextSection = `\n当前上下文：`;
 		contextSection += `\n- 编程语言：${request.language}`;
 		contextSection += `\n- 位置：文件级别（将生成完整的类）`;
@@ -538,7 +611,21 @@ ${contextSection}
 	/**
 	 * 构建完整方法的prompt
 	 */
-	private buildFullMethodPrompt(request: AIGenerationRequest, contextInfo: any): string {
+	private async buildFullMethodPrompt(request: AIGenerationRequest, contextInfo: any): Promise<string> {
+		// 尝试从后端获取提示词
+		const backendPrompt = await this.fetchPromptFromBackend('/generation/method', {
+			language: request.language,
+			methodSignature: contextInfo.methodSignature || '',
+			requirement: request.requirement,
+			classContext: contextInfo.currentClass
+		});
+
+		if (backendPrompt) {
+			return backendPrompt;
+		}
+
+		// 降级：使用默认提示词
+		this.logService.warn('[AI Service] 使用默认完整方法生成提示词');
 		let contextSection = `\n当前上下文：`;
 		contextSection += `\n- 编程语言：${request.language}`;
 		contextSection += `\n- 位置：类级别（将生成完整的方法）`;
@@ -576,7 +663,20 @@ ${contextSection}
 	/**
 	 * 构建代码片段的prompt
 	 */
-	private buildCodeSnippetPrompt(request: AIGenerationRequest, contextInfo: any): string {
+	private async buildCodeSnippetPrompt(request: AIGenerationRequest, contextInfo: any): Promise<string> {
+		// 尝试从后端获取提示词
+		const backendPrompt = await this.fetchPromptFromBackend('/generation/snippet', {
+			language: request.language,
+			requirement: request.requirement,
+			contextCode: contextInfo.surroundingCode || contextInfo.currentMethod
+		});
+
+		if (backendPrompt) {
+			return backendPrompt;
+		}
+
+		// 降级：使用默认提示词
+		this.logService.warn('[AI Service] 使用默认代码片段生成提示词');
 		let contextSection = `\n当前上下文：`;
 		contextSection += `\n- 编程语言：${request.language}`;
 		contextSection += `\n- 位置：方法内部（将生成代码片段）`;
@@ -698,6 +798,44 @@ ${contextSection}
 	 */
 	private getUserEmail(): string | undefined {
 		return this.credentials?.username;
+	}
+
+	/**
+	 * 从后端API获取提示词
+	 */
+	private async fetchPromptFromBackend(endpoint: string, context: Record<string, any>): Promise<string | null> {
+		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
+		if (!apiUrl) {
+			this.logService.warn('[AI Service] 未配置API URL，无法从后端获取提示词');
+			return null;
+		}
+
+		try {
+			const url = `${apiUrl.replace(/\/$/, '')}/system/ai/prompt${endpoint}`;
+			this.logService.info('[AI Service] 从后端获取提示词:', url);
+
+			const response = await this.requestService.request({
+				type: 'POST',
+				url: url,
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				data: JSON.stringify(context)
+			}, CancellationToken.None);
+
+			const data = await asJson<any>(response);
+
+			if (data && data.code === 200 && data.data) {
+				this.logService.info('[AI Service] 从后端获取提示词成功');
+				return data.data;
+			}
+
+			this.logService.warn('[AI Service] 后端返回提示词失败:', data);
+			return null;
+		} catch (error) {
+			this.logService.error('[AI Service] 从后端获取提示词失败:', error);
+			return null;
+		}
 	}
 
 	/**

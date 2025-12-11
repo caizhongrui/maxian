@@ -324,9 +324,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 			console.warn('[Maxian] API配置验证失败:', validation.error);
 		}
 
-		this.apiHandler = this.apiFactory.createHandler(credentials);
+		this.apiHandler = this.apiFactory.createHandler(credentials, this.currentMode);
 		const modelInfo = this.apiHandler.getModel();
-		console.log('[Maxian] API Handler已初始化，模型:', modelInfo.name);
+		console.log('[Maxian] API Handler已初始化，模型:', modelInfo.name, '模式:', this.currentMode);
 
 		this._initialized = true;
 		console.log('[Maxian] 码弦服务初始化完成');
@@ -850,16 +850,72 @@ export class MaxianService extends Disposable implements IMaxianService {
 	}
 
 	/**
-	 * 获取系统提示词
+	 * 获取系统提示词（从后端API获取）
 	 */
-	private getSystemPrompt(): string {
+	private async getSystemPrompt(): Promise<string> {
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
 		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
-		const availableTools = this.getAvailableTools();
 		const systemInfo = this.getSystemInfo();
 
-		// 传递当前模式和系统信息给系统提示词生成器
-		return SystemPromptGenerator.generate(workspaceRoot, availableTools, systemInfo, this.currentMode);
+		try {
+			// 调用后端API获取系统提示词
+			const response = await this.fetchSystemPromptFromBackend(workspaceRoot, systemInfo, this.currentMode);
+			console.log('[Maxian] 从后端获取系统提示词成功，长度:', response.systemPrompt.length);
+			return response.systemPrompt;
+		} catch (error) {
+			console.error('[Maxian] 从后端获取系统提示词失败，使用本地生成:', error);
+			// 降级方案：使用本地生成
+			const availableTools = this.getAvailableTools();
+			return SystemPromptGenerator.generate(workspaceRoot, availableTools, systemInfo, this.currentMode);
+		}
+	}
+
+	/**
+	 * 从后端API获取系统提示词
+	 */
+	private async fetchSystemPromptFromBackend(
+		workspaceRoot: string,
+		systemInfo: SystemInfo,
+		mode: string
+	): Promise<{ systemPrompt: string; estimatedTokens: number }> {
+		// 从配置中获取后端API地址
+		const apiBaseUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
+		if (!apiBaseUrl) {
+			throw new Error('未配置后端API地址');
+		}
+
+		const url = `${apiBaseUrl}/system/ai/prompt/system`;
+		const requestBody = {
+			mode: mode,
+			workspaceRoot: workspaceRoot,
+			platform: systemInfo.platform,
+			arch: systemInfo.arch,
+			nodeVersion: systemInfo.nodeVersion,
+			shell: systemInfo.shell
+		};
+
+		console.log('[Maxian] 请求后端系统提示词:', url, requestBody);
+
+		const response = await fetch(url, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(requestBody)
+		});
+
+		if (!response.ok) {
+			throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+		}
+
+		const result = await response.json();
+
+		// 检查后端返回的统一响应格式
+		if (result.code !== 200 || !result.data) {
+			throw new Error(result.msg || '后端返回错误');
+		}
+
+		return result.data;
 	}
 
 	/**
