@@ -120,6 +120,8 @@ import { AuxiliaryWindowsMainService } from '../../platform/auxiliaryWindow/elec
 import { normalizeNFC } from '../../base/common/normalization.js';
 import { ICSSDevelopmentService, CSSDevelopmentService } from '../../platform/cssDev/node/cssDevService.js';
 import { ExtensionSignatureVerificationService, IExtensionSignatureVerificationService } from '../../platform/extensionManagement/node/extensionSignatureVerificationService.js';
+import { IDatabaseMainService } from '../../workbench/contrib/database/electron-main/databaseMainService.js';
+import { DatabaseServiceImpl } from '../../workbench/contrib/database/node/databaseServiceImpl.js';
 
 /**
  * The main VS Code application. There will only ever be one instance,
@@ -1120,6 +1122,9 @@ export class CodeApplication extends Disposable {
 			services.set(IExtensionSignatureVerificationService, new SyncDescriptor(ExtensionSignatureVerificationService, undefined, true));
 		}
 
+		// Database
+		services.set(IDatabaseMainService, new SyncDescriptor(DatabaseServiceImpl, undefined, true));
+
 		// Init services that require it
 		await Promises.settled([
 			backupMainService.initialize(),
@@ -1247,6 +1252,10 @@ export class CodeApplication extends Disposable {
 		// Utility Process Worker
 		const utilityProcessWorkerChannel = ProxyChannel.fromService(accessor.get(IUtilityProcessWorkerMainService), disposables);
 		mainProcessElectronServer.registerChannel(ipcUtilityProcessWorkerChannelName, utilityProcessWorkerChannel);
+
+		// Database
+		const databaseChannel = ProxyChannel.fromService(accessor.get(IDatabaseMainService), disposables);
+		mainProcessElectronServer.registerChannel('database', databaseChannel);
 	}
 
 	private async openFirstWindow(accessor: ServicesAccessor, initialProtocolUrls: IInitialProtocolUrls | undefined): Promise<ICodeWindow[]> {

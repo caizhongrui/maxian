@@ -422,3 +422,6 @@ import { MAX_ZOOM_LEVEL, MIN_ZOOM_LEVEL } from '../../platform/window/electron-s
 
 	jsonRegistry.registerSchema(argvDefinitionFileSchemaId, schema);
 })();
+
+// Database Service
+import '../contrib/database/electron-sandbox/databaseService.js';

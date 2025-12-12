@@ -1,0 +1,380 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* SQL 生成器视图样式 */
+.sql-generator-view {
+	padding: 20px;
+	height: 100%;
+	overflow-y: auto;
+	overflow-x: hidden;
+	box-sizing: border-box;
+}
+
+/* 输入部分 */
+.input-section {
+	margin-bottom: 24px;
+}
+
+.section-header {
+	margin-bottom: 16px;
+}
+
+.section-header h3 {
+	margin: 0 0 8px 0;
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+}
+
+.subtitle {
+	font-size: 13px;
+	color: var(--vscode-descriptionForeground);
+	line-height: 1.5;
+}
+
+/* 数据库选择区域 */
+.db-select-area {
+	margin-bottom: 16px;
+	display: grid;
+	grid-template-columns: 100px 1fr;
+	gap: 12px;
+	align-items: center;
+}
+
+.db-select-area label {
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--vscode-foreground);
+}
+
+.db-select-area select {
+	padding: 6px 10px;
+	border: 1px solid var(--vscode-input-border);
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font-family: var(--vscode-font-family);
+	font-size: 13px;
+	border-radius: 3px;
+	box-sizing: border-box;
+}
+
+.db-select-area select:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	border-color: var(--vscode-focusBorder);
+}
+
+.db-select-area select:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* 输入区域 */
+.input-area {
+	margin-bottom: 12px;
+}
+
+.input-area label {
+	display: block;
+	margin-bottom: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--vscode-foreground);
+}
+
+.input-area textarea {
+	width: 100%;
+	padding: 10px;
+	border: 1px solid var(--vscode-input-border);
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font-family: var(--vscode-font-family);
+	font-size: 13px;
+	line-height: 1.5;
+	resize: vertical;
+	border-radius: 4px;
+	box-sizing: border-box;
+}
+
+.input-area textarea:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	border-color: var(--vscode-focusBorder);
+}
+
+.input-area textarea::placeholder {
+	color: var(--vscode-input-placeholderForeground);
+}
+
+.char-count {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 4px;
+}
+
+.char-count .count {
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.char-count .count.error {
+	color: var(--vscode-errorForeground);
+	font-weight: 600;
+}
+
+/* 按钮区域 */
+.button-area {
+	display: flex;
+	gap: 8px;
+}
+
+.button-area button {
+	padding: 8px 16px;
+	border: none;
+	border-radius: 4px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.generate-button {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.generate-button:hover:not(:disabled) {
+	background: var(--vscode-button-hoverBackground);
+}
+
+.generate-button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.clear-button {
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+}
+
+.clear-button:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+}
+
+/* 结果展示部分 */
+.result-section {
+	margin-top: 24px;
+	border-top: 1px solid var(--vscode-panel-border);
+	padding-top: 20px;
+}
+
+/* SQL 结果区域 */
+.sql-result-area {
+	margin-bottom: 20px;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 6px;
+	background: var(--vscode-editorWidget-background);
+	padding: 16px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.sql-code {
+	width: 100%;
+	margin: 0 0 12px 0;
+	padding: 14px;
+	background: var(--vscode-editor-background);
+	border: 1px solid var(--vscode-input-border);
+	border-radius: 4px;
+	font-family: var(--vscode-editor-font-family);
+	font-size: 13px;
+	line-height: 1.7;
+	color: var(--vscode-editor-foreground);
+	white-space: pre;
+	resize: vertical;
+	min-height: 120px;
+	max-height: 400px;
+	box-sizing: border-box;
+	overflow-x: auto;
+	overflow-y: auto;
+	transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sql-code:focus {
+	outline: none;
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
+.sql-code:hover {
+	border-color: var(--vscode-inputOption-activeBorder);
+}
+
+.copy-sql-button {
+	padding: 7px 14px;
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: none;
+	border-radius: 4px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.copy-sql-button:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+	transform: translateY(-1px);
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+/* 执行按钮 */
+.execute-button {
+	margin-bottom: 20px;
+	padding: 11px 28px;
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: none;
+	border-radius: 5px;
+	font-size: 14px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.execute-button:hover:not(:disabled) {
+	background: var(--vscode-button-hoverBackground);
+	transform: translateY(-1px);
+	box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+}
+
+.execute-button:active:not(:disabled) {
+	transform: translateY(0);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.execute-button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+	box-shadow: none;
+}
+
+/* 查询结果区域 */
+.query-result-area {
+	margin-top: 20px;
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.empty-message {
+	padding: 32px 20px;
+	text-align: center;
+	color: var(--vscode-descriptionForeground);
+	font-size: 13px;
+	background: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 6px;
+	font-style: italic;
+}
+
+.more-message {
+	margin-top: 12px;
+	padding: 10px 16px;
+	text-align: center;
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+	background: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 4px;
+	font-weight: 500;
+}
+
+/* 结果表格 */
+.results-table {
+	width: 100%;
+	border-collapse: separate;
+	border-spacing: 0;
+	font-size: 13px;
+	margin: 0;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 6px;
+	overflow: hidden;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+	background: var(--vscode-editor-background);
+}
+
+.results-table thead {
+	background: var(--vscode-editorWidget-background);
+	position: sticky;
+	top: 0;
+	z-index: 10;
+}
+
+.results-table th {
+	padding: 14px 18px;
+	text-align: left;
+	font-weight: 600;
+	font-size: 13px;
+	color: var(--vscode-foreground);
+	border-bottom: 2px solid var(--vscode-focusBorder);
+	white-space: nowrap;
+	background: var(--vscode-editorWidget-background);
+	user-select: none;
+	letter-spacing: 0.3px;
+}
+
+.results-table th:first-child {
+	border-top-left-radius: 6px;
+}
+
+.results-table th:last-child {
+	border-top-right-radius: 6px;
+}
+
+.results-table td {
+	padding: 12px 18px;
+	border-bottom: 1px solid var(--vscode-panel-border);
+	color: var(--vscode-foreground);
+	vertical-align: middle;
+	max-width: 300px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	background: var(--vscode-editor-background);
+	transition: background-color 0.15s ease;
+}
+
+.results-table tbody tr {
+	transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.results-table tbody tr:hover {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.results-table tbody tr:hover td {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.results-table tbody tr:nth-child(even) {
+	background: rgba(0, 0, 0, 0.02);
+}
+
+.results-table tbody tr:nth-child(even):hover {
+	background: var(--vscode-list-hoverBackground);
+}
+
+.results-table tbody tr:last-child td {
+	border-bottom: none;
+}
+
+.results-table tbody tr:last-child td:first-child {
+	border-bottom-left-radius: 6px;
+}
+
+.results-table tbody tr:last-child td:last-child {
+	border-bottom-right-radius: 6px;
+}

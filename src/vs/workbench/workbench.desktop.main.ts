@@ -205,6 +205,10 @@ import './contrib/multilang/browser/multilang.contribution.js';
 // Code Analysis System (Phase 3.5)
 import './contrib/analysis/browser/analysis.contribution.js';
 
+// Database Assistant (Sprint 1)
+import './contrib/database/browser/database.contribution.js';
+import './contrib/database/electron-sandbox/databaseService.js';
+
 //#endregion
 
 

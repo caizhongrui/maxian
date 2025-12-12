@@ -1,0 +1,374 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* SQL 优化器视图样式 */
+.sql-optimizer-view {
+	padding: 20px;
+	height: 100%;
+	overflow-y: auto;
+	overflow-x: hidden;
+	box-sizing: border-box;
+}
+
+/* 输入部分 */
+.input-section {
+	margin-bottom: 24px;
+}
+
+.section-header {
+	margin-bottom: 16px;
+}
+
+.section-header h3 {
+	margin: 0 0 8px 0;
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+}
+
+.subtitle {
+	font-size: 13px;
+	color: var(--vscode-descriptionForeground);
+	line-height: 1.5;
+}
+
+/* 数据库选择区域 */
+.db-select-area {
+	margin-bottom: 16px;
+	display: grid;
+	grid-template-columns: 100px 1fr;
+	gap: 12px;
+	align-items: center;
+}
+
+.db-select-area label {
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--vscode-foreground);
+}
+
+.db-select-area select {
+	padding: 6px 10px;
+	border: 1px solid var(--vscode-input-border);
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font-family: var(--vscode-font-family);
+	font-size: 13px;
+	border-radius: 3px;
+	box-sizing: border-box;
+}
+
+.db-select-area select:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	border-color: var(--vscode-focusBorder);
+}
+
+.db-select-area select:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* 输入区域 */
+.input-area {
+	margin-bottom: 12px;
+}
+
+.input-area label {
+	display: block;
+	margin-bottom: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--vscode-foreground);
+}
+
+.input-area textarea {
+	width: 100%;
+	padding: 10px;
+	border: 1px solid var(--vscode-input-border);
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font-family: var(--vscode-font-family);
+	font-size: 13px;
+	line-height: 1.5;
+	resize: vertical;
+	border-radius: 4px;
+	box-sizing: border-box;
+}
+
+.input-area textarea:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	border-color: var(--vscode-focusBorder);
+}
+
+.input-area textarea::placeholder {
+	color: var(--vscode-input-placeholderForeground);
+}
+
+.char-count {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 4px;
+}
+
+.char-count .count {
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.char-count .count.error {
+	color: var(--vscode-errorForeground);
+	font-weight: 600;
+}
+
+/* 按钮区域 */
+.button-area {
+	display: flex;
+	gap: 8px;
+}
+
+.button-area button {
+	padding: 8px 16px;
+	border: none;
+	border-radius: 4px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.optimize-button {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.optimize-button:hover:not(:disabled) {
+	background: var(--vscode-button-hoverBackground);
+}
+
+.optimize-button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.clear-button {
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+}
+
+.clear-button:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+}
+
+/* 结果展示部分 */
+.result-section {
+	margin-top: 24px;
+	border-top: 1px solid var(--vscode-panel-border);
+	padding-top: 20px;
+}
+
+.result-area {
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+}
+
+/* 评分卡片 */
+.score-card {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 16px 20px;
+	background: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 6px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.score-label {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+}
+
+.score-value {
+	font-size: 24px;
+	font-weight: 700;
+	padding: 4px 12px;
+	border-radius: 4px;
+}
+
+.score-value.good {
+	color: #16a34a;
+	background: rgba(22, 163, 74, 0.1);
+}
+
+.score-value.medium {
+	color: #ca8a04;
+	background: rgba(202, 138, 4, 0.1);
+}
+
+.score-value.bad {
+	color: #dc2626;
+	background: rgba(220, 38, 38, 0.1);
+}
+
+/* 问题和建议部分 */
+.issues-section,
+.suggestions-section,
+.table-suggestions-section {
+	padding: 16px 20px;
+	background: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 6px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.issues-section h4,
+.suggestions-section h4,
+.table-suggestions-section h4 {
+	margin: 0 0 12px 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.issues-section h4::before {
+	content: '⚠️';
+	font-size: 16px;
+}
+
+.suggestions-section h4::before {
+	content: '💡';
+	font-size: 16px;
+}
+
+.table-suggestions-section h4::before {
+	content: '🗄️';
+	font-size: 16px;
+}
+
+.issues-list,
+.suggestions-list,
+.table-suggestions-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.issues-list li,
+.suggestions-list li,
+.table-suggestions-list li {
+	padding: 10px 14px;
+	background: var(--vscode-editor-background);
+	border-left: 3px solid var(--vscode-focusBorder);
+	border-radius: 3px;
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--vscode-foreground);
+}
+
+.issues-list li {
+	border-left-color: var(--vscode-editorError-foreground);
+}
+
+.table-suggestions-list li {
+	border-left-color: #3b82f6;
+}
+
+/* 优化后的SQL部分 */
+.optimized-sql-section {
+	padding: 16px 20px;
+	background: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 6px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.optimized-sql-section h4 {
+	margin: 0 0 12px 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.optimized-sql-section h4::before {
+	content: '✨';
+	font-size: 16px;
+}
+
+.optimized-sql {
+	width: 100%;
+	margin: 0 0 12px 0;
+	padding: 14px;
+	background: var(--vscode-editor-background);
+	border: 1px solid var(--vscode-input-border);
+	border-radius: 4px;
+	font-family: var(--vscode-editor-font-family);
+	font-size: 13px;
+	line-height: 1.7;
+	color: var(--vscode-editor-foreground);
+	white-space: pre;
+	resize: vertical;
+	min-height: 120px;
+	max-height: 400px;
+	box-sizing: border-box;
+	overflow-x: auto;
+	overflow-y: auto;
+	transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.optimized-sql:focus {
+	outline: none;
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
+.optimized-sql:hover {
+	border-color: var(--vscode-inputOption-activeBorder);
+}
+
+.copy-sql-button {
+	padding: 7px 14px;
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: none;
+	border-radius: 4px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.copy-sql-button:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+	transform: translateY(-1px);
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+/* 原始内容显示 */
+.raw-content {
+	padding: 16px;
+	background: var(--vscode-editor-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 4px;
+	font-family: var(--vscode-editor-font-family);
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--vscode-foreground);
+	white-space: pre-wrap;
+	word-wrap: break-word;
+}

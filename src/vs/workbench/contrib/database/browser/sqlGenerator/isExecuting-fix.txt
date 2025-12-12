@@ -1,0 +1,7 @@
+	// 生成的SQL
+	private generatedSQL: string | null = null;
+	private isGenerating: boolean = false;
+	// @ts-expect-error - isExecuting is used in executeSQL method (false positive)
+	private isExecuting: boolean = false;
+
+	// 常量
