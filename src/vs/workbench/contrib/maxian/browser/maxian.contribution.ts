@@ -142,16 +142,19 @@ registerWorkbenchContribution2(
 
 // ====== 注册 AI 生成提交信息命令 ======
 CommandsRegistry.registerCommand('zhikai.ai.generateCommitMessage', async (accessor, prompt: string) => {
-	console.log('[Git] AI 生成提交信息请求, prompt length:', prompt.length);
+	console.log('[Git AI] 生成提交信息请求, prompt length:', prompt.length);
+	console.log('[Git AI] Prompt preview:', prompt.substring(0, 200));
 
 	try {
 		// 获取 AI 服务
 		const aiService = accessor.get(IAIService);
+		console.log('[Git AI] AI Service obtained:', !!aiService);
 
 		// 调用 AI 服务生成提交信息
 		// 使用 'business' 类型,因为生成提交信息是一个业务场景的代码生成任务
+		console.log('[Git AI] Calling aiService.generate()...');
 		const result = await aiService.generate({
-			type: 'business',         // 使用业务类型
+			type: 'commit',           // 使用 commit 类型，对应 IDE_COMMIT_MESSAGE_GENERATION
 			requirement: prompt,      // 将 git diff 和提示作为需求传入
 			language: 'text',         // 语言类型设置为 text (提交信息是纯文本)
 			context: {
@@ -160,13 +163,26 @@ CommandsRegistry.registerCommand('zhikai.ai.generateCommitMessage', async (acces
 			}
 		});
 
-		console.log('[Git] AI 生成提交信息成功, length:', result.code?.length || 0);
+		console.log('[Git AI] AI 服务返回结果:', {
+			hasCode: !!result.code,
+			codeLength: result.code?.length || 0
+		});
 
-		// 返回生成的提交信息
-		return result.code || '';
+		if (result.code) {
+			console.log('[Git AI] Generated commit message:', result.code.substring(0, 100));
+			return result.code;
+		} else {
+			console.warn('[Git AI] AI service returned empty result');
+			return '';
+		}
 
 	} catch (error) {
-		console.error('[Git] AI 生成提交信息失败:', error);
+		console.error('[Git AI] AI 生成提交信息失败:', error);
+		console.error('[Git AI] Error details:', {
+			name: (error as Error).name,
+			message: (error as Error).message,
+			stack: (error as Error).stack?.substring(0, 200)
+		});
 		// 失败时返回空字符串,让 Git 扩展使用简单版本的生成
 		return '';
 	}

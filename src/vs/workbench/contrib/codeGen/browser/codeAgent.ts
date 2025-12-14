@@ -177,7 +177,9 @@ Requirements:
 
 Generate the ${fileInfo.action === 'modify' ? 'modified' : 'new'} code:`;
 
-		const result = await this.aiService.complete(prompt);
+		const result = await this.aiService.complete(prompt, {
+			businessCode: 'IDE_CODE_GENERATION'
+		});
 		return this.extractCode(result);
 	}
 

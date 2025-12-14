@@ -2290,8 +2290,12 @@ export class CommandCenter {
 
 	@command('git.generateCommitMessage', { repository: true })
 	async generateCommitMessage(repository: Repository): Promise<void> {
+		console.log('[Git] generateCommitMessage command triggered');
+
 		// 只在输入框为空时自动生成
 		if (repository.inputBox.value.trim().length > 0) {
+			console.log('[Git] Input box already has content, skipping generation');
+			window.showInformationMessage('提交信息输入框已有内容，请先清空');
 			return;
 		}
 
@@ -2303,19 +2307,24 @@ export class CommandCenter {
 				cancellable: false
 			}, async (progress) => {
 				progress.report({ message: '正在分析代码变更...' });
+				console.log('[Git] Starting to generate commit message...');
 
 				// 调用生成方法
 				const message = await repository.generateCommitMessage();
+				console.log('[Git] Generated message:', message ? `length=${message.length}` : 'empty');
 
 				if (message) {
 					progress.report({ message: '提交信息已生成' });
 					repository.inputBox.value = message;
+					console.log('[Git] Commit message set to input box');
 				} else {
-					progress.report({ message: '未检测到代码变更' });
+					progress.report({ message: '未检测到代码变更或生成失败' });
+					console.warn('[Git] No message generated - possibly no staged changes or AI service failed');
+					window.showWarningMessage('未能生成提交信息，请检查是否有暂存的代码变更');
 				}
 			});
 		} catch (err) {
-			console.error('生成提交信息失败:', err);
+			console.error('[Git] 生成提交信息失败:', err);
 			window.showErrorMessage('生成提交信息失败: ' + (err as Error).message);
 		}
 	}

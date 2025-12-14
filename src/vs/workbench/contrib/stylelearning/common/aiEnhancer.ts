@@ -93,7 +93,9 @@ export class AIEnhancer {
 		const prompt = this.buildBestPracticesPrompt(profile);
 
 		try {
-			const response = await this.aiService.complete(prompt);
+			const response = await this.aiService.complete(prompt, {
+				businessCode: 'IDE_STYLE_LEARNING'
+			});
 			const practices = this.parseBestPractices(response);
 
 			console.log('[AIEnhancer] Extracted', practices.length, 'best practices');
@@ -116,7 +118,9 @@ export class AIEnhancer {
 		const prompt = this.buildPatternsPrompt(profile);
 
 		try {
-			const response = await this.aiService.complete(prompt);
+			const response = await this.aiService.complete(prompt, {
+				businessCode: 'IDE_STYLE_LEARNING'
+			});
 			const patterns = this.parsePatterns(response);
 
 			console.log('[AIEnhancer] Extracted', patterns.length, 'patterns');
@@ -141,7 +145,9 @@ export class AIEnhancer {
 		const prompt = this.buildSummaryPrompt(profile, bestPractices, patterns);
 
 		try {
-			const summary = await this.aiService.complete(prompt);
+			const summary = await this.aiService.complete(prompt, {
+				businessCode: 'IDE_STYLE_LEARNING'
+			});
 
 			console.log('[AIEnhancer] Summary generated');
 			return summary.trim();

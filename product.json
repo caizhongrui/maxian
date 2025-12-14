@@ -4,6 +4,8 @@
 	"nameLongAscii": "Maxian",
 	"applicationName": "maxian",
 	"dataFolderName": ".maxian",
+	"quality": "stable",
+	"commit": "1.106.0",
 	"win32MutexName": "maxian",
 	"licenseName": "MIT",
 	"licenseUrl": "https://github.com/tianhe-zhikai/tianhe-zhikai-ide/blob/main/LICENSE.txt",

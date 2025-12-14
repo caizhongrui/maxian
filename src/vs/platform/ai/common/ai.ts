@@ -89,7 +89,7 @@ export interface IAIService {
  * AI Generation Request
  */
 export interface AIGenerationRequest {
-	type: 'test' | 'comment' | 'business';
+	type: 'test' | 'comment' | 'business' | 'commit';
 	sourceCode?: string;
 	requirement?: string;
 	language: string;

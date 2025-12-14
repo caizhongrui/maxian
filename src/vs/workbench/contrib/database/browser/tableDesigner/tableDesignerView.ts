@@ -23,6 +23,7 @@ import { IStorageService, StorageScope } from '../../../../../platform/storage/c
 import { IDatabaseConnectionConfig } from '../../common/databaseConnection.js';
 import { localize } from '../../../../../nls.js';
 import { ITableStructure, IColumnDefinition, ColumnDataType, IndexType } from '../../common/databaseMetadata.js';
+import { IDesignRulesService } from '../../common/designRulesService.js';
 import { $, addDisposableListener, EventType } from '../../../../../base/browser/dom.js';
 
 /**
@@ -70,7 +71,8 @@ export class TableDesignerView extends ViewPane {
 		@IAIService private readonly aiService: IAIService,
 		@IQuickInputService private readonly quickInputService: IQuickInputService,
 		@IDialogService private readonly dialogService: IDialogService,
-		@IStorageService private readonly storageService: IStorageService
+		@IStorageService private readonly storageService: IStorageService,
+		@IDesignRulesService private readonly designRulesService: IDesignRulesService
 	) {
 		super(
 			options,
@@ -854,6 +856,10 @@ export class TableDesignerView extends ViewPane {
 	private generateCreateTableSQL(table: ITableStructure): string {
 		const lines: string[] = [];
 
+		// 获取设计规则配置
+		const designRules = this.designRulesService.getConfig();
+		const engineRules = designRules.storageEngine;
+
 		// CREATE TABLE
 		lines.push(`CREATE TABLE \`${table.name}\` (`);
 
@@ -897,7 +903,31 @@ export class TableDesignerView extends ViewPane {
 		});
 
 		lines.push(columnDefs.join(',\n'));
-		lines.push(`)${table.comment ? ` COMMENT='${table.comment}'` : ''};`);
+
+		// 表选项: 应用设计规则
+		const tableOptions: string[] = [];
+
+		// 存储引擎
+		if (designRules.enabled && engineRules.defaultEngine) {
+			tableOptions.push(`ENGINE=${engineRules.defaultEngine}`);
+		}
+
+		// 字符集
+		if (designRules.enabled && engineRules.defaultCharset) {
+			tableOptions.push(`DEFAULT CHARSET=${engineRules.defaultCharset}`);
+		}
+
+		// 排序规则
+		if (designRules.enabled && engineRules.defaultCollation) {
+			tableOptions.push(`COLLATE=${engineRules.defaultCollation}`);
+		}
+
+		// 表注释
+		if (table.comment) {
+			tableOptions.push(`COMMENT='${table.comment}'`);
+		}
+
+		lines.push(`) ${tableOptions.join(' ')};`);
 
 		return lines.join('\n');
 	}

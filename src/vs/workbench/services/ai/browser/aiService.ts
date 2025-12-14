@@ -11,6 +11,8 @@ import { IRequestService, asJson } from '../../../../platform/request/common/req
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
 import { IAILogService } from '../../../../platform/aiLog/common/aiLog.js';
+import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
+import { isWindows, isMacintosh, isLinux } from '../../../../base/common/platform.js';
 
 export class AIService implements IAIService {
 
@@ -25,7 +27,8 @@ export class AIService implements IAIService {
 		@ILogService private readonly logService: ILogService,
 		@IRequestService private readonly requestService: IRequestService,
 		@IStorageService private readonly storageService: IStorageService,
-		@IAILogService private readonly aiLogService: IAILogService
+		@IAILogService private readonly aiLogService: IAILogService,
+		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService
 	) {
 		this.logService.info('[AI Service] Initialized');
 		this.credentials = this.loadAuthCredentials();
@@ -54,7 +57,7 @@ export class AIService implements IAIService {
 		}
 	}
 
-	async complete(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string }): Promise<string> {
+	async complete(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string; businessCode?: string }): Promise<string> {
 		const response = await this.completeWithUsage(prompt, options);
 		return response.content;
 	}
@@ -90,10 +93,12 @@ export class AIService implements IAIService {
 			await this.logAICall({
 				provider: provider,
 				model: model,
-				operation: 'chat',
+				operation: businessCode || 'chat',  // 使用businessCode作为operation，如果没有则降级使用'chat'
 				mode: 'code_action',
 				status: 'failed',
-				errorMessage: errorMsg
+				errorMessage: errorMsg,
+				deviceInfo: this.getDeviceInfo(),
+				ideInfo: this.getIdeInfo()
 			});
 
 			return { content: 'Error: ' + errorMsg };
@@ -159,11 +164,13 @@ export class AIService implements IAIService {
 				await this.logAICall({
 					provider: provider,
 					model: model,
-					operation: 'chat',
+					operation: businessCode || 'chat',  // 使用businessCode作为operation，如果没有则降级使用'chat'
 					mode: 'code_action',
 					inputTokens: usage?.promptTokens,
 					outputTokens: usage?.completionTokens,
-					status: 'success'
+					status: 'success',
+					deviceInfo: this.getDeviceInfo(),
+					ideInfo: this.getIdeInfo()
 				});
 
 				return { content, usage };
@@ -175,10 +182,12 @@ export class AIService implements IAIService {
 			await this.logAICall({
 				provider: provider,
 				model: model,
-				operation: 'chat',
+				operation: businessCode || 'chat',  // 使用businessCode作为operation，如果没有则降级使用'chat'
 				mode: 'code_action',
 				status: 'failed',
-				errorMessage: 'Invalid proxy response'
+				errorMessage: 'Invalid proxy response',
+				deviceInfo: this.getDeviceInfo(),
+				ideInfo: this.getIdeInfo()
 			});
 
 			return { content: 'Error: Invalid proxy response' };
@@ -189,10 +198,12 @@ export class AIService implements IAIService {
 			await this.logAICall({
 				provider: provider,
 				model: model,
-				operation: 'chat',
+				operation: businessCode || 'chat',  // 使用businessCode作为operation，如果没有则降级使用'chat'
 				mode: 'code_action',
 				status: 'failed',
-				errorMessage: String(error)
+				errorMessage: String(error),
+				deviceInfo: this.getDeviceInfo(),
+				ideInfo: this.getIdeInfo()
 			});
 
 			return { content: `Error: ${error}` };
@@ -354,6 +365,15 @@ export class AIService implements IAIService {
 					businessCode: 'IDE_COMMENT_GENERATION'
 				};
 				break;
+			case 'commit':
+				// Git commit message 生成
+				prompt = request.requirement || ''; // commit message的prompt已经在Git扩展中构建好了
+				options = {
+					temperature: 0.3,
+					maxTokens: 500,
+					businessCode: 'IDE_COMMIT_MESSAGE_GENERATION'
+				};
+				break;
 			case 'business':
 				prompt = await this.buildBusinessCodePrompt(request);
 				options = {
@@ -398,7 +418,9 @@ ${code}
 
 请直接返回修改后的代码：`;
 
-		const result = await this.complete(prompt);
+		const result = await this.complete(prompt, {
+			businessCode: 'IDE_CODE_MODIFICATION'
+		});
 
 		return {
 			modifiedCode: this.extractCode(result),
@@ -801,6 +823,45 @@ ${contextSection}
 	}
 
 	/**
+	 * 获取设备信息
+	 */
+	private getDeviceInfo(): any {
+		let osType = 'unknown';
+		let osVersion = '';
+
+		if (isWindows) {
+			osType = 'Windows';
+			// 可以通过navigator.userAgent获取详细版本
+			osVersion = navigator.userAgent.match(/Windows NT (\d+\.\d+)/)?.[1] || '';
+		} else if (isMacintosh) {
+			osType = 'macOS';
+			osVersion = navigator.userAgent.match(/Mac OS X (\d+[_\.]\d+[_\.]\d+)/)?.[1]?.replace(/_/g, '.') || '';
+		} else if (isLinux) {
+			osType = 'Linux';
+		}
+
+		return {
+			type: osType,
+			id: '', // 可以生成设备ID
+			name: '', // 可以获取计算机名
+			osVersion: osVersion || osType
+		};
+	}
+
+	/**
+	 * 获取IDE信息
+	 */
+	private getIdeInfo(): any {
+		// 从VSCode配置中获取版本信息
+		return {
+			type: 'vscode',
+			version: '1.90.0', // 可以从vscode API获取
+			pluginVersion: '1.0.0', // 插件版本
+			projectName: this.workspaceContextService.getWorkspace().folders[0]?.name || ''
+		};
+	}
+
+	/**
 	 * 从后端API获取提示词
 	 */
 	private async fetchPromptFromBackend(endpoint: string, context: Record<string, any>): Promise<string | null> {
@@ -850,6 +911,8 @@ ${contextSection}
 		outputTokens?: number;
 		status: 'success' | 'failed';
 		errorMessage?: string;
+		deviceInfo: any;
+		ideInfo: any;
 	}): Promise<void> {
 		if (!this.currentTraceId || !this.currentCallStartTime) {
 			return;
@@ -862,6 +925,8 @@ ${contextSection}
 			await this.aiLogService.logAICall({
 				traceId: this.currentTraceId,
 				userEmail: this.getUserEmail(),
+				deviceInfo: options.deviceInfo,
+				ideInfo: options.ideInfo,
 				provider: options.provider,
 				model: options.model,
 				operation: options.operation,

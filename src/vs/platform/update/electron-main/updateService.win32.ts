@@ -3,20 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { spawn } from 'child_process';
-import * as fs from 'fs';
-import { tmpdir } from 'os';
-import { timeout } from '../../../base/common/async.js';
 import { CancellationToken } from '../../../base/common/cancellation.js';
-import { memoize } from '../../../base/common/decorators.js';
 import { hash } from '../../../base/common/hash.js';
-import * as path from '../../../base/common/path.js';
-import { URI } from '../../../base/common/uri.js';
-import { checksum } from '../../../base/node/crypto.js';
-import * as pfs from '../../../base/node/pfs.js';
 import { IConfigurationService } from '../../configuration/common/configuration.js';
 import { IEnvironmentMainService } from '../../environment/electron-main/environmentMainService.js';
-import { IFileService } from '../../files/common/files.js';
 import { ILifecycleMainService, IRelaunchHandler, IRelaunchOptions } from '../../lifecycle/electron-main/lifecycleMainService.js';
 import { ILogService } from '../../log/common/log.js';
 import { INativeHostMainService } from '../../native/electron-main/nativeHostMainService.js';
@@ -24,39 +14,13 @@ import { IProductService } from '../../product/common/productService.js';
 import { asJson, IRequestService } from '../../request/common/request.js';
 import { ITelemetryService } from '../../telemetry/common/telemetry.js';
 import { AvailableForDownload, DisablementReason, IUpdate, State, StateType, UpdateType } from '../common/update.js';
-import { AbstractUpdateService, createUpdateURL, UpdateErrorClassification, UpdateNotAvailableClassification } from './abstractUpdateService.js';
+import { AbstractUpdateService, UpdateErrorClassification, UpdateNotAvailableClassification } from './abstractUpdateService.js';
 
-async function pollUntil(fn: () => boolean, millis = 1000): Promise<void> {
-	while (!fn()) {
-		await timeout(millis);
-	}
-}
-
-interface IAvailableUpdate {
-	packagePath: string;
-	updateFilePath?: string;
-}
-
-let _updateType: UpdateType | undefined = undefined;
 function getUpdateType(): UpdateType {
-	if (typeof _updateType === 'undefined') {
-		_updateType = fs.existsSync(path.join(path.dirname(process.execPath), 'unins000.exe'))
-			? UpdateType.Setup
-			: UpdateType.Archive;
-	}
-
-	return _updateType;
+	return UpdateType.Archive;
 }
 
 export class Win32UpdateService extends AbstractUpdateService implements IRelaunchHandler {
-
-	private availableUpdate: IAvailableUpdate | undefined;
-
-	@memoize
-	get cachePath(): Promise<string> {
-		const result = path.join(tmpdir(), `vscode-${this.productService.quality}-${this.productService.target}-${process.arch}`);
-		return fs.promises.mkdir(result, { recursive: true }).then(() => result);
-	}
 
 	constructor(
 		@ILifecycleMainService lifecycleMainService: ILifecycleMainService,
@@ -65,7 +29,6 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 		@IEnvironmentMainService environmentMainService: IEnvironmentMainService,
 		@IRequestService requestService: IRequestService,
 		@ILogService logService: ILogService,
-		@IFileService private readonly fileService: IFileService,
 		@INativeHostMainService private readonly nativeHostMainService: INativeHostMainService,
 		@IProductService productService: IProductService
 	) {
@@ -79,7 +42,7 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 			return false; // we cannot apply an update and restart with different args
 		}
 
-		if (this.state.type !== StateType.Ready || !this.availableUpdate) {
+		if (this.state.type !== StateType.Ready) {
 			return false; // we only handle the relaunch when we have a pending update
 		}
 
@@ -100,15 +63,19 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 	}
 
 	protected buildUpdateFeedUrl(quality: string): string | undefined {
-		let platform = `win32-${process.arch}`;
-
-		if (getUpdateType() === UpdateType.Archive) {
-			platform += '-archive';
-		} else if (this.productService.target === 'user') {
-			platform += '-user';
+		// 使用内网API进行更新检查
+		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
+		if (!apiUrl) {
+			this.logService.error('zhikai.auth.apiUrl not configured');
+			return undefined;
 		}
 
-		return createUpdateURL(platform, quality, this.productService);
+		// 构建更新检查URL: http://apiUrl/knowledge/plugin/update-check?platform=windows&version=当前版本
+		const currentVersion = this.productService.version || '0.0.0';
+		const url = `${apiUrl}/knowledge/plugin/update-check?platform=windows&version=${currentVersion}`;
+
+		this.logService.info('Update feed URL:', url);
+		return url;
 	}
 
 	protected doCheckForUpdates(context: any): void {
@@ -120,56 +87,45 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 
 		this.requestService.request({ url: this.url }, CancellationToken.None)
 			.then<IUpdate | null>(asJson)
-			.then(update => {
+			.then((response: any) => {
 				const updateType = getUpdateType();
 
-				if (!update || !update.url || !update.version || !update.productVersion) {
-					this.telemetryService.publicLog2<{ explicit: boolean }, UpdateNotAvailableClassification>('update:notAvailable', { explicit: !!context });
+				// 解析内网API的响应格式: R<UpdateCheckResponse>
+				// response.data 包含 UpdateCheckResponse 对象
+				const updateInfo = response?.data;
 
+				if (!updateInfo || !updateInfo.url || !updateInfo.version) {
+					this.logService.info('No update available');
+					this.telemetryService.publicLog2<{ explicit: boolean }, UpdateNotAvailableClassification>('update:notAvailable', { explicit: !!context });
 					this.setState(State.Idle(updateType));
 					return Promise.resolve(null);
 				}
 
-				if (updateType === UpdateType.Archive) {
-					this.setState(State.AvailableForDownload(update));
-					return Promise.resolve(null);
-				}
+				this.logService.info('Update available:', updateInfo.version);
 
-				this.setState(State.Downloading);
+				// 构建完整的下载URL（拼接apiUrl）
+				const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
+				const downloadUrl = `${apiUrl}${updateInfo.url}`;
 
-				return this.cleanup(update.version).then(() => {
-					return this.getUpdatePackagePath(update.version).then(updatePackagePath => {
-						return pfs.Promises.exists(updatePackagePath).then(exists => {
-							if (exists) {
-								return Promise.resolve(updatePackagePath);
-							}
+				// 构建IUpdate对象
+				const update: IUpdate = {
+					version: updateInfo.version,
+					productVersion: updateInfo.productVersion || updateInfo.version,
+					url: downloadUrl,
+					sha256hash: updateInfo.sha256,
+					timestamp: updateInfo.timestamp
+				};
 
-							const downloadPath = `${updatePackagePath}.tmp`;
+				this.logService.info('Download URL:', downloadUrl);
 
-							return this.requestService.request({ url: update.url }, CancellationToken.None)
-								.then(context => this.fileService.writeFile(URI.file(downloadPath), context.stream))
-								.then(update.sha256hash ? () => checksum(downloadPath, update.sha256hash) : () => undefined)
-								.then(() => pfs.Promises.rename(downloadPath, updatePackagePath, false /* no retry */))
-								.then(() => updatePackagePath);
-						});
-					}).then(packagePath => {
-						this.availableUpdate = { packagePath };
-						this.setState(State.Downloaded(update));
-
-						const fastUpdatesEnabled = this.configurationService.getValue('update.enableWindowsBackgroundUpdates');
-						if (fastUpdatesEnabled) {
-							if (this.productService.target === 'user') {
-								this.doApplyUpdate();
-							}
-						} else {
-							this.setState(State.Ready(update));
-						}
-					});
-				});
+				// 简化模式：不自动下载，提示用户手动下载
+				// 显示 "可下载" 状态，用户点击后打开浏览器下载
+				this.setState(State.AvailableForDownload(update));
+				return Promise.resolve(null);
 			})
 			.then(undefined, err => {
 				this.telemetryService.publicLog2<{ messageHash: string }, UpdateErrorClassification>('update:error', { messageHash: String(hash(String(err))) });
-				this.logService.error(err);
+				this.logService.error('Update check error:', err);
 
 				// only show message when explicitly checking for updates
 				const message: string | undefined = !!context ? (err.message || err) : undefined;
@@ -178,109 +134,16 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 	}
 
 	protected override async doDownloadUpdate(state: AvailableForDownload): Promise<void> {
+		// 打开浏览器下载更新
 		if (state.update.url) {
-			this.nativeHostMainService.openExternal(undefined, state.update.url);
+			this.logService.info('Opening download URL in browser:', state.update.url);
+			await this.nativeHostMainService.openExternal(undefined, state.update.url);
 		}
+		// 下载后返回 Idle 状态
 		this.setState(State.Idle(getUpdateType()));
-	}
-
-	private async getUpdatePackagePath(version: string): Promise<string> {
-		const cachePath = await this.cachePath;
-		return path.join(cachePath, `CodeSetup-${this.productService.quality}-${version}.exe`);
-	}
-
-	private async cleanup(exceptVersion: string | null = null): Promise<void> {
-		const filter = exceptVersion ? (one: string) => !(new RegExp(`${this.productService.quality}-${exceptVersion}\\.exe$`).test(one)) : () => true;
-
-		const cachePath = await this.cachePath;
-		const versions = await pfs.Promises.readdir(cachePath);
-
-		const promises = versions.filter(filter).map(async one => {
-			try {
-				await fs.promises.unlink(path.join(cachePath, one));
-			} catch (err) {
-				// ignore
-			}
-		});
-
-		await Promise.all(promises);
-	}
-
-	protected override async doApplyUpdate(): Promise<void> {
-		if (this.state.type !== StateType.Downloaded) {
-			return Promise.resolve(undefined);
-		}
-
-		if (!this.availableUpdate) {
-			return Promise.resolve(undefined);
-		}
-
-		const update = this.state.update;
-		this.setState(State.Updating(update));
-
-		const cachePath = await this.cachePath;
-
-		this.availableUpdate.updateFilePath = path.join(cachePath, `CodeSetup-${this.productService.quality}-${update.version}.flag`);
-
-		await pfs.Promises.writeFile(this.availableUpdate.updateFilePath, 'flag');
-		const child = spawn(this.availableUpdate.packagePath, ['/verysilent', '/log', `/update="${this.availableUpdate.updateFilePath}"`, '/nocloseapplications', '/mergetasks=runcode,!desktopicon,!quicklaunchicon'], {
-			detached: true,
-			stdio: ['ignore', 'ignore', 'ignore'],
-			windowsVerbatimArguments: true
-		});
-
-		child.once('exit', () => {
-			this.availableUpdate = undefined;
-			this.setState(State.Idle(getUpdateType()));
-		});
-
-		const readyMutexName = `${this.productService.win32MutexName}-ready`;
-		const mutex = await import('@vscode/windows-mutex');
-
-		// poll for mutex-ready
-		pollUntil(() => mutex.isActive(readyMutexName))
-			.then(() => this.setState(State.Ready(update)));
-	}
-
-	protected override doQuitAndInstall(): void {
-		if (this.state.type !== StateType.Ready || !this.availableUpdate) {
-			return;
-		}
-
-		this.logService.trace('update#quitAndInstall(): running raw#quitAndInstall()');
-
-		if (this.availableUpdate.updateFilePath) {
-			fs.unlinkSync(this.availableUpdate.updateFilePath);
-		} else {
-			spawn(this.availableUpdate.packagePath, ['/silent', '/log', '/mergetasks=runcode,!desktopicon,!quicklaunchicon'], {
-				detached: true,
-				stdio: ['ignore', 'ignore', 'ignore']
-			});
-		}
 	}
 
 	protected override getUpdateType(): UpdateType {
 		return getUpdateType();
-	}
-
-	override async _applySpecificUpdate(packagePath: string): Promise<void> {
-		if (this.state.type !== StateType.Idle) {
-			return;
-		}
-
-		const fastUpdatesEnabled = this.configurationService.getValue('update.enableWindowsBackgroundUpdates');
-		const update: IUpdate = { version: 'unknown', productVersion: 'unknown' };
-
-		this.setState(State.Downloading);
-		this.availableUpdate = { packagePath };
-		this.setState(State.Downloaded(update));
-
-		if (fastUpdatesEnabled) {
-			if (this.productService.target === 'user') {
-				this.doApplyUpdate();
-			}
-		} else {
-			this.setState(State.Ready(update));
-		}
 	}
 }

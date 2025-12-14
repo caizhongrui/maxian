@@ -296,7 +296,7 @@ export class UpdateContribution extends Disposable implements IWorkbenchContribu
 		this.dialogService.info(nls.localize('noUpdatesAvailable', "There are currently no updates available."));
 	}
 
-	// linux
+	// 检测到更新可用 - 显示精美通知
 	private onUpdateAvailable(update: IUpdate): void {
 		if (!this.shouldShowNotification()) {
 			return;
@@ -307,21 +307,28 @@ export class UpdateContribution extends Disposable implements IWorkbenchContribu
 			return;
 		}
 
+		// 构建详细的更新信息
+		const currentVersion = this.productService.version;
+		let message = nls.localize(
+			'updateAvailableDetail',
+			"发现新版本 {0} (当前版本: {1})",
+			productVersion,
+			currentVersion
+		);
+
 		this.notificationService.prompt(
 			severity.Info,
-			nls.localize('thereIsUpdateAvailable', "There is an available update."),
+			message,
 			[{
-				label: nls.localize('download update', "Download Update"),
+				label: nls.localize('downloadNow', "立即下载"),
 				run: () => this.updateService.downloadUpdate()
 			}, {
-				label: nls.localize('later', "Later"),
+				label: nls.localize('later', "稍后提醒"),
 				run: () => { }
-			}, {
-				label: nls.localize('releaseNotes', "Release Notes"),
-				run: () => {
-					this.instantiationService.invokeFunction(accessor => showReleaseNotes(accessor, productVersion));
-				}
-			}]
+			}],
+			{
+				sticky: true  // 让通知保持显示，不自动消失
+			}
 		);
 	}
 
@@ -395,20 +402,21 @@ export class UpdateContribution extends Disposable implements IWorkbenchContribu
 	}
 
 	private shouldShowNotification(): boolean {
-		const currentVersion = this.productService.commit;
-		const currentMillis = new Date().getTime();
-		const lastKnownVersion = this.storageService.get('update/lastKnownVersion', StorageScope.APPLICATION);
+		// 对于内网IDE，总是显示更新通知（不使用VS Code的5天防骚扰机制）
+		// 因为内网更新是手动发布的，每次更新都应该及时通知用户
+		return true;
 
-		// if version != stored version, save version and date
-		if (currentVersion !== lastKnownVersion) {
-			this.storageService.store('update/lastKnownVersion', currentVersion, StorageScope.APPLICATION, StorageTarget.MACHINE);
-			this.storageService.store('update/updateNotificationTime', currentMillis, StorageScope.APPLICATION, StorageTarget.MACHINE);
-		}
-
-		const updateNotificationMillis = this.storageService.getNumber('update/updateNotificationTime', StorageScope.APPLICATION, currentMillis);
-		const diffDays = (currentMillis - updateNotificationMillis) / (1000 * 60 * 60 * 24);
-
-		return diffDays > 5;
+		// VS Code原有的防骚扰逻辑（已禁用）：
+		// const currentVersion = this.productService.commit;
+		// const currentMillis = new Date().getTime();
+		// const lastKnownVersion = this.storageService.get('update/lastKnownVersion', StorageScope.APPLICATION);
+		// if (currentVersion !== lastKnownVersion) {
+		// 	this.storageService.store('update/lastKnownVersion', currentVersion, StorageScope.APPLICATION, StorageTarget.MACHINE);
+		// 	this.storageService.store('update/updateNotificationTime', currentMillis, StorageScope.APPLICATION, StorageTarget.MACHINE);
+		// }
+		// const updateNotificationMillis = this.storageService.getNumber('update/updateNotificationTime', StorageScope.APPLICATION, currentMillis);
+		// const diffDays = (currentMillis - updateNotificationMillis) / (1000 * 60 * 60 * 24);
+		// return diffDays > 5;
 	}
 
 	private registerGlobalActivityActions(): void {

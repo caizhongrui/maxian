@@ -106,10 +106,19 @@ export class CheckForUpdateAction extends Action2 {
 	constructor() {
 		super({
 			id: 'update.checkForUpdate',
-			title: localize2('checkForUpdates', 'Check for Updates...'),
+			title: {
+				...localize2('checkForUpdates', '检查更新...'),
+				mnemonicTitle: localize({ key: 'mCheckForUpdates', comment: ['&& denotes a mnemonic'] }, "检查更新(&&U)..."),
+			},
 			category: { value: product.nameShort, original: product.nameShort },
 			f1: true,
 			precondition: CONTEXT_UPDATE_STATE.isEqualTo(StateType.Idle),
+			menu: [{
+				id: MenuId.MenubarHelpMenu,
+				group: '8_updates',
+				order: 1,
+				when: CONTEXT_UPDATE_STATE.isEqualTo(StateType.Idle)
+			}]
 		});
 	}
 

@@ -1,0 +1,486 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* 表结构分析器视图样式 */
+.table-analyzer-view {
+	padding: 20px;
+	height: 100%;
+	overflow-y: auto;
+	overflow-x: hidden;
+	box-sizing: border-box;
+}
+
+/* 输入部分 */
+.input-section {
+	margin-bottom: 24px;
+}
+
+.section-header {
+	margin-bottom: 16px;
+}
+
+.section-header h3 {
+	margin: 0 0 8px 0;
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+}
+
+.subtitle {
+	font-size: 13px;
+	color: var(--vscode-descriptionForeground);
+	line-height: 1.5;
+}
+
+/* 数据库选择区域 */
+.db-select-area {
+	margin-bottom: 16px;
+	display: grid;
+	grid-template-columns: 100px 1fr;
+	gap: 12px;
+	align-items: center;
+}
+
+.db-select-area label {
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--vscode-foreground);
+}
+
+.db-select-area select {
+	padding: 6px 10px;
+	border: 1px solid var(--vscode-input-border);
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font-family: var(--vscode-font-family);
+	font-size: 13px;
+	border-radius: 3px;
+	box-sizing: border-box;
+}
+
+.db-select-area select:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	border-color: var(--vscode-focusBorder);
+}
+
+.db-select-area select:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* 按钮区域 */
+.button-area {
+	display: flex;
+	gap: 8px;
+}
+
+.button-area button {
+	padding: 8px 16px;
+	border: none;
+	border-radius: 4px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.analyze-button {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.analyze-button:hover:not(:disabled) {
+	background: var(--vscode-button-hoverBackground);
+}
+
+.analyze-button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* 结果展示部分 */
+.result-section {
+	margin-top: 24px;
+	border-top: 1px solid var(--vscode-panel-border);
+	padding-top: 20px;
+}
+
+.result-area {
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+}
+
+/* 评分卡片 */
+.score-card {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 16px 20px;
+	background: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 6px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.score-label {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+}
+
+.score-value {
+	font-size: 24px;
+	font-weight: 700;
+	padding: 4px 12px;
+	border-radius: 4px;
+}
+
+.score-value.good {
+	color: #16a34a;
+	background: rgba(22, 163, 74, 0.1);
+}
+
+.score-value.medium {
+	color: #ca8a04;
+	background: rgba(202, 138, 4, 0.1);
+}
+
+.score-value.bad {
+	color: #dc2626;
+	background: rgba(220, 38, 38, 0.1);
+}
+
+/* 总结部分 */
+.summary-section {
+	padding: 16px 20px;
+	background: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 6px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.summary-section h4 {
+	margin: 0 0 12px 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.summary-section h4::before {
+	content: '📋';
+	font-size: 16px;
+}
+
+.summary-text {
+	margin: 0;
+	padding: 10px 14px;
+	background: var(--vscode-editor-background);
+	border-left: 3px solid var(--vscode-focusBorder);
+	border-radius: 3px;
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--vscode-foreground);
+}
+
+/* 问题部分 */
+.issues-section {
+	padding: 16px 20px;
+	background: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 6px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.issues-section h4 {
+	margin: 0 0 12px 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.issues-section h4::before {
+	content: '⚠️';
+	font-size: 16px;
+}
+
+.issues-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.issues-list li {
+	padding: 12px 14px;
+	background: var(--vscode-editor-background);
+	border-left: 3px solid var(--vscode-editorError-foreground);
+	border-radius: 3px;
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--vscode-foreground);
+}
+
+.issues-list li.severity-low {
+	border-left-color: var(--vscode-editorInfo-foreground);
+}
+
+.issues-list li.severity-medium {
+	border-left-color: var(--vscode-editorWarning-foreground);
+}
+
+.issues-list li.severity-high {
+	border-left-color: var(--vscode-editorError-foreground);
+}
+
+.issues-list li.severity-critical {
+	border-left-color: #dc2626;
+}
+
+.issue-category {
+	display: inline-block;
+	padding: 2px 6px;
+	margin-right: 6px;
+	background: var(--vscode-badge-background);
+	color: var(--vscode-badge-foreground);
+	border-radius: 3px;
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.issue-field {
+	display: inline-block;
+	padding: 2px 6px;
+	margin-right: 4px;
+	background: var(--vscode-editorWidget-background);
+	color: var(--vscode-foreground);
+	border-radius: 3px;
+	font-size: 12px;
+	font-weight: 600;
+	font-family: var(--vscode-editor-font-family);
+}
+
+.issue-suggestion {
+	margin-top: 8px;
+	padding: 8px 10px;
+	background: rgba(100, 149, 237, 0.1);
+	border-radius: 3px;
+	font-size: 12px;
+	color: var(--vscode-foreground);
+}
+
+.issue-impact {
+	margin-top: 6px;
+	padding: 6px 10px;
+	background: rgba(202, 138, 4, 0.1);
+	border-radius: 3px;
+	font-size: 12px;
+	color: var(--vscode-foreground);
+	font-style: italic;
+}
+
+/* 优化方案部分 */
+.optimizations-section {
+	padding: 16px 20px;
+	background: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 6px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.optimizations-section h4 {
+	margin: 0 0 12px 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.optimizations-section h4::before {
+	content: '🔧';
+	font-size: 16px;
+}
+
+.optimizations-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.optimizations-list li {
+	padding: 14px 16px;
+	background: var(--vscode-editor-background);
+	border-left: 3px solid #3b82f6;
+	border-radius: 3px;
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--vscode-foreground);
+	position: relative;
+}
+
+.optimizations-list li.priority-高 {
+	border-left-color: #dc2626;
+}
+
+.optimizations-list li.priority-中 {
+	border-left-color: #ca8a04;
+}
+
+.optimizations-list li.priority-低 {
+	border-left-color: #3b82f6;
+}
+
+.optimization-type {
+	display: inline-block;
+	padding: 2px 6px;
+	margin-right: 8px;
+	background: var(--vscode-badge-background);
+	color: var(--vscode-badge-foreground);
+	border-radius: 3px;
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.optimization-priority {
+	display: inline-block;
+	padding: 2px 6px;
+	background: var(--vscode-editorWidget-background);
+	color: var(--vscode-foreground);
+	border-radius: 3px;
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.opt-reason {
+	margin-top: 8px;
+	padding: 8px 10px;
+	background: rgba(100, 149, 237, 0.1);
+	border-radius: 3px;
+	font-size: 12px;
+	color: var(--vscode-foreground);
+}
+
+.opt-sql {
+	margin-top: 8px;
+	padding: 0;
+}
+
+.opt-sql pre {
+	margin: 0;
+	padding: 10px 12px;
+	background: var(--vscode-textCodeBlock-background);
+	border: 1px solid var(--vscode-input-border);
+	border-radius: 4px;
+	font-family: var(--vscode-editor-font-family);
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--vscode-editor-foreground);
+	white-space: pre-wrap;
+	word-wrap: break-word;
+	overflow-x: auto;
+}
+
+.copy-sql-button-small {
+	margin-top: 8px;
+	padding: 4px 10px;
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: none;
+	border-radius: 3px;
+	font-size: 12px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.copy-sql-button-small:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.opt-benefit {
+	margin-top: 6px;
+	padding: 6px 10px;
+	background: rgba(22, 163, 74, 0.1);
+	border-radius: 3px;
+	font-size: 12px;
+	color: var(--vscode-foreground);
+	font-weight: 500;
+}
+
+/* 最佳实践部分 */
+.practices-section {
+	padding: 16px 20px;
+	background: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 6px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.practices-section h4 {
+	margin: 0 0 12px 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.practices-section h4::before {
+	content: '💡';
+	font-size: 16px;
+}
+
+.practices-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.practices-list li {
+	padding: 10px 14px;
+	background: var(--vscode-editor-background);
+	border-left: 3px solid #16a34a;
+	border-radius: 3px;
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--vscode-foreground);
+}
+
+.practices-list li::before {
+	content: '✓ ';
+	color: #16a34a;
+	font-weight: 700;
+	margin-right: 6px;
+}
+
+/* 原始内容显示 */
+.raw-content {
+	padding: 16px;
+	background: var(--vscode-editor-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 4px;
+	font-family: var(--vscode-editor-font-family);
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--vscode-foreground);
+	white-space: pre-wrap;
+	word-wrap: break-word;
+}

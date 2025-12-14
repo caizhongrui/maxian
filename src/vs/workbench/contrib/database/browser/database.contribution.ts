@@ -24,10 +24,17 @@ import { DatabaseTreeViewDataProvider } from './databaseTreeView.js';
 import { TableDesignerView, TABLE_DESIGNER_VIEW_ID } from './tableDesigner/tableDesignerView.js';
 import { SQLGeneratorView, SQL_GENERATOR_VIEW_ID } from './sqlGenerator/sqlGeneratorView.js';
 import { SQLOptimizerView, SQL_OPTIMIZER_VIEW_ID } from './sqlOptimizer/sqlOptimizerView.js';
+import { TableAnalyzerView, TABLE_ANALYZER_VIEW_ID } from './tableAnalyzer/tableAnalyzerView.js';
+import { HealthCheckView, HEALTH_CHECK_VIEW_ID } from './healthCheck/healthCheckView.js';
 import { SQLDiagnosticsProvider } from './sqlEditor/sqlDiagnosticsProvider.js';
 import { SQLFormatterProvider } from './sqlEditor/sqlFormatterProvider.js';
 import { SQLCompletionProvider } from './sqlEditor/sqlCompletionProvider.js';
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
+import { IDesignRulesService, DesignRulesService } from '../common/designRulesService.js';
+import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
+
+// 注册设计规则服务
+registerSingleton(IDesignRulesService, DesignRulesService, InstantiationType.Delayed);
 
 // 导入 Actions
 import './databaseActions.js';
@@ -36,6 +43,8 @@ import './databaseActions.js';
 import './tableDesigner/tableDesignerView.css';
 import './sqlGenerator/sqlGeneratorView.css';
 import './sqlOptimizer/sqlOptimizerView.css';
+import './tableAnalyzer/tableAnalyzerView.css';
+import './healthCheck/healthCheckView.css';
 
 /**
  * 数据库视图容器ID
@@ -222,6 +231,50 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 			console.log('[Database] SQLOptimizerView registered successfully');
 		} catch (error) {
 			console.error('[Database] Failed to register SQLOptimizerView:', error);
+		}
+
+		// 注册表结构分析器视图
+		try {
+			const viewContainer = viewContainerRegistry.get(DATABASE_VIEW_CONTAINER_ID);
+
+			const tableAnalyzerViewDescriptor = {
+				id: TABLE_ANALYZER_VIEW_ID,
+				name: { value: '表结构分析', original: 'Table Analyzer' },
+				ctorDescriptor: new SyncDescriptor(TableAnalyzerView),
+				canToggleVisibility: true,
+				canMoveView: false,
+				weight: 20,
+				order: 5,
+				collapsed: true
+			};
+
+			viewsRegistry.registerViews([tableAnalyzerViewDescriptor], viewContainer!);
+
+			console.log('[Database] TableAnalyzerView registered successfully');
+		} catch (error) {
+			console.error('[Database] Failed to register TableAnalyzerView:', error);
+		}
+
+		// 注册数据库健康检查视图
+		try {
+			const viewContainer = viewContainerRegistry.get(DATABASE_VIEW_CONTAINER_ID);
+
+			const healthCheckViewDescriptor = {
+				id: HEALTH_CHECK_VIEW_ID,
+				name: { value: '数据库健康检查', original: 'Health Check' },
+				ctorDescriptor: new SyncDescriptor(HealthCheckView),
+				canToggleVisibility: true,
+				canMoveView: false,
+				weight: 10,
+				order: 6,
+				collapsed: true
+			};
+
+			viewsRegistry.registerViews([healthCheckViewDescriptor], viewContainer!);
+
+			console.log('[Database] HealthCheckView registered successfully');
+		} catch (error) {
+			console.error('[Database] Failed to register HealthCheckView:', error);
 		}
 	}
 

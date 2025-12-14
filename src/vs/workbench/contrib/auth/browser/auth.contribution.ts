@@ -20,6 +20,7 @@ import { Categories } from '../../../../platform/action/common/actionCommonCateg
 import { ISecretStorageService } from '../../../../platform/secrets/common/secrets.js';
 import { IStatusbarService, StatusbarAlignment, IStatusbarEntryAccessor } from '../../../services/statusbar/browser/statusbar.js';
 import { HeartbeatService } from './heartbeatService.js';
+import { IUpdateService } from '../../../../platform/update/common/update.js';
 
 // 注册认证服务
 registerSingleton(IAuthService, AuthService, InstantiationType.Delayed);
@@ -42,7 +43,8 @@ class AuthStartupContribution extends Disposable implements IWorkbenchContributi
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@INotificationService _notificationService: INotificationService,
 		@ISecretStorageService private readonly secretStorageService: ISecretStorageService,
-		@IStatusbarService private readonly statusbarService: IStatusbarService
+		@IStatusbarService private readonly statusbarService: IStatusbarService,
+		@IUpdateService private readonly updateService: IUpdateService
 	) {
 		super();
 
@@ -78,6 +80,17 @@ class AuthStartupContribution extends Disposable implements IWorkbenchContributi
 				// 用户登录成功，启动心跳
 				console.log('[AuthStartupContribution] Starting heartbeat for user:', user.username);
 				this.heartbeatService.startHeartbeat();
+				// 登录成功后检查更新（延迟2秒确保UpdateService已初始化）
+				console.log('[AuthStartupContribution] Will check for updates after login...');
+				setTimeout(() => {
+					console.log('[AuthStartupContribution] UpdateService state:', this.updateService.state);
+					console.log('[AuthStartupContribution] Calling checkForUpdates...');
+					this.updateService.checkForUpdates(false).then(() => {
+						console.log('[AuthStartupContribution] checkForUpdates completed');
+					}).catch((err) => {
+						console.error('[AuthStartupContribution] checkForUpdates failed:', err);
+					});
+				}, 2000);
 			} else {
 				// 用户退出登录
 				this.updateStatusBar();

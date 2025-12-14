@@ -250,7 +250,9 @@ Extract:
 
 Provide a concise summary in Chinese.`;
 
-		const styleAnalysis = await this.aiService.complete(prompt);
+		const styleAnalysis = await this.aiService.complete(prompt, {
+			businessCode: 'IDE_MEMORY_BANK'
+		});
 
 		await this.addEntry(workspaceUri, {
 			title: 'Coding Style Guidelines',

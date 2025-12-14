@@ -96,7 +96,9 @@ export class LineCommentCommand {
 			prompt = this.getDefaultLineCommentPrompt(code, languageId, commentStyle.line);
 		}
 
-		const result = await this.aiService.complete(prompt);
+		const result = await this.aiService.complete(prompt, {
+			businessCode: 'IDE_COMMENT_GENERATION'
+		});
 
 		// 清理可能的markdown标记
 		let cleanCode = result.trim();

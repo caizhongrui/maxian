@@ -69,10 +69,15 @@ export abstract class AbstractUpdateService implements IUpdateService {
 	 * https://github.com/microsoft/vscode/issues/89784
 	 */
 	protected async initialize(): Promise<void> {
-		if (!this.environmentMainService.isBuilt) {
-			this.setState(State.Disabled(DisablementReason.NotBuilt));
-			return; // updates are never enabled when running out of sources
-		}
+		this.logService.info('update#initialize - Starting initialization...');
+		this.logService.info('update#initialize - isBuilt:', this.environmentMainService.isBuilt);
+		this.logService.info('update#initialize - disableUpdates:', this.environmentMainService.disableUpdates);
+
+		// 允许开发模式下测试更新功能
+		// if (!this.environmentMainService.isBuilt) {
+		// 	this.setState(State.Disabled(DisablementReason.NotBuilt));
+		// 	return; // updates are never enabled when running out of sources
+		// }
 
 		if (this.environmentMainService.disableUpdates) {
 			this.setState(State.Disabled(DisablementReason.DisabledByEnvironment));
@@ -80,25 +85,31 @@ export abstract class AbstractUpdateService implements IUpdateService {
 			return;
 		}
 
-		if (!this.productService.updateUrl || !this.productService.commit) {
-			this.setState(State.Disabled(DisablementReason.MissingConfiguration));
-			this.logService.info('update#ctor - updates are disabled as there is no update URL');
-			return;
-		}
+		// 允许通过 buildUpdateFeedUrl 自定义构建 URL，不强制要求 productService.updateUrl
+		// 如果没有 updateUrl，buildUpdateFeedUrl 应该返回自定义的 URL
+		// if (!this.productService.updateUrl || !this.productService.commit) {
+		// 	this.setState(State.Disabled(DisablementReason.MissingConfiguration));
+		// 	this.logService.info('update#ctor - updates are disabled as there is no update URL');
+		// 	return;
+		// }
 
 		const updateMode = this.configurationService.getValue<'none' | 'manual' | 'start' | 'default'>('update.mode');
+		this.logService.info('update#initialize - updateMode:', updateMode);
 		const quality = this.getProductQuality(updateMode);
+		this.logService.info('update#initialize - quality:', quality);
+		this.logService.info('update#initialize - productService.quality:', this.productService.quality);
 
 		if (!quality) {
 			this.setState(State.Disabled(DisablementReason.ManuallyDisabled));
-			this.logService.info('update#ctor - updates are disabled by user preference');
+			this.logService.info('update#ctor - updates are disabled by user preference (quality is undefined)');
 			return;
 		}
 
 		this.url = this.buildUpdateFeedUrl(quality);
+		this.logService.info('update#initialize - buildUpdateFeedUrl returned:', this.url);
 		if (!this.url) {
 			this.setState(State.Disabled(DisablementReason.InvalidConfiguration));
-			this.logService.info('update#ctor - updates are disabled as the update URL is badly formed');
+			this.logService.info('update#ctor - updates are disabled as the update URL is badly formed or buildUpdateFeedUrl returned undefined');
 			return;
 		}
 
@@ -116,15 +127,18 @@ export abstract class AbstractUpdateService implements IUpdateService {
 			return;
 		}
 
-		if (updateMode === 'start') {
-			this.logService.info('update#ctor - startup checks only; automatic updates are disabled by user preference');
+		// 不在启动时自动检查更新，等待登录成功后由auth service触发
+		// 这样可以确保在用户登录后立即检查更新，而不是等待30秒
+		this.logService.info('update#ctor - update check will be triggered after successful login');
 
-			// Check for updates only once after 30 seconds
-			setTimeout(() => this.checkForUpdates(false), 30 * 1000);
-		} else {
-			// Start checking for updates after 30 seconds
-			this.scheduleCheckForUpdates(30 * 1000).then(undefined, err => this.logService.error(err));
-		}
+		// if (updateMode === 'start') {
+		// 	this.logService.info('update#ctor - startup checks only; automatic updates are disabled by user preference');
+		// 	// Check for updates only once after 30 seconds
+		// 	setTimeout(() => this.checkForUpdates(false), 30 * 1000);
+		// } else {
+		// 	// Start checking for updates after 30 seconds
+		// 	this.scheduleCheckForUpdates(30 * 1000).then(undefined, err => this.logService.error(err));
+		// }
 	}
 
 	private getProductQuality(updateMode: string): string | undefined {
@@ -141,12 +155,14 @@ export abstract class AbstractUpdateService implements IUpdateService {
 	}
 
 	async checkForUpdates(explicit: boolean): Promise<void> {
-		this.logService.trace('update#checkForUpdates, state = ', this.state.type);
+		this.logService.info('update#checkForUpdates called, state = ', this.state.type, ', url = ', this.url);
 
 		if (this.state.type !== StateType.Idle) {
+			this.logService.warn('update#checkForUpdates - Cannot check for updates, state is not Idle. Current state:', this.state.type);
 			return;
 		}
 
+		this.logService.info('update#checkForUpdates - Calling doCheckForUpdates with explicit =', explicit);
 		this.doCheckForUpdates(explicit);
 	}
 

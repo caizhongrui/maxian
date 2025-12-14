@@ -1362,13 +1362,13 @@ class AnalyzeTableStructureAction extends Action2 {
 
 				// 确保连接
 				await databaseService.addConnection(connectionConfig);
-				const connection = await databaseService.getConnection(connectionId);
+				const connection = await databaseService.getConnection(connectionId!);
 				if (!connection || connection.status !== 'connected') {
-					await databaseService.connect(connectionId);
+					await databaseService.connect(connectionId!);
 				}
 
 				// 选择Schema
-				const schemas = await databaseService.getSchemas(connectionId);
+				const schemas = await databaseService.getSchemas(connectionId!);
 				if (schemas.length === 0) {
 					notificationService.warn(localize('database.noSchemas', '该连接没有可用的数据库'));
 					return;
@@ -1391,7 +1391,7 @@ class AnalyzeTableStructureAction extends Action2 {
 				schema = selectedSchema.label;
 
 				// 选择表
-				const tables = await databaseService.getTables(connectionId, schema);
+				const tables = await databaseService.getTables(connectionId!, schema);
 				if (tables.length === 0) {
 					notificationService.warn(localize('database.noTables', '该数据库没有表'));
 					return;
@@ -1417,7 +1417,7 @@ class AnalyzeTableStructureAction extends Action2 {
 			// 获取表结构
 			notificationService.info(localize('database.analyzingTable', '正在分析表结构...'));
 
-			const tableStructure = await databaseService.getTableStructure(connectionId, schema, tableName);
+			await databaseService.getTableStructure(connectionId!, schema!, tableName!);
 
 			// TODO: 调用AI分析表结构，生成优化建议
 			// 这里需要创建后端提示词模板 IDE_DB_TABLE_ANALYZE

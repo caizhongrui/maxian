@@ -2578,16 +2578,21 @@ export class Repository implements Disposable {
 	 */
 	async generateCommitMessage(): Promise<string> {
 		const staged = [...this.indexGroup.resourceStates];
+		console.log('[Git Repository] generateCommitMessage called, staged files:', staged.length);
 
 		if (staged.length === 0) {
+			console.log('[Git Repository] No staged files, returning empty');
 			return '';
 		}
 
 		try {
 			// 获取暂存区的完整 diff
+			console.log('[Git Repository] Getting diff for staged changes...');
 			const diff = await this.diff(true);
+			console.log('[Git Repository] Diff length:', diff?.length || 0);
 
 			if (!diff || diff.trim().length === 0) {
+				console.log('[Git Repository] No diff content, using simple message generation');
 				return this.generateSimpleCommitMessage(staged);
 			}
 
@@ -2596,13 +2601,22 @@ export class Repository implements Disposable {
 			const truncatedDiff = diff.length > maxDiffLength
 				? diff.substring(0, maxDiffLength) + '\n\n...(内容过长,已截断)'
 				: diff;
+			console.log('[Git Repository] Truncated diff length:', truncatedDiff.length);
 
 			// 调用 AI 生成提交信息
+			console.log('[Git Repository] Calling AI service to generate commit message...');
 			const aiMessage = await this.generateAICommitMessage(truncatedDiff, staged);
-			return aiMessage || this.generateSimpleCommitMessage(staged);
+			console.log('[Git Repository] AI service returned:', aiMessage ? `length=${aiMessage.length}` : 'empty');
+
+			if (aiMessage) {
+				return aiMessage;
+			} else {
+				console.log('[Git Repository] AI service failed, using simple message generation');
+				return this.generateSimpleCommitMessage(staged);
+			}
 
 		} catch (error) {
-			console.error('[Git] 生成提交信息失败:', error);
+			console.error('[Git Repository] 生成提交信息失败:', error);
 			// 失败时回退到简单版本
 			return this.generateSimpleCommitMessage(staged);
 		}

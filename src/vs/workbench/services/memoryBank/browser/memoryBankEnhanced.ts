@@ -172,7 +172,9 @@ ${samples.map((s, i) => `\n---示例 ${i + 1}---\n${s.substring(0, 800)}`).join(
 
 用中文简洁总结，格式化为 Markdown。`;
 
-		const patterns = await this.aiService.complete(prompt);
+		const patterns = await this.aiService.complete(prompt, {
+			businessCode: 'IDE_MEMORY_BANK'
+		});
 
 		await this.memoryBankService.addEntry(workspaceUri, {
 			title: '常用设计模式',

@@ -43,7 +43,8 @@ export class MemoryBankAIIntegration {
 		// 4. 调用 AI 生成代码
 		const generatedCode = await this.aiService.complete(prompt, {
 			temperature: 0.2,
-			maxTokens: 2000
+			maxTokens: 2000,
+			businessCode: 'IDE_MEMORY_BANK'
 		});
 
 		return this.extractCode(generatedCode);
@@ -292,7 +293,8 @@ export class MemoryBankAIIntegration {
 		// 4. 调用 AI 补全
 		const completion = await this.aiService.complete(prompt, {
 			temperature: 0.1,
-			maxTokens: 500
+			maxTokens: 500,
+			businessCode: 'IDE_MEMORY_BANK'
 		});
 
 		return this.extractCode(completion);
@@ -380,7 +382,9 @@ export class MemoryBankAIIntegration {
 }`;
 
 		// 3. 调用 AI 审查
-		const reviewResult = await this.aiService.complete(prompt);
+		const reviewResult = await this.aiService.complete(prompt, {
+			businessCode: 'IDE_MEMORY_BANK'
+		});
 
 		// 4. 解析结果
 		try {

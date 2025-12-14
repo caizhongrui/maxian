@@ -259,7 +259,8 @@ export class TestGenerator {
 		// Increased to 3000 tokens to ensure complete test class generation
 		const result = await this._aiService.complete(prompt, {
 			maxTokens: 3000,
-			temperature: 0.3
+			temperature: 0.3,
+			businessCode: 'IDE_TEST_GENERATION'
 		});
 
 		// Extract and clean the generated code

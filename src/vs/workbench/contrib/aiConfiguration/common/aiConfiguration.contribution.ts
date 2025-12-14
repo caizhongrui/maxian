@@ -80,8 +80,8 @@ configurationRegistry.registerConfiguration({
 		// 认证配置
 		'zhikai.auth.apiUrl': {
 			type: 'string',
-			default: 'http://192.168.0.185:8088/',
-			description: '后端 API 地址（例如: http://192.168.0.185:8088/）',
+			default: 'http://192.168.0.185:8088',
+			description: '后端 API 地址（例如: http://192.168.0.185:8088）',
 			scope: ConfigurationScope.MACHINE,
 			order: 8
 		},

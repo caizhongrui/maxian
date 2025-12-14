@@ -8,6 +8,7 @@ import { memoize } from '../../../base/common/decorators.js';
 import { Event } from '../../../base/common/event.js';
 import { hash } from '../../../base/common/hash.js';
 import { DisposableStore } from '../../../base/common/lifecycle.js';
+import { CancellationToken } from '../../../base/common/cancellation.js';
 import { IConfigurationService } from '../../configuration/common/configuration.js';
 import { IEnvironmentMainService } from '../../environment/electron-main/environmentMainService.js';
 import { ILifecycleMainService, IRelaunchHandler, IRelaunchOptions } from '../../lifecycle/electron-main/lifecycleMainService.js';
@@ -15,8 +16,8 @@ import { ILogService } from '../../log/common/log.js';
 import { IProductService } from '../../product/common/productService.js';
 import { IRequestService } from '../../request/common/request.js';
 import { ITelemetryService } from '../../telemetry/common/telemetry.js';
-import { IUpdate, State, StateType, UpdateType } from '../common/update.js';
-import { AbstractUpdateService, createUpdateURL, UpdateErrorClassification, UpdateNotAvailableClassification } from './abstractUpdateService.js';
+import { IUpdate, State, StateType, UpdateType, AvailableForDownload } from '../common/update.js';
+import { AbstractUpdateService, UpdateErrorClassification, UpdateNotAvailableClassification } from './abstractUpdateService.js';
 
 export class DarwinUpdateService extends AbstractUpdateService implements IRelaunchHandler {
 
@@ -74,26 +75,116 @@ export class DarwinUpdateService extends AbstractUpdateService implements IRelau
 	}
 
 	protected buildUpdateFeedUrl(quality: string): string | undefined {
-		let assetID: string;
-		if (!this.productService.darwinUniversalAssetId) {
-			assetID = process.arch === 'x64' ? 'darwin' : 'darwin-arm64';
-		} else {
-			assetID = this.productService.darwinUniversalAssetId;
-		}
-		const url = createUpdateURL(assetID, quality, this.productService);
-		try {
-			electron.autoUpdater.setFeedURL({ url });
-		} catch (e) {
-			// application is very likely not signed
-			this.logService.error('Failed to set update feed URL', e);
+		this.logService.info('[DarwinUpdateService] buildUpdateFeedUrl called with quality:', quality);
+
+		// 使用内网API进行更新检查
+		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
+		this.logService.info('[DarwinUpdateService] apiUrl from config:', apiUrl);
+
+		if (!apiUrl) {
+			this.logService.error('[DarwinUpdateService] zhikai.auth.apiUrl not configured');
 			return undefined;
 		}
+
+		// 构建更新检查URL: http://apiUrl/knowledge/plugin/update-check?platform=mac&version=当前版本
+		const currentVersion = this.productService.version || '0.0.0';
+		const url = `${apiUrl}/knowledge/plugin/update-check?platform=mac&version=${currentVersion}`;
+
+		this.logService.info('[DarwinUpdateService] Update feed URL built:', url);
+
+		// 注意：我们不直接使用 electron.autoUpdater.setFeedURL
+		// 而是通过自定义的HTTP请求来检查更新
+		// electron.autoUpdater 将在下载阶段使用
+
 		return url;
 	}
 
-	protected doCheckForUpdates(context: any): void {
+	protected async doCheckForUpdates(context: any): Promise<void> {
 		this.setState(State.CheckingForUpdates(context));
-		electron.autoUpdater.checkForUpdates();
+
+		if (!this.url) {
+			return;
+		}
+
+		try {
+			this.logService.info('Checking for updates:', this.url);
+
+			// 调用内网API检查更新
+			const response = await this.requestService.request({ url: this.url }, CancellationToken.None);
+
+			if (response.res.statusCode === 200) {
+				// 读取响应数据
+				const chunks: Uint8Array[] = [];
+
+				response.stream.on('data', (chunk) => {
+					chunks.push(chunk.buffer);
+				});
+
+				response.stream.on('end', () => {
+					try {
+						// 合并所有数据块
+						const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+						const result = new Uint8Array(totalLength);
+						let offset = 0;
+						for (const chunk of chunks) {
+							result.set(chunk, offset);
+							offset += chunk.length;
+						}
+
+						// 解析内网API的响应格式: R<UpdateCheckResponse>
+						const responseText = new TextDecoder().decode(result);
+						const data = JSON.parse(responseText);
+						const updateInfo = data.data;
+
+						if (!updateInfo || !updateInfo.version) {
+							this.logService.info('No update available');
+							this.onUpdateNotAvailable();
+							return;
+						}
+
+						this.logService.info('Update available:', updateInfo.version);
+
+						// 优先使用 filePath（OSS直接下载地址），fallback 到内网下载端点
+						let downloadUrl: string;
+						if (updateInfo.filePath) {
+							// 使用 OSS 直接下载地址
+							downloadUrl = updateInfo.filePath;
+							this.logService.info('Using OSS direct download URL:', downloadUrl);
+						} else if (updateInfo.url) {
+							// fallback: 使用内网下载端点
+							const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
+							downloadUrl = `${apiUrl}${updateInfo.url}`;
+							this.logService.info('Using internal download endpoint:', downloadUrl);
+						} else {
+							this.logService.error('No download URL available');
+							this.onUpdateNotAvailable();
+							return;
+						}
+
+						// 构建 IUpdate 对象
+						const update: IUpdate = {
+							version: updateInfo.version,
+							productVersion: updateInfo.productVersion || updateInfo.version,
+							url: downloadUrl
+						};
+
+						// 简化模式：不自动下载，提示用户手动下载
+						// 显示 "可下载" 状态，用户点击后打开浏览器下载
+						this.setState(State.AvailableForDownload(update));
+					} catch (e) {
+						this.logService.error('Failed to parse update response', e);
+						this.onError(String(e));
+					}
+				});
+			} else {
+				// 无更新
+				this.logService.info('No update available (status code:', response.res.statusCode, ')');
+				this.onUpdateNotAvailable();
+			}
+		} catch (error) {
+			this.logService.error('Error checking for updates:', error);
+			this.onError(String(error));
+		}
 	}
 
 	private onUpdateAvailable(): void {
@@ -127,6 +218,17 @@ export class DarwinUpdateService extends AbstractUpdateService implements IRelau
 		}
 		this.telemetryService.publicLog2<{ explicit: boolean }, UpdateNotAvailableClassification>('update:notAvailable', { explicit: this.state.explicit });
 
+		this.setState(State.Idle(UpdateType.Archive));
+	}
+
+	protected override async doDownloadUpdate(state: AvailableForDownload): Promise<void> {
+		// 打开浏览器下载更新
+		if (state.update.url) {
+			this.logService.info('Opening download URL in browser:', state.update.url);
+			// 使用系统默认浏览器打开下载链接
+			await electron.shell.openExternal(state.update.url);
+		}
+		// 下载后返回 Idle 状态
 		this.setState(State.Idle(UpdateType.Archive));
 	}
 
