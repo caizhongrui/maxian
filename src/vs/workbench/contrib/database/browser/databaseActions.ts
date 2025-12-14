@@ -15,7 +15,17 @@ import { DatabaseType, IDatabaseConnectionConfig } from '../common/databaseConne
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { showDatabaseConnectionDialog } from './databaseConnectionDialog.js';
-import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
+import { ContextKeyExpr, RawContextKey, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
+import { IAuthService } from '../../auth/common/authService.js';
+
+/**
+ * 数据库功能权限 ContextKey
+ */
+export const HasDbNlToSqlPermission = new RawContextKey<boolean>('hasDbNlToSqlPermission', false);
+export const HasDbSqlOptimizePermission = new RawContextKey<boolean>('hasDbSqlOptimizePermission', false);
+export const HasDbTableAnalyzePermission = new RawContextKey<boolean>('hasDbTableAnalyzePermission', false);
+export const HasDbHealthCheckPermission = new RawContextKey<boolean>('hasDbHealthCheckPermission', false);
+export const HasDbTableDesignPermission = new RawContextKey<boolean>('hasDbTableDesignPermission', false);
 
 /**
  * 添加数据库连接 Action
@@ -1034,7 +1044,8 @@ class GenerateSQLWithAIAction extends Action2 {
 				original: 'Generate SQL with AI'
 			},
 			icon: ThemeIcon.fromId('sparkle'),
-			f1: true
+			f1: true,
+			precondition: HasDbNlToSqlPermission
 		});
 	}
 
@@ -1175,7 +1186,8 @@ class OptimizeSQLAction extends Action2 {
 				original: 'Optimize SQL'
 			},
 			icon: ThemeIcon.fromId('lightbulb'),
-			f1: true
+			f1: true,
+			precondition: HasDbSqlOptimizePermission
 		});
 	}
 
@@ -1310,7 +1322,8 @@ class AnalyzeTableStructureAction extends Action2 {
 				original: 'Analyze Table Structure'
 			},
 			icon: ThemeIcon.fromId('search'),
-			f1: true
+			f1: true,
+			precondition: HasDbTableAnalyzePermission
 		});
 	}
 
@@ -1433,6 +1446,57 @@ class AnalyzeTableStructureAction extends Action2 {
 		}
 	}
 }
+
+/**
+ * 数据库权限管理贡献
+ * 监听用户变化，更新数据库功能的 ContextKey
+ */
+class DatabasePermissionContribution {
+	constructor(
+		@IAuthService authService: IAuthService,
+		@IContextKeyService contextKeyService: IContextKeyService
+	) {
+		// 创建 ContextKey 绑定
+		const nlToSqlKey = HasDbNlToSqlPermission.bindTo(contextKeyService);
+		const sqlOptimizeKey = HasDbSqlOptimizePermission.bindTo(contextKeyService);
+		const tableAnalyzeKey = HasDbTableAnalyzePermission.bindTo(contextKeyService);
+		const healthCheckKey = HasDbHealthCheckPermission.bindTo(contextKeyService);
+		const tableDesignKey = HasDbTableDesignPermission.bindTo(contextKeyService);
+
+		// 更新权限的函数
+		const updatePermissions = () => {
+			const user = authService.currentUser;
+			const permissions = user?.agentPermission || [];
+
+			nlToSqlKey.set(permissions.includes('IDE_DB_NL_TO_SQL'));
+			sqlOptimizeKey.set(permissions.includes('IDE_DB_SQL_OPTIMIZE'));
+			tableAnalyzeKey.set(permissions.includes('IDE_DB_TABLE_ANALYZE'));
+			healthCheckKey.set(permissions.includes('IDE_DB_HEALTH_CHECK'));
+			tableDesignKey.set(permissions.includes('IDE_DB_TABLE_DESIGN'));
+		};
+
+		// 初始化权限
+		updatePermissions();
+
+		// 监听用户变化
+		authService.onDidChangeUser(() => {
+			updatePermissions();
+		});
+	}
+}
+
+// 注册权限管理贡献
+import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
+
+class DatabasePermissionWorkbenchContribution extends DatabasePermissionContribution implements IWorkbenchContribution {
+	static readonly ID = 'workbench.contrib.databasePermission';
+}
+
+registerWorkbenchContribution2(
+	DatabasePermissionWorkbenchContribution.ID,
+	DatabasePermissionWorkbenchContribution,
+	WorkbenchPhase.BlockRestore
+);
 
 // 注册所有 Actions
 registerAction2(AddDatabaseConnectionAction);

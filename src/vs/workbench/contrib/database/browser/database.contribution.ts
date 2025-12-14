@@ -32,6 +32,13 @@ import { SQLCompletionProvider } from './sqlEditor/sqlCompletionProvider.js';
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
 import { IDesignRulesService, DesignRulesService } from '../common/designRulesService.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
+import {
+	HasDbNlToSqlPermission,
+	HasDbSqlOptimizePermission,
+	HasDbTableAnalyzePermission,
+	HasDbHealthCheckPermission,
+	HasDbTableDesignPermission
+} from './databaseActions.js';
 
 // 注册设计规则服务
 registerSingleton(IDesignRulesService, DesignRulesService, InstantiationType.Delayed);
@@ -179,7 +186,8 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 				canMoveView: false,
 				weight: 50,
 				order: 2,
-				collapsed: true
+				collapsed: true,
+				when: HasDbTableDesignPermission
 			};
 
 			viewsRegistry.registerViews([tableDesignerViewDescriptor], viewContainer!);
@@ -201,7 +209,8 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 				canMoveView: false,
 				weight: 40,
 				order: 3,
-				collapsed: true
+				collapsed: true,
+				when: HasDbNlToSqlPermission
 			};
 
 			viewsRegistry.registerViews([sqlGeneratorViewDescriptor], viewContainer!);
@@ -223,7 +232,8 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 				canMoveView: false,
 				weight: 30,
 				order: 4,
-				collapsed: true
+				collapsed: true,
+				when: HasDbSqlOptimizePermission
 			};
 
 			viewsRegistry.registerViews([sqlOptimizerViewDescriptor], viewContainer!);
@@ -245,7 +255,8 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 				canMoveView: false,
 				weight: 20,
 				order: 5,
-				collapsed: true
+				collapsed: true,
+				when: HasDbTableAnalyzePermission
 			};
 
 			viewsRegistry.registerViews([tableAnalyzerViewDescriptor], viewContainer!);
@@ -267,7 +278,8 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 				canMoveView: false,
 				weight: 10,
 				order: 6,
-				collapsed: true
+				collapsed: true,
+				when: HasDbHealthCheckPermission
 			};
 
 			viewsRegistry.registerViews([healthCheckViewDescriptor], viewContainer!);

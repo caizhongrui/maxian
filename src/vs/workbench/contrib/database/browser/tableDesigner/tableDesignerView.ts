@@ -21,6 +21,7 @@ import { IQuickInputService, IQuickPickItem } from '../../../../../platform/quic
 import { IDialogService } from '../../../../../platform/dialogs/common/dialogs.js';
 import { IStorageService, StorageScope } from '../../../../../platform/storage/common/storage.js';
 import { IDatabaseConnectionConfig } from '../../common/databaseConnection.js';
+import { HasDbTableDesignPermission } from '../databaseActions.js';
 import { localize } from '../../../../../nls.js';
 import { ITableStructure, IColumnDefinition, ColumnDataType, IndexType } from '../../common/databaseMetadata.js';
 import { IDesignRulesService } from '../../common/designRulesService.js';
@@ -292,6 +293,15 @@ export class TableDesignerView extends ViewPane {
 	 * 生成表结构
 	 */
 	private async generateTableStructure(): Promise<void> {
+		// 检查权限
+		const hasPermission = HasDbTableDesignPermission.getValue(this.contextKeyService);
+		if (!hasPermission) {
+			this.notificationService.warn(
+				localize('database.noPermission', '您没有使用该功能的权限，请联系管理员开通')
+			);
+			return;
+		}
+
 		const requirement = this.requirementInput.value.trim();
 
 		if (requirement.length < this.MIN_CHARS) {

@@ -19,6 +19,7 @@ import { INotificationService } from '../../../../../platform/notification/commo
 import { IAIService } from '../../../../../platform/ai/common/ai.js';
 import { IStorageService, StorageScope } from '../../../../../platform/storage/common/storage.js';
 import { IDatabaseConnectionConfig } from '../../common/databaseConnection.js';
+import { HasDbHealthCheckPermission } from '../databaseActions.js';
 import { localize } from '../../../../../nls.js';
 import { $, addDisposableListener, EventType } from '../../../../../base/browser/dom.js';
 
@@ -303,6 +304,15 @@ export class HealthCheckView extends ViewPane {
 	 * 执行健康检查
 	 */
 	private async performHealthCheck(): Promise<void> {
+		// 检查权限
+		const hasPermission = HasDbHealthCheckPermission.getValue(this.contextKeyService);
+		if (!hasPermission) {
+			this.notificationService.warn(
+				localize('database.noPermission', '您没有使用该功能的权限，请联系管理员开通')
+			);
+			return;
+		}
+
 		if (!this.selectedConnectionId || !this.selectedSchema) {
 			this.notificationService.warn(
 				localize('database.healthCheck.selectSchemaFirst', '请先选择要检查的数据库')

@@ -398,22 +398,6 @@
 			}
 		},
 		{
-			"name": "eamodio.gitlens",
-			"version": "2025.11.3004",
-			"sha256": null,
-			"repo": "https://github.com/gitkraken/vscode-gitlens.git",
-			"metadata": {
-				"id": "eamodio.gitlens",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "eamodio",
-					"displayName": "GitKraken",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "GitKraken"
-			}
-		},
-		{
 			"name": "donjayamanne.githistory",
 			"version": "0.6.20",
 			"sha256": null,
