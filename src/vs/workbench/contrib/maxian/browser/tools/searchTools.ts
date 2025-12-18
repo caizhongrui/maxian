@@ -61,7 +61,7 @@ export class SearchTool {
 
 	/**
 	 * 代码库搜索
-	 * 智能搜索：将自然语言查询转换为多种搜索策略
+	 * 优化：并行执行多种搜索策略，添加超时机制
 	 * @param toolUse 代码库搜索工具使用信息
 	 * @returns 搜索结果
 	 */
@@ -72,43 +72,58 @@ export class SearchTool {
 			return '错误: 未提供搜索查询';
 		}
 
+		const startTime = Date.now();
+		const timeout = 8000; // 8秒超时
+
 		try {
-			// 如果没有提供path,使用workspaceRoot作为默认搜索路径
 			const searchPath = path || this.workspaceRoot;
 			const folderUri = URI.file(searchPath);
 
-			// 将file_pattern字符串转换为glob.IExpression
 			const includePattern: glob.IExpression | undefined = file_pattern
 				? { [file_pattern]: true }
 				: undefined;
 
-			// 智能搜索：尝试多种策略
 			const allResults: Map<string, { filePath: string; lineNumber: number; line: string }> = new Map();
 
-			// 策略1: 直接文本搜索（非正则）
-			await this.performTextSearch(folderUri, query, includePattern, allResults, false);
+			// 构建所有搜索任务
+			const searchTasks: Promise<void>[] = [];
 
-			// 策略2: 如果查询包含多个词，搜索每个关键词
+			// 策略1: 直接文本搜索
+			searchTasks.push(this.performTextSearch(folderUri, query, includePattern, allResults, false));
+
+			// 策略2: 关键词搜索（并行）
 			const keywords = query.split(/\s+/).filter(w => w.length > 2);
 			if (keywords.length > 1) {
-				for (const keyword of keywords.slice(0, 3)) { // 最多搜索前3个关键词
-					await this.performTextSearch(folderUri, keyword, includePattern, allResults, false);
+				for (const keyword of keywords.slice(0, 2)) { // 最多2个关键词
+					searchTasks.push(this.performTextSearch(folderUri, keyword, includePattern, allResults, false));
 				}
 			}
 
-			// 策略3: 搜索驼峰命名变体（如：user_config -> userConfig, UserConfig）
+			// 策略3: 驼峰命名变体
 			const camelCasePattern = this.toCamelCasePattern(query);
 			if (camelCasePattern && camelCasePattern !== query) {
-				await this.performTextSearch(folderUri, camelCasePattern, includePattern, allResults, false);
+				searchTasks.push(this.performTextSearch(folderUri, camelCasePattern, includePattern, allResults, false));
 			}
+
+			// 并行执行所有搜索，带超时
+			try {
+				await Promise.race([
+					Promise.all(searchTasks),
+					new Promise((_, reject) => setTimeout(() => reject(new Error('搜索超时')), timeout))
+				]);
+			} catch (e) {
+				console.warn('[SearchTool] codebaseSearch 超时，返回已有结果');
+			}
+
+			const elapsed = Date.now() - startTime;
+			console.log('[SearchTool] codebaseSearch 完成，耗时:', elapsed, 'ms，结果:', allResults.size);
 
 			if (allResults.size === 0) {
-				return `未找到与 "${query}" 相关的结果。\n\n建议：\n- 尝试使用 glob 工具按文件名搜索: glob(path, "**/*${query}*")\n- 尝试 search_files 进行正则表达式搜索\n- 尝试 list_files 查看目录结构`;
+				return `未找到与 "${query}" 相关的结果。\n\n建议：\n- 尝试使用 glob 工具按文件名搜索\n- 尝试 search_files 进行正则表达式搜索`;
 			}
 
-			// 格式化并排序结果（按相关性）
 			const sortedResults = Array.from(allResults.values())
-				.slice(0, 50) // 限制结果数量
+				.slice(0, 50)
 				.map(r => `${r.filePath}:${r.lineNumber}: ${r.line.trim()}`);
 
 			return `找到 ${allResults.size} 个匹配 (显示前${sortedResults.length}个):\n\n${sortedResults.join('\n')}`;

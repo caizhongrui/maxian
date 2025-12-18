@@ -850,77 +850,24 @@ export class MaxianService extends Disposable implements IMaxianService {
 	}
 
 	/**
-	 * 获取系统提示词（从后端API获取）
+	 * 获取系统提示词（本地生成）
+	 * 工具描述在IDE中硬编码，确保最佳的提示词质量
 	 */
 	private async getSystemPrompt(): Promise<string> {
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
 		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
 		const systemInfo = this.getSystemInfo();
+		const availableTools = this.getAvailableTools();
 
-		try {
-			// 调用后端API获取系统提示词
-			const response = await this.fetchSystemPromptFromBackend(workspaceRoot, systemInfo, this.currentMode);
-			console.log('[Maxian] 从后端获取系统提示词成功，长度:', response.systemPrompt.length);
-			return response.systemPrompt;
-		} catch (error) {
-			console.error('[Maxian] 从后端获取系统提示词失败，使用本地生成:', error);
-			// 降级方案：使用本地生成
-			const availableTools = this.getAvailableTools();
-			return SystemPromptGenerator.generate(workspaceRoot, availableTools, systemInfo, this.currentMode);
-		}
-	}
-
-	/**
-	 * 从后端API获取系统提示词
-	 */
-	private async fetchSystemPromptFromBackend(
-		workspaceRoot: string,
-		systemInfo: SystemInfo,
-		mode: string
-	): Promise<{ systemPrompt: string; estimatedTokens: number }> {
-		// 从配置中获取后端API地址
-		const apiBaseUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
-		if (!apiBaseUrl) {
-			throw new Error('未配置后端API地址');
-		}
-
-		const url = `${apiBaseUrl}/system/ai/prompt/system`;
-		const requestBody = {
-			mode: mode,
-			workspaceRoot: workspaceRoot,
-			platform: systemInfo.platform,
-			arch: systemInfo.arch,
-			nodeVersion: systemInfo.nodeVersion,
-			shell: systemInfo.shell
-		};
-
-		console.log('[Maxian] 请求后端系统提示词:', url, requestBody);
-
-		const response = await fetch(url, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify(requestBody)
-		});
-
-		if (!response.ok) {
-			throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-		}
-
-		const result = await response.json();
-
-		// 检查后端返回的统一响应格式
-		if (result.code !== 200 || !result.data) {
-			throw new Error(result.msg || '后端返回错误');
-		}
-
-		return result.data;
+		// 直接使用本地生成，工具描述在IDE中硬编码
+		const prompt = SystemPromptGenerator.generate(workspaceRoot, availableTools, systemInfo, this.currentMode);
+		console.log('[Maxian] 本地生成系统提示词，长度:', prompt.length);
+		return prompt;
 	}
 
 	/**
 	 * 获取所有工具定义
-	 * 包含所有15个工具的完整定义
+	 * 包含所有23个工具的完整定义（含P0/P1优化新增的8个工具）
 	 */
 	private getAllToolDefinitions(): ToolDefinition[] {
 		return [
@@ -1135,6 +1082,158 @@ export class MaxianService extends Disposable implements IMaxianService {
 						todos: { type: 'array', description: '待办事项列表' }
 					},
 					required: ['todos']
+				}
+			},
+
+			// ==================== P0/P1 优化工具 ====================
+
+			// 16. batch - 批量并行执行工具【重要：优先使用！】
+			{
+				name: 'batch',
+				description: '【优先使用】批量并行执行多个独立的读取/搜索工具。当需要执行2个或更多read_file、search_files、glob、list_files、codebase_search操作时，必须使用batch而非逐个调用。性能提升2-5倍。示例：读取3个文件→使用batch一次完成，而非调用3次read_file。',
+				parameters: {
+					type: 'object',
+					properties: {
+						tool_calls: {
+							type: 'array',
+							description: '工具调用数组。格式：[{"tool":"read_file","parameters":{"path":"a.ts"}},{"tool":"read_file","parameters":{"path":"b.ts"}}]。最多10个。禁止：batch、apply_diff、write_to_file、execute_command',
+							items: {
+								type: 'object',
+								properties: {
+									tool: { type: 'string', description: '工具名称' },
+									parameters: { type: 'object', description: '工具参数' }
+								},
+								required: ['tool', 'parameters']
+							}
+						}
+					},
+					required: ['tool_calls']
+				}
+			},
+
+			// 17. edit - 容错字符串替换
+			{
+				name: 'edit',
+				description: '基于old_string/new_string的容错字符串替换。支持9种匹配策略：精确匹配、行trim、首尾锚点、空白归一化、缩进灵活、转义处理、边界trim、上下文感知、多处匹配。',
+				parameters: {
+					type: 'object',
+					properties: {
+						path: { type: 'string', description: '要编辑的文件路径' },
+						old_string: { type: 'string', description: '要被替换的原始内容（需与文件内容匹配）' },
+						new_string: { type: 'string', description: '替换后的新内容' },
+						replace_all: { type: 'boolean', description: '是否替换所有匹配项（默认false）' },
+						create_if_missing: { type: 'boolean', description: '文件不存在时是否创建（默认false）' }
+					},
+					required: ['path', 'new_string']
+				}
+			},
+
+			// 18. multiedit - 单文件多处编辑
+			{
+				name: 'multiedit',
+				description: '在单个文件中执行多处编辑操作（原子性）。所有编辑要么全部成功，要么全部不执行。',
+				parameters: {
+					type: 'object',
+					properties: {
+						path: { type: 'string', description: '文件路径' },
+						edits: {
+							type: 'array',
+							description: '编辑数组，每项包含 old_string, new_string, replace_all(可选)',
+							items: {
+								type: 'object',
+								properties: {
+									old_string: { type: 'string', description: '要被替换的内容' },
+									new_string: { type: 'string', description: '替换后的内容' },
+									replace_all: { type: 'boolean', description: '是否替换所有匹配' }
+								},
+								required: ['old_string', 'new_string']
+							}
+						}
+					},
+					required: ['path', 'edits']
+				}
+			},
+
+			// 19. patch - 多文件批量操作
+			{
+				name: 'patch',
+				description: '批量执行多文件操作：创建、修改、删除、重命名。适合重命名多个文件、创建多个新文件、批量修改文件。',
+				parameters: {
+					type: 'object',
+					properties: {
+						patches: {
+							type: 'array',
+							description: 'JSON数组，每项包含：action (create/modify/delete/rename), path, content(可选), new_path(rename时必需)',
+							items: {
+								type: 'object',
+								properties: {
+									action: { type: 'string', enum: ['create', 'modify', 'delete', 'rename'], description: '操作类型' },
+									path: { type: 'string', description: '文件路径' },
+									content: { type: 'string', description: '文件内容（create/modify时）' },
+									new_path: { type: 'string', description: '新路径（rename时）' }
+								},
+								required: ['action', 'path']
+							}
+						}
+					},
+					required: ['patches']
+				}
+			},
+
+			// 20. webfetch - 网页获取
+			{
+				name: 'webfetch',
+				description: '获取网页内容并转换为Markdown格式。支持缓存、自动处理重定向。适合获取API文档、读取网页内容。',
+				parameters: {
+					type: 'object',
+					properties: {
+						url: { type: 'string', description: '要获取的网页URL' },
+						useCache: { type: 'boolean', description: '是否使用缓存（默认true，15分钟有效）' },
+						format: { type: 'string', enum: ['markdown', 'text', 'html'], description: '输出格式（默认markdown）' }
+					},
+					required: ['url']
+				}
+			},
+
+			// 21. task - 子Agent委托
+			{
+				name: 'task',
+				description: '将复杂任务委托给子Agent执行。适合独立的子任务、需要专门上下文的任务、分解复杂任务。',
+				parameters: {
+					type: 'object',
+					properties: {
+						prompt: { type: 'string', description: '任务描述（详细说明子Agent需要完成的工作）' },
+						subagent_type: { type: 'string', enum: ['general-purpose', 'explore', 'plan'], description: '子Agent类型（可选，默认general-purpose）' }
+					},
+					required: ['prompt']
+				}
+			},
+
+			// 22. lsp_hover - LSP悬停信息
+			{
+				name: 'lsp_hover',
+				description: '获取代码位置的LSP悬停信息，包括类型、函数签名、文档等。',
+				parameters: {
+					type: 'object',
+					properties: {
+						path: { type: 'string', description: '文件路径' },
+						line: { type: 'number', description: '行号（从1开始）' },
+						column: { type: 'number', description: '列号（从1开始）' }
+					},
+					required: ['path', 'line', 'column']
+				}
+			},
+
+			// 23. lsp_diagnostics - LSP诊断信息
+			{
+				name: 'lsp_diagnostics',
+				description: '获取文件的LSP诊断信息，包括编译错误、类型错误、lint警告等。',
+				parameters: {
+					type: 'object',
+					properties: {
+						path: { type: 'string', description: '文件路径' }
+					},
+					required: ['path']
 				}
 			}
 		];

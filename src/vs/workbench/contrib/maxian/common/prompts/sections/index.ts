@@ -11,3 +11,8 @@ export { getToolUseGuidelinesSection } from './toolUseGuidelines.js';
 export { getMarkdownFormattingSection } from './markdownFormatting.js';
 export { getToolUseSection } from './toolUse.js';
 export { getModesSection } from './modes.js';
+export { getGitSafetyProtocolSection } from './gitSafetyProtocol.js';
+
+// 已移除的 sections（内容合并到 toolUseGuidelines）
+// - getToolDecisionTreeSection
+// - getExplorationStrategySection

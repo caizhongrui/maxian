@@ -12,6 +12,7 @@ import { distance } from '../utils/levenshtein.js';
 import { addLineNumbers, everyLineHasLineNumbers, stripLineNumbers } from '../utils/lineNumbers.js';
 import { normalizeString } from '../utils/textNormalization.js';
 import { ToolUse } from '../tools/toolTypes.js';
+import { findMatch, FUZZY_MATCH_STRATEGIES } from './fuzzyMatch.js';
 
 const BUFFER_LINES = 40; // Number of extra context lines to show before and after matches
 
@@ -572,31 +573,51 @@ Only use a single line of '=======' between search and replacement content, beca
 					searchLines = aggressiveSearchLines;
 					replaceLines = replaceContent ? replaceContent.split(/\r?\n/) : [];
 				} else {
-					// No match found with either method
-					const originalContentSection =
-						startLine !== undefined && endLine !== undefined
-							? `\n\nOriginal Content:\n${addLineNumbers(
-								resultLines
-									.slice(
-										Math.max(0, startLine - 1 - this.bufferLines),
-										Math.min(resultLines.length, endLine + this.bufferLines)
-									)
-									.join('\n'),
-								Math.max(1, startLine - this.bufferLines)
-							)}`
-							: `\n\nOriginal Content:\n${addLineNumbers(resultLines.join('\n'))}`;
+					// P1-6: 使用 9 种容错匹配策略作为最终后备
+					// 参考 OpenCode edit.ts 的 9 种替换策略
+					const fullContent = resultLines.join('\n');
+					const fuzzyResult = findMatch(fullContent, searchChunk);
 
-					const bestMatchSection = bestMatchContent
-						? `\n\nBest Match Found:\n${addLineNumbers(bestMatchContent, matchIndex + 1)}`
-						: `\n\nBest Match Found:\n(no match)`;
+					if (fuzzyResult.found && fuzzyResult.matched) {
+						// 找到匹配，计算行号
+						const beforeMatch = fullContent.substring(0, fuzzyResult.start!);
+						const matchedLineIndex = beforeMatch.split('\n').length - 1;
 
-					const lineRange = startLine ? ` at line: ${startLine}` : '';
+						matchIndex = matchedLineIndex;
+						bestMatchScore = fuzzyResult.similarity ?? 0.8;
+						bestMatchContent = fuzzyResult.matched;
 
-					diffResults.push({
-						success: false,
-						error: `No sufficiently similar match found${lineRange} (${Math.floor(bestMatchScore * 100)}% similar, needs ${Math.floor(this.fuzzyThreshold * 100)}%)\n\nDebug Info:\n- Similarity Score: ${Math.floor(bestMatchScore * 100)}%\n- Required Threshold: ${Math.floor(this.fuzzyThreshold * 100)}%\n- Search Range: ${startLine ? `starting at line ${startLine}` : 'start to end'}\n- Tried both standard and aggressive line number stripping\n- Tip: Use the read_file tool to get the latest content of the file before attempting to use the apply_diff tool again, as the file content may have changed\n\nSearch Content:\n${searchChunk}${bestMatchSection}${originalContentSection}`,
-					});
-					continue;
+						// 更新 searchLines 为实际匹配的内容
+						searchLines = fuzzyResult.matched.split(/\r?\n/);
+
+						console.log(`[Maxian] 使用 ${fuzzyResult.strategy} 策略找到匹配 (相似度: ${Math.floor(bestMatchScore * 100)}%)`);
+					} else {
+						// No match found with any method
+						const originalContentSection =
+							startLine !== undefined && endLine !== undefined
+								? `\n\nOriginal Content:\n${addLineNumbers(
+									resultLines
+										.slice(
+											Math.max(0, startLine - 1 - this.bufferLines),
+											Math.min(resultLines.length, endLine + this.bufferLines)
+										)
+										.join('\n'),
+									Math.max(1, startLine - this.bufferLines)
+								)}`
+								: `\n\nOriginal Content:\n${addLineNumbers(resultLines.join('\n'))}`;
+
+						const bestMatchSection = bestMatchContent
+							? `\n\nBest Match Found:\n${addLineNumbers(bestMatchContent, matchIndex + 1)}`
+							: `\n\nBest Match Found:\n(no match)`;
+
+						const lineRange = startLine ? ` at line: ${startLine}` : '';
+
+						diffResults.push({
+							success: false,
+							error: `No sufficiently similar match found${lineRange} (${Math.floor(bestMatchScore * 100)}% similar, needs ${Math.floor(this.fuzzyThreshold * 100)}%)\n\nDebug Info:\n- Similarity Score: ${Math.floor(bestMatchScore * 100)}%\n- Required Threshold: ${Math.floor(this.fuzzyThreshold * 100)}%\n- Search Range: ${startLine ? `starting at line ${startLine}` : 'start to end'}\n- Tried: standard matching, aggressive line number stripping, and 9 fuzzy strategies (${FUZZY_MATCH_STRATEGIES.join(', ')})\n- Tip: Use the read_file tool to get the latest content of the file before attempting to use the apply_diff tool again, as the file content may have changed\n\nSearch Content:\n${searchChunk}${bestMatchSection}${originalContentSection}`,
+						});
+						continue;
+					}
 				}
 			}
 

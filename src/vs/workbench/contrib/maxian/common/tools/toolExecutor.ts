@@ -38,6 +38,8 @@ export interface IToolExecutor {
 export interface ToolExecutionContext {
 	cwd: string; // 当前工作目录
 	workspaceRoot?: string; // 工作区根目录
+	sessionId?: string; // P1-7: 会话ID，用于 Doom Loop 检测
+	agentName?: string; // P2-9: Agent名称，用于工具过滤
 }
 
 /**

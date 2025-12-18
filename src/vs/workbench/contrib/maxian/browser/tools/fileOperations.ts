@@ -12,6 +12,8 @@ import { MultiSearchReplaceDiffStrategy } from '../../common/diff/MultiSearchRep
 import { addLineNumbers, stripLineNumbers, everyLineHasLineNumbers } from '../../common/utils/lineNumbers.js';
 import { normalizeString } from '../../common/utils/textNormalization.js';
 import * as path from '../../../../../base/common/path.js';
+import { trackFileRead, assertFileWritable, withFileLock, updateFileAfterWrite } from '../../common/file/fileTimeTracker.js';
+import { getDiagnosticsAfterEdit } from '../../common/lsp/lspDiagnostics.js';
 
 /**
  * 检测文件是否为二进制文件（基于扩展名）
@@ -47,13 +49,24 @@ function isBinaryFileByExtension(filePath: string): boolean {
  */
 export class FileOperationsTool {
 	private readonly diffStrategy: MultiSearchReplaceDiffStrategy;
+	private sessionId: string;
 
 	constructor(
 		private readonly fileService: IFileService,
-		private readonly workspaceRoot: string = ''
+		private readonly workspaceRoot: string = '',
+		sessionId?: string
 	) {
 		// 初始化Diff策略（完整Kilocode实现）
 		this.diffStrategy = new MultiSearchReplaceDiffStrategy(1.0, 40); // 100%匹配阈值，40行缓冲
+		// P1-8: 会话ID用于文件时间戳追踪
+		this.sessionId = sessionId || 'default';
+	}
+
+	/**
+	 * 更新会话ID
+	 */
+	setSessionId(sessionId: string): void {
+		this.sessionId = sessionId;
 	}
 
 	/**
@@ -119,6 +132,17 @@ export class FileOperationsTool {
 			const content = await this.fileService.readFile(uri);
 			const text = content.value.toString();
 			const allLines = text.split(/\r?\n/);
+
+			// P1-8: 记录文件读取时间戳
+			try {
+				const stat = await this.fileService.resolve(uri);
+				const mtime = stat.mtime ?? Date.now();
+				const size = stat.size ?? text.length;
+				trackFileRead(this.sessionId, absolutePath, mtime, size);
+			} catch (e) {
+				// 忽略 stat 失败，不影响读取
+				console.warn(`[FileOperations] 获取文件 stat 失败: ${absolutePath}`, e);
+			}
 
 			// 如果文件末尾有换行符，split会产生一个空字符串，需要移除
 			if (allLines.length > 0 && allLines[allLines.length - 1] === '' && text.endsWith('\n')) {
@@ -195,6 +219,27 @@ export class FileOperationsTool {
 			// 检查文件是否存在
 			const exists = await this.fileService.exists(uri);
 
+			// P1-8: 文件时间戳校验（仅对已存在的文件）
+			if (exists) {
+				try {
+					const stat = await this.fileService.resolve(uri);
+					const currentMtime = stat.mtime ?? Date.now();
+					const currentSize = stat.size ?? 0;
+
+					const assertResult = assertFileWritable(this.sessionId, absolutePath, currentMtime, currentSize);
+					if (!assertResult.success) {
+						return `<error>
+${assertResult.message}
+
+提示：这是一个安全保护机制，防止覆盖您或其他程序对文件的修改。
+</error>`;
+					}
+				} catch (e) {
+					console.warn(`[FileOperations] 时间戳校验失败: ${absolutePath}`, e);
+					// 校验失败不阻止写入，只记录警告
+				}
+			}
+
 			// 预处理内容
 			let processedContent = content;
 
@@ -257,26 +302,45 @@ export class FileOperationsTool {
 				console.warn(`[writeToFile] 行数不匹配: 实际 ${actualLineCount} 行，预期 ${predictedLineCount} 行`);
 			}
 
-			// 写入文件
+			// 写入文件（使用文件锁确保串行写入）
 			const buffer = VSBuffer.fromString(processedContent);
 
-			if (exists) {
-				// 文件存在，更新内容
-				await this.fileService.writeFile(uri, buffer);
-				return `<success>
+			return await withFileLock(absolutePath, async () => {
+				if (exists) {
+					// 文件存在，更新内容
+					await this.fileService.writeFile(uri, buffer);
+				} else {
+					// 文件不存在，创建新文件（包括目录）
+					await this.fileService.createFile(uri, buffer, { overwrite: false });
+				}
+
+				// P1-8: 写入后更新时间戳记录
+				try {
+					const newStat = await this.fileService.resolve(uri);
+					const newMtime = newStat.mtime ?? Date.now();
+					const newSize = newStat.size ?? processedContent.length;
+					updateFileAfterWrite(this.sessionId, absolutePath, newMtime, newSize);
+				} catch (e) {
+					console.warn(`[FileOperations] 更新时间戳记录失败: ${absolutePath}`, e);
+				}
+
+				// P2-12: 获取 LSP 诊断
+				const diagnosticsAppendix = await getDiagnosticsAfterEdit(absolutePath);
+
+				if (exists) {
+					return `<success>
 文件已更新: ${absolutePath}
 操作: 修改现有文件
 行数: ${actualLineCount}
-</success>`;
-			} else {
-				// 文件不存在，创建新文件（包括目录）
-				await this.fileService.createFile(uri, buffer, { overwrite: false });
-				return `<success>
+</success>${diagnosticsAppendix}`;
+				} else {
+					return `<success>
 文件已创建: ${absolutePath}
 操作: 创建新文件
 行数: ${actualLineCount}
-</success>`;
-			}
+</success>${diagnosticsAppendix}`;
+				}
+			});
 
 		} catch (error) {
 			return `<error>
@@ -295,7 +359,7 @@ export class FileOperationsTool {
 
 	/**
 	 * 列出目录下的文件和目录
-	 * 使用IFileService实现，浏览器环境友好
+	 * 优化：使用并行遍历，添加超时机制
 	 * @param toolUse 列出文件工具使用信息
 	 * @returns 文件和目录列表（目录以"/"结尾）
 	 */
@@ -306,17 +370,34 @@ export class FileOperationsTool {
 			return '错误: 未提供目录路径';
 		}
 
-		// 使用统一的路径解析（模仿 Kilocode）
 		const absolutePath = this.resolveFilePath(dirPath);
+		const startTime = Date.now();
+		const timeout = 10000; // 10秒超时
 
 		try {
 			const uri = URI.file(absolutePath);
 			const result: string[] = [];
 			const limit = 500;
 			let count = 0;
+			let timedOut = false;
 
-			const listDir = async (currentUri: URI, isRecursive: boolean): Promise<void> => {
-				if (count >= limit) {
+			// 检查是否超时
+			const checkTimeout = () => {
+				if (Date.now() - startTime > timeout) {
+					timedOut = true;
+					return true;
+				}
+				return false;
+			};
+
+			// 并行遍历目录
+			const listDir = async (currentUri: URI, isRecursive: boolean, depth: number = 0): Promise<void> => {
+				if (count >= limit || timedOut || checkTimeout()) {
+					return;
+				}
+
+				// 限制递归深度
+				if (depth > 10) {
 					return;
 				}
 
@@ -327,47 +408,48 @@ export class FileOperationsTool {
 						return;
 					}
 
-					// 排序：目录在前，文件在后
-					const sortedChildren = stat.children.sort((a, b) => {
-						if (a.isDirectory && !b.isDirectory) {
-							return -1;
-						}
-						if (!a.isDirectory && b.isDirectory) {
-							return 1;
-						}
+					// 过滤并排序
+					const filteredChildren = stat.children.filter(child =>
+						!child.name.startsWith('.') && child.name !== 'node_modules'
+					).sort((a, b) => {
+						if (a.isDirectory && !b.isDirectory) return -1;
+						if (!a.isDirectory && b.isDirectory) return 1;
 						return a.name.localeCompare(b.name);
 					});
 
-					for (const child of sortedChildren) {
-						if (count >= limit) {
-							break;
-						}
-
-						// 跳过隐藏文件和node_modules
-						if (child.name.startsWith('.') || child.name === 'node_modules') {
-							continue;
-						}
+					// 先收集当前目录的所有项目
+					const dirs: typeof filteredChildren = [];
+					for (const child of filteredChildren) {
+						if (count >= limit || timedOut) break;
 
 						const childPath = child.resource.fsPath;
 						if (child.isDirectory) {
-							result.push(childPath.endsWith('/') ? childPath : `${childPath}/`);
-							count++;
-
-							if (isRecursive) {
-								await listDir(child.resource, true);
-							}
+							result.push(`${childPath}/`);
+							dirs.push(child);
 						} else {
 							result.push(childPath);
-							count++;
+						}
+						count++;
+					}
+
+					// 并行递归子目录（限制并发数）
+					if (isRecursive && dirs.length > 0 && !timedOut) {
+						const concurrency = 5; // 最多5个并发
+						for (let i = 0; i < dirs.length; i += concurrency) {
+							if (count >= limit || timedOut) break;
+							const batch = dirs.slice(i, i + concurrency);
+							await Promise.all(batch.map(d => listDir(d.resource, true, depth + 1)));
 						}
 					}
 				} catch (error) {
 					// 忽略无法访问的目录
-					console.warn(`无法访问目录: ${currentUri.fsPath}`, error);
 				}
 			};
 
 			await listDir(uri, recursive === 'true');
+
+			const elapsed = Date.now() - startTime;
+			console.log('[FileOperations] listFiles 完成，耗时:', elapsed, 'ms，文件数:', count);
 
 			if (result.length === 0) {
 				return '目录为空或未找到匹配的文件';
@@ -375,8 +457,9 @@ export class FileOperationsTool {
 
 			let response = result.join('\n');
 
-			// 如果达到限制，添加提示
-			if (count >= limit) {
+			if (timedOut) {
+				response = `⚠️ 搜索超时（${timeout / 1000}秒），已找到 ${count} 个项目:\n\n${response}`;
+			} else if (count >= limit) {
 				response = `找到超过${limit}个项目，仅显示前${limit}个:\n\n${response}`;
 			}
 
@@ -423,7 +506,7 @@ export class FileOperationsTool {
 
 	/**
 	 * 使用Glob模式匹配文件
-	 * 使用IFileService遍历文件，然后使用VSCode的glob模式匹配
+	 * 优化：并行遍历，边遍历边匹配，添加超时机制
 	 * @param toolUse Glob工具使用信息
 	 * @returns 匹配的文件列表
 	 */
@@ -438,18 +521,37 @@ export class FileOperationsTool {
 			return '错误: 未提供文件模式';
 		}
 
-		// 使用统一的路径解析（模仿 Kilocode）
 		const absolutePath = this.resolveFilePath(dirPath);
+		const startTime = Date.now();
+		const timeout = 10000; // 10秒超时
 
 		try {
 			const uri = URI.file(absolutePath);
-			const allFiles: string[] = [];
-			const limit = 1000;
-			let count = 0;
+			const matchedFiles: string[] = [];
+			const limit = 200; // 匹配文件限制
+			let scannedCount = 0;
+			let timedOut = false;
 
-			// 递归列出所有文件
-			const listDir = async (currentUri: URI): Promise<void> => {
-				if (count >= limit) {
+			// 预编译 glob 模式
+			const pattern = glob.parse(file_pattern);
+
+			// 检查是否超时
+			const checkTimeout = () => {
+				if (Date.now() - startTime > timeout) {
+					timedOut = true;
+					return true;
+				}
+				return false;
+			};
+
+			// 并行遍历并即时匹配
+			const listDir = async (currentUri: URI, depth: number = 0): Promise<void> => {
+				if (matchedFiles.length >= limit || timedOut || checkTimeout()) {
+					return;
+				}
+
+				// 限制递归深度
+				if (depth > 15) {
 					return;
 				}
 
@@ -460,61 +562,62 @@ export class FileOperationsTool {
 						return;
 					}
 
-					for (const child of stat.children) {
-						if (count >= limit) {
-							break;
-						}
+					const dirs: URI[] = [];
 
-						// 跳过隐藏文件和node_modules
+					for (const child of stat.children) {
+						if (matchedFiles.length >= limit || timedOut) break;
+
+						// 跳过隐藏文件和 node_modules
 						if (child.name.startsWith('.') || child.name === 'node_modules') {
 							continue;
 						}
 
 						if (child.isDirectory) {
-							await listDir(child.resource);
+							dirs.push(child.resource);
 						} else {
-							allFiles.push(child.resource.fsPath);
-							count++;
+							scannedCount++;
+							// 即时匹配，不需要收集所有文件
+							const filePath = child.resource.fsPath;
+							const relativePath = filePath.startsWith(absolutePath)
+								? filePath.substring(absolutePath.length).replace(/^[\/\\]/, '')
+								: filePath;
+							const normalizedPath = relativePath.replace(/\\/g, '/');
+
+							if (pattern(normalizedPath)) {
+								matchedFiles.push(filePath);
+							}
 						}
 					}
-				} catch (error) {
+
+					// 并行递归子目录
+					if (dirs.length > 0 && !timedOut && matchedFiles.length < limit) {
+						const concurrency = 5;
+						for (let i = 0; i < dirs.length; i += concurrency) {
+							if (matchedFiles.length >= limit || timedOut) break;
+							const batch = dirs.slice(i, i + concurrency);
+							await Promise.all(batch.map(d => listDir(d, depth + 1)));
+						}
+					}
+				} catch {
 					// 忽略无法访问的目录
 				}
 			};
 
 			await listDir(uri);
 
-			if (allFiles.length === 0) {
-				return `未找到匹配模式 "${file_pattern}" 的文件`;
-			}
-
-			// 使用VSCode的glob模式匹配器
-			const pattern = glob.parse(file_pattern);
-			const matchedFiles: string[] = [];
-
-			for (const file of allFiles) {
-				// 计算相对路径用于glob匹配
-				const relativePath = file.startsWith(absolutePath)
-					? file.substring(absolutePath.length).replace(/^[\/\\]/, '')
-					: file;
-
-				// 标准化路径分隔符
-				const normalizedPath = relativePath.replace(/\\/g, '/');
-
-				// 测试是否匹配glob模式
-				if (pattern(normalizedPath)) {
-					matchedFiles.push(file);
-				}
-			}
+			const elapsed = Date.now() - startTime;
+			console.log('[FileOperations] glob 完成，耗时:', elapsed, 'ms，扫描:', scannedCount, '匹配:', matchedFiles.length);
 
 			if (matchedFiles.length === 0) {
-				return `未找到匹配模式 "${file_pattern}" 的文件`;
+				return `未找到匹配模式 "${file_pattern}" 的文件（扫描了 ${scannedCount} 个文件）`;
 			}
 
 			let response = `找到 ${matchedFiles.length} 个匹配的文件:\n${matchedFiles.join('\n')}`;
 
-			if (count >= limit) {
-				response = `注意: 文件列表已达到限制，可能有更多匹配的文件未显示。\n\n${response}`;
+			if (timedOut) {
+				response = `⚠️ 搜索超时（${timeout / 1000}秒），已找到 ${matchedFiles.length} 个匹配:\n\n${matchedFiles.join('\n')}`;
+			} else if (matchedFiles.length >= limit) {
+				response = `找到超过 ${limit} 个匹配，仅显示前 ${limit} 个:\n${matchedFiles.join('\n')}`;
 			}
 
 			return response;
@@ -601,7 +704,10 @@ export class FileOperationsTool {
 				? '\n<notice>提示: 如果需要在此文件中进行多个相关更改，建议在单个 apply_diff 调用中使用多个 SEARCH/REPLACE 块，这样更高效。</notice>'
 				: '';
 
-			return `${partialFailureHint}成功应用diff到文件: ${absolutePath}\n\n已应用 ${searchBlockCount} 个diff块${singleBlockNotice}`;
+			// P2-12: 获取 LSP 诊断
+			const diagnosticsAppendix = await getDiagnosticsAfterEdit(absolutePath);
+
+			return `${partialFailureHint}成功应用diff到文件: ${absolutePath}\n\n已应用 ${searchBlockCount} 个diff块${singleBlockNotice}${diagnosticsAppendix}`;
 		} catch (error) {
 			return `应用diff失败: ${error instanceof Error ? error.message : String(error)}`;
 		}

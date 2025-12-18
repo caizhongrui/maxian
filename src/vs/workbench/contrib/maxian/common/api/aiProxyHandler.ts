@@ -45,7 +45,8 @@ interface AiProxyRequest {
 	stream?: boolean;
 	tools?: AiProxyTool[];
 	toolChoice?: any;
-	parallelToolCalls?: boolean;
+	parallelToolCalls?: boolean;  // 驼峰格式（部分后端）
+	parallel_tool_calls?: boolean;  // 下划线格式（阿里云千问API）
 	apiType?: string;  // chat 或 completion
 }
 
@@ -162,9 +163,15 @@ export class AiProxyHandler implements IApiHandler {
 				password: this.config.password,
 				requestId: this.currentRequestId,
 				messages: aiProxyMessages,
+				maxTokens: 8192,  // 必须设置有效的 max_tokens，千问API要求范围 [1, 32768]
+				temperature: 0.15,
 				stream: true,
 				apiType: 'chat',  // 重要：指定为 chat 模式，否则后端默认使用 completions 模式
-				...(aiProxyTools && aiProxyTools.length > 0 ? { tools: aiProxyTools, toolChoice: 'auto' } : {})
+				...(aiProxyTools && aiProxyTools.length > 0 ? {
+					tools: aiProxyTools,
+					toolChoice: 'auto',
+					parallelToolCalls: true  // 启用并行工具调用（驼峰命名，匹配后端Java DTO）
+				} : {})
 			};
 
 		// 优先使用businessCode，如果没有则使用provider/model（向后兼容）

@@ -1,0 +1,514 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/**
+ * 模糊匹配策略
+ * 参考 OpenCode tool/edit.ts 实现的 9 种容错匹配策略
+ *
+ * 来源参考：
+ * - Cline: https://github.com/cline/cline/blob/main/evals/diff-edits/
+ * - Gemini CLI: https://github.com/google-gemini/gemini-cli
+ *
+ * 策略按顺序尝试，直到找到匹配：
+ * 1. SimpleReplacer - 精确匹配
+ * 2. LineTrimmedReplacer - 行首尾空白容错
+ * 3. BlockAnchorReplacer - 首尾行锚点匹配
+ * 4. WhitespaceNormalizedReplacer - 空白归一化
+ * 5. IndentationFlexibleReplacer - 缩进灵活匹配
+ * 6. EscapeNormalizedReplacer - 转义字符处理
+ * 7. TrimmedBoundaryReplacer - 边界 trim
+ * 8. ContextAwareReplacer - 上下文感知
+ * 9. MultiOccurrenceReplacer - 多处匹配
+ */
+
+/**
+ * 匹配结果
+ */
+export interface MatchResult {
+	/** 是否找到匹配 */
+	found: boolean;
+	/** 匹配的起始位置 */
+	start?: number;
+	/** 匹配的结束位置 */
+	end?: number;
+	/** 实际匹配的内容 */
+	matched?: string;
+	/** 使用的策略名称 */
+	strategy?: string;
+	/** 匹配的相似度（0-1） */
+	similarity?: number;
+}
+
+/**
+ * 替换器接口
+ */
+type Replacer = (content: string, oldString: string) => Generator<MatchResult>;
+
+/**
+ * 计算 Levenshtein 距离
+ */
+function levenshteinDistance(str1: string, str2: string): number {
+	const m = str1.length;
+	const n = str2.length;
+
+	// 创建距离矩阵
+	const dp: number[][] = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+
+	// 初始化
+	for (let i = 0; i <= m; i++) {
+		dp[i][0] = i;
+	}
+	for (let j = 0; j <= n; j++) {
+		dp[0][j] = j;
+	}
+
+	// 填充矩阵
+	for (let i = 1; i <= m; i++) {
+		for (let j = 1; j <= n; j++) {
+			if (str1[i - 1] === str2[j - 1]) {
+				dp[i][j] = dp[i - 1][j - 1];
+			} else {
+				dp[i][j] = Math.min(
+					dp[i - 1][j] + 1,     // 删除
+					dp[i][j - 1] + 1,     // 插入
+					dp[i - 1][j - 1] + 1  // 替换
+				);
+			}
+		}
+	}
+
+	return dp[m][n];
+}
+
+/**
+ * 计算字符串相似度（基于 Levenshtein 距离）
+ */
+export function stringSimilarity(str1: string, str2: string): number {
+	if (str1 === str2) return 1;
+	if (!str1 || !str2) return 0;
+
+	const maxLen = Math.max(str1.length, str2.length);
+	if (maxLen === 0) return 1;
+
+	const distance = levenshteinDistance(str1, str2);
+	return 1 - distance / maxLen;
+}
+
+/**
+ * Levenshtein 相似度阈值
+ * 参考 OpenCode edit.ts:180-181
+ */
+const SINGLE_CANDIDATE_SIMILARITY_THRESHOLD = 0.0;   // 单候选放宽
+// 多候选严格阈值（暂未使用）: 0.3
+
+// ==================== 9 种替换策略 ====================
+
+/**
+ * 1. SimpleReplacer - 精确匹配
+ */
+function* SimpleReplacer(content: string, oldString: string): Generator<MatchResult> {
+	const index = content.indexOf(oldString);
+	if (index !== -1) {
+		yield {
+			found: true,
+			start: index,
+			end: index + oldString.length,
+			matched: oldString,
+			strategy: 'SimpleReplacer',
+			similarity: 1.0,
+		};
+	}
+}
+
+/**
+ * 2. LineTrimmedReplacer - 行首尾空白容错
+ * 每行首尾空白可以不精确匹配
+ */
+function* LineTrimmedReplacer(content: string, oldString: string): Generator<MatchResult> {
+	const oldLines = oldString.split('\n');
+	const contentLines = content.split('\n');
+
+	// 创建 trim 后的版本用于比较
+	const oldTrimmed = oldLines.map(line => line.trim());
+
+	for (let i = 0; i <= contentLines.length - oldLines.length; i++) {
+		let match = true;
+		for (let j = 0; j < oldLines.length; j++) {
+			if (contentLines[i + j].trim() !== oldTrimmed[j]) {
+				match = false;
+				break;
+			}
+		}
+
+		if (match) {
+			// 计算实际位置
+			let start = 0;
+			for (let k = 0; k < i; k++) {
+				start += contentLines[k].length + 1; // +1 for newline
+			}
+			let end = start;
+			for (let k = 0; k < oldLines.length; k++) {
+				end += contentLines[i + k].length + (k < oldLines.length - 1 ? 1 : 0);
+			}
+
+			const matched = contentLines.slice(i, i + oldLines.length).join('\n');
+			yield {
+				found: true,
+				start,
+				end,
+				matched,
+				strategy: 'LineTrimmedReplacer',
+				similarity: 0.95,
+			};
+		}
+	}
+}
+
+/**
+ * 3. BlockAnchorReplacer - 首尾行锚点匹配
+ * 首尾行必须匹配，中间使用 Levenshtein 相似度
+ */
+function* BlockAnchorReplacer(content: string, oldString: string): Generator<MatchResult> {
+	const oldLines = oldString.split('\n');
+	if (oldLines.length < 2) return;
+
+	const contentLines = content.split('\n');
+	const firstLine = oldLines[0].trim();
+	const lastLine = oldLines[oldLines.length - 1].trim();
+
+	for (let i = 0; i <= contentLines.length - oldLines.length; i++) {
+		// 检查首行匹配
+		if (contentLines[i].trim() !== firstLine) continue;
+
+		// 检查尾行匹配
+		const endIndex = i + oldLines.length - 1;
+		if (contentLines[endIndex].trim() !== lastLine) continue;
+
+		// 计算中间部分的相似度
+		const middleOld = oldLines.slice(1, -1).join('\n');
+		const middleContent = contentLines.slice(i + 1, endIndex).join('\n');
+		const similarity = stringSimilarity(middleOld, middleContent);
+
+		if (similarity >= SINGLE_CANDIDATE_SIMILARITY_THRESHOLD) {
+			let start = 0;
+			for (let k = 0; k < i; k++) {
+				start += contentLines[k].length + 1;
+			}
+			let end = start;
+			for (let k = 0; k < oldLines.length; k++) {
+				end += contentLines[i + k].length + (k < oldLines.length - 1 ? 1 : 0);
+			}
+
+			const matched = contentLines.slice(i, i + oldLines.length).join('\n');
+			yield {
+				found: true,
+				start,
+				end,
+				matched,
+				strategy: 'BlockAnchorReplacer',
+				similarity,
+			};
+		}
+	}
+}
+
+/**
+ * 4. WhitespaceNormalizedReplacer - 空白归一化
+ * 多个空白字符视为单个空格
+ */
+function* WhitespaceNormalizedReplacer(content: string, oldString: string): Generator<MatchResult> {
+	const normalizeWhitespace = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+	const normalizedOld = normalizeWhitespace(oldString);
+	const contentLines = content.split('\n');
+
+	// 尝试在连续的行中找到匹配
+	for (let i = 0; i < contentLines.length; i++) {
+		for (let j = i; j < Math.min(i + 20, contentLines.length); j++) {
+			const block = contentLines.slice(i, j + 1).join('\n');
+			if (normalizeWhitespace(block) === normalizedOld) {
+				let start = 0;
+				for (let k = 0; k < i; k++) {
+					start += contentLines[k].length + 1;
+				}
+				const end = start + block.length;
+
+				yield {
+					found: true,
+					start,
+					end,
+					matched: block,
+					strategy: 'WhitespaceNormalizedReplacer',
+					similarity: 0.9,
+				};
+			}
+		}
+	}
+}
+
+/**
+ * 5. IndentationFlexibleReplacer - 缩进灵活匹配
+ * 移除最小公共缩进后比较
+ */
+function* IndentationFlexibleReplacer(content: string, oldString: string): Generator<MatchResult> {
+	const removeMinIndent = (s: string) => {
+		const lines = s.split('\n');
+		const nonEmptyLines = lines.filter(l => l.trim());
+		if (nonEmptyLines.length === 0) return s;
+
+		const minIndent = Math.min(...nonEmptyLines.map(l => l.match(/^\s*/)?.[0].length || 0));
+		return lines.map(l => l.substring(minIndent)).join('\n');
+	};
+
+	const normalizedOld = removeMinIndent(oldString);
+	const contentLines = content.split('\n');
+
+	for (let i = 0; i < contentLines.length; i++) {
+		const oldLineCount = oldString.split('\n').length;
+		for (let j = i; j < Math.min(i + oldLineCount + 5, contentLines.length); j++) {
+			const block = contentLines.slice(i, j + 1).join('\n');
+			if (removeMinIndent(block) === normalizedOld) {
+				let start = 0;
+				for (let k = 0; k < i; k++) {
+					start += contentLines[k].length + 1;
+				}
+				const end = start + block.length;
+
+				yield {
+					found: true,
+					start,
+					end,
+					matched: block,
+					strategy: 'IndentationFlexibleReplacer',
+					similarity: 0.85,
+				};
+			}
+		}
+	}
+}
+
+/**
+ * 6. EscapeNormalizedReplacer - 转义字符处理
+ * 处理 \n, \t, \\ 等转义字符
+ */
+function* EscapeNormalizedReplacer(content: string, oldString: string): Generator<MatchResult> {
+	const normalizeEscapes = (s: string) => {
+		return s
+			.replace(/\\n/g, '\n')
+			.replace(/\\t/g, '\t')
+			.replace(/\\r/g, '\r')
+			.replace(/\\\\/g, '\\');
+	};
+
+	const normalizedOld = normalizeEscapes(oldString);
+	const index = content.indexOf(normalizedOld);
+
+	if (index !== -1) {
+		yield {
+			found: true,
+			start: index,
+			end: index + normalizedOld.length,
+			matched: normalizedOld,
+			strategy: 'EscapeNormalizedReplacer',
+			similarity: 0.95,
+		};
+	}
+}
+
+/**
+ * 7. TrimmedBoundaryReplacer - 边界 trim
+ * 只 trim 首尾行
+ */
+function* TrimmedBoundaryReplacer(content: string, oldString: string): Generator<MatchResult> {
+	const trimBoundaries = (s: string) => {
+		const lines = s.split('\n');
+		if (lines.length === 0) return s;
+		lines[0] = lines[0].trim();
+		lines[lines.length - 1] = lines[lines.length - 1].trim();
+		return lines.join('\n');
+	};
+
+	const trimmedOld = trimBoundaries(oldString);
+	const index = content.indexOf(trimmedOld);
+
+	if (index !== -1) {
+		yield {
+			found: true,
+			start: index,
+			end: index + trimmedOld.length,
+			matched: trimmedOld,
+			strategy: 'TrimmedBoundaryReplacer',
+			similarity: 0.9,
+		};
+	}
+}
+
+/**
+ * 8. ContextAwareReplacer - 上下文感知
+ * 首尾行匹配 + 50% 中间行相似度
+ */
+function* ContextAwareReplacer(content: string, oldString: string): Generator<MatchResult> {
+	const oldLines = oldString.split('\n');
+	if (oldLines.length < 3) return;
+
+	const contentLines = content.split('\n');
+	const firstLine = oldLines[0].trim();
+	const lastLine = oldLines[oldLines.length - 1].trim();
+
+	for (let i = 0; i <= contentLines.length - oldLines.length; i++) {
+		// 首行必须匹配
+		if (contentLines[i].trim() !== firstLine) continue;
+
+		// 尾行必须匹配
+		const expectedEndIndex = i + oldLines.length - 1;
+		if (expectedEndIndex >= contentLines.length) continue;
+		if (contentLines[expectedEndIndex].trim() !== lastLine) continue;
+
+		// 计算中间行的相似度
+		let matchedMiddleLines = 0;
+		const middleOldLines = oldLines.slice(1, -1);
+		const middleContentLines = contentLines.slice(i + 1, expectedEndIndex);
+
+		for (let j = 0; j < middleOldLines.length && j < middleContentLines.length; j++) {
+			if (stringSimilarity(middleOldLines[j].trim(), middleContentLines[j].trim()) > 0.8) {
+				matchedMiddleLines++;
+			}
+		}
+
+		const middleMatchRatio = middleOldLines.length > 0
+			? matchedMiddleLines / middleOldLines.length
+			: 1;
+
+		// 50% 以上中间行匹配
+		if (middleMatchRatio >= 0.5) {
+			let start = 0;
+			for (let k = 0; k < i; k++) {
+				start += contentLines[k].length + 1;
+			}
+			let end = start;
+			for (let k = 0; k < oldLines.length; k++) {
+				end += contentLines[i + k].length + (k < oldLines.length - 1 ? 1 : 0);
+			}
+
+			const matched = contentLines.slice(i, i + oldLines.length).join('\n');
+			yield {
+				found: true,
+				start,
+				end,
+				matched,
+				strategy: 'ContextAwareReplacer',
+				similarity: 0.5 + middleMatchRatio * 0.5,
+			};
+		}
+	}
+}
+
+/**
+ * 9. MultiOccurrenceReplacer - 多处匹配
+ * 找到所有匹配位置
+ */
+function* MultiOccurrenceReplacer(content: string, oldString: string): Generator<MatchResult> {
+	let searchIndex = 0;
+	while (true) {
+		const index = content.indexOf(oldString, searchIndex);
+		if (index === -1) break;
+
+		yield {
+			found: true,
+			start: index,
+			end: index + oldString.length,
+			matched: oldString,
+			strategy: 'MultiOccurrenceReplacer',
+			similarity: 1.0,
+		};
+
+		searchIndex = index + oldString.length;
+	}
+}
+
+/**
+ * 所有替换策略（按优先级排序）
+ */
+const REPLACERS: Array<{ name: string; fn: Replacer }> = [
+	{ name: 'SimpleReplacer', fn: SimpleReplacer },
+	{ name: 'LineTrimmedReplacer', fn: LineTrimmedReplacer },
+	{ name: 'BlockAnchorReplacer', fn: BlockAnchorReplacer },
+	{ name: 'WhitespaceNormalizedReplacer', fn: WhitespaceNormalizedReplacer },
+	{ name: 'IndentationFlexibleReplacer', fn: IndentationFlexibleReplacer },
+	{ name: 'EscapeNormalizedReplacer', fn: EscapeNormalizedReplacer },
+	{ name: 'TrimmedBoundaryReplacer', fn: TrimmedBoundaryReplacer },
+	{ name: 'ContextAwareReplacer', fn: ContextAwareReplacer },
+	{ name: 'MultiOccurrenceReplacer', fn: MultiOccurrenceReplacer },
+];
+
+/**
+ * 使用所有策略尝试匹配
+ * 按顺序尝试直到找到匹配
+ */
+export function findMatch(content: string, oldString: string): MatchResult {
+	for (const { fn } of REPLACERS) {
+		for (const result of fn(content, oldString)) {
+			if (result.found) {
+				return result;
+			}
+		}
+	}
+
+	return { found: false };
+}
+
+/**
+ * 使用容错匹配执行替换
+ */
+export function fuzzyReplace(
+	content: string,
+	oldString: string,
+	newString: string,
+	replaceAll: boolean = false
+): { success: boolean; result: string; strategy?: string; matchCount: number } {
+	if (replaceAll) {
+		// 使用 MultiOccurrenceReplacer 找到所有匹配
+		const matches: MatchResult[] = [];
+		for (const result of MultiOccurrenceReplacer(content, oldString)) {
+			if (result.found) {
+				matches.push(result);
+			}
+		}
+
+		if (matches.length === 0) {
+			// 尝试其他策略
+			const match = findMatch(content, oldString);
+			if (!match.found) {
+				return { success: false, result: content, matchCount: 0 };
+			}
+			// 只替换一处
+			const result = content.substring(0, match.start!) + newString + content.substring(match.end!);
+			return { success: true, result, strategy: match.strategy, matchCount: 1 };
+		}
+
+		// 从后向前替换（避免位置偏移）
+		let result = content;
+		for (let i = matches.length - 1; i >= 0; i--) {
+			const m = matches[i];
+			result = result.substring(0, m.start!) + newString + result.substring(m.end!);
+		}
+
+		return { success: true, result, strategy: 'MultiOccurrenceReplacer', matchCount: matches.length };
+	}
+
+	// 单次替换
+	const match = findMatch(content, oldString);
+	if (!match.found) {
+		return { success: false, result: content, matchCount: 0 };
+	}
+
+	const result = content.substring(0, match.start!) + newString + content.substring(match.end!);
+	return { success: true, result, strategy: match.strategy, matchCount: 1 };
+}
+
+/**
+ * 导出策略名称列表
+ */
+export const FUZZY_MATCH_STRATEGIES = REPLACERS.map(r => r.name);

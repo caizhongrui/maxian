@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
- * 工具组类型 - 与Kilocode保持一致
+ * 工具组类型 - 与Kilocode保持一致，扩展支持新工具
  */
-export type ToolGroup = 'read' | 'edit' | 'browser' | 'command' | 'mcp';
+export type ToolGroup = 'read' | 'edit' | 'browser' | 'command' | 'mcp' | 'web' | 'lsp' | 'agent';
 
 /**
  * 组选项配置
@@ -30,7 +30,7 @@ export interface ToolGroupConfig {
 }
 
 /**
- * 工具组映射 - 与Kilocode保持一致
+ * 工具组映射 - 与Kilocode保持一致，扩展支持新工具
  */
 export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 	read: {
@@ -40,7 +40,8 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 			'list_files',
 			'list_code_definition_names',
 			'codebase_search',
-			'glob'
+			'glob',
+			'batch'  // P0优化：批量并行执行只读工具
 		]
 	},
 	edit: {
@@ -48,7 +49,10 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 			'apply_diff',
 			'edit_file',
 			'write_to_file',
-			'insert_content'
+			'insert_content',
+			'edit',       // P0优化：基于old_string/new_string的容错替换
+			'multiedit',  // P1优化：单文件多处编辑
+			'patch'       // P1优化：多文件批量操作
 		]
 	},
 	browser: {
@@ -59,6 +63,18 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 	},
 	mcp: {
 		tools: ['use_mcp_tool', 'access_mcp_resource']
+	},
+	web: {
+		tools: ['webfetch']  // P0优化：网页获取工具
+	},
+	lsp: {
+		tools: [
+			'lsp_hover',       // P1优化：LSP悬停信息
+			'lsp_diagnostics'  // P1优化：LSP诊断信息
+		]
+	},
+	agent: {
+		tools: ['task']  // P1优化：子Agent委托
 	}
 };
 
@@ -140,7 +156,7 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 		roleDefinition: '你是码弦（Maxian），一位高技能的软件工程师，在多种编程语言、框架、设计模式和最佳实践方面拥有丰富的知识。',
 		whenToUse: '当你需要编写、修改或重构代码时使用此模式。适合实现功能、修复bug、创建新文件，或在任何编程语言或框架中进行代码改进。',
 		description: '编写、修改和重构代码',
-		groups: ['read', 'edit', 'command']  // Code模式有完整的读写和命令权限
+		groups: ['read', 'edit', 'command', 'web', 'lsp', 'agent']  // Code模式有完整的读写、命令、网页、LSP和子Agent权限
 	},
 	{
 		slug: 'ask',
@@ -159,7 +175,7 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 		roleDefinition: '你是码弦（Maxian），一位专门从事系统问题诊断和解决的软件调试专家。',
 		whenToUse: '当你在排查问题、调查错误或诊断问题时使用此模式。专门从事系统调试、添加日志、分析堆栈跟踪，以及在应用修复前识别根本原因。',
 		description: '诊断和修复软件问题',
-		groups: ['read', 'edit', 'command'],  // Debug模式有完整权限
+		groups: ['read', 'edit', 'command', 'web', 'lsp', 'agent'],  // Debug模式有完整权限
 		customInstructions: '思考5-7个可能导致问题的不同来源，将这些来源精简为1-2个最可能的来源，然后添加日志来验证你的假设。在修复问题之前，明确要求用户确认诊断。'
 	},
 	{

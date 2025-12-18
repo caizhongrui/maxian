@@ -6,302 +6,286 @@
 import { ToolName } from '../tools/toolTypes.js';
 
 /**
- * 工具描述映射
- * 每个工具的详细描述，用于系统提示词
+ * 工具描述映射 - 精简版
+ * 只包含关键的使用场景指南，参数详情由 tools 数组提供
  */
 const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
+
+	// ==================== 文件操作工具 ====================
+
 	read_file: `## read_file
-读取指定文件的内容
+读取文件内容，支持行范围限制
 
-**用途**：查看文件内容以理解代码、配置或文档
+**使用**：查看文件内容、修改前了解当前代码
+**不使用**：搜索关键词→search_files，查找文件名→glob，不确定文件是否存在→先list_files
 
-**参数**：
-- path (string, required): 文件路径（相对于工作区根目录）
-
-**最佳实践**：
-- 修改文件前先读取以了解当前内容
-- 大文件建议先用 search_files 定位关键部分
-- 二进制文件可能无法正确读取`,
+**要点**：
+- 修改文件前必须先读取
+- 大文件用 start_line/end_line 分段读取`,
 
 	write_to_file: `## write_to_file
 创建新文件或完全覆盖现有文件
 
-**用途**：创建新文件或完全重写文件内容
+**使用**：创建新文件、完全重写（变化>50%）
+**不使用**：小改动→apply_diff，局部修改→apply_diff，插入内容→insert_content
 
-**参数**：
-- path (string, required): 文件路径
-- content (string, required): 完整文件内容
+**要点**：
+- 必须提供完整内容，禁止使用占位符
+- 写入前先 read_file 了解原文件`,
 
-**关键规则**：
-- 必须提供完整文件内容，不允许省略部分
-- 禁止使用 "// 其余代码不变" 等占位符
-- 小改动优先使用 edit_file 或 insert_content
-- 会自动创建不存在的目录`,
+	apply_diff: `## apply_diff
+使用SEARCH/REPLACE块编辑文件（修改代码的首选工具）
+
+**使用**：修改现有文件的任何部分
+**不使用**：创建新文件→write_to_file，完全重写→write_to_file
+
+**格式**：
+\`\`\`
+<<<<<<< SEARCH
+原始代码（必须精确匹配）
+=======
+新代码
+>>>>>>> REPLACE
+\`\`\`
+
+**要点**：
+- SEARCH块必须与文件精确匹配（包括空格、缩进）
+- 先 read_file 确认当前内容
+- 一次可包含多个块`,
 
 	list_files: `## list_files
 列出目录中的文件和子目录
 
-**用途**：探索项目结构、查找文件
+**使用**：了解目录结构、确认文件存在
+**不使用**：按文件名模式查找→glob，按内容查找→search_files`,
 
-**参数**：
-- path (string, optional): 目录路径（默认为工作区根目录）
-- recursive (boolean, optional): 是否递归列出子目录（默认 false）
+	glob: `## glob
+使用Glob模式匹配文件名
 
-**注意**：
-- 递归列出大型项目可能产生大量输出
-- 优先列出特定子目录而非整个项目`,
+**使用**：按扩展名查找(*.ts)、按命名模式查找(test_*.py)
+**不使用**：按内容查找→search_files，浏览目录→list_files
+
+**常用模式**：
+- \`**/*.ts\` 所有TS文件
+- \`src/**/*.tsx\` src下所有TSX
+- \`**/*.test.ts\` 所有测试文件`,
+
+	insert_content: `## insert_content
+在文件指定位置插入内容
+
+**使用**：追加内容、在特定行后插入
+**不使用**：替换代码→apply_diff，创建新文件→write_to_file
+
+**参数 line**：行号，0表示文件末尾`,
+
+	edit_file: `## edit_file
+编辑文件内容
+
+**使用**：代码修改（apply_diff 的替代方案）
+**参数**：target_file(文件路径)、instructions(编辑说明)、code_edit(代码内容)`,
+
+	// ==================== 搜索工具 ====================
+
+	search_files: `## search_files
+在文件内容中搜索文本或正则表达式
+
+**使用**：知道关键词时搜索、查找函数调用、搜索TODO/FIXME
+**不使用**：不知道关键词→codebase_search，查找文件名→glob
+
+**参数 regex**：支持正则表达式`,
+
+	codebase_search: `## codebase_search
+语义搜索代码库 - 探索未知代码的首选工具
+
+**使用**：探索未知代码（必须首选）、不知道关键词时、理解功能实现
+**不使用**：已知关键词→search_files，已知路径→read_file
+
+**要点**：
+- 探索新代码区域必须首先使用此工具
+- 使用自然语言描述，如"用户认证逻辑"`,
+
+	list_code_definition_names: `## list_code_definition_names
+列出代码文件中的定义（函数、类、方法等）
+
+**使用**：快速了解文件结构
+**不使用**：需要完整实现→read_file`,
+
+	// ==================== 命令执行工具 ====================
 
 	execute_command: `## execute_command
 在终端执行命令
 
-**用途**：运行构建、测试、安装依赖等操作
+**使用**：构建、测试、安装依赖、Git操作
+**不使用**：读文件→read_file，搜索→search_files，编辑→apply_diff
 
-**参数**：
-- command (string, required): 要执行的命令
-- cwd (string, optional): 工作目录（可选）
+**安全**：
+- 危险命令(rm -rf, git push --force等)先询问用户
+- 永远不要 git push --force 到 main/master`,
 
-**安全规则**：
-- 危险命令（rm -rf、格式化等）执行前询问用户
-- 长时间运行的命令应告知用户
-- 命令失败时分析错误并提供解决方案
-
-**技巧**：
-- 使用 cd && command 在特定目录执行
-- 检查操作系统兼容性`,
-
-	search_files: `## search_files
-在文件中搜索文本或正则表达式模式
-
-**用途**：查找代码、注释、配置等
-
-**参数**：
-- pattern (string, required): 搜索模式（支持正则表达式）
-- path (string, optional): 搜索路径（默认为工作区）
-
-**最佳实践**：
-- 精心设计正则表达式以平衡精确度和灵活性
-- 结果过多时缩小搜索范围或使用更精确的模式
-- 利用搜索结果的上下文理解代码
-- 配合 read_file 查看完整上下文`,
-
-	codebase_search: `## codebase_search
-语义搜索代码库
-
-**用途**：基于含义而非关键词查找相关代码
-
-**参数**：
-- query (string, required): 搜索查询（自然语言描述）
-
-**关键优势**：
-- 理解代码含义，比 search_files 更智能
-- 探索未知代码时必须优先使用
-- 可以找到功能相关但关键词不同的代码
-
-**使用规则**：
-- **关键：探索任何新代码区域时必须先用此工具**
-- 即使已探索部分代码，新功能仍需先用此工具
-- 搜索后可用 search_files 或 read_file 深入了解`,
+	// ==================== 交互工具 ====================
 
 	ask_followup_question: `## ask_followup_question
-向用户询问问题以获取更多信息
+向用户询问问题
 
-**用途**：澄清需求、获取缺失信息
+**使用**：需要澄清需求、缺少关键信息
+**不使用**：能用工具解决的问题、答案在代码中能找到
 
-**参数**：
-- question (string, required): 要问的问题
-
-**使用原则**：
-- 仅在真正需要时使用
-- 能用工具解决的问题不要问用户
-- 问题要清晰、具体、可操作
-- 提供 2-4 个建议答案供用户选择
-
-**例子**：
-好的问题："应该在哪个目录创建配置文件？A) src/config B) config/ C) 项目根目录 D) 其他"
-不好的问题："你想怎么做？"`,
+**要点**：问题要具体，提供2-4个选项`,
 
 	attempt_completion: `## attempt_completion
 完成任务并报告结果
 
-**用途**：标记任务完成并向用户展示结果
+**使用**：任务真正完成时
+**不使用**：任务未完成、有错误待解决
 
-**参数**：
-- result (string, required): 任务完成的详细描述
-- command (string, optional): 用户可能需要运行的命令
-
-**关键规则**：
-- 任务真正完成时才使用
-- 结果描述要清晰、完整
-- 不要以问题结尾
-- 不要使用对话式语言
-
-**例子**：
-好的结果："已实现用户登录功能。添加了3个文件：auth.ts、login.tsx、authApi.ts。可以运行 npm test 验证功能。"
-不好的结果："完成了！还有什么需要帮助的吗？"`,
+**要点**：清晰描述完成了什么，不要以问题结尾`,
 
 	new_task: `## new_task
 创建新的子任务
 
-**用途**：将复杂任务分解为多个子任务
-
-**参数**：
-- task (string, required): 子任务描述
-
-**使用场景**：
-- 当前任务过于复杂，需要分步执行
-- 发现需要额外的独立工作
-- 用户提出新的相关需求`,
+**使用**：任务复杂需要分解、发现额外工作`,
 
 	update_todo_list: `## update_todo_list
-更新任务待办列表
+管理和跟踪任务进度
 
-**用途**：跟踪任务进度、管理多个待办项
+**使用**：复杂多步骤任务（3个以上步骤）
+**不使用**：单一简单任务
 
-**参数**：
-- todos (array, required): 待办事项列表
+**要点**：同时只有一个任务为 in_progress`,
 
-**最佳实践**：
-- 将大任务拆分为小的可执行步骤
-- 及时更新完成状态
-- 保持列表有序和最新`,
+	// P0优化：批量执行工具
+	batch: `## batch 【最重要的工具 - 必须优先使用！】
+并行执行多个独立的读取/搜索工具调用
 
-	list_code_definition_names: `## list_code_definition_names
-列出代码文件中的定义
+⚠️ **强制规则**：当你需要执行2个或更多以下操作时，**必须**使用batch工具：
+- read_file（读取多个文件）
+- search_files（多处搜索）
+- glob（多个模式匹配）
+- list_files（多个目录）
+- codebase_search（多个查询）
 
-**用途**：快速了解文件中的函数、类、方法等定义
+❌ **错误示例**（禁止这样做）：
+先调用 read_file("a.ts")，再调用 read_file("b.ts")，再调用 read_file("c.ts")
 
-**参数**：
-- path (string, required): 代码文件路径
-
-**应用**：
-- 了解代码结构
-- 查找特定函数或类
-- 代码导航`,
-
-	insert_content: `## insert_content
-在文件的指定位置插入内容
-
-**用途**：向现有文件添加新内容
-
-**参数**：
-- path (string, required): 文件路径
-- position (string, required): 插入位置（行号，0表示文件末尾）
-- content (string, required): 要插入的内容
-
-**使用场景**：
-- 添加新函数到文件
-- 在特定位置插入导入语句
-- 添加配置项
-
-**注意**：
-- 行号从1开始，0表示文件末尾
-- 不会覆盖现有内容，只插入`,
-
-	apply_diff: `## apply_diff
-使用SEARCH/REPLACE块精确编辑文件
-
-**用途**：对现有文件进行精确、可靠的修改
-
-**参数**：
-- path (string, required): 文件路径（相对或绝对）
-- diff (string, required): 一个或多个SEARCH/REPLACE块
-
-**SEARCH/REPLACE块格式**：
+✅ **正确示例**（必须这样做）：
 \`\`\`
-<<<<<<< SEARCH
-要查找的代码
-=======
-替换后的代码
->>>>>>> REPLACE
+<batch>
+<tool_calls>[
+  {"tool": "read_file", "parameters": {"path": "a.ts"}},
+  {"tool": "read_file", "parameters": {"path": "b.ts"}},
+  {"tool": "read_file", "parameters": {"path": "c.ts"}}
+]</tool_calls>
+</batch>
 \`\`\`
 
-**关键规则**：
-1. SEARCH块必须与文件内容精确匹配（空格、缩进、换行符）
-2. 一次可以应用多个SEARCH/REPLACE块
-3. SEARCH内容要足够独特以避免歧义
-4. 保持原有缩进风格
-5. 可以使用空REPLACE块来删除代码
+**性能提升**：使用batch可获得2-5倍效率提升！
 
-**最佳实践**：
-- 多个相关改动使用多个块，不要分多次调用
-- SEARCH块包含足够上下文确保唯一性
-- 修改前先用read_file确认文件当前内容
-- 大范围改动优先使用apply_diff而非write_to_file
+**规则**：
+- 每次batch最多10个工具调用
+- 禁止在batch中使用：batch、apply_diff、write_to_file、execute_command`,
 
-**示例**：
-修改函数并添加新导入：
-\`\`\`
-<<<<<<< SEARCH
-import { useState } from 'react';
-=======
-import { useState, useEffect } from 'react';
->>>>>>> REPLACE
+	// P1优化：多处编辑工具
+	multiedit: `## multiedit
+在单个文件中执行多处编辑操作（原子性）
 
-<<<<<<< SEARCH
-function App() {
-  const [count, setCount] = useState(0);
-=======
-function App() {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    console.log('Count changed:', count);
-  }, [count]);
->>>>>>> REPLACE
-\`\`\`
+**使用**：需要修改同一文件的多个位置
+**不使用**：只修改一处→apply_diff，创建新文件→write_to_file
 
-**错误处理**：
-- SEARCH不匹配时会报告相似度和建议
-- 支持模糊匹配以容忍轻微的空格差异
-- 失败时会显示详细错误信息指导修正`,
+**要点**：
+- 所有编辑要么全部成功，要么全部不执行
+- 编辑按顺序执行，每个基于前一个的结果
 
-	edit_file: `## edit_file
-编辑文件内容（查找替换）
+**参数**：path（文件路径）、edits（编辑数组）
+每个edit包含：old_string、new_string、replace_all(可选)`,
 
-**用途**：精确修改文件的特定部分
+	// P0优化：独立edit工具
+	edit: `## edit
+基于old_string/new_string的容错字符串替换
 
-**参数**：
-- path (string, required): 文件路径
-- oldText (string, required): 要替换的文本
-- newText (string, required): 新文本
+**使用**：修改文件中的特定内容，需要容错匹配时
+**不使用**：创建新文件→write_to_file，大段代码修改→apply_diff
 
-**最佳实践**：
-- oldText 要足够独特以准确匹配
-- 包含上下文以避免错误替换
-- 小改动优先使用此工具而非 write_to_file
+**容错能力**：支持9种匹配策略
+- SimpleReplacer（精确匹配）
+- LineTrimmedReplacer（行首尾空白容错）
+- BlockAnchorReplacer（首尾行锚点）
+- WhitespaceNormalizedReplacer（空白归一化）
+- IndentationFlexibleReplacer（缩进灵活）
+- EscapeNormalizedReplacer（转义字符）
+- TrimmedBoundaryReplacer（边界trim）
+- ContextAwareReplacer（上下文感知）
+- MultiOccurrenceReplacer（多处匹配）
 
-**例子**：
-oldText: "const port = 3000;"
-newText: "const port = 8080;"`,
+**参数**：path、old_string、new_string、replace_all(可选)、create_if_missing(可选)`,
 
-	glob: `## glob
-使用Glob模式匹配文件
+	// P1优化：子任务委托
+	task: `## task
+将复杂任务委托给子Agent执行
 
-**用途**：根据文件名模式查找文件
+**使用**：
+- 独立的子任务，可并行执行
+- 需要专门上下文的任务
+- 分解复杂任务
 
-**参数**：
-- path (string, required): 要搜索的目录路径
-- file_pattern (string, required): Glob模式（支持通配符）
+**不使用**：简单任务、需要共享上下文的任务
 
-**通配符说明**：
-- * : 匹配任意字符（不包括路径分隔符）
-- ** : 匹配任意层级目录
-- ? : 匹配单个字符
-- [] : 匹配字符集合
+**子Agent类型**：
+- general-purpose：通用任务
+- explore：快速代码探索
+- plan：架构规划
 
-**使用示例**：
-- "**/*.ts" : 查找所有TypeScript文件
-- "src/**/*.js" : 查找src目录下所有JavaScript文件
-- "test/**/*.spec.ts" : 查找所有测试文件
-- "*.json" : 查找当前目录的所有JSON文件
+**参数**：prompt（任务描述）、subagent_type(可选)`,
 
-**最佳实践**：
-- 需要按文件类型查找时使用此工具
-- 模式要足够精确以避免匹配过多文件
-- 配合 read_file 查看匹配到的文件内容`
+	// P1优化：多文件补丁
+	patch: `## patch
+批量执行多文件操作
+
+**使用**：
+- 重命名多个文件
+- 创建多个新文件
+- 批量修改文件
+
+**不使用**：单文件操作→apply_diff/edit/write_to_file
+
+**参数**：patches - JSON数组，每项包含：
+- action: "create" | "modify" | "delete" | "rename"
+- path: 文件路径
+- content: 文件内容（create/modify）
+- new_path: 新路径（rename）`,
+
+	// P0优化：网页获取
+	webfetch: `## webfetch
+获取网页内容并转换为Markdown
+
+**使用**：
+- 获取API文档
+- 读取网页内容
+- 获取外部资源
+
+**要点**：
+- 自动HTML转Markdown
+- 支持缓存（useCache参数）
+- 自动处理重定向
+
+**参数**：url（网址）、useCache(可选)、format(可选)`,
+
+	// P1优化：LSP悬停
+	lsp_hover: `## lsp_hover
+获取代码位置的LSP悬停信息
+
+**使用**：获取类型、函数签名、文档等
+**参数**：path（文件路径）、line（行号）、column（列号）`,
+
+	// P1优化：LSP诊断
+	lsp_diagnostics: `## lsp_diagnostics
+获取文件的LSP诊断信息（错误、警告）
+
+**使用**：获取编译错误、类型错误、lint警告等
+**参数**：path（文件路径）`
 };
 
 /**
- * 生成工具描述section
+ * 生成工具描述section - 精简版
  */
 export function getToolDescriptions(workspaceRoot: string, availableTools: ToolName[]): string {
 	const descriptions = availableTools
@@ -313,7 +297,12 @@ export function getToolDescriptions(workspaceRoot: string, availableTools: ToolN
 
 TOOLS
 
-以下是你可以使用的工具。每个工具都有特定的用途和使用规则，请仔细阅读。
+以下是可用工具的使用指南（参数详情见工具定义）。
+
+**选择原则**：
+1. 探索未知代码 → codebase_search（首选）
+2. 修改文件 → apply_diff（首选）
+3. 搜索：知道关键词→search_files，不知道→codebase_search
 
 ${descriptions}`;
 }

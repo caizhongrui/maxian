@@ -58,6 +58,18 @@ export const toolParamNames = [
 	'todos',
 	'prompt',
 	'image',
+	// P0/P1 优化新增参数
+	'tool_calls',     // batch 工具参数
+	'edits',          // multiedit 工具参数
+	'old_string',     // edit 容错匹配参数
+	'new_string',     // edit 容错匹配参数
+	'replace_all',    // edit 全局替换参数
+	'create_if_missing', // edit 创建文件参数
+	'patches',        // patch 多文件补丁参数
+	'subagent_type',  // task 子Agent类型参数
+	'column',         // LSP 列号参数
+	'useCache',       // webfetch 缓存参数
+	'format',         // webfetch 输出格式参数
 ] as const;
 
 export type ToolParamName = (typeof toolParamNames)[number];
@@ -74,11 +86,19 @@ export const toolNames = [
 	'insert_content',
 	'apply_diff',
 	'edit_file',
+	'edit',         // 独立edit工具：基于old_string/new_string的容错替换
 	'glob',
 	'ask_followup_question',
 	'attempt_completion',
 	'new_task',
 	'update_todo_list',
+	'batch',        // P0优化：批量并行执行工具
+	'multiedit',    // P1优化：单文件多处编辑
+	'webfetch',     // P0优化：网页获取工具
+	'task',         // P1优化：子Agent委托
+	'patch',        // P1优化：多文件批量操作
+	'lsp_hover',    // P1优化：LSP悬停信息
+	'lsp_diagnostics', // P1优化：LSP诊断信息
 ] as const;
 
 // 工具名称
@@ -183,15 +203,23 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 	insert_content: '插入内容',
 	apply_diff: '应用差异',
 	edit_file: '编辑文件',
+	edit: '编辑(容错)',          // 独立edit工具
 	glob: 'Glob模式匹配',
 	ask_followup_question: '提问',
 	attempt_completion: '完成任务',
 	new_task: '创建新任务',
 	update_todo_list: '更新待办列表',
+	batch: '批量执行',           // P0优化
+	multiedit: '多处编辑',        // P1优化
+	webfetch: '获取网页',         // P0优化
+	task: '子任务委托',           // P1优化
+	patch: '多文件补丁',          // P1优化
+	lsp_hover: 'LSP悬停',        // P1优化
+	lsp_diagnostics: 'LSP诊断',  // P1优化
 } as const;
 
 // 工具分组
-export type ToolGroup = 'read' | 'edit' | 'command';
+export type ToolGroup = 'read' | 'edit' | 'command' | 'web' | 'lsp' | 'agent';
 
 export type ToolGroupConfig = {
 	tools: readonly string[];
@@ -213,12 +241,30 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 		tools: [
 			'apply_diff',
 			'edit_file',
+			'edit',           // 独立edit工具
 			'write_to_file',
 			'insert_content',
+			'multiedit',      // 多处编辑
+			'patch',          // 多文件补丁
 		],
 	},
 	command: {
 		tools: ['execute_command'],
+	},
+	web: {
+		tools: ['webfetch'],  // 网页获取
+	},
+	lsp: {
+		tools: [
+			'lsp_hover',
+			'lsp_diagnostics',
+		],
+	},
+	agent: {
+		tools: [
+			'task',           // 子Agent委托
+			'batch',          // 批量执行
+		],
 	},
 };
 

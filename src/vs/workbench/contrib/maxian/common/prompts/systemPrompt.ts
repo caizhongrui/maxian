@@ -13,60 +13,59 @@ import {
 	getMarkdownFormattingSection,
 	getToolUseSection,
 	getModesSection,
+	getGitSafetyProtocolSection,
 	type SystemInfo
 } from './sections/index.js';
 import { getToolDescriptions } from './toolDescriptions.js';
 import { getModeBySlug, DEFAULT_MODE, type Mode } from '../modes/modeTypes.js';
 
 /**
- * 系统提示词生成器（完整版）
- * 参考Kilocode实现，包含所有必要sections
- * 顺序与Kilocode保持一致
+ * 系统提示词生成器（精简版）
+ * 移除冗余内容，减少 token 消耗
  */
 export class SystemPromptGenerator {
 
 	/**
-	 * 生成完整系统提示词
-	 * 按照Kilocode的顺序组织sections
-	 * @param workspaceRoot 工作区根目录
-	 * @param availableTools 可用工具列表
-	 * @param systemInfo 系统信息
-	 * @param mode 当前模式（默认为code）
+	 * 生成系统提示词
+	 * 顺序：角色 → 格式 → 工具 → 指南 → 安全 → 能力 → 规则 → 系统信息 → 目标
 	 */
 	static generate(workspaceRoot: string, availableTools: ToolName[], systemInfo: SystemInfo, mode: Mode = DEFAULT_MODE): string {
 		const sections: string[] = [];
 
-		// 1. 角色定义（roleDefinition） - 根据模式动态获取
+		// 1. 角色定义
 		sections.push(this.getRoleDefinition(mode));
 
-		// 2. Markdown格式化规则（markdownFormattingSection）
+		// 2. Markdown格式化规则
 		sections.push(getMarkdownFormattingSection());
 
-		// 3. 工具使用基础说明（getSharedToolUseSection）
+		// 3. 工具使用基础说明
 		sections.push(getToolUseSection());
 
-		// 4. 工具描述（getToolDescriptionsForMode）
+		// 4. 工具描述（精简版，参数详情由tools数组提供）
 		sections.push(getToolDescriptions(workspaceRoot, availableTools));
 
-		// 5. 工具使用指南（getToolUseGuidelinesSection）
+		// 5. 工具使用指南（合并了决策树和探索策略）
 		sections.push(getToolUseGuidelinesSection());
 
-		// 6. 能力说明（getCapabilitiesSection）
+		// 6. Git 安全协议
+		sections.push(getGitSafetyProtocolSection());
+
+		// 7. 能力说明
 		sections.push(getCapabilitiesSection());
 
-		// 7. 模式说明（getModesSection） - 与Kilocode保持一致
+		// 8. 模式说明
 		sections.push(getModesSection());
 
-		// 8. 规则（getRulesSection）
+		// 9. 规则
 		sections.push(getRulesSection(workspaceRoot));
 
-		// 9. 系统信息（getSystemInfoSection）
+		// 10. 系统信息
 		sections.push(getSystemInfoSection(workspaceRoot, systemInfo));
 
-		// 10. 目标（getObjectiveSection）
+		// 11. 目标
 		sections.push(getObjectiveSection());
 
-		// 11. 自定义指令（如果当前模式有）
+		// 12. 自定义指令（如果当前模式有）
 		const customInstructions = this.getCustomInstructions(mode);
 		if (customInstructions) {
 			sections.push(customInstructions);
@@ -77,22 +76,17 @@ export class SystemPromptGenerator {
 
 	/**
 	 * 角色定义
-	 * 对应Kilocode的roleDefinition
-	 * 根据当前模式动态生成
 	 */
 	private static getRoleDefinition(mode: Mode): string {
 		const modeConfig = getModeBySlug(mode);
 		if (!modeConfig) {
-			// 回退到默认角色定义
 			return `你是码弦（Maxian），一个智能AI编程助手，专门帮助用户完成软件开发任务。`;
 		}
-
 		return modeConfig.roleDefinition;
 	}
 
 	/**
 	 * 获取自定义指令
-	 * 如果当前模式有customInstructions，则返回
 	 */
 	private static getCustomInstructions(mode: Mode): string | null {
 		const modeConfig = getModeBySlug(mode);
