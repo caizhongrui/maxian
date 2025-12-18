@@ -90,6 +90,27 @@ export interface ITokenUsageEvent {
 }
 
 /**
+ * 任务进度事件
+ */
+export interface ITaskProgressEvent {
+	current: number;           // 当前步骤
+	total: number;             // 总步骤数
+	currentStep?: string;      // 当前步骤描述
+	status: 'running' | 'completed' | 'error' | 'cancelled';  // 任务状态
+}
+
+/**
+ * 工具输入流式事件
+ * 用于实时显示工具调用的参数信息
+ */
+export interface IToolInputStreamingEvent {
+	toolId: string;            // 工具调用ID
+	toolName: string;          // 工具名称
+	input: any;                // 工具输入参数
+	isPartial: boolean;        // 是否为部分输入（流式传输中）
+}
+
+/**
  * 码弦服务接口
  */
 export interface IMaxianService {
@@ -168,6 +189,16 @@ export interface IMaxianService {
 	applyDiffView(filePath: string, diff: string): Promise<boolean>;
 
 	/**
+	 * 保存diff修改并关闭diff编辑器，打开修改后的文件
+	 */
+	saveDiffAndClose(): Promise<boolean>;
+
+	/**
+	 * 关闭diff编辑器但不保存
+	 */
+	closeDiffWithoutSave(): Promise<boolean>;
+
+	/**
 	 * 取消当前正在执行的任务
 	 */
 	cancelTask(): void;
@@ -197,6 +228,54 @@ export interface IMaxianService {
 	 * （一次code/ask等模式对话完成时触发，包含本次对话的总token）
 	 */
 	readonly onTokenUsage: Event<ITokenUsageEvent>;
+
+	/**
+	 * 任务进度事件
+	 * （任务执行过程中触发，显示当前进度）
+	 */
+	readonly onTaskProgress: Event<ITaskProgressEvent>;
+
+	/**
+	 * 工具输入流式事件
+	 * （工具调用时实时触发，显示工具参数输入）
+	 */
+	readonly onToolInputStreaming: Event<IToolInputStreamingEvent>;
+
+	/**
+	 * 设置工具自动批准规则
+	 * @param toolName 工具名称
+	 * @param autoApprove 是否自动批准
+	 */
+	setToolAutoApprove(toolName: string, autoApprove: boolean): void;
+
+	/**
+	 * 检查工具是否设置为自动批准
+	 * @param toolName 工具名称
+	 */
+	isToolAutoApproved(toolName: string): boolean;
+
+	/**
+	 * 设置命令自动批准规则
+	 * @param command 命令（支持通配符 * 表示所有命令）
+	 * @param autoApprove 是否自动批准
+	 */
+	setCommandAutoApprove(command: string, autoApprove: boolean): void;
+
+	/**
+	 * 检查命令是否设置为自动批准
+	 * @param command 命令
+	 */
+	isCommandAutoApproved(command: string): boolean;
+
+	/**
+	 * 获取所有自动批准规则
+	 */
+	getAutoApproveRules(): { tools: string[]; commands: string[] };
+
+	/**
+	 * 清除所有自动批准规则
+	 */
+	clearAutoApproveRules(): void;
 }
 
 /**
@@ -223,12 +302,19 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private readonly _onTokenUsage = this._register(new Emitter<ITokenUsageEvent>());
 	readonly onTokenUsage: Event<ITokenUsageEvent> = this._onTokenUsage.event;
 
+	private readonly _onTaskProgress = this._register(new Emitter<ITaskProgressEvent>());
+	readonly onTaskProgress: Event<ITaskProgressEvent> = this._onTaskProgress.event;
+
+	private readonly _onToolInputStreaming = this._register(new Emitter<IToolInputStreamingEvent>());
+	readonly onToolInputStreaming: Event<IToolInputStreamingEvent> = this._onToolInputStreaming.event;
+
 	private _initialized = false;
 	private toolExecutor: IToolExecutor | null = null;
 	private apiHandler: IApiHandler | null = null;
 	private apiFactory: ApiFactory;
 	private currentMode: Mode = DEFAULT_MODE;
 	private currentTask: TaskService | null = null;
+	private currentTaskCancelled: boolean = false;  // 标记当前任务是否已被取消，防止重复处理
 	private diffViewProvider: DiffViewProvider | null = null;
 	private difyHandler: DifyHandler | null = null;
 	private currentDifyConfig: string | null = null;  // 当前Dify配置的hash（用于判断是否需要重新创建Handler）
@@ -240,6 +326,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private currentCallStartTime: Date | null = null;  // 当前调用开始时间
 	private currentFirstTokenTime: Date | null = null;  // 首Token到达时间
 	private currentKnowledgeBaseConfig: IKnowledgeBaseConfig | null = null;  // 当前知识库配置
+
+	// 自动批准规则
+	private autoApprovedTools: Set<string> = new Set();  // 自动批准的工具名称
+	private autoApprovedCommands: Set<string> = new Set();  // 自动批准的命令（* 表示所有命令）
 
 	constructor(
 		@IFileService private readonly fileService: IFileService,
@@ -601,7 +691,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
 
 		try {
-			// 创建新的TaskService实例
+			// 创建新的TaskService实例，并重置取消标志
+			this.currentTaskCancelled = false;
 			this.currentTask = new TaskService({
 				task: message,
 				apiHandler: this.apiHandler,
@@ -615,10 +706,18 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 			// 连接TaskService事件
 			const statusChangedDisposable = this.currentTask.onStatusChanged(async (status) => {
-				console.log('[Maxian] Task状态变更:', status);
+				console.log('[Maxian] Task状态变更:', status, ', 任务已取消:', this.currentTaskCancelled);
+
+				// 如果任务已被取消，忽略后续状态变化（除了ABORTED）
+				if (this.currentTaskCancelled && status !== TaskStatus.ABORTED) {
+					console.log('[Maxian] 任务已被取消，忽略状态变化:', status);
+					return;
+				}
+
 				if (status === TaskStatus.COMPLETED || status === TaskStatus.ERROR || status === TaskStatus.ABORTED) {
 					// 任务结束（无论成功、失败还是中止），记录AI调用日志
-					if (this.currentTask) {
+					// 但如果任务已被取消，不再重复记录
+					if (this.currentTask && !this.currentTaskCancelled) {
 						const taskUsage = this.currentTask.getTokenUsage();
 
 						// 尝试使用后端返回的精确token数据
@@ -691,14 +790,21 @@ export class MaxianService extends Disposable implements IMaxianService {
 						content: '',
 						isPartial: false
 					});
+					// 任务结束后重置currentTask，避免取消按钮误触发
+					this.currentTask = null;
 				} else if (status === TaskStatus.ERROR) {
 					// 仅对真正的错误显示错误提示，中止时静默处理
 					this._onMessage.fire({
 						type: 'error',
 						content: '任务错误'
 					});
+					// 任务结束后重置currentTask，避免取消按钮误触发
+					this.currentTask = null;
+				} else if (status === TaskStatus.ABORTED) {
+					// ABORTED状态静默处理，不显示任何提示
+					// 任务结束后重置currentTask，避免取消按钮误触发
+					this.currentTask = null;
 				}
-				// ABORTED状态静默处理，不显示任何提示
 			});
 			this._register(statusChangedDisposable);
 
@@ -752,38 +858,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 			});
 			this._register(streamChunkDisposable);
 
-			// 监听token使用量更新，在每次API调用完成时记录日志
-			let hasLoggedCall = false; // 标记是否已记录过本次会话的日志
-			const tokenUsageDisposable = this.currentTask.onTokenUsageUpdated(async (tokenUsage) => {
-				// 只记录一次日志(在第一次收到token使用量时)
-				if (hasLoggedCall) {
-					return;
-				}
-
+			// 注意：token使用量事件已在onStatusChanged中统一触发，这里不再重复触发
+			// 只记录日志用于调试
+			const tokenUsageDisposable = this.currentTask.onTokenUsageUpdated((tokenUsage) => {
 				if (tokenUsage && (tokenUsage.totalTokensIn > 0 || tokenUsage.totalTokensOut > 0)) {
-					hasLoggedCall = true;
-
-					// 触发单次对话完成的token使用量事件
-					const usageEvent: ITokenUsageEvent = {
-						promptTokens: tokenUsage.totalTokensIn || 0,
-						completionTokens: tokenUsage.totalTokensOut || 0,
-						totalTokens: (tokenUsage.totalTokensIn || 0) + (tokenUsage.totalTokensOut || 0),
-						mode: this.currentMode,
-						timestamp: Date.now()
-					};
-					this._onTokenUsage.fire(usageEvent);
-
-					console.log(`[Maxian] ${this.currentMode}模式Token使用量更新 - 输入:${usageEvent.promptTokens}, 输出:${usageEvent.completionTokens}, 总计:${usageEvent.totalTokens}`);
-
-					// 立即记录AI调用日志（不等待用户确认）
-					console.log(`[Maxian] 准备记录${this.currentMode}模式的AI调用日志(基于token更新事件)...`);
-					await this.logAICall({
-						inputTokens: usageEvent.promptTokens,
-						outputTokens: usageEvent.completionTokens,
-						status: 'success', // API调用成功
-						requestSummary: message.substring(0, 200)
-					});
-					console.log(`[Maxian] ${this.currentMode}模式的AI调用日志记录完成(基于token更新事件)`);
+					console.log(`[Maxian] Token使用量实时更新 - 输入:${tokenUsage.totalTokensIn}, 输出:${tokenUsage.totalTokensOut}`);
 				}
 			});
 			this._register(tokenUsageDisposable);
@@ -794,6 +873,48 @@ export class MaxianService extends Disposable implements IMaxianService {
 				this._onQuestionAsked.fire({ question, toolUseId });
 			});
 			this._register(userInputDisposable);
+
+			// 监听步骤更新事件，转发到任务进度事件
+			const stepUpdatedDisposable = this.currentTask.onStepUpdated((stepInfo) => {
+				console.log('[Maxian] 步骤更新:', stepInfo);
+
+				// 转换状态
+				let status: 'running' | 'completed' | 'error' | 'cancelled';
+				switch (stepInfo.status) {
+					case 'running':
+						status = 'running';
+						break;
+					case 'completed':
+						status = 'completed';
+						break;
+					case 'error':
+						status = 'error';
+						break;
+					default:
+						status = 'running';
+				}
+
+				// 发出任务进度事件
+				this._onTaskProgress.fire({
+					current: stepInfo.current,
+					total: stepInfo.total,
+					currentStep: stepInfo.description,
+					status: status,
+				});
+			});
+			this._register(stepUpdatedDisposable);
+
+			// 监听工具输入流式事件，转发到UI
+			const toolInputStreamingDisposable = this.currentTask.onToolInputStreaming((event) => {
+				console.log('[Maxian] 工具输入流式:', event.toolName, event.isPartial ? '(部分)' : '(完整)');
+				this._onToolInputStreaming.fire({
+					toolId: event.toolId,
+					toolName: event.toolName,
+					input: event.input,
+					isPartial: event.isPartial
+				});
+			});
+			this._register(toolInputStreamingDisposable);
 
 			// 启动任务
 			await this.currentTask.start();
@@ -1357,13 +1478,47 @@ export class MaxianService extends Disposable implements IMaxianService {
 	}
 
 	/**
+	 * 保存diff修改并关闭diff编辑器，打开修改后的文件
+	 */
+	async saveDiffAndClose(): Promise<boolean> {
+		if (!this.diffViewProvider) {
+			console.error('[Maxian] DiffViewProvider未初始化');
+			return false;
+		}
+		return this.diffViewProvider.saveAndClose();
+	}
+
+	/**
+	 * 关闭diff编辑器但不保存
+	 */
+	async closeDiffWithoutSave(): Promise<boolean> {
+		if (!this.diffViewProvider) {
+			console.error('[Maxian] DiffViewProvider未初始化');
+			return false;
+		}
+		return this.diffViewProvider.closeWithoutSave();
+	}
+
+	/**
 	 * 取消当前正在执行的任务
 	 */
 	cancelTask(): void {
+		console.log('[Maxian] cancelTask 被调用, currentTask:', !!this.currentTask, ', currentTaskCancelled:', this.currentTaskCancelled, ', isAskModeRunning:', this.isAskModeRunning);
+
+		// 如果任务已经被取消，直接返回，不做任何处理
+		if (this.currentTaskCancelled) {
+			console.log('[Maxian] 任务已被取消，忽略重复取消请求');
+			return;
+		}
+
 		// 检查是否有TaskService任务在运行（code/architect/debug等模式）
 		if (this.currentTask) {
 			console.log('[Maxian] 取消当前TaskService任务');
-			this.currentTask.abortTask(ClineApiReqCancelReason.UserCancelled);
+			// 立即设置取消标志和重置currentTask，防止重复点击
+			this.currentTaskCancelled = true;
+			const task = this.currentTask;
+			this.currentTask = null;
+			task.abortTask(ClineApiReqCancelReason.UserCancelled);
 			this._onTaskCancelled.fire();
 			return;
 		}
@@ -1371,17 +1526,22 @@ export class MaxianService extends Disposable implements IMaxianService {
 		// 检查是否有ask模式任务在运行
 		if (this.isAskModeRunning && this.askModeAbortController && this.difyHandler) {
 			console.log('[Maxian] 中止Ask模式任务');
+			// 立即重置状态，防止重复点击
+			this.isAskModeRunning = false;
+			const controller = this.askModeAbortController;
+			this.askModeAbortController = null;
 			// 1. 调用Dify停止API（异步，不等待结果）
 			this.difyHandler.stopCurrentTask().catch(err => {
 				console.error('[Maxian] Dify停止API调用失败:', err);
 			});
 			// 2. 中止前端HTTP请求
-			this.askModeAbortController.abort();
+			controller.abort();
 			this._onTaskCancelled.fire();
 			return;
 		}
 
-		console.log('[Maxian] 没有正在执行的任务');
+		// 没有正在执行的任务，不触发任何事件，不显示任何提示
+		console.log('[Maxian] 没有正在执行的任务，忽略取消请求');
 	}
 
 	/**
@@ -1571,6 +1731,71 @@ export class MaxianService extends Disposable implements IMaxianService {
 			console.error('[Maxian] 记录AI调用日志失败:', error);
 			// 不抛出错误，避免影响正常功能
 		}
+	}
+
+	// ========== 自动批准规则管理 ==========
+
+	/**
+	 * 设置工具自动批准规则
+	 */
+	setToolAutoApprove(toolName: string, autoApprove: boolean): void {
+		if (autoApprove) {
+			this.autoApprovedTools.add(toolName);
+			console.log(`[Maxian] 工具 "${toolName}" 已设置为自动批准`);
+		} else {
+			this.autoApprovedTools.delete(toolName);
+			console.log(`[Maxian] 工具 "${toolName}" 已取消自动批准`);
+		}
+	}
+
+	/**
+	 * 检查工具是否设置为自动批准
+	 */
+	isToolAutoApproved(toolName: string): boolean {
+		return this.autoApprovedTools.has(toolName) || this.autoApprovedTools.has('*');
+	}
+
+	/**
+	 * 设置命令自动批准规则
+	 */
+	setCommandAutoApprove(command: string, autoApprove: boolean): void {
+		if (autoApprove) {
+			this.autoApprovedCommands.add(command);
+			console.log(`[Maxian] 命令 "${command}" 已设置为自动批准`);
+		} else {
+			this.autoApprovedCommands.delete(command);
+			console.log(`[Maxian] 命令 "${command}" 已取消自动批准`);
+		}
+	}
+
+	/**
+	 * 检查命令是否设置为自动批准
+	 */
+	isCommandAutoApproved(command: string): boolean {
+		// 检查通配符 * 或精确匹配
+		if (this.autoApprovedCommands.has('*')) {
+			return true;
+		}
+		return this.autoApprovedCommands.has(command);
+	}
+
+	/**
+	 * 获取所有自动批准规则
+	 */
+	getAutoApproveRules(): { tools: string[]; commands: string[] } {
+		return {
+			tools: Array.from(this.autoApprovedTools),
+			commands: Array.from(this.autoApprovedCommands)
+		};
+	}
+
+	/**
+	 * 清除所有自动批准规则
+	 */
+	clearAutoApproveRules(): void {
+		this.autoApprovedTools.clear();
+		this.autoApprovedCommands.clear();
+		console.log('[Maxian] 所有自动批准规则已清除');
 	}
 
 	override dispose(): void {

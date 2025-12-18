@@ -6,13 +6,14 @@
 import { ISearchService, QueryType, resultIsMatch } from '../../../../services/search/common/search.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { SearchFilesToolUse, CodebaseSearchToolUse, ToolResponse } from '../../common/tools/toolTypes.js';
-import { CancellationToken } from '../../../../../base/common/cancellation.js';
+import { CancellationToken, CancellationTokenSource } from '../../../../../base/common/cancellation.js';
 import { IRipgrepService } from '../../../../services/ripgrep/common/ripgrep.js';
 import * as glob from '../../../../../base/common/glob.js';
 
 /**
  * 搜索工具类
  * 实现文件搜索和代码库搜索功能
+ * 优化：直接使用 ISearchService (底层使用 ripgrep)，简化搜索策略
  */
 export class SearchTool {
 	constructor(
@@ -20,15 +21,19 @@ export class SearchTool {
 		// @ts-expect-error: ripgrepService保留以备将来使用
 		private readonly _ripgrepService: IRipgrepService,
 		private readonly workspaceRoot: string
-	) { }
+	) {
+		console.log('[SearchTool] 初始化，工作区:', workspaceRoot);
+	}
 
 	/**
 	 * 搜索文件
+	 * 使用 ISearchService.fileSearch()，底层由 Extension Host 的 ripgrep 实现
 	 * @param toolUse 搜索文件工具使用信息
 	 * @returns 搜索结果
 	 */
 	async searchFiles(toolUse: SearchFilesToolUse): Promise<ToolResponse> {
 		const { path, regex, file_pattern } = toolUse.params;
+		const startTime = Date.now();
 
 		if (!regex && !file_pattern) {
 			return '错误: 必须提供搜索模式(regex)或文件模式(file_pattern)';
@@ -40,28 +45,46 @@ export class SearchTool {
 			const folderUri = URI.file(searchPath);
 			const includePattern = file_pattern || '**/*';
 
-			// 使用文件搜索
-			const result = await this.searchService.fileSearch({
-				type: QueryType.File,
-				filePattern: includePattern,
-				folderQueries: [{ folder: folderUri }],
-				maxResults: 500
-			}, CancellationToken.None);
+			console.log('[SearchTool] searchFiles 开始，路径:', searchPath, '模式:', includePattern);
 
-			if (!result || !result.results || result.results.length === 0) {
-				return '未找到匹配的文件';
+			// 创建可取消的 token（5秒超时）
+			const cts = new CancellationTokenSource();
+			const timeoutId = setTimeout(() => cts.cancel(), 5000);
+
+			try {
+				// 使用文件搜索（由 Extension Host ripgrep 实现）
+				const result = await this.searchService.fileSearch({
+					type: QueryType.File,
+					filePattern: includePattern,
+					folderQueries: [{ folder: folderUri }],
+					maxResults: 500
+				}, cts.token);
+
+				clearTimeout(timeoutId);
+				const elapsed = Date.now() - startTime;
+				console.log('[SearchTool] searchFiles 完成，耗时:', elapsed, 'ms，结果数:', result?.results?.length || 0);
+
+				if (!result || !result.results || result.results.length === 0) {
+					return '未找到匹配的文件';
+				}
+
+				const files = result.results.map(r => r.resource.fsPath);
+				return files.join('\n');
+			} finally {
+				clearTimeout(timeoutId);
+				cts.dispose();
 			}
-
-			const files = result.results.map(r => r.resource.fsPath);
-			return files.join('\n');
 		} catch (error) {
+			const elapsed = Date.now() - startTime;
+			console.error('[SearchTool] searchFiles 失败，耗时:', elapsed, 'ms，错误:', error);
 			return `搜索文件失败: ${error instanceof Error ? error.message : String(error)}`;
 		}
 	}
 
 	/**
 	 * 代码库搜索
-	 * 优化：并行执行多种搜索策略，添加超时机制
+	 * 优化：直接使用 ISearchService.textSearch()（底层使用 ripgrep）
+	 * 简化策略：先执行直接搜索，只在无结果时尝试回退
 	 * @param toolUse 代码库搜索工具使用信息
 	 * @returns 搜索结果
 	 */
@@ -73,7 +96,6 @@ export class SearchTool {
 		}
 
 		const startTime = Date.now();
-		const timeout = 8000; // 8秒超时
 
 		try {
 			const searchPath = path || this.workspaceRoot;
@@ -83,65 +105,89 @@ export class SearchTool {
 				? { [file_pattern]: true }
 				: undefined;
 
-			const allResults: Map<string, { filePath: string; lineNumber: number; line: string }> = new Map();
+			console.log('[SearchTool] codebaseSearch 开始，查询:', query, '路径:', searchPath);
 
-			// 构建所有搜索任务
-			const searchTasks: Promise<void>[] = [];
+			// 创建可取消的 token（5秒超时）
+			const cts = new CancellationTokenSource();
+			const timeoutId = setTimeout(() => cts.cancel(), 5000);
 
-			// 策略1: 直接文本搜索
-			searchTasks.push(this.performTextSearch(folderUri, query, includePattern, allResults, false));
-
-			// 策略2: 关键词搜索（并行）
-			const keywords = query.split(/\s+/).filter(w => w.length > 2);
-			if (keywords.length > 1) {
-				for (const keyword of keywords.slice(0, 2)) { // 最多2个关键词
-					searchTasks.push(this.performTextSearch(folderUri, keyword, includePattern, allResults, false));
-				}
-			}
-
-			// 策略3: 驼峰命名变体
-			const camelCasePattern = this.toCamelCasePattern(query);
-			if (camelCasePattern && camelCasePattern !== query) {
-				searchTasks.push(this.performTextSearch(folderUri, camelCasePattern, includePattern, allResults, false));
-			}
-
-			// 并行执行所有搜索，带超时
 			try {
-				await Promise.race([
-					Promise.all(searchTasks),
-					new Promise((_, reject) => setTimeout(() => reject(new Error('搜索超时')), timeout))
-				]);
-			} catch (e) {
-				console.warn('[SearchTool] codebaseSearch 超时，返回已有结果');
+				// 策略1: 直接文本搜索（使用 ripgrep）
+				const searchStart = Date.now();
+				const results = await this.performTextSearchDirect(folderUri, query, includePattern, false, cts.token);
+				const searchElapsed = Date.now() - searchStart;
+				console.log('[SearchTool] 直接搜索完成，耗时:', searchElapsed, 'ms，结果数:', results.size);
+
+				// 如果直接搜索有结果，直接返回
+				if (results.size > 0) {
+					clearTimeout(timeoutId);
+					return this.formatSearchResults(query, results, startTime);
+				}
+
+				// 策略2: 如果直接搜索无结果，尝试关键词分词搜索
+				const keywords = query.split(/\s+/).filter(w => w.length > 2);
+				if (keywords.length > 1) {
+					console.log('[SearchTool] 直接搜索无结果，尝试关键词搜索:', keywords.slice(0, 2));
+					const keywordStart = Date.now();
+
+					// 只搜索前2个关键词
+					for (const keyword of keywords.slice(0, 2)) {
+						if (cts.token.isCancellationRequested) break;
+						const keywordResults = await this.performTextSearchDirect(folderUri, keyword, includePattern, false, cts.token);
+						keywordResults.forEach((v, k) => results.set(k, v));
+					}
+
+					const keywordElapsed = Date.now() - keywordStart;
+					console.log('[SearchTool] 关键词搜索完成，耗时:', keywordElapsed, 'ms，累计结果:', results.size);
+				}
+
+				clearTimeout(timeoutId);
+				return this.formatSearchResults(query, results, startTime);
+			} finally {
+				clearTimeout(timeoutId);
+				cts.dispose();
 			}
-
-			const elapsed = Date.now() - startTime;
-			console.log('[SearchTool] codebaseSearch 完成，耗时:', elapsed, 'ms，结果:', allResults.size);
-
-			if (allResults.size === 0) {
-				return `未找到与 "${query}" 相关的结果。\n\n建议：\n- 尝试使用 glob 工具按文件名搜索\n- 尝试 search_files 进行正则表达式搜索`;
-			}
-
-			const sortedResults = Array.from(allResults.values())
-				.slice(0, 50)
-				.map(r => `${r.filePath}:${r.lineNumber}: ${r.line.trim()}`);
-
-			return `找到 ${allResults.size} 个匹配 (显示前${sortedResults.length}个):\n\n${sortedResults.join('\n')}`;
 		} catch (error) {
+			const elapsed = Date.now() - startTime;
+			console.error('[SearchTool] codebaseSearch 失败，耗时:', elapsed, 'ms，错误:', error);
 			return `代码库搜索失败: ${error instanceof Error ? error.message : String(error)}`;
 		}
 	}
 
 	/**
-	 * 执行文本搜索
+	 * 格式化搜索结果
 	 */
-	private async performTextSearch(
+	private formatSearchResults(
+		query: string,
+		results: Map<string, { filePath: string; lineNumber: number; line: string }>,
+		startTime: number
+	): string {
+		const elapsed = Date.now() - startTime;
+		console.log('[SearchTool] codebaseSearch 完成，总耗时:', elapsed, 'ms，最终结果:', results.size);
+
+		if (results.size === 0) {
+			return `未找到与 "${query}" 相关的结果。\n\n建议：\n- 尝试使用 glob 工具按文件名搜索\n- 尝试 search_files 进行正则表达式搜索`;
+		}
+
+		const sortedResults = Array.from(results.values())
+			.slice(0, 50)
+			.map(r => `${r.filePath}:${r.lineNumber}: ${r.line.trim()}`);
+
+		return `找到 ${results.size} 个匹配 (显示前${sortedResults.length}个，耗时${elapsed}ms):\n\n${sortedResults.join('\n')}`;
+	}
+
+	/**
+	 * 执行直接文本搜索（返回新的 Map）
+	 */
+	private async performTextSearchDirect(
 		folderUri: URI,
 		pattern: string,
 		includePattern: glob.IExpression | undefined,
-		results: Map<string, { filePath: string; lineNumber: number; line: string }>,
-		isRegExp: boolean
-	): Promise<void> {
+		isRegExp: boolean,
+		token: CancellationToken
+	): Promise<Map<string, { filePath: string; lineNumber: number; line: string }>> {
+		const results = new Map<string, { filePath: string; lineNumber: number; line: string }>();
+
 		try {
 			const searchResult = await this.searchService.textSearch(
 				{
@@ -156,7 +202,7 @@ export class SearchTool {
 					maxResults: 100,
 					folderQueries: [{ folder: folderUri }]
 				},
-				CancellationToken.None
+				token
 			);
 
 			if (searchResult && searchResult.results) {
@@ -178,21 +224,14 @@ export class SearchTool {
 					}
 				}
 			}
-		} catch {
-			// 忽略单次搜索失败
+		} catch (error) {
+			// 搜索被取消或失败
+			if (!(error instanceof Error && error.message.includes('cancel'))) {
+				console.warn('[SearchTool] 文本搜索失败:', error);
+			}
 		}
-	}
 
-	/**
-	 * 将查询转换为驼峰命名模式
-	 */
-	private toCamelCasePattern(query: string): string {
-		// 移除特殊字符并转换为驼峰
-		const words = query.toLowerCase().split(/[\s_-]+/);
-		if (words.length <= 1) {
-			return '';
-		}
-		return words[0] + words.slice(1).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+		return results;
 	}
 
 	/**

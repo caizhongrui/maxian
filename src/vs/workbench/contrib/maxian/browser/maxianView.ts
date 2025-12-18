@@ -14,7 +14,7 @@ import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
-import { IMaxianService } from './maxianService.js';
+import { IMaxianService, type ITokenUsageEvent, type ITaskProgressEvent, type IToolInputStreamingEvent } from './maxianService.js';
 import { $, append } from '../../../../base/browser/dom.js';
 import { ISecretStorageService } from '../../../../platform/secrets/common/secrets.js';
 import { getAllModes, DEFAULT_MODE, type Mode } from '../common/modes/modeTypes.js';
@@ -22,6 +22,29 @@ import { MarkdownRendererDom } from './markdownRendererDom.js';
 import { FileAccess } from '../../../../base/common/network.js';
 import { ClineMessage } from '../common/task/taskTypes.js';
 import { IAuthService } from '../../auth/common/authService.js';
+import {
+	renderDiffStats,
+	calculateSearchReplaceDiffStats,
+	calculateDiffStats,
+	renderFilePath,
+	renderTokenStats,
+	getToolIcon,
+	formatTime,
+	createCopyButton,
+	createErrorCard,
+	createRetryStatus,
+	createCollapsible,
+	createCompactionStatus,
+	createDiagnosticsSummary,
+	parseDiagnosticsFromToolResult,
+	type DiffStats,
+	type ToolStatus,
+	TOOL_STATUS_TEXT,
+	TOOL_STATUS_COLOR,
+	// 以下导入保留用于后续功能
+	// createProgressBar,
+	// type TokenStats,
+} from './uiUtils.js';
 
 /**
  * 码弦 Agent 视图面板
@@ -63,6 +86,16 @@ export class MaxianView extends ViewPane {
 	private isContinuousConversation: boolean = false; // 是否启用连续对话（ask模式专用）
 	private continuousConversationCheckbox!: HTMLInputElement; // 连续对话复选框
 	private continuousConversationWrapper!: HTMLLabelElement; // 连续对话复选框容器
+	// Reasoning 思考过程相关
+	private currentReasoningElement: HTMLElement | null = null; // 当前思考过程元素
+	private currentReasoningText: string = ''; // 累积的思考文本
+	// 任务进度条相关
+	private taskProgressContainer: HTMLElement | null = null; // 进度条容器
+	private taskProgressBar: HTMLElement | null = null; // 进度条填充元素
+	private taskProgressText: HTMLElement | null = null; // 进度条文字
+	private taskProgressStep: HTMLElement | null = null; // 当前步骤描述
+	// 工具输入流式显示相关
+	private toolInputStreamingElements: Map<string, HTMLElement> = new Map(); // 工具ID到显示元素的映射
 
 	constructor(
 		options: IViewPaneOptions,
@@ -127,8 +160,26 @@ export class MaxianView extends ViewPane {
 			this.loadKnowledgeBases(); // 重新加载知识库列表
 		}));
 
+		// 监听Token使用量事件
+		this._register(this.maxianService.onTokenUsage(event => {
+			this.handleTokenUsage(event);
+		}));
+
+		// 监听任务进度事件
+		this._register(this.maxianService.onTaskProgress(event => {
+			this.handleTaskProgress(event);
+		}));
+
+		// 监听工具输入流式事件
+		this._register(this.maxianService.onToolInputStreaming(event => {
+			this.handleToolInputStreaming(event);
+		}));
+
 		// ========== 创建消息区域 ==========
 		this.messageArea = append(this.container, $('div.maxian-messages'));
+
+		// ========== 创建任务进度条区域（消息区域上方） ==========
+		this.createTaskProgressBar();
 		this.messageArea.style.flex = '1';
 		this.messageArea.style.overflowY = 'auto';
 		this.messageArea.style.padding = '16px';
@@ -326,22 +377,12 @@ export class MaxianView extends ViewPane {
 		// 模式选择器包装器
 		const modeSelectorWrapper = append(leftControls, $('div'));
 		modeSelectorWrapper.style.flexShrink = '1';
-		modeSelectorWrapper.style.minWidth = '80px';
-		modeSelectorWrapper.style.maxWidth = '110px';
+		modeSelectorWrapper.style.minWidth = '90px';
+		modeSelectorWrapper.style.maxWidth = '130px';
 		modeSelectorWrapper.style.position = 'relative';
 		modeSelectorWrapper.style.display = 'flex';
 		modeSelectorWrapper.style.alignItems = 'center';
 		modeSelectorWrapper.style.zIndex = '100';
-
-		// 模式图标
-		const modeIcon = append(modeSelectorWrapper, $('span.codicon.codicon-symbol-event'));
-		modeIcon.style.position = 'absolute';
-		modeIcon.style.left = '8px';
-		modeIcon.style.pointerEvents = 'none';
-		modeIcon.style.color = 'var(--vscode-charts-blue, #007ACC)';
-		modeIcon.style.fontSize = '14px';
-		modeIcon.style.zIndex = '1';
-		modeIcon.style.transition = 'all 0.2s ease';
 
 		// 模式选择器显示框（自定义div）
 		this.modeSelector = append(modeSelectorWrapper, $('div')) as HTMLDivElement;
@@ -349,7 +390,7 @@ export class MaxianView extends ViewPane {
 		this.modeSelector.style.display = 'flex';
 		this.modeSelector.style.alignItems = 'center';
 		this.modeSelector.style.height = '34px';
-		this.modeSelector.style.padding = '0 32px 0 36px';
+		this.modeSelector.style.padding = '0 28px 0 10px';
 		this.modeSelector.style.fontSize = '12px';
 		this.modeSelector.style.fontWeight = '400';
 		this.modeSelector.style.borderRadius = '8px';
@@ -429,7 +470,8 @@ export class MaxianView extends ViewPane {
 
 				// 设置动态的maxHeight和宽度
 				this.modeDropdown.style.maxHeight = `${actualMaxHeight}px`;
-				this.modeDropdown.style.width = `${selectorRect.width}px`;
+				this.modeDropdown.style.minWidth = `${selectorRect.width}px`;
+				this.modeDropdown.style.width = 'auto';
 				this.modeDropdown.style.left = `${selectorRect.left}px`;
 
 				// 根据方向设置位置
@@ -475,8 +517,6 @@ export class MaxianView extends ViewPane {
 				this.modeSelector.style.backgroundColor = 'var(--vscode-list-hoverBackground, rgba(90, 93, 94, 0.31))';
 				this.modeSelector.style.boxShadow = '0 2px 8px rgba(0, 122, 204, 0.15)';
 			}
-			modeIcon.style.color = 'var(--vscode-focusBorder, #007ACC)';
-			modeIcon.style.transform = 'scale(1.05)';
 		};
 		this.modeSelector.onmouseleave = () => {
 			if (!this.isModeDropdownOpen) {
@@ -484,8 +524,6 @@ export class MaxianView extends ViewPane {
 				this.modeSelector.style.backgroundColor = 'var(--vscode-input-background)';
 				this.modeSelector.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.12)';
 			}
-			modeIcon.style.color = 'var(--vscode-charts-blue, #007ACC)';
-			modeIcon.style.transform = 'scale(1)';
 		};
 
 		// 模式列表将在 updateAvailableModes 方法中填充
@@ -1046,7 +1084,7 @@ export class MaxianView extends ViewPane {
 				display: block;
 			}
 
-			/* 代码高亮样式 */
+			/* 代码高亮样式 - VSCode Dark+ 主题风格 */
 			.markdown-content .keyword {
 				color: #569cd6;
 				font-weight: 600;
@@ -1054,6 +1092,14 @@ export class MaxianView extends ViewPane {
 
 			.markdown-content .string {
 				color: #ce9178;
+			}
+
+			.markdown-content .template-string {
+				color: #ce9178;
+			}
+
+			.markdown-content .template-expr {
+				color: #9cdcfe;
 			}
 
 			.markdown-content .comment {
@@ -1070,8 +1116,82 @@ export class MaxianView extends ViewPane {
 				color: #dcdcaa;
 			}
 
+			.markdown-content .method {
+				color: #dcdcaa;
+			}
+
 			.markdown-content .class {
 				color: #4ec9b0;
+			}
+
+			.markdown-content .type {
+				color: #4ec9b0;
+			}
+
+			.markdown-content .interface {
+				color: #4ec9b0;
+				font-style: italic;
+			}
+
+			.markdown-content .variable {
+				color: #9cdcfe;
+			}
+
+			.markdown-content .constant {
+				color: #4fc1ff;
+			}
+
+			.markdown-content .parameter {
+				color: #9cdcfe;
+			}
+
+			.markdown-content .property {
+				color: #9cdcfe;
+			}
+
+			.markdown-content .decorator {
+				color: #dcdcaa;
+			}
+
+			.markdown-content .operator {
+				color: #d4d4d4;
+			}
+
+			.markdown-content .punctuation {
+				color: #d4d4d4;
+			}
+
+			.markdown-content .regexp {
+				color: #d16969;
+			}
+
+			.markdown-content .tag {
+				color: #569cd6;
+			}
+
+			.markdown-content .attribute {
+				color: #9cdcfe;
+			}
+
+			.markdown-content .builtin {
+				color: #4fc1ff;
+			}
+
+			.markdown-content .boolean {
+				color: #569cd6;
+			}
+
+			.markdown-content .null {
+				color: #569cd6;
+			}
+
+			/* 行号样式（可选） */
+			.markdown-content .line-number {
+				color: var(--vscode-editorLineNumber-foreground);
+				user-select: none;
+				text-align: right;
+				padding-right: 1em;
+				opacity: 0.5;
 			}
 
 			.markdown-content strong {
@@ -1409,6 +1529,11 @@ export class MaxianView extends ViewPane {
 				this.renderTextMessage(message.text || '', message.partial);
 				break;
 
+			case 'reasoning':
+				// Reasoning/思考过程 - 使用可折叠的思考块展示
+				this.renderReasoningMessage(message.reasoning || message.text || '', message.partial);
+				break;
+
 			case 'completion_result':
 				// 完成结果 - 显示给用户查看
 				this.renderCompletionResult(message.text || '');
@@ -1440,6 +1565,11 @@ export class MaxianView extends ViewPane {
 			case 'tool':
 				// 工具执行状态 - 显示正在执行什么工具
 				this.renderToolExecutionStatus(message.text || '');
+				break;
+
+			case 'condense_context':
+				// 上下文压缩 - 显示压缩状态
+				this.renderCondenseContext(message);
 				break;
 
 			default:
@@ -1549,6 +1679,193 @@ export class MaxianView extends ViewPane {
 	}
 
 	/**
+	 * 渲染 Reasoning/思考过程（S1功能）
+	 * 使用可折叠的"思考中"块展示AI的推理过程
+	 */
+	private renderReasoningMessage(text: string, partial?: boolean): void {
+		if (!text && !partial) {
+			// 流结束信号
+			this.currentReasoningElement = null;
+			this.currentReasoningText = '';
+			return;
+		}
+
+		if (!this.currentReasoningElement) {
+			// 创建新的思考块容器
+			const reasoningContainer = append(this.messageArea, $('div'));
+			reasoningContainer.style.marginBottom = '10px';
+
+			// 创建标题元素
+			const titleElement = $('div');
+			titleElement.style.display = 'flex';
+			titleElement.style.alignItems = 'center';
+			titleElement.style.gap = '8px';
+
+			// 思考图标（脑袋/灯泡）
+			const thinkIcon = append(titleElement, $('span.codicon.codicon-lightbulb'));
+			thinkIcon.style.fontSize = '14px';
+			thinkIcon.style.color = 'var(--vscode-charts-purple, #c586c0)';
+
+			// 标题文本
+			const titleText = append(titleElement, $('span'));
+			titleText.style.fontWeight = '600';
+			titleText.style.fontSize = '13px';
+			titleText.style.color = 'var(--vscode-charts-purple, #c586c0)';
+			titleText.textContent = '思考中...';
+
+			// 加载动画（三个点）
+			const loadingDots = append(titleElement, $('span'));
+			loadingDots.style.color = 'var(--vscode-descriptionForeground)';
+			loadingDots.style.animation = 'blink 1s infinite';
+			loadingDots.textContent = partial ? '...' : '';
+
+			// 创建可折叠组件
+			const collapsible = createCollapsible(reasoningContainer, {
+				title: titleElement,
+				defaultOpen: false, // 默认折叠，用户可以点击展开查看
+				headerClass: 'reasoning-header',
+				contentClass: 'reasoning-content'
+			});
+
+			// 设置容器样式 - 紫色主题
+			collapsible.container.style.backgroundColor = 'rgba(197, 134, 192, 0.1)';
+			collapsible.container.style.border = '1px solid var(--vscode-charts-purple, #c586c0)';
+			collapsible.container.style.borderLeft = '3px solid var(--vscode-charts-purple, #c586c0)';
+
+			// 内容区域
+			const contentArea = collapsible.content;
+			contentArea.style.fontFamily = 'var(--vscode-editor-font-family)';
+			contentArea.style.fontSize = '12px';
+			contentArea.style.color = 'var(--vscode-descriptionForeground)';
+			contentArea.style.lineHeight = '1.6';
+			contentArea.style.whiteSpace = 'pre-wrap';
+			contentArea.style.wordBreak = 'break-word';
+			contentArea.style.maxHeight = '300px';
+			contentArea.style.overflow = 'auto';
+
+			this.currentReasoningText = text;
+			contentArea.textContent = this.currentReasoningText;
+			this.currentReasoningElement = contentArea;
+
+			// 存储标题引用以便更新
+			(this.currentReasoningElement as any).__titleText = titleText;
+			(this.currentReasoningElement as any).__loadingDots = loadingDots;
+		} else {
+			// 累积内容
+			this.currentReasoningText += text;
+			this.currentReasoningElement.textContent = this.currentReasoningText;
+		}
+
+		// 更新标题状态
+		if (!partial && this.currentReasoningElement) {
+			const titleText = (this.currentReasoningElement as any).__titleText;
+			const loadingDots = (this.currentReasoningElement as any).__loadingDots;
+			if (titleText) {
+				titleText.textContent = '思考完成';
+			}
+			if (loadingDots) {
+				loadingDots.textContent = '';
+			}
+		}
+
+		this.messageArea.scrollTop = this.messageArea.scrollHeight;
+	}
+
+	/**
+	 * 渲染上下文压缩状态（C3功能）
+	 * 显示压缩完成的提示信息
+	 */
+	private renderCondenseContext(message: ClineMessage): void {
+		const contextInfo = message.contextCondense;
+		if (!contextInfo) {
+			// 没有压缩信息，显示简单提示
+			this.renderSystemMessage('🗜️ 上下文已压缩');
+			return;
+		}
+
+		// 计算节省的token数
+		const savedTokens = contextInfo.prevContextTokens - contextInfo.newContextTokens;
+		const savingPercent = ((savedTokens / contextInfo.prevContextTokens) * 100).toFixed(1);
+
+		// 创建压缩状态显示
+		const compactContainer = append(this.messageArea, $('div'));
+		compactContainer.style.marginBottom = '10px';
+
+		createCompactionStatus(compactContainer, {
+			compactedParts: 1, // 压缩了一次
+			savedTokens: savedTokens
+		});
+
+		// 如果有摘要，显示可折叠的摘要内容
+		if (contextInfo.summary) {
+			const summaryContainer = append(this.messageArea, $('div'));
+			summaryContainer.style.marginBottom = '10px';
+
+			// 创建标题元素
+			const titleElement = $('div');
+			titleElement.style.display = 'flex';
+			titleElement.style.alignItems = 'center';
+			titleElement.style.gap = '8px';
+
+			const archiveIcon = append(titleElement, $('span.codicon.codicon-archive'));
+			archiveIcon.style.fontSize = '14px';
+			archiveIcon.style.color = 'var(--vscode-charts-blue)';
+
+			const titleText = append(titleElement, $('span'));
+			titleText.style.fontWeight = '600';
+			titleText.style.fontSize = '12px';
+			titleText.style.color = 'var(--vscode-foreground)';
+			titleText.textContent = `上下文压缩摘要 (节省 ${savingPercent}%)`;
+
+			// 创建可折叠组件
+			const collapsible = createCollapsible(summaryContainer, {
+				title: titleElement,
+				defaultOpen: false,
+				headerClass: 'condense-summary-header',
+				contentClass: 'condense-summary-content'
+			});
+
+			collapsible.container.style.backgroundColor = 'var(--vscode-editor-inactiveSelectionBackground)';
+
+			// 摘要内容
+			const summaryContent = collapsible.content;
+			summaryContent.style.fontSize = '12px';
+			summaryContent.style.color = 'var(--vscode-descriptionForeground)';
+			summaryContent.style.lineHeight = '1.5';
+			summaryContent.style.whiteSpace = 'pre-wrap';
+			summaryContent.textContent = contextInfo.summary;
+		}
+
+		// 如果标记了自动继续，显示提示
+		if (contextInfo.autoContinue) {
+			const continueHint = append(this.messageArea, $('div'));
+			continueHint.style.marginBottom = '10px';
+			continueHint.style.padding = '8px 12px';
+			continueHint.style.backgroundColor = 'var(--vscode-inputValidation-infoBackground)';
+			continueHint.style.borderRadius = '6px';
+			continueHint.style.display = 'flex';
+			continueHint.style.alignItems = 'center';
+			continueHint.style.gap = '8px';
+
+			const refreshIcon = append(continueHint, $('span.codicon.codicon-sync.codicon-modifier-spin'));
+			refreshIcon.style.fontSize = '14px';
+			refreshIcon.style.color = 'var(--vscode-charts-blue)';
+
+			const continueText = append(continueHint, $('span'));
+			continueText.style.fontSize = '12px';
+			continueText.style.color = 'var(--vscode-foreground)';
+			continueText.textContent = '正在继续任务...';
+
+			// 2秒后自动移除提示
+			setTimeout(() => {
+				continueHint.remove();
+			}, 2000);
+		}
+
+		this.messageArea.scrollTop = this.messageArea.scrollHeight;
+	}
+
+	/**
 	 * 渲染完成结果（用于completion_result say消息）
 	 */
 	private renderCompletionResult(result: string): void {
@@ -1581,27 +1898,39 @@ export class MaxianView extends ViewPane {
 	 * 渲染错误消息
 	 */
 	private renderErrorMessage(error: string): void {
-		const errorMsg = append(this.messageArea, $('div'));
-		errorMsg.style.marginBottom = '10px';
-		errorMsg.style.padding = '10px 15px';
-		errorMsg.style.backgroundColor = 'var(--vscode-inputValidation-errorBackground)';
-		errorMsg.style.border = '1px solid var(--vscode-inputValidation-errorBorder)';
-		errorMsg.style.borderRadius = '6px';
-		errorMsg.style.borderLeft = '3px solid var(--vscode-errorForeground)';
+		// 解析错误信息，尝试提取详情
+		let errorTitle = '错误';
+		let errorMessage = error;
+		let errorDetails: string | undefined;
 
-		const errorLabel = append(errorMsg, $('div'));
-		errorLabel.style.fontWeight = '600';
-		errorLabel.style.marginBottom = '6px';
-		errorLabel.style.color = 'var(--vscode-errorForeground)';
-		errorLabel.style.fontSize = '13px';
-		errorLabel.textContent = '❌ 错误';
+		// 尝试解析常见的错误格式
+		const apiErrorMatch = error.match(/^(API Error|Network Error|Timeout Error|Rate Limit Error):?\s*(.*)$/i);
+		if (apiErrorMatch) {
+			errorTitle = apiErrorMatch[1];
+			errorMessage = apiErrorMatch[2] || error;
+		}
 
-		const errorContent = append(errorMsg, $('div'));
-		errorContent.style.whiteSpace = 'pre-wrap';
-		errorContent.style.wordBreak = 'break-word';
-		errorContent.style.color = 'var(--vscode-foreground)';
-		errorContent.style.lineHeight = '1.5';
-		errorContent.textContent = error;
+		// 检查是否包含堆栈信息
+		const stackIndex = error.indexOf('\n    at ');
+		if (stackIndex > 0) {
+			errorMessage = error.substring(0, stackIndex);
+			errorDetails = error.substring(stackIndex);
+		}
+
+		// 使用 createErrorCard 创建美化的错误卡片
+		createErrorCard(this.messageArea, {
+			title: errorTitle,
+			message: errorMessage,
+			details: errorDetails
+		});
+
+		// U6: 解析错误消息中的LSP诊断信息并美化显示
+		const diagnostics = parseDiagnosticsFromToolResult(error);
+		if (diagnostics.length > 0) {
+			const diagnosticsContainer = append(this.messageArea, $('div'));
+			diagnosticsContainer.style.marginBottom = '10px';
+			createDiagnosticsSummary(diagnosticsContainer, diagnostics);
+		}
 
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;
 	}
@@ -1654,142 +1983,198 @@ export class MaxianView extends ViewPane {
 	/**
 	 * 渲染工具执行状态（say tool）
 	 * 更新而非每次都创建新元素，类似kilocode的ProgressIndicator
+	 * 优化：添加执行状态细分、美化文件路径、状态颜色
 	 */
 	private renderToolExecutionStatus(toolStatusJson: string): void {
 		try {
 			const toolInfo = JSON.parse(toolStatusJson);
 
-			// 根据工具类型确定图标和标题
-			let iconClass = 'codicon-tools';
-			let statusText = '正在执行工具...';
+			// 获取执行状态（默认为running）
+			const status: ToolStatus = toolInfo.status || 'running';
+			const statusText = TOOL_STATUS_TEXT[status] || '执行中';
+			const statusColor = TOOL_STATUS_COLOR[status] || 'var(--vscode-charts-blue)';
+
+			// 根据工具类型确定图标和动作描述
+			const toolIconClass = getToolIcon(toolInfo.tool);
+			let actionText = '正在执行工具';
 			let detailText = '';
 
 			switch (toolInfo.tool) {
 				case 'readFile':
-					iconClass = 'codicon-file-code';
-					statusText = '正在读取文件';
+				case 'read_file':
+					actionText = '读取文件';
 					detailText = toolInfo.path || '';
 					break;
 				case 'listFiles':
-					iconClass = 'codicon-folder-opened';
-					statusText = '正在列出文件';
+				case 'list_files':
+					actionText = '列出文件';
 					detailText = toolInfo.path || '';
 					break;
 				case 'searchFiles':
-					iconClass = 'codicon-search';
-					statusText = '正在搜索文件';
-					detailText = toolInfo.path ? `${toolInfo.path} (${toolInfo.regex})` : toolInfo.regex;
+				case 'search_files':
+				case 'grep':
+					actionText = '搜索文件';
+					detailText = toolInfo.path ? `${toolInfo.path} (${toolInfo.regex || toolInfo.pattern})` : (toolInfo.regex || toolInfo.pattern);
 					break;
 				case 'writeToFile':
-					iconClass = 'codicon-new-file';
-					statusText = '正在写入文件';
+				case 'write_to_file':
+				case 'write':
+					actionText = '写入文件';
 					detailText = toolInfo.path || '';
 					break;
 				case 'applyDiff':
-					iconClass = 'codicon-diff';
-					statusText = '正在应用差异';
-					detailText = toolInfo.path || '';
+				case 'apply_diff':
+				case 'edit':
+					actionText = '应用差异';
+					detailText = toolInfo.path || toolInfo.file_path || '';
 					break;
 				case 'executeCommand':
-					iconClass = 'codicon-terminal';
-					statusText = '正在执行命令';
+				case 'execute_command':
+				case 'bash':
+					actionText = '执行命令';
 					detailText = toolInfo.command || '';
 					break;
 				case 'askFollowupQuestion':
-					iconClass = 'codicon-comment-discussion';
-					statusText = '正在提问';
+				case 'ask_followup_question':
+					actionText = '提问';
 					detailText = '';
 					break;
 				case 'attemptCompletion':
-					iconClass = 'codicon-check';
-					statusText = '正在完成任务';
+				case 'attempt_completion':
+					actionText = '完成任务';
 					detailText = '';
 					break;
 				case 'insertContent':
-					iconClass = 'codicon-add';
-					statusText = '正在插入内容';
+				case 'insert_content':
+					actionText = '插入内容';
 					detailText = toolInfo.path || '';
 					break;
 				case 'searchAndReplace':
-					iconClass = 'codicon-find-replace';
-					statusText = '正在搜索替换';
+				case 'search_and_replace':
+					actionText = '搜索替换';
 					detailText = toolInfo.path || '';
 					break;
+				case 'webfetch':
+				case 'web_fetch':
+					actionText = '获取网页';
+					detailText = toolInfo.url || '';
+					break;
+				case 'websearch':
+				case 'web_search':
+					actionText = '搜索网页';
+					detailText = toolInfo.query || '';
+					break;
 				default:
-					statusText = `正在执行 ${toolInfo.tool}`;
+					actionText = `执行 ${toolInfo.tool}`;
 					detailText = toolInfo.params ? toolInfo.params.join(', ') : '';
 			}
+
+			// 组合状态文本
+			const fullStatusText = status === 'running' ? `正在${actionText}` : `${actionText} - ${statusText}`;
 
 			// 如果已有工具状态元素，更新内容而不是创建新的
 			if (this.currentToolStatusElement) {
 				// 更新图标
 				const iconElement = this.currentToolStatusElement.querySelector('.tool-status-icon') as HTMLElement;
 				if (iconElement) {
-					iconElement.className = `codicon ${iconClass} tool-status-icon`;
+					iconElement.className = `codicon ${toolIconClass} tool-status-icon`;
+					iconElement.style.color = statusColor;
 				}
 
 				// 更新状态文本
 				const textElement = this.currentToolStatusElement.querySelector('.tool-status-text') as HTMLElement;
 				if (textElement) {
-					textElement.textContent = statusText;
+					textElement.textContent = fullStatusText;
+				}
+
+				// 更新状态标签颜色
+				const statusBadge = this.currentToolStatusElement.querySelector('.tool-status-badge') as HTMLElement;
+				if (statusBadge) {
+					statusBadge.textContent = statusText;
+					statusBadge.style.backgroundColor = statusColor;
+					statusBadge.style.display = status !== 'running' ? 'inline-block' : 'none';
 				}
 
 				// 更新详情
 				const detailElement = this.currentToolStatusElement.querySelector('.tool-status-detail') as HTMLElement;
 				if (detailElement) {
 					detailElement.textContent = detailText;
+					detailElement.title = detailText;
 					detailElement.style.display = detailText ? 'block' : 'none';
+				}
+
+				// 更新加载动画
+				const loadingDots = this.currentToolStatusElement.querySelector('.tool-loading-dots') as HTMLElement;
+				if (loadingDots) {
+					loadingDots.style.display = status === 'running' ? 'inline' : 'none';
 				}
 			} else {
 				// 创建新的工具状态元素
 				const toolStatusContainer = append(this.messageArea, $('div'));
 				toolStatusContainer.style.marginBottom = '10px';
-				toolStatusContainer.style.padding = '8px 12px';
+				toolStatusContainer.style.padding = '10px 14px';
 				toolStatusContainer.style.backgroundColor = 'var(--vscode-editor-background)';
 				toolStatusContainer.style.border = '1px solid var(--vscode-widget-border)';
 				toolStatusContainer.style.borderRadius = '6px';
 				toolStatusContainer.style.display = 'flex';
 				toolStatusContainer.style.flexDirection = 'column';
-				toolStatusContainer.style.gap = '4px';
+				toolStatusContainer.style.gap = '6px';
 
-				// 状态行（图标 + 状态文本）
+				// 状态行（图标 + 状态文本 + 状态标签）
 				const statusRow = append(toolStatusContainer, $('div'));
 				statusRow.style.display = 'flex';
 				statusRow.style.alignItems = 'center';
 				statusRow.style.gap = '8px';
 
-				// 图标（带旋转动画表示进行中）
-				const toolIcon = append(statusRow, $(`span.codicon.${iconClass}.tool-status-icon`));
-				toolIcon.style.color = 'var(--vscode-charts-blue)';
+				// 图标
+				const toolIcon = append(statusRow, $(`span.codicon.${toolIconClass}.tool-status-icon`));
+				toolIcon.style.color = statusColor;
 				toolIcon.style.fontSize = '14px';
+				toolIcon.style.flexShrink = '0';
 
 				// 状态文本
 				const toolText = append(statusRow, $('span.tool-status-text'));
 				toolText.style.fontSize = '13px';
 				toolText.style.color = 'var(--vscode-foreground)';
 				toolText.style.fontWeight = '500';
-				toolText.textContent = statusText;
+				toolText.textContent = fullStatusText;
 
 				// 加载指示器（三个点动画）
-				const loadingDots = append(statusRow, $('span'));
+				const loadingDots = append(statusRow, $('span.tool-loading-dots'));
 				loadingDots.style.color = 'var(--vscode-descriptionForeground)';
-				loadingDots.style.marginLeft = '4px';
+				loadingDots.style.marginLeft = '2px';
 				loadingDots.textContent = '...';
 				loadingDots.style.animation = 'blink 1s infinite';
+				loadingDots.style.display = status === 'running' ? 'inline' : 'none';
 
-				// 详情行（文件路径等）
+				// 状态标签（非running时显示）
+				const statusBadge = append(statusRow, $('span.tool-status-badge'));
+				statusBadge.style.fontSize = '10px';
+				statusBadge.style.padding = '2px 6px';
+				statusBadge.style.borderRadius = '10px';
+				statusBadge.style.backgroundColor = statusColor;
+				statusBadge.style.color = 'var(--vscode-button-foreground)';
+				statusBadge.style.marginLeft = 'auto';
+				statusBadge.textContent = statusText;
+				statusBadge.style.display = status !== 'running' ? 'inline-block' : 'none';
+
+				// 详情行（文件路径等）- 使用美化显示
 				const detailRow = append(toolStatusContainer, $('div.tool-status-detail'));
 				detailRow.style.fontSize = '12px';
 				detailRow.style.color = 'var(--vscode-descriptionForeground)';
 				detailRow.style.fontFamily = 'var(--vscode-editor-font-family)';
-				detailRow.style.marginLeft = '22px'; // 与图标对齐
+				detailRow.style.marginLeft = '22px';
 				detailRow.style.wordBreak = 'break-all';
+				detailRow.style.overflow = 'hidden';
+				detailRow.style.textOverflow = 'ellipsis';
+				detailRow.style.whiteSpace = 'nowrap';
 				detailRow.textContent = detailText;
+				detailRow.title = detailText;
 				detailRow.style.display = detailText ? 'block' : 'none';
 
 				this.currentToolStatusElement = toolStatusContainer;
 
-				// 添加blink动画样式
+				// 添加动画样式
 				const styleId = 'maxian-tool-status-animation';
 				if (!document.getElementById(styleId)) {
 					const style = document.createElement('style');
@@ -1799,8 +2184,29 @@ export class MaxianView extends ViewPane {
 							0%, 100% { opacity: 1; }
 							50% { opacity: 0.3; }
 						}
+						@keyframes spin {
+							from { transform: rotate(0deg); }
+							to { transform: rotate(360deg); }
+						}
+						.codicon-modifier-spin {
+							animation: spin 1s linear infinite;
+						}
 					`;
 					document.head.appendChild(style);
+				}
+			}
+
+			// U6: 当工具执行完成且有输出时，解析并显示LSP诊断信息
+			if ((status === 'completed' || status === 'error') && this.currentToolStatusElement) {
+				const output = toolInfo.result || toolInfo.output || '';
+				if (output) {
+					const diagnostics = parseDiagnosticsFromToolResult(output);
+					if (diagnostics.length > 0) {
+						// 创建诊断信息容器
+						const diagnosticsContainer = append(this.messageArea, $('div'));
+						diagnosticsContainer.style.marginBottom = '10px';
+						createDiagnosticsSummary(diagnosticsContainer, diagnostics);
+					}
 				}
 			}
 
@@ -1827,6 +2233,7 @@ export class MaxianView extends ViewPane {
 
 	/**
 	 * 处理任务取消事件
+	 * 清理所有pending状态的工具确认UI
 	 */
 	private handleTaskCancelled(): void {
 		// 重置当前AI消息状态
@@ -1838,8 +2245,101 @@ export class MaxianView extends ViewPane {
 		this.awaitingUserResponse = false;
 		this.inputBox.placeholder = '输入消息... (Enter 发送, Shift+Enter 换行)';
 
-		// 静默处理，不显示任何提示消息
+		// 清理所有pending的工具确认UI
+		// 查找所有带有确认按钮的工具消息并移除或标记为已取消
+		const toolApprovalElements = this.messageArea.querySelectorAll('div[style*="border: 2px solid"]');
+		toolApprovalElements.forEach((element) => {
+			const buttons = element.querySelectorAll('button');
+			if (buttons.length > 0) {
+				// 有按钮表示是等待确认的UI
+				// 禁用所有按钮
+				buttons.forEach((btn) => {
+					(btn as HTMLButtonElement).disabled = true;
+					(btn as HTMLButtonElement).style.opacity = '0.5';
+				});
+
+				// 添加取消标记
+				const cancelMark = document.createElement('div');
+				cancelMark.style.marginTop = '8px';
+				cancelMark.style.padding = '6px 10px';
+				cancelMark.style.backgroundColor = 'var(--vscode-inputValidation-warningBackground)';
+				cancelMark.style.border = '1px solid var(--vscode-charts-orange)';
+				cancelMark.style.borderRadius = '4px';
+				cancelMark.style.fontSize = '12px';
+				cancelMark.style.color = 'var(--vscode-charts-orange)';
+				cancelMark.style.display = 'flex';
+				cancelMark.style.alignItems = 'center';
+				cancelMark.style.gap = '6px';
+				cancelMark.innerHTML = '<span class="codicon codicon-warning"></span><span>任务已取消</span>';
+				element.appendChild(cancelMark);
+			}
+		});
+
+		// 关闭可能打开的diff编辑器
+		this.maxianService.closeDiffWithoutSave().catch(() => {
+			// 静默处理错误
+		});
+
+		// 显示取消提示
+		const cancelMsg = append(this.messageArea, $('div'));
+		cancelMsg.style.marginBottom = '10px';
+		cancelMsg.style.padding = '8px 12px';
+		cancelMsg.style.backgroundColor = 'var(--vscode-inputValidation-warningBackground)';
+		cancelMsg.style.border = '1px solid var(--vscode-charts-orange)';
+		cancelMsg.style.borderRadius = '6px';
+		cancelMsg.style.display = 'flex';
+		cancelMsg.style.alignItems = 'center';
+		cancelMsg.style.gap = '8px';
+		cancelMsg.style.fontSize = '13px';
+		cancelMsg.style.color = 'var(--vscode-foreground)';
+
+		const cancelIcon = append(cancelMsg, $('span.codicon.codicon-stop-circle'));
+		cancelIcon.style.color = 'var(--vscode-charts-orange)';
+
+		const cancelText = append(cancelMsg, $('span'));
+		cancelText.textContent = '任务已取消';
+
 		// 滚动到底部
+		this.messageArea.scrollTop = this.messageArea.scrollHeight;
+	}
+
+	/**
+	 * 处理Token使用量事件
+	 * 在消息区域显示token统计
+	 */
+	private handleTokenUsage(event: ITokenUsageEvent): void {
+		// 创建token统计显示
+		const tokenStatsContainer = append(this.messageArea, $('div'));
+		tokenStatsContainer.style.marginBottom = '10px';
+		tokenStatsContainer.style.padding = '8px 12px';
+		tokenStatsContainer.style.backgroundColor = 'var(--vscode-editor-background)';
+		tokenStatsContainer.style.border = '1px solid var(--vscode-widget-border)';
+		tokenStatsContainer.style.borderRadius = '6px';
+		tokenStatsContainer.style.display = 'flex';
+		tokenStatsContainer.style.alignItems = 'center';
+		tokenStatsContainer.style.justifyContent = 'space-between';
+		tokenStatsContainer.style.fontSize = '11px';
+
+		// 左侧：模式标签
+		const modeLabel = append(tokenStatsContainer, $('span'));
+		modeLabel.style.color = 'var(--vscode-descriptionForeground)';
+		modeLabel.style.display = 'flex';
+		modeLabel.style.alignItems = 'center';
+		modeLabel.style.gap = '6px';
+
+		const modeIcon = append(modeLabel, $('span.codicon.codicon-dashboard'));
+		modeIcon.style.fontSize = '12px';
+
+		const modeText = append(modeLabel, $('span'));
+		modeText.textContent = `${event.mode} 模式`;
+
+		// 右侧：Token统计
+		renderTokenStats(tokenStatsContainer, {
+			inputTokens: event.promptTokens,
+			outputTokens: event.completionTokens,
+			cost: undefined // 如果需要成本计算，可以调用 calculateCost
+		});
+
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;
 	}
 
@@ -2023,10 +2523,8 @@ export class MaxianView extends ViewPane {
 			if (answer) {
 				// 调用MaxianService的handleAskResponse方法
 				this.maxianService.handleAskResponse(message.ts, 'messageResponse', answer);
-				// 禁用输入和按钮
-				inputArea.disabled = true;
-				submitButton.disabled = true;
-				submitButton.textContent = '已提交';
+				// 移除询问消息元素
+				questionMsg.remove();
 			}
 		};
 
@@ -2170,26 +2668,81 @@ export class MaxianView extends ViewPane {
 		failedMsg.style.borderRadius = '8px';
 		failedMsg.style.borderLeft = '4px solid var(--vscode-errorForeground)';
 
-		const failedLabel = append(failedMsg, $('div'));
+		// 标题行：图标 + 标题 + 时间戳
+		const headerRow = append(failedMsg, $('div'));
+		headerRow.style.display = 'flex';
+		headerRow.style.alignItems = 'center';
+		headerRow.style.justifyContent = 'space-between';
+		headerRow.style.marginBottom = '8px';
+
+		const titleArea = append(headerRow, $('div'));
+		titleArea.style.display = 'flex';
+		titleArea.style.alignItems = 'center';
+		titleArea.style.gap = '8px';
+
+		// 警告图标
+		const warnIcon = append(titleArea, $('span.codicon.codicon-warning'));
+		warnIcon.style.fontSize = '16px';
+		warnIcon.style.color = 'var(--vscode-charts-orange)';
+
+		const failedLabel = append(titleArea, $('span'));
 		failedLabel.style.fontWeight = '700';
-		failedLabel.style.marginBottom = '8px';
 		failedLabel.style.fontSize = '14px';
 		failedLabel.style.color = 'var(--vscode-errorForeground)';
-		failedLabel.textContent = '⚠️ API请求失败';
+		failedLabel.textContent = 'API请求失败';
 
+		// 时间戳
+		if (message.ts) {
+			const timeLabel = append(headerRow, $('span'));
+			timeLabel.style.fontSize = '11px';
+			timeLabel.style.color = 'var(--vscode-descriptionForeground)';
+			timeLabel.textContent = formatTime(message.ts);
+		}
+
+		// 解析错误信息
+		let errorMessage = message.text || 'API请求失败';
+		let retryAttempt = 1;
+
+		// 尝试解析重试次数
+		const retryMatch = errorMessage.match(/retry\s*#?(\d+)/i);
+		if (retryMatch) {
+			retryAttempt = parseInt(retryMatch[1], 10);
+		}
+
+		// 错误内容
 		const failedContent = append(failedMsg, $('div'));
 		failedContent.style.marginBottom = '12px';
 		failedContent.style.color = 'var(--vscode-foreground)';
-		failedContent.textContent = message.text || 'API请求失败，是否重试？';
+		failedContent.style.fontSize = '13px';
+		failedContent.style.lineHeight = '1.5';
+		failedContent.textContent = errorMessage;
+
+		// 重试状态提示
+		const retryStatusContainer = append(failedMsg, $('div'));
+		retryStatusContainer.style.marginBottom = '12px';
+
+		// 重试状态UI
+		let retryCountdownTimer: ReturnType<typeof setInterval> | null = null;
+		let retryCountdown = 5; // 5秒倒计时
+
+		const retryStatusEl = createRetryStatus(retryStatusContainer, {
+			attempt: retryAttempt,
+			delayMs: retryCountdown * 1000,
+			message: `第 ${retryAttempt} 次重试失败`
+		});
+
+		// 自动重试倒计时（可被用户取消）
+		let autoRetryEnabled = false; // 默认不自动重试，让用户选择
 
 		// 按钮容器
 		const buttonContainer = append(failedMsg, $('div'));
 		buttonContainer.style.display = 'flex';
 		buttonContainer.style.gap = '8px';
+		buttonContainer.style.flexWrap = 'wrap';
 
 		// Retry按钮
 		const retryButton = append(buttonContainer, $('button')) as HTMLButtonElement;
-		retryButton.textContent = '🔄 重试';
+		retryButton.innerHTML = '<span class="codicon codicon-refresh" style="margin-right:4px;"></span>立即重试';
 		retryButton.style.padding = '6px 16px';
 		retryButton.style.backgroundColor = 'var(--vscode-button-background)';
 		retryButton.style.color = 'var(--vscode-button-foreground)';
@@ -2197,16 +2750,25 @@ export class MaxianView extends ViewPane {
 		retryButton.style.borderRadius = '4px';
 		retryButton.style.cursor = 'pointer';
 		retryButton.style.fontWeight = '600';
+		retryButton.style.display = 'flex';
+		retryButton.style.alignItems = 'center';
 		retryButton.onclick = () => {
+			// 清除倒计时
+			if (retryCountdownTimer) {
+				clearInterval(retryCountdownTimer);
+				retryCountdownTimer = null;
+			}
+			retryStatusEl.remove();
+
 			this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
 			retryButton.disabled = true;
 			cancelButton.disabled = true;
-			retryButton.textContent = '正在重试...';
+			retryButton.innerHTML = '<span class="codicon codicon-loading codicon-modifier-spin" style="margin-right:4px;"></span>正在重试...';
 		};
 
 		// Cancel按钮
 		const cancelButton = append(buttonContainer, $('button')) as HTMLButtonElement;
-		cancelButton.textContent = '❌ 取消';
+		cancelButton.textContent = '取消任务';
 		cancelButton.style.padding = '6px 16px';
 		cancelButton.style.backgroundColor = 'var(--vscode-button-secondaryBackground)';
 		cancelButton.style.color = 'var(--vscode-button-secondaryForeground)';
@@ -2214,11 +2776,57 @@ export class MaxianView extends ViewPane {
 		cancelButton.style.borderRadius = '4px';
 		cancelButton.style.cursor = 'pointer';
 		cancelButton.onclick = () => {
+			// 清除倒计时
+			if (retryCountdownTimer) {
+				clearInterval(retryCountdownTimer);
+				retryCountdownTimer = null;
+			}
+			retryStatusEl.remove();
+
 			this.maxianService.handleAskResponse(message.ts, 'noButtonClicked');
 			retryButton.disabled = true;
 			cancelButton.disabled = true;
 			cancelButton.textContent = '已取消';
+			failedMsg.remove();
 		};
+
+		// 自动重试开关
+		const autoRetryToggle = append(buttonContainer, $('label')) as HTMLLabelElement;
+		autoRetryToggle.style.display = 'flex';
+		autoRetryToggle.style.alignItems = 'center';
+		autoRetryToggle.style.gap = '4px';
+		autoRetryToggle.style.fontSize = '12px';
+		autoRetryToggle.style.color = 'var(--vscode-descriptionForeground)';
+		autoRetryToggle.style.cursor = 'pointer';
+
+		const autoRetryCheckbox = append(autoRetryToggle, $('input')) as HTMLInputElement;
+		autoRetryCheckbox.type = 'checkbox';
+		autoRetryCheckbox.checked = autoRetryEnabled;
+		autoRetryCheckbox.onchange = () => {
+			autoRetryEnabled = autoRetryCheckbox.checked;
+			if (autoRetryEnabled) {
+				// 开始倒计时
+				retryCountdown = 5;
+				retryStatusEl.updateCountdown(retryCountdown * 1000);
+				retryCountdownTimer = setInterval(() => {
+					retryCountdown--;
+					retryStatusEl.updateCountdown(retryCountdown * 1000);
+					if (retryCountdown <= 0 && autoRetryEnabled) {
+						clearInterval(retryCountdownTimer!);
+						retryButton.click();
+					}
+				}, 1000);
+			} else {
+				// 停止倒计时
+				if (retryCountdownTimer) {
+					clearInterval(retryCountdownTimer);
+					retryCountdownTimer = null;
+				}
+			}
+		};
+
+		const autoRetryLabel = append(autoRetryToggle, $('span'));
+		autoRetryLabel.textContent = '自动重试';
 
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;
 	}
@@ -2226,21 +2834,11 @@ export class MaxianView extends ViewPane {
 	/**
 	 * 渲染工具批准请求（ask tool）
 	 * 解析JSON格式的工具信息，以diff模式显示文件修改
+	 * 优化：添加变更统计、美化文件路径、工具图标、展开/折叠功能
 	 */
 	private renderToolApproval(message: ClineMessage): void {
 		const toolMsg = append(this.messageArea, $('div'));
 		toolMsg.style.marginBottom = '10px';
-		toolMsg.style.padding = '12px 16px';
-		toolMsg.style.backgroundColor = 'var(--vscode-editor-inactiveSelectionBackground)';
-		toolMsg.style.border = '2px solid var(--vscode-widget-border)';
-		toolMsg.style.borderRadius = '8px';
-
-		const toolLabel = append(toolMsg, $('div'));
-		toolLabel.style.fontWeight = '700';
-		toolLabel.style.marginBottom = '8px';
-		toolLabel.style.fontSize = '14px';
-		toolLabel.style.color = 'var(--vscode-foreground)';
-		toolLabel.textContent = '🔧 工具使用确认';
 
 		// 尝试解析JSON格式的工具信息
 		let toolInfo: { tool?: string; path?: string; diff?: string; content?: string; command?: string; originalContent?: string; newContent?: string; operationCount?: number } | null = null;
@@ -2253,95 +2851,168 @@ export class MaxianView extends ViewPane {
 			toolInfo = null;
 		}
 
-		if (toolInfo && toolInfo.tool) {
-			// 显示工具类型
-			const toolTypeLabel = append(toolMsg, $('div'));
-			toolTypeLabel.style.marginBottom = '8px';
-			toolTypeLabel.style.fontSize = '13px';
-			toolTypeLabel.style.color = 'var(--vscode-descriptionForeground)';
-
+		// 工具图标和类型名称
+		const toolIconClass = toolInfo?.tool ? getToolIcon(toolInfo.tool) : 'codicon-tools';
+		let toolTypeName = '工具使用';
+		if (toolInfo?.tool) {
 			switch (toolInfo.tool) {
 				case 'appliedDiff':
-					toolTypeLabel.textContent = '📝 应用差异修改';
+					toolTypeName = '应用差异修改';
 					break;
 				case 'newFileCreated':
-					toolTypeLabel.textContent = '📄 创建新文件';
+					toolTypeName = '创建新文件';
 					break;
 				case 'editedExistingFile':
-					toolTypeLabel.textContent = '✏️ 编辑现有文件';
+					toolTypeName = '编辑现有文件';
 					break;
 				case 'insertContent':
-					toolTypeLabel.textContent = '➕ 插入内容';
+					toolTypeName = '插入内容';
 					break;
 				case 'searchAndReplace':
-					toolTypeLabel.textContent = '🔍 搜索替换';
+					toolTypeName = '搜索替换';
 					break;
 				default:
-					toolTypeLabel.textContent = `🔧 ${toolInfo.tool}`;
+					toolTypeName = toolInfo.tool;
 			}
+		}
 
-			// 显示文件路径
+		// 计算变更统计
+		let diffStats: DiffStats | null = null;
+		if (toolInfo?.diff) {
+			diffStats = calculateSearchReplaceDiffStats(toolInfo.diff);
+		} else if (toolInfo?.content) {
+			const lines = toolInfo.content.split('\n').length;
+			diffStats = { additions: lines, deletions: 0 };
+		} else if (toolInfo?.originalContent && toolInfo?.newContent) {
+			diffStats = calculateDiffStats(toolInfo.originalContent, toolInfo.newContent);
+		}
+
+		// 创建可折叠的标题元素
+		const titleElement = $('div');
+		titleElement.style.display = 'flex';
+		titleElement.style.alignItems = 'center';
+		titleElement.style.gap = '8px';
+		titleElement.style.flex = '1';
+		titleElement.style.overflow = 'hidden';
+
+		// 工具图标
+		const toolIcon = append(titleElement, $(`span.codicon.${toolIconClass}`));
+		toolIcon.style.fontSize = '14px';
+		toolIcon.style.color = 'var(--vscode-charts-blue)';
+		toolIcon.style.flexShrink = '0';
+
+		// 工具类型名称
+		const toolTypeSpan = append(titleElement, $('span'));
+		toolTypeSpan.style.fontWeight = '600';
+		toolTypeSpan.style.fontSize = '13px';
+		toolTypeSpan.style.color = 'var(--vscode-foreground)';
+		toolTypeSpan.textContent = toolTypeName;
+
+		// 文件路径摘要（显示在标题中）
+		if (toolInfo?.path) {
+			const filename = toolInfo.path.split('/').pop() || toolInfo.path;
+			const pathSummary = append(titleElement, $('span'));
+			pathSummary.style.fontSize = '12px';
+			pathSummary.style.color = 'var(--vscode-descriptionForeground)';
+			pathSummary.style.overflow = 'hidden';
+			pathSummary.style.textOverflow = 'ellipsis';
+			pathSummary.style.whiteSpace = 'nowrap';
+			pathSummary.textContent = `· ${filename}`;
+			pathSummary.title = toolInfo.path;
+		}
+
+		// 变更统计标签（显示在标题中）
+		if (diffStats && (diffStats.additions > 0 || diffStats.deletions > 0)) {
+			const statsSpan = append(titleElement, $('span'));
+			statsSpan.style.marginLeft = 'auto';
+			statsSpan.style.flexShrink = '0';
+			renderDiffStats(statsSpan, diffStats, 'default');
+		}
+
+		// 时间戳
+		if (message.ts) {
+			const timeSpan = append(titleElement, $('span'));
+			timeSpan.style.fontSize = '10px';
+			timeSpan.style.color = 'var(--vscode-descriptionForeground)';
+			timeSpan.style.marginLeft = diffStats ? '8px' : 'auto';
+			timeSpan.style.flexShrink = '0';
+			timeSpan.textContent = formatTime(message.ts);
+		}
+
+		// 创建可折叠组件
+		const collapsible = createCollapsible(toolMsg, {
+			title: titleElement,
+			defaultOpen: true, // 默认展开，因为需要用户确认
+			headerClass: 'tool-approval-header',
+			contentClass: 'tool-approval-content'
+		});
+
+		// 设置容器样式
+		collapsible.container.style.backgroundColor = 'var(--vscode-editor-inactiveSelectionBackground)';
+		collapsible.container.style.border = '2px solid var(--vscode-widget-border)';
+
+		// 在内容区域添加详细信息
+		const contentArea = collapsible.content;
+
+		if (toolInfo && toolInfo.tool) {
+			// 显示完整文件路径
 			if (toolInfo.path) {
-				const pathContainer = append(toolMsg, $('div'));
-				pathContainer.style.marginBottom = '12px';
-				pathContainer.style.display = 'flex';
-				pathContainer.style.alignItems = 'center';
-				pathContainer.style.gap = '6px';
-				pathContainer.style.overflow = 'hidden'; // 防止溢出
+				const pathRow = append(contentArea, $('div'));
+				pathRow.style.marginBottom = '12px';
+				renderFilePath(pathRow, toolInfo.path);
 
-				const pathIcon = append(pathContainer, $('span.codicon.codicon-file'));
-				pathIcon.style.color = 'var(--vscode-textLink-foreground)';
-				pathIcon.style.fontSize = '14px';
-				pathIcon.style.flexShrink = '0'; // 图标不缩小
+				// 创建提示信息容器（稍后根据结果更新）
+				const infoLabel = append(contentArea, $('div'));
+				infoLabel.style.marginBottom = '12px';
+				infoLabel.style.fontSize = '12px';
+				infoLabel.style.color = 'var(--vscode-descriptionForeground)';
+				infoLabel.style.fontStyle = 'italic';
+				infoLabel.textContent = '正在打开差异视图...';
 
-				const pathText = append(pathContainer, $('span'));
-				pathText.style.fontFamily = 'var(--vscode-editor-font-family)';
-				pathText.style.fontSize = '13px';
-				pathText.style.color = 'var(--vscode-textLink-foreground)';
-				pathText.style.fontWeight = '600';
-				pathText.style.overflow = 'hidden';
-				pathText.style.textOverflow = 'ellipsis';
-				pathText.style.whiteSpace = 'nowrap';
-				pathText.title = toolInfo.path; // 鼠标悬停显示完整路径
-				pathText.textContent = toolInfo.path;
-
-				// 自动打开diff视图（在编辑器中显示）
+				// 自动打开diff视图
 				const filePath = toolInfo.path;
 				if (toolInfo.diff) {
-					// 对于apply_diff工具，在编辑器中打开diff视图
 					const diffContent = toolInfo.diff;
-					this.maxianService.applyDiffView(filePath, diffContent).catch(() => {
-						// Diff视图打开失败
+					this.maxianService.applyDiffView(filePath, diffContent).then(success => {
+						if (success) {
+							infoLabel.textContent = '💡 完整的差异视图已在左侧编辑器中打开';
+						} else {
+							infoLabel.textContent = '⚠️ 无法打开差异视图，请查看右侧面板中的变更预览';
+							infoLabel.style.color = 'var(--vscode-charts-orange)';
+						}
+					}).catch(() => {
+						infoLabel.textContent = '⚠️ 打开差异视图失败';
+						infoLabel.style.color = 'var(--vscode-errorForeground)';
 					});
 				} else if (toolInfo.content) {
-					// 对于新文件创建，在编辑器中打开diff视图
 					const newContent = toolInfo.content;
-					this.maxianService.openDiffView(filePath, newContent).catch(() => {
-						// 新文件视图打开失败
+					this.maxianService.openDiffView(filePath, newContent).then(success => {
+						if (success) {
+							infoLabel.textContent = '💡 完整的差异视图已在左侧编辑器中打开';
+						} else {
+							infoLabel.textContent = '⚠️ 无法打开差异视图，请查看右侧面板中的变更预览';
+							infoLabel.style.color = 'var(--vscode-charts-orange)';
+						}
+					}).catch(() => {
+						infoLabel.textContent = '⚠️ 打开差异视图失败';
+						infoLabel.style.color = 'var(--vscode-errorForeground)';
 					});
 				} else if (toolInfo.originalContent && toolInfo.newContent) {
-					// 对于search_and_replace工具，显示搜索替换的对比
-					// 这里我们直接使用openDiffView，传入新内容
-					// 由于search_and_replace是对文件的部分修改，我们不能直接打开完整文件的diff
-					// 暂时显示操作数量
-					const operationInfo = append(toolMsg, $('div'));
+					const operationInfo = append(contentArea, $('div'));
 					operationInfo.style.marginBottom = '8px';
 					operationInfo.style.fontSize = '12px';
 					operationInfo.style.color = 'var(--vscode-descriptionForeground)';
 					operationInfo.textContent = `共 ${toolInfo.operationCount || 0} 个替换操作`;
+					// 没有diff视图，更新提示信息
+					infoLabel.textContent = '💡 请查看上方的变更详情';
+				} else {
+					// 没有diff相关内容，隐藏提示
+					infoLabel.style.display = 'none';
 				}
 			}
-
-			// 显示简化的提示信息
-			const infoLabel = append(toolMsg, $('div'));
-			infoLabel.style.marginBottom = '12px';
-			infoLabel.style.fontSize = '12px';
-			infoLabel.style.color = 'var(--vscode-descriptionForeground)';
-			infoLabel.style.fontStyle = 'italic';
-			infoLabel.textContent = '💡 完整的差异视图已在左侧编辑器中打开';
 		} else {
 			// 无法解析，显示原始文本
-			const toolContent = append(toolMsg, $('div'));
+			const toolContent = append(contentArea, $('div'));
 			toolContent.style.marginBottom = '12px';
 			toolContent.style.whiteSpace = 'pre-wrap';
 			toolContent.style.wordBreak = 'break-word';
@@ -2350,9 +3021,10 @@ export class MaxianView extends ViewPane {
 		}
 
 		// 按钮容器
-		const buttonContainer = append(toolMsg, $('div'));
+		const buttonContainer = append(contentArea, $('div'));
 		buttonContainer.style.display = 'flex';
 		buttonContainer.style.gap = '8px';
+		buttonContainer.style.flexWrap = 'wrap';
 
 		// Approve按钮
 		const approveButton = append(buttonContainer, $('button')) as HTMLButtonElement;
@@ -2364,11 +3036,15 @@ export class MaxianView extends ViewPane {
 		approveButton.style.borderRadius = '4px';
 		approveButton.style.cursor = 'pointer';
 		approveButton.style.fontWeight = '600';
-		approveButton.onclick = () => {
-			this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
+		approveButton.onclick = async () => {
 			approveButton.disabled = true;
 			denyButton.disabled = true;
-			approveButton.textContent = '已批准';
+			alwaysAllowButton.disabled = true;
+			approveButton.textContent = '正在保存...';
+
+			await this.maxianService.saveDiffAndClose();
+			this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
+			toolMsg.remove();
 		};
 
 		// Deny按钮
@@ -2380,11 +3056,50 @@ export class MaxianView extends ViewPane {
 		denyButton.style.border = 'none';
 		denyButton.style.borderRadius = '4px';
 		denyButton.style.cursor = 'pointer';
-		denyButton.onclick = () => {
-			this.maxianService.handleAskResponse(message.ts, 'noButtonClicked');
+		denyButton.onclick = async () => {
 			approveButton.disabled = true;
 			denyButton.disabled = true;
-			denyButton.textContent = '已拒绝';
+			alwaysAllowButton.disabled = true;
+			denyButton.textContent = '正在关闭...';
+
+			await this.maxianService.closeDiffWithoutSave();
+			this.maxianService.handleAskResponse(message.ts, 'noButtonClicked');
+			toolMsg.remove();
+		};
+
+		// 始终允许按钮
+		const currentToolName = toolInfo?.tool || '';
+		const alwaysAllowButton = append(buttonContainer, $('button')) as HTMLButtonElement;
+		// 使用 DOM API 而非 innerHTML（避免 CSP 问题）
+		const alwaysAllowIcon = append(alwaysAllowButton, $('span.codicon.codicon-shield'));
+		alwaysAllowIcon.style.marginRight = '4px';
+		const alwaysAllowText = append(alwaysAllowButton, $('span'));
+		alwaysAllowText.textContent = '始终允许';
+		alwaysAllowButton.style.padding = '6px 16px';
+		alwaysAllowButton.style.backgroundColor = 'transparent';
+		alwaysAllowButton.style.color = 'var(--vscode-charts-green)';
+		alwaysAllowButton.style.border = '1px solid var(--vscode-charts-green)';
+		alwaysAllowButton.style.borderRadius = '4px';
+		alwaysAllowButton.style.cursor = 'pointer';
+		alwaysAllowButton.style.fontSize = '12px';
+		alwaysAllowButton.style.display = 'flex';
+		alwaysAllowButton.style.alignItems = 'center';
+		alwaysAllowButton.title = currentToolName ? `始终允许 "${currentToolName}" 工具的操作` : '始终允许此类工具操作';
+		alwaysAllowButton.onclick = async () => {
+			approveButton.disabled = true;
+			denyButton.disabled = true;
+			alwaysAllowButton.disabled = true;
+			// 更新按钮内容为loading状态
+			alwaysAllowIcon.className = 'codicon codicon-loading codicon-modifier-spin';
+			alwaysAllowText.textContent = '设置中...';
+
+			if (currentToolName) {
+				this.maxianService.setToolAutoApprove(currentToolName, true);
+			}
+
+			await this.maxianService.saveDiffAndClose();
+			this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
+			toolMsg.remove();
 		};
 
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;
@@ -2392,37 +3107,101 @@ export class MaxianView extends ViewPane {
 
 	/**
 	 * 渲染命令批准请求（ask command）
+	 * 优化：添加展开/折叠功能
 	 */
 	private renderCommandApproval(message: ClineMessage): void {
 		const cmdMsg = append(this.messageArea, $('div'));
 		cmdMsg.style.marginBottom = '10px';
-		cmdMsg.style.padding = '12px 16px';
-		cmdMsg.style.backgroundColor = 'var(--vscode-editor-inactiveSelectionBackground)';
-		cmdMsg.style.border = '2px solid var(--vscode-widget-border)';
-		cmdMsg.style.borderRadius = '8px';
 
-		const cmdLabel = append(cmdMsg, $('div'));
-		cmdLabel.style.fontWeight = '700';
-		cmdLabel.style.marginBottom = '8px';
-		cmdLabel.style.fontSize = '14px';
+		// 提取命令摘要（取前50个字符）
+		const cmdText = message.text || '';
+		const cmdSummary = cmdText.length > 50 ? cmdText.substring(0, 50) + '...' : cmdText;
+
+		// 创建可折叠的标题元素
+		const titleElement = $('div');
+		titleElement.style.display = 'flex';
+		titleElement.style.alignItems = 'center';
+		titleElement.style.gap = '8px';
+		titleElement.style.flex = '1';
+		titleElement.style.overflow = 'hidden';
+
+		// 终端图标
+		const cmdIcon = append(titleElement, $('span.codicon.codicon-terminal'));
+		cmdIcon.style.fontSize = '14px';
+		cmdIcon.style.color = 'var(--vscode-charts-orange)';
+		cmdIcon.style.flexShrink = '0';
+
+		// 命令执行确认标签
+		const cmdLabel = append(titleElement, $('span'));
+		cmdLabel.style.fontWeight = '600';
+		cmdLabel.style.fontSize = '13px';
 		cmdLabel.style.color = 'var(--vscode-foreground)';
-		cmdLabel.textContent = '⌨️ 命令执行确认';
+		cmdLabel.textContent = '命令执行';
 
-		const cmdContent = append(cmdMsg, $('div'));
-		cmdContent.style.marginBottom = '12px';
+		// 命令摘要（显示在标题中）
+		const cmdSummarySpan = append(titleElement, $('span'));
+		cmdSummarySpan.style.fontSize = '12px';
+		cmdSummarySpan.style.color = 'var(--vscode-descriptionForeground)';
+		cmdSummarySpan.style.fontFamily = 'var(--vscode-editor-font-family)';
+		cmdSummarySpan.style.overflow = 'hidden';
+		cmdSummarySpan.style.textOverflow = 'ellipsis';
+		cmdSummarySpan.style.whiteSpace = 'nowrap';
+		cmdSummarySpan.textContent = `$ ${cmdSummary}`;
+		cmdSummarySpan.title = cmdText;
+
+		// 时间戳
+		if (message.ts) {
+			const timeSpan = append(titleElement, $('span'));
+			timeSpan.style.fontSize = '10px';
+			timeSpan.style.color = 'var(--vscode-descriptionForeground)';
+			timeSpan.style.marginLeft = 'auto';
+			timeSpan.style.flexShrink = '0';
+			timeSpan.textContent = formatTime(message.ts);
+		}
+
+		// 创建可折叠组件
+		const collapsible = createCollapsible(cmdMsg, {
+			title: titleElement,
+			defaultOpen: true,
+			headerClass: 'command-approval-header',
+			contentClass: 'command-approval-content'
+		});
+
+		// 设置容器样式
+		collapsible.container.style.backgroundColor = 'var(--vscode-editor-inactiveSelectionBackground)';
+		collapsible.container.style.border = '2px solid var(--vscode-widget-border)';
+
+		// 内容区域
+		const contentArea = collapsible.content;
+
+		// 命令内容容器
+		const cmdContentWrapper = append(contentArea, $('div'));
+		cmdContentWrapper.style.position = 'relative';
+		cmdContentWrapper.style.marginBottom = '12px';
+
+		const cmdContent = append(cmdContentWrapper, $('div'));
 		cmdContent.style.whiteSpace = 'pre-wrap';
 		cmdContent.style.wordBreak = 'break-word';
 		cmdContent.style.fontFamily = 'var(--vscode-editor-font-family)';
 		cmdContent.style.backgroundColor = 'var(--vscode-textCodeBlock-background)';
-		cmdContent.style.padding = '8px';
+		cmdContent.style.padding = '10px 40px 10px 10px';
 		cmdContent.style.borderRadius = '4px';
 		cmdContent.style.color = 'var(--vscode-foreground)';
-		cmdContent.textContent = message.text || '';
+		cmdContent.style.fontSize = '13px';
+		cmdContent.textContent = cmdText;
+
+		// 复制按钮
+		const copyBtnWrapper = append(cmdContentWrapper, $('div'));
+		copyBtnWrapper.style.position = 'absolute';
+		copyBtnWrapper.style.top = '6px';
+		copyBtnWrapper.style.right = '6px';
+		createCopyButton(copyBtnWrapper, () => cmdText);
 
 		// 按钮容器
-		const buttonContainer = append(cmdMsg, $('div'));
+		const buttonContainer = append(contentArea, $('div'));
 		buttonContainer.style.display = 'flex';
 		buttonContainer.style.gap = '8px';
+		buttonContainer.style.flexWrap = 'wrap';
 
 		// Allow按钮
 		const allowButton = append(buttonContainer, $('button')) as HTMLButtonElement;
@@ -2435,10 +3214,11 @@ export class MaxianView extends ViewPane {
 		allowButton.style.cursor = 'pointer';
 		allowButton.style.fontWeight = '600';
 		allowButton.onclick = () => {
-			this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
 			allowButton.disabled = true;
 			denyButton.disabled = true;
-			allowButton.textContent = '已允许';
+			alwaysAllowButton.disabled = true;
+			this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
+			cmdMsg.remove();
 		};
 
 		// Deny按钮
@@ -2451,10 +3231,41 @@ export class MaxianView extends ViewPane {
 		denyButton.style.borderRadius = '4px';
 		denyButton.style.cursor = 'pointer';
 		denyButton.onclick = () => {
-			this.maxianService.handleAskResponse(message.ts, 'noButtonClicked');
 			allowButton.disabled = true;
 			denyButton.disabled = true;
-			denyButton.textContent = '已拒绝';
+			alwaysAllowButton.disabled = true;
+			this.maxianService.handleAskResponse(message.ts, 'noButtonClicked');
+			cmdMsg.remove();
+		};
+
+		// 始终允许按钮
+		const alwaysAllowButton = append(buttonContainer, $('button')) as HTMLButtonElement;
+		// 使用 DOM API 而非 innerHTML（避免 CSP 问题）
+		const cmdAlwaysAllowIcon = append(alwaysAllowButton, $('span.codicon.codicon-shield'));
+		cmdAlwaysAllowIcon.style.marginRight = '4px';
+		const cmdAlwaysAllowText = append(alwaysAllowButton, $('span'));
+		cmdAlwaysAllowText.textContent = '始终允许';
+		alwaysAllowButton.style.padding = '6px 16px';
+		alwaysAllowButton.style.backgroundColor = 'transparent';
+		alwaysAllowButton.style.color = 'var(--vscode-charts-green)';
+		alwaysAllowButton.style.border = '1px solid var(--vscode-charts-green)';
+		alwaysAllowButton.style.borderRadius = '4px';
+		alwaysAllowButton.style.cursor = 'pointer';
+		alwaysAllowButton.style.fontSize = '12px';
+		alwaysAllowButton.style.display = 'flex';
+		alwaysAllowButton.style.alignItems = 'center';
+		alwaysAllowButton.title = '始终允许所有命令执行（点击后将不再询问）';
+		alwaysAllowButton.onclick = () => {
+			allowButton.disabled = true;
+			denyButton.disabled = true;
+			alwaysAllowButton.disabled = true;
+			// 更新按钮内容为loading状态
+			cmdAlwaysAllowIcon.className = 'codicon codicon-loading codicon-modifier-spin';
+			cmdAlwaysAllowText.textContent = '设置中...';
+
+			this.maxianService.setCommandAutoApprove('*', true);
+			this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
+			cmdMsg.remove();
 		};
 
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;
@@ -2574,6 +3385,9 @@ export class MaxianView extends ViewPane {
 			checkmark.style.fontSize = '14px';
 			checkmark.style.opacity = '0';
 			checkmark.style.transition = 'opacity 0.2s ease';
+			checkmark.style.flexShrink = '0';
+			checkmark.style.width = '14px';
+			checkmark.style.textAlign = 'center';
 
 			// Hover效果
 			li.onmouseenter = () => {
@@ -2775,6 +3589,9 @@ export class MaxianView extends ViewPane {
 			checkmark.style.fontSize = '14px';
 			checkmark.style.opacity = '0';
 			checkmark.style.transition = 'opacity 0.2s ease';
+			checkmark.style.flexShrink = '0';
+			checkmark.style.width = '14px';
+			checkmark.style.textAlign = 'center';
 
 			// 如果是当前模式，高亮显示
 			if (mode.slug === this.currentMode) {
@@ -2856,7 +3673,269 @@ export class MaxianView extends ViewPane {
 		console.log('[MaxianView] Updated available modes:', availableModes.map(m => m.slug), 'Current mode:', this.currentMode);
 	}
 
+	/**
+	 * 创建任务进度条区域
+	 * 显示在消息区域上方，用于展示当前任务的整体进度
+	 */
+	private createTaskProgressBar(): void {
+		// 创建进度条容器（插入到消息区域之前）
+		this.taskProgressContainer = $('div.task-progress-container');
+		this.container.insertBefore(this.taskProgressContainer, this.messageArea);
+		this.taskProgressContainer.style.padding = '8px 16px';
+		this.taskProgressContainer.style.borderBottom = '1px solid var(--vscode-widget-border)';
+		this.taskProgressContainer.style.backgroundColor = 'var(--vscode-editor-background)';
+		this.taskProgressContainer.style.display = 'none'; // 默认隐藏
+
+		// 进度条头部（步骤描述 + 进度文字）
+		const progressHeader = append(this.taskProgressContainer, $('div'));
+		progressHeader.style.display = 'flex';
+		progressHeader.style.justifyContent = 'space-between';
+		progressHeader.style.alignItems = 'center';
+		progressHeader.style.marginBottom = '6px';
+
+		// 当前步骤描述
+		this.taskProgressStep = append(progressHeader, $('span'));
+		this.taskProgressStep.style.fontSize = '12px';
+		this.taskProgressStep.style.color = 'var(--vscode-foreground)';
+		this.taskProgressStep.style.fontWeight = '500';
+		this.taskProgressStep.style.overflow = 'hidden';
+		this.taskProgressStep.style.textOverflow = 'ellipsis';
+		this.taskProgressStep.style.whiteSpace = 'nowrap';
+		this.taskProgressStep.style.flex = '1';
+		this.taskProgressStep.style.marginRight = '12px';
+		this.taskProgressStep.textContent = '正在处理...';
+
+		// 进度数字
+		this.taskProgressText = append(progressHeader, $('span'));
+		this.taskProgressText.style.fontSize = '11px';
+		this.taskProgressText.style.color = 'var(--vscode-descriptionForeground)';
+		this.taskProgressText.style.flexShrink = '0';
+		this.taskProgressText.textContent = '0/0';
+
+		// 进度条背景
+		const progressBarBg = append(this.taskProgressContainer, $('div'));
+		progressBarBg.style.width = '100%';
+		progressBarBg.style.height = '4px';
+		progressBarBg.style.backgroundColor = 'var(--vscode-progressBar-background, rgba(0, 122, 204, 0.2))';
+		progressBarBg.style.borderRadius = '2px';
+		progressBarBg.style.overflow = 'hidden';
+
+		// 进度条填充
+		this.taskProgressBar = append(progressBarBg, $('div'));
+		this.taskProgressBar.style.height = '100%';
+		this.taskProgressBar.style.width = '0%';
+		this.taskProgressBar.style.background = 'linear-gradient(90deg, var(--vscode-charts-blue), var(--vscode-charts-green))';
+		this.taskProgressBar.style.borderRadius = '2px';
+		this.taskProgressBar.style.transition = 'width 0.3s ease';
+	}
+
+	/**
+	 * 处理任务进度事件
+	 * 更新进度条显示
+	 */
+	private handleTaskProgress(event: ITaskProgressEvent): void {
+		if (!this.taskProgressContainer || !this.taskProgressBar || !this.taskProgressText || !this.taskProgressStep) {
+			return;
+		}
+
+		// 根据状态决定显示/隐藏
+		if (event.status === 'running') {
+			this.taskProgressContainer.style.display = 'block';
+
+			// 更新进度条宽度
+			const percent = event.total > 0 ? (event.current / event.total) * 100 : 0;
+			this.taskProgressBar.style.width = `${Math.min(100, percent)}%`;
+
+			// 更新进度文字
+			this.taskProgressText.textContent = `${event.current}/${event.total}`;
+
+			// 更新步骤描述
+			if (event.currentStep) {
+				this.taskProgressStep.textContent = event.currentStep;
+			} else {
+				this.taskProgressStep.textContent = `步骤 ${event.current}/${event.total}`;
+			}
+
+			// 设置进度条颜色
+			this.taskProgressBar.style.background = 'linear-gradient(90deg, var(--vscode-charts-blue), var(--vscode-charts-green))';
+
+		} else if (event.status === 'completed') {
+			// 完成时显示100%，然后渐隐
+			this.taskProgressBar.style.width = '100%';
+			this.taskProgressBar.style.background = 'var(--vscode-charts-green)';
+			this.taskProgressText.textContent = `${event.total}/${event.total}`;
+			this.taskProgressStep.textContent = '✓ 任务完成';
+
+			// 2秒后隐藏
+			setTimeout(() => {
+				if (this.taskProgressContainer) {
+					this.taskProgressContainer.style.display = 'none';
+				}
+			}, 2000);
+
+		} else if (event.status === 'error') {
+			// 错误时显示红色
+			this.taskProgressBar.style.background = 'var(--vscode-charts-red, #f14c4c)';
+			this.taskProgressStep.textContent = '✗ 任务出错';
+
+			// 3秒后隐藏
+			setTimeout(() => {
+				if (this.taskProgressContainer) {
+					this.taskProgressContainer.style.display = 'none';
+				}
+			}, 3000);
+
+		} else if (event.status === 'cancelled') {
+			// 取消时显示灰色
+			this.taskProgressBar.style.background = 'var(--vscode-descriptionForeground)';
+			this.taskProgressStep.textContent = '任务已取消';
+
+			// 2秒后隐藏
+			setTimeout(() => {
+				if (this.taskProgressContainer) {
+					this.taskProgressContainer.style.display = 'none';
+				}
+			}, 2000);
+		}
+	}
+
+	/**
+	 * 处理工具输入流式事件
+	 * 实时显示工具调用的参数信息
+	 */
+	private handleToolInputStreaming(event: IToolInputStreamingEvent): void {
+		console.log('[MaxianView] 工具输入流式:', event.toolName, event.isPartial);
+
+		// 获取或创建显示元素
+		let streamingElement = this.toolInputStreamingElements.get(event.toolId);
+
+		if (!streamingElement) {
+			// 创建新的流式显示元素
+			streamingElement = $('div.tool-input-streaming');
+			streamingElement.style.cssText = `
+				padding: 8px 12px;
+				margin: 4px 0;
+				background: var(--vscode-inputValidation-infoBackground, rgba(0, 127, 255, 0.1));
+				border-left: 3px solid var(--vscode-inputValidation-infoBorder, #007acc);
+				border-radius: 4px;
+				font-size: 12px;
+				font-family: var(--vscode-editor-font-family, monospace);
+				overflow: hidden;
+			`;
+
+			// 创建标题行
+			const headerRow = $('div.tool-input-header');
+			headerRow.style.cssText = `
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				margin-bottom: 4px;
+				color: var(--vscode-foreground);
+			`;
+
+			// 工具图标
+			const iconSpan = $('span.tool-icon');
+			iconSpan.textContent = getToolIcon(event.toolName as any);
+			headerRow.appendChild(iconSpan);
+
+			// 工具名称
+			const nameSpan = $('span.tool-name');
+			nameSpan.textContent = event.toolName;
+			nameSpan.style.fontWeight = '600';
+			headerRow.appendChild(nameSpan);
+
+			// 流式指示器
+			const streamingIndicator = $('span.streaming-indicator');
+			streamingIndicator.textContent = '⏳ 接收参数中...';
+			streamingIndicator.style.cssText = `
+				font-size: 11px;
+				color: var(--vscode-descriptionForeground);
+				margin-left: auto;
+			`;
+			headerRow.appendChild(streamingIndicator);
+
+			streamingElement.appendChild(headerRow);
+
+			// 创建参数显示区域
+			const inputArea = $('div.tool-input-content');
+			inputArea.style.cssText = `
+				max-height: 150px;
+				overflow-y: auto;
+				white-space: pre-wrap;
+				word-break: break-all;
+				color: var(--vscode-editor-foreground);
+				opacity: 0.9;
+				padding: 4px 0;
+			`;
+			streamingElement.appendChild(inputArea);
+
+			// 将元素添加到消息区域
+			this.messageArea.appendChild(streamingElement);
+			this.toolInputStreamingElements.set(event.toolId, streamingElement);
+
+			// 自动滚动到底部
+			this.messageArea.scrollTop = this.messageArea.scrollHeight;
+		}
+
+		// 更新参数内容
+		const inputArea = streamingElement.querySelector('.tool-input-content') as HTMLElement;
+		if (inputArea && event.input) {
+			try {
+				// 格式化输入参数
+				let inputText: string;
+				if (typeof event.input === 'string') {
+					inputText = event.input;
+				} else {
+					inputText = JSON.stringify(event.input, null, 2);
+				}
+
+				// 截断过长的输入
+				if (inputText.length > 500) {
+					inputText = inputText.substring(0, 500) + '\n... (已截断)';
+				}
+
+				inputArea.textContent = inputText;
+			} catch (e) {
+				inputArea.textContent = String(event.input);
+			}
+		}
+
+		// 更新流式指示器
+		const streamingIndicator = streamingElement.querySelector('.streaming-indicator') as HTMLElement;
+		if (streamingIndicator) {
+			if (event.isPartial) {
+				streamingIndicator.textContent = '⏳ 接收参数中...';
+				streamingIndicator.style.color = 'var(--vscode-charts-blue, #007acc)';
+			} else {
+				streamingIndicator.textContent = '✓ 参数已完成';
+				streamingIndicator.style.color = 'var(--vscode-charts-green, #89d185)';
+
+				// 完成后2秒移除流式显示（工具结果会替代它）
+				setTimeout(() => {
+					const element = this.toolInputStreamingElements.get(event.toolId);
+					if (element && element.parentNode) {
+						element.parentNode.removeChild(element);
+						this.toolInputStreamingElements.delete(event.toolId);
+					}
+				}, 1500);
+			}
+		}
+	}
+
+	/**
+	 * 清除所有工具输入流式显示
+	 */
+	private clearToolInputStreaming(): void {
+		for (const [_toolId, element] of this.toolInputStreamingElements) {
+			if (element.parentNode) {
+				element.parentNode.removeChild(element);
+			}
+		}
+		this.toolInputStreamingElements.clear();
+	}
+
 	override dispose(): void {
+		this.clearToolInputStreaming();
 		super.dispose();
 	}
 }

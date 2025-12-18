@@ -29,7 +29,12 @@ import {
 import { AgentOrchestrator, TaskContext } from '../agents/index.js';
 import { ToolResultCache } from '../tools/ToolResultCache.js';
 import { ErrorHandler } from './ErrorHandler.js';
-import { ContextCompactor, CompactableMessage } from '../context/contextCompaction.js';
+import {
+	ContextCompactor,
+	CompactableMessage,
+	AISummaryCompactor,
+	TieredCompactionManager,
+} from '../context/contextCompaction.js';
 
 const MAX_CONSECUTIVE_MISTAKES = 3; // 最大连续错误次数
 
@@ -101,6 +106,15 @@ export class TaskService extends Disposable {
 	private readonly _onUserInputRequired = this._register(new Emitter<{ question: string; toolUseId: string }>());
 	readonly onUserInputRequired: Event<{ question: string; toolUseId: string }> = this._onUserInputRequired.event;
 
+	// 工具输入流式事件（用于实时显示工具调用信息）
+	private readonly _onToolInputStreaming = this._register(new Emitter<{
+		toolId: string;
+		toolName: string;
+		input: any;
+		isPartial: boolean;
+	}>());
+	readonly onToolInputStreaming = this._onToolInputStreaming.event;
+
 	// Task metadata
 	readonly taskId: string;
 	readonly metadata: TaskMetadata;
@@ -145,6 +159,12 @@ export class TaskService extends Disposable {
 	// P0优化：上下文压缩器
 	private readonly contextCompactor: ContextCompactor;
 
+	// AI摘要压缩器
+	private readonly aiSummaryCompactor: AISummaryCompactor;
+
+	// 分层压缩管理器
+	private readonly tieredCompactionManager: TieredCompactionManager;
+
 	// Message history
 	private apiConversationHistory: MessageParam[] = [];
 	clineMessages: ClineMessage[] = [];
@@ -157,6 +177,20 @@ export class TaskService extends Disposable {
 		contextTokens: 0
 	};
 	toolUsage: ToolUsage = {};
+
+	// 步骤追踪
+	private currentStepIndex: number = 0;
+	private totalSteps: number = 0;
+	private currentStepDescription: string = '';
+
+	// 步骤更新事件
+	private readonly _onStepUpdated = this._register(new Emitter<{
+		current: number;
+		total: number;
+		description: string;
+		status: 'running' | 'completed' | 'error';
+	}>());
+	readonly onStepUpdated = this._onStepUpdated.event;
 
 	constructor(options: TaskServiceOptions) {
 		super();
@@ -189,6 +223,8 @@ export class TaskService extends Disposable {
 
 		// P0优化：初始化上下文压缩器
 		this.contextCompactor = new ContextCompactor(MAX_CONTEXT_TOKENS);
+		this.aiSummaryCompactor = new AISummaryCompactor();
+		this.tieredCompactionManager = new TieredCompactionManager();
 
 		// 初始化 Agent 编排器
 		this.agentOrchestrator = new AgentOrchestrator(
@@ -514,20 +550,37 @@ export class TaskService extends Disposable {
 
 		this.setStatus(TaskStatus.PROCESSING);
 
+		// 初始化步骤追踪（估算总步骤数，后续根据规划结果调整）
+		this.setTotalSteps(5); // 初始估算：分析 -> 规划 -> 执行 -> 验证 -> 完成
+		this.updateStep('正在分析任务...');
+
 		try {
 			// 获取初始任务描述
 			const initialTask = this.getInitialTaskDescription();
 
 			// 对于非简单任务，执行探索-规划阶段
 			if (initialTask && this.shouldPerformExplorationAndPlanning(initialTask)) {
+				this.updateStep('正在探索代码库...');
 				await this.performExplorationAndPlanning(initialTask);
+
+				// 如果有规划结果，更新总步骤数
+				if (this.taskContext?.planResult?.data?.steps) {
+					const planSteps = this.taskContext.planResult.data.steps.length;
+					this.setTotalSteps(planSteps + 2); // 规划步骤 + 验证 + 完成
+					this.currentStepIndex = 2; // 已完成分析和规划
+				}
 			}
 
 			// 执行主任务循环
+			this.updateStep('正在执行任务...');
 			await this.initiateTaskLoop();
+
+			// 任务完成
+			this.updateStep('任务已完成', 'completed');
 			this.setStatus(TaskStatus.COMPLETED);
 		} catch (error) {
 			console.error('[TaskService] 任务执行错误:', error);
+			this.updateStep('任务执行出错', 'error');
 			this.setStatus(TaskStatus.ERROR);
 		}
 	}
@@ -703,7 +756,7 @@ export class TaskService extends Disposable {
 	 */
 	private async attemptApiRequest(retryAttempt: number): Promise<AsyncIterable<StreamChunk>> {
 		// 在发送请求前截断历史以控制 token 消耗
-		this.truncateHistoryIfNeeded();
+		await this.truncateHistoryIfNeeded();
 
 		// 获取基础系统提示词
 		let systemPrompt = await this.getSystemPrompt();
@@ -768,6 +821,15 @@ export class TaskService extends Disposable {
 					console.error('[TaskService] 工具参数解析失败:', chunk.input);
 					input = {};
 				}
+
+				// 发出工具输入流式事件（用于实时显示工具调用信息）
+				this._onToolInputStreaming.fire({
+					toolId: chunk.id,
+					toolName: chunk.name,
+					input: input,
+					isPartial: false, // 工具输入接收完整后发出
+				});
+				console.log(`[TaskService] 工具输入流式: ${chunk.name}`, input);
 
 				toolUses.push({ id: chunk.id, name: chunk.name, input });
 			} else if (chunk.type === 'usage') {
@@ -1412,15 +1474,76 @@ export class TaskService extends Disposable {
 
 	/**
 	 * 更新Token使用统计
+	 * 支持精确 Token 统计和缓存 Token 统计
 	 */
 	private updateTokenUsage(usageChunk: any): void {
+		// 精确输入 Token
 		if (usageChunk.inputTokens) {
 			this.tokenUsage.totalTokensIn += usageChunk.inputTokens;
 		}
+
+		// 精确输出 Token
 		if (usageChunk.outputTokens) {
 			this.tokenUsage.totalTokensOut += usageChunk.outputTokens;
 		}
+
+		// 缓存写入 Token（prompt caching）
+		if (usageChunk.cacheCreationInputTokens) {
+			this.tokenUsage.totalCacheWrites = (this.tokenUsage.totalCacheWrites || 0) + usageChunk.cacheCreationInputTokens;
+		}
+
+		// 缓存读取 Token（prompt caching）
+		if (usageChunk.cacheReadInputTokens) {
+			this.tokenUsage.totalCacheReads = (this.tokenUsage.totalCacheReads || 0) + usageChunk.cacheReadInputTokens;
+		}
+
+		// 更新上下文 Token（当前消息历史的估算）
+		this.tokenUsage.contextTokens = this.estimateTokens(this.apiConversationHistory);
+
+		console.log(`[TaskService] Token统计更新 - 输入:${this.tokenUsage.totalTokensIn}, 输出:${this.tokenUsage.totalTokensOut}, 缓存读:${this.tokenUsage.totalCacheReads || 0}, 缓存写:${this.tokenUsage.totalCacheWrites || 0}, 上下文:${this.tokenUsage.contextTokens}`);
+
 		this._onTokenUsageUpdated.fire(this.tokenUsage);
+	}
+
+	/**
+	 * 更新步骤状态
+	 * 发出步骤更新事件，用于UI显示当前进度
+	 */
+	private updateStep(description: string, status: 'running' | 'completed' | 'error' = 'running'): void {
+		if (status === 'running') {
+			this.currentStepIndex++;
+			this.currentStepDescription = description;
+		}
+
+		this._onStepUpdated.fire({
+			current: this.currentStepIndex,
+			total: this.totalSteps,
+			description: description,
+			status: status,
+		});
+
+		console.log(`[TaskService] 步骤更新: ${this.currentStepIndex}/${this.totalSteps} - ${description} (${status})`);
+	}
+
+	/**
+	 * 设置总步骤数
+	 * 根据规划结果或估算设置总步骤数
+	 */
+	private setTotalSteps(steps: number): void {
+		this.totalSteps = steps;
+		this.currentStepIndex = 0;
+		console.log(`[TaskService] 设置总步骤数: ${steps}`);
+	}
+
+	/**
+	 * 获取当前步骤信息
+	 */
+	public getStepInfo(): { current: number; total: number; description: string } {
+		return {
+			current: this.currentStepIndex,
+			total: this.totalSteps,
+			description: this.currentStepDescription,
+		};
 	}
 
 	/**
@@ -1430,6 +1553,13 @@ export class TaskService extends Disposable {
 		this.abort = true;
 		this.abortReason = reason;
 		this.setStatus(TaskStatus.ABORTED);
+		// 发出步骤中止事件
+		this._onStepUpdated.fire({
+			current: this.currentStepIndex,
+			total: this.totalSteps,
+			description: '任务已取消',
+			status: 'error',
+		});
 		console.log('[TaskService] 任务已中止:', this.taskId, reason);
 	}
 
@@ -1519,10 +1649,11 @@ export class TaskService extends Disposable {
 	/**
 	 * P0优化：截断对话历史以控制 token 数量
 	 * 增强策略：
-	 * 1. 使用 ContextCompactor 自动检测和修剪
-	 * 2. 如果仍然超限，再截断消息
+	 * 1. 使用 ContextCompactor 自动检测和修剪工具输出
+	 * 2. 使用 AI 摘要压缩旧消息
+	 * 3. 如果仍然超限，再截断消息
 	 */
-	private truncateHistoryIfNeeded(): void {
+	private async truncateHistoryIfNeeded(): Promise<void> {
 		const currentTokens = this.estimateTokens(this.apiConversationHistory);
 		const allowedTokens = MAX_CONTEXT_TOKENS - TOKEN_BUFFER;
 
@@ -1533,7 +1664,7 @@ export class TaskService extends Disposable {
 
 		console.log(`[TaskService] 上下文需要优化: tokens=${currentTokens}, messages=${this.apiConversationHistory.length}`);
 
-		// P0-3: 使用 ContextCompactor 自动修剪工具输出
+		// 第一层：P0-3: 使用 ContextCompactor 自动修剪工具输出
 		const compactResult = this.contextCompactor.updateMessages(this.apiConversationHistory as CompactableMessage[]);
 		if (compactResult.needsPrune) {
 			this.apiConversationHistory = compactResult.messages;
@@ -1547,8 +1678,100 @@ export class TaskService extends Disposable {
 			}
 		}
 
-		// 仍然超限，执行消息截断
-		console.log(`[TaskService] ContextCompactor 处理后仍超限，执行消息截断`);
+		// 第二层：分层压缩策略
+		const messages = this.apiConversationHistory as CompactableMessage[];
+		const afterPruneTokens = this.estimateTokens(this.apiConversationHistory);
+
+		if (this.tieredCompactionManager.shouldTieredCompact(messages, afterPruneTokens)) {
+			console.log(`[TaskService] 执行分层压缩策略`);
+
+			const tieredResult = this.tieredCompactionManager.executeTieredCompaction(messages);
+
+			// 更新消息历史
+			this.apiConversationHistory = tieredResult.messages as MessageParam[];
+			const afterTieredTokens = this.estimateTokens(this.apiConversationHistory);
+
+			console.log(`[TaskService] 分层压缩完成: Tier1=${tieredResult.tierCounts.tier1}, Tier2=${tieredResult.tierCounts.tier2}, Tier3=${tieredResult.tierCounts.tier3}, Tier4=${tieredResult.tierCounts.tier4}`);
+			console.log(`[TaskService] Token变化: ${tieredResult.originalTokens} -> ${afterTieredTokens} (节省 ${tieredResult.originalTokens - afterTieredTokens})`);
+
+			// 如果需要 AI 摘要（Tier 4 有消息）
+			if (tieredResult.needsAISummary && tieredResult.summaryPrompt) {
+				console.log(`[TaskService] 分层压缩需要 AI 摘要 (Tier4 消息数: ${tieredResult.tierCounts.tier4})`);
+
+				try {
+					// 调用 AI 生成摘要
+					const summaryStream = this.apiHandler.createMessage(
+						'你是一个专门生成对话摘要的助手。请根据提供的对话历史生成一个详细的摘要，保留所有关键技术细节。',
+						[{ role: 'user', content: [{ type: 'text', text: tieredResult.summaryPrompt }] }],
+						[]
+					);
+
+					let summaryText = '';
+					for await (const chunk of summaryStream) {
+						if (chunk.type === 'text') {
+							summaryText += chunk.text;
+						}
+					}
+
+					if (summaryText) {
+						// 整合摘要到压缩结果
+						const finalMessages = this.tieredCompactionManager.integrateSummary(tieredResult, summaryText);
+						this.apiConversationHistory = finalMessages as MessageParam[];
+
+						const finalTokens = this.estimateTokens(this.apiConversationHistory);
+						console.log(`[TaskService] 分层压缩+AI摘要完成: ${tieredResult.originalTokens} -> ${finalTokens} tokens`);
+
+						// 发出压缩完成事件
+						this.say('condense_context', JSON.stringify({
+							status: 'completed',
+							prevContextTokens: tieredResult.originalTokens,
+							newContextTokens: finalTokens,
+							summary: summaryText.substring(0, 200) + '...',
+							cost: 0,
+							autoContinue: true,
+							tiered: true, // 标记这是分层压缩
+							tierCounts: tieredResult.tierCounts,
+						}));
+					}
+				} catch (error) {
+					console.error(`[TaskService] 分层压缩 AI 摘要失败:`, error);
+					// AI 摘要失败，但分层压缩仍然有效
+				}
+			}
+
+			// 如果分层压缩后仍在限制内，直接返回
+			const newTokens = this.estimateTokens(this.apiConversationHistory);
+			if (newTokens <= allowedTokens) {
+				return;
+			}
+		}
+
+		// 第三层：P0-2: 尝试传统 AI 摘要压缩
+		const messagesAfterTiered = this.apiConversationHistory as CompactableMessage[];
+		const tokensAfterTiered = this.estimateTokens(this.apiConversationHistory);
+
+		if (this.aiSummaryCompactor.shouldSummarize(messagesAfterTiered, tokensAfterTiered)) {
+			console.log(`[TaskService] 尝试 AI 摘要压缩`);
+
+			try {
+				const summaryResult = await this.condenseContext();
+				if (summaryResult.success) {
+					const newTokens = this.estimateTokens(this.apiConversationHistory);
+					console.log(`[TaskService] AI摘要压缩完成: 从 ${summaryResult.originalTokens} tokens 压缩到 ${summaryResult.newTokens} tokens`);
+
+					// 如果压缩后仍在限制内，直接返回
+					if (newTokens <= allowedTokens) {
+						return;
+					}
+				}
+			} catch (error) {
+				console.error(`[TaskService] AI摘要压缩失败:`, error);
+				// 压缩失败，继续使用截断策略
+			}
+		}
+
+		// 最终层：仍然超限，执行消息截断
+		console.log(`[TaskService] 处理后仍超限，执行消息截断`);
 
 		// 保留第一条消息（任务描述）
 		const firstMessage = this.apiConversationHistory[0];
@@ -1564,6 +1787,104 @@ export class TaskService extends Disposable {
 			this.apiConversationHistory = [firstMessage, ...keptMessages];
 
 			console.log(`[TaskService] 截断完成: 移除了 ${messagesToRemove} 条消息, 剩余 ${this.apiConversationHistory.length} 条`);
+		}
+	}
+
+	/**
+	 * AI摘要压缩
+	 * 调用 AI 生成对话历史的摘要，替换旧消息
+	 */
+	private async condenseContext(): Promise<{
+		success: boolean;
+		originalTokens: number;
+		newTokens: number;
+		summary?: string;
+	}> {
+		const messages = this.apiConversationHistory as CompactableMessage[];
+		const originalTokens = this.estimateTokens(this.apiConversationHistory);
+
+		// 准备压缩数据
+		const compactionPlan = this.aiSummaryCompactor.prepareCompaction(messages);
+
+		if (!compactionPlan.needsSummary) {
+			return {
+				success: false,
+				originalTokens,
+				newTokens: originalTokens,
+			};
+		}
+
+		// 发出压缩开始事件（通知 UI）
+		this.say('condense_context', JSON.stringify({
+			status: 'started',
+			prevContextTokens: originalTokens,
+			messageCount: messages.length,
+		}));
+
+		try {
+			// 调用 AI 生成摘要
+			const summaryPrompt = compactionPlan.summaryPrompt!;
+			const summaryStream = this.apiHandler.createMessage(
+				'你是一个专门生成对话摘要的助手。请根据提供的对话历史生成一个详细的摘要，保留所有关键技术细节。',
+				[{ role: 'user', content: [{ type: 'text', text: summaryPrompt }] }],
+				[] // 不使用工具
+			);
+
+			// 提取摘要文本
+			let summaryText = '';
+			for await (const chunk of summaryStream) {
+				if (chunk.type === 'text') {
+					summaryText += chunk.text;
+				}
+			}
+
+			if (!summaryText) {
+				throw new Error('AI 返回空摘要');
+			}
+
+			// 处理摘要，创建新的消息历史
+			const result = this.aiSummaryCompactor.processSummary(
+				summaryText,
+				compactionPlan.messagesToKeep
+			);
+
+			// 更新消息历史
+			this.apiConversationHistory = result.messages as MessageParam[];
+			const newTokens = this.estimateTokens(this.apiConversationHistory);
+
+			// 发出压缩完成事件
+			this.say('condense_context', JSON.stringify({
+				status: 'completed',
+				prevContextTokens: originalTokens,
+				newContextTokens: newTokens,
+				summary: summaryText.substring(0, 200) + '...',
+				cost: 0, // 摘要调用的成本（可选）
+				autoContinue: true, // 标记将自动继续任务
+			}));
+
+			console.log(`[TaskService] AI摘要压缩成功: ${originalTokens} -> ${newTokens} tokens，自动继续任务`);
+
+			return {
+				success: true,
+				originalTokens,
+				newTokens,
+				summary: summaryText,
+			};
+
+		} catch (error) {
+			// 发出压缩错误事件
+			this.say('condense_context_error', JSON.stringify({
+				error: error instanceof Error ? error.message : String(error),
+				prevContextTokens: originalTokens,
+			}));
+
+			console.error(`[TaskService] AI摘要压缩失败:`, error);
+
+			return {
+				success: false,
+				originalTokens,
+				newTokens: originalTokens,
+			};
 		}
 	}
 

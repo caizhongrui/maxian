@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { $, append } from '../../../../base/browser/dom.js';
+import { copyToClipboard } from './uiUtils.js';
 
 /**
  * 基于DOM的Markdown渲染器
@@ -43,13 +44,84 @@ export class MarkdownRendererDom {
 				}
 				i++; // 跳过结束标记
 
+				const codeContent = codeLines.join('\n');
+
+				// 创建代码块包装器
+				const codeBlockWrapper = append(container, $('div.code-block-wrapper'));
+				codeBlockWrapper.style.position = 'relative';
+				codeBlockWrapper.style.marginBottom = '8px';
+
+				// 代码块头部（语言标签 + 复制按钮）
+				const codeHeader = append(codeBlockWrapper, $('div.code-block-header'));
+				codeHeader.style.display = 'flex';
+				codeHeader.style.alignItems = 'center';
+				codeHeader.style.justifyContent = 'space-between';
+				codeHeader.style.padding = '4px 10px';
+				codeHeader.style.backgroundColor = 'var(--vscode-textCodeBlock-background)';
+				codeHeader.style.borderTopLeftRadius = '6px';
+				codeHeader.style.borderTopRightRadius = '6px';
+				codeHeader.style.borderBottom = '1px solid var(--vscode-widget-border)';
+
+				// 语言标签
+				const langLabel = append(codeHeader, $('span.code-language'));
+				langLabel.style.fontSize = '11px';
+				langLabel.style.color = 'var(--vscode-descriptionForeground)';
+				langLabel.style.textTransform = 'uppercase';
+				langLabel.textContent = language || 'code';
+
+				// 复制按钮
+				const copyBtn = append(codeHeader, $('button.code-copy-btn'));
+				copyBtn.style.background = 'transparent';
+				copyBtn.style.border = 'none';
+				copyBtn.style.cursor = 'pointer';
+				copyBtn.style.color = 'var(--vscode-descriptionForeground)';
+				copyBtn.style.fontSize = '12px';
+				copyBtn.style.padding = '2px 6px';
+				copyBtn.style.borderRadius = '4px';
+				copyBtn.style.display = 'flex';
+				copyBtn.style.alignItems = 'center';
+				copyBtn.style.gap = '4px';
+				copyBtn.style.transition = 'all 0.2s ease';
+
+				const copyIcon = append(copyBtn, $('span.codicon.codicon-copy'));
+				copyIcon.style.fontSize = '12px';
+
+				const copyText = append(copyBtn, $('span'));
+				copyText.textContent = '复制';
+
+				copyBtn.onmouseenter = () => {
+					copyBtn.style.backgroundColor = 'var(--vscode-toolbar-hoverBackground)';
+					copyBtn.style.color = 'var(--vscode-foreground)';
+				};
+				copyBtn.onmouseleave = () => {
+					copyBtn.style.backgroundColor = 'transparent';
+					copyBtn.style.color = 'var(--vscode-descriptionForeground)';
+				};
+				copyBtn.onclick = async () => {
+					const success = await copyToClipboard(codeContent);
+					if (success) {
+						copyIcon.className = 'codicon codicon-check';
+						copyIcon.style.color = 'var(--vscode-charts-green)';
+						copyText.textContent = '已复制';
+						setTimeout(() => {
+							copyIcon.className = 'codicon codicon-copy';
+							copyIcon.style.color = '';
+							copyText.textContent = '复制';
+						}, 2000);
+					}
+				};
+
 				// 创建代码块元素
-				const pre = append(container, $('pre.code-block'));
+				const pre = append(codeBlockWrapper, $('pre.code-block'));
+				pre.style.margin = '0';
+				pre.style.borderTopLeftRadius = '0';
+				pre.style.borderTopRightRadius = '0';
+
 				const code = append(pre, $('code'));
 				if (language) {
 					code.className = `language-${language}`;
 				}
-				code.textContent = codeLines.join('\n');
+				code.textContent = codeContent;
 
 				// 应用代码高亮
 				this.highlightCode(code);
@@ -203,32 +275,16 @@ export class MarkdownRendererDom {
 
 	/**
 	 * 增强的代码高亮
+	 * 支持多种编程语言的语法高亮
 	 */
 	private static highlightCode(codeElement: HTMLElement): void {
 		const code = codeElement.textContent || '';
+		const language = this.detectLanguage(codeElement);
 
 		// 清空元素（使用DOM API避免CSP违规）
 		while (codeElement.firstChild) {
 			codeElement.removeChild(codeElement.firstChild);
 		}
-
-		// 通用编程语言关键字
-		const keywords = [
-			// JavaScript/TypeScript
-			'function', 'const', 'let', 'var', 'if', 'else', 'return', 'import', 'export',
-			'class', 'interface', 'type', 'async', 'await', 'for', 'while', 'switch',
-			'case', 'break', 'continue', 'try', 'catch', 'finally', 'throw', 'new',
-			'this', 'super', 'extends', 'implements', 'static', 'private', 'public', 'protected',
-			// Java
-			'public', 'private', 'protected', 'static', 'final', 'void', 'int', 'boolean',
-			'String', 'double', 'float', 'long', 'short', 'byte', 'char', 'class', 'interface',
-			'extends', 'implements', 'package', 'import', 'throws', 'throw', 'try', 'catch',
-			// Python
-			'def', 'class', 'import', 'from', 'as', 'if', 'elif', 'else', 'for', 'while',
-			'return', 'yield', 'lambda', 'with', 'pass', 'raise', 'finally', 'try', 'except',
-			// 其他
-			'true', 'false', 'null', 'undefined', 'None', 'self', 'True', 'False'
-		];
 
 		// 按行处理
 		const lines = code.split('\n');
@@ -237,89 +293,470 @@ export class MarkdownRendererDom {
 				codeElement.appendChild(document.createTextNode('\n'));
 			}
 
-			let remaining = line;
-			let pos = 0;
-
-			while (pos < remaining.length) {
-				let matched = false;
-
-				// 检查字符串 "..." 或 '...'
-				const stringMatch = remaining.substring(pos).match(/^("([^"\\]*(\\.[^"\\]*)*)"|'([^'\\]*(\\.[^'\\]*)*)')/);
-				if (stringMatch) {
-					const span = append(codeElement, $('span.string'));
-					span.textContent = stringMatch[0];
-					pos += stringMatch[0].length;
-					matched = true;
-					continue;
-				}
-
-				// 检查单行注释 // 或 #
-				if (remaining.substring(pos).match(/^(\/\/|#)/)) {
-					const span = append(codeElement, $('span.comment'));
-					span.textContent = remaining.substring(pos);
-					break;
-				}
-
-				// 检查多行注释 /* ... */
-				const multiCommentMatch = remaining.substring(pos).match(/^\/\*[\s\S]*?\*\//);
-				if (multiCommentMatch) {
-					const span = append(codeElement, $('span.comment'));
-					span.textContent = multiCommentMatch[0];
-					pos += multiCommentMatch[0].length;
-					matched = true;
-					continue;
-				}
-
-				// 检查函数调用 functionName(
-				const functionMatch = remaining.substring(pos).match(/^([a-zA-Z_]\w*)\s*\(/);
-				if (functionMatch) {
-					const span = append(codeElement, $('span.function'));
-					span.textContent = functionMatch[1];
-					pos += functionMatch[1].length;
-					matched = true;
-					continue;
-				}
-
-				// 检查类名（大写开头的标识符）
-				const classMatch = remaining.substring(pos).match(/^([A-Z][a-zA-Z0-9_]*)/);
-				if (classMatch && !keywords.includes(classMatch[1])) {
-					const span = append(codeElement, $('span.class'));
-					span.textContent = classMatch[0];
-					pos += classMatch[0].length;
-					matched = true;
-					continue;
-				}
-
-				// 检查关键字
-				for (const keyword of keywords) {
-					const regex = new RegExp(`^\\b(${keyword})\\b`);
-					const keywordMatch = remaining.substring(pos).match(regex);
-					if (keywordMatch) {
-						const span = append(codeElement, $('span.keyword'));
-						span.textContent = keywordMatch[0];
-						pos += keywordMatch[0].length;
-						matched = true;
-						break;
-					}
-				}
-				if (matched) {
-					continue;
-				}
-
-				// 检查数字
-				const numberMatch = remaining.substring(pos).match(/^\b(\d+\.?\d*)\b/);
-				if (numberMatch) {
-					const span = append(codeElement, $('span.number'));
-					span.textContent = numberMatch[0];
-					pos += numberMatch[0].length;
-					matched = true;
-					continue;
-				}
-
-				// 普通字符
-				codeElement.appendChild(document.createTextNode(remaining[pos]));
-				pos++;
-			}
+			this.highlightLine(line, codeElement, language);
 		});
+	}
+
+	/**
+	 * 检测代码语言
+	 */
+	private static detectLanguage(codeElement: HTMLElement): string {
+		const className = codeElement.className || '';
+		const langMatch = className.match(/language-(\w+)/);
+		return langMatch ? langMatch[1].toLowerCase() : 'text';
+	}
+
+	/**
+	 * 高亮单行代码
+	 */
+	private static highlightLine(line: string, container: HTMLElement, language: string): void {
+		let pos = 0;
+
+		while (pos < line.length) {
+			const remaining = line.substring(pos);
+
+			// 1. 检查装饰器 @decorator
+			const decoratorMatch = remaining.match(/^@[a-zA-Z_]\w*/);
+			if (decoratorMatch) {
+				const span = append(container, $('span.decorator'));
+				span.textContent = decoratorMatch[0];
+				pos += decoratorMatch[0].length;
+				continue;
+			}
+
+			// 2. 检查模板字符串 `...${...}...`
+			if (remaining.startsWith('`')) {
+				const templateResult = this.parseTemplateString(remaining);
+				if (templateResult) {
+					this.renderTemplateString(templateResult.content, container);
+					pos += templateResult.length;
+					continue;
+				}
+			}
+
+			// 3. 检查正则表达式 /pattern/flags
+			const regexMatch = remaining.match(/^\/(?:[^/\\]|\\.)+\/[gimsuvy]*/);
+			if (regexMatch && this.isRegexContext(line, pos)) {
+				const span = append(container, $('span.regexp'));
+				span.textContent = regexMatch[0];
+				pos += regexMatch[0].length;
+				continue;
+			}
+
+			// 4. 检查多行字符串（Python三引号）
+			const tripleQuoteMatch = remaining.match(/^("""|''')[\s\S]*?\1/);
+			if (tripleQuoteMatch) {
+				const span = append(container, $('span.string'));
+				span.textContent = tripleQuoteMatch[0];
+				pos += tripleQuoteMatch[0].length;
+				continue;
+			}
+
+			// 5. 检查字符串 "..." 或 '...'
+			const stringMatch = remaining.match(/^("([^"\\]*(\\.[^"\\]*)*)"|'([^'\\]*(\\.[^'\\]*)*)')/);
+			if (stringMatch) {
+				const span = append(container, $('span.string'));
+				span.textContent = stringMatch[0];
+				pos += stringMatch[0].length;
+				continue;
+			}
+
+			// 6. 检查单行注释 // 或 # 或 --
+			const commentPrefixes = ['///', '//', '#', '--'];
+			for (const prefix of commentPrefixes) {
+				if (remaining.startsWith(prefix)) {
+					const span = append(container, $('span.comment'));
+					span.textContent = remaining;
+					return; // 注释占据剩余行
+				}
+			}
+
+			// 7. 检查多行注释开始 /* 或 <!--
+			const multiCommentMatch = remaining.match(/^(\/\*[\s\S]*?\*\/|<!--[\s\S]*?-->)/);
+			if (multiCommentMatch) {
+				const span = append(container, $('span.comment'));
+				span.textContent = multiCommentMatch[0];
+				pos += multiCommentMatch[0].length;
+				continue;
+			}
+
+			// 8. 检查 JSX/XML 标签
+			if (language === 'jsx' || language === 'tsx' || language === 'xml' || language === 'html') {
+				const tagMatch = remaining.match(/^<\/?[a-zA-Z][a-zA-Z0-9.:-]*/);
+				if (tagMatch) {
+					const span = append(container, $('span.tag'));
+					span.textContent = tagMatch[0];
+					pos += tagMatch[0].length;
+					continue;
+				}
+			}
+
+			// 9. 检查属性名 (在标签内)
+			const attrMatch = remaining.match(/^([a-zA-Z_][\w-]*)\s*=/);
+			if (attrMatch && this.isInsideTag(line, pos)) {
+				const span = append(container, $('span.attribute'));
+				span.textContent = attrMatch[1];
+				pos += attrMatch[1].length;
+				continue;
+			}
+
+			// 10. 检查方法调用 .methodName(
+			const methodMatch = remaining.match(/^\.([a-zA-Z_]\w*)\s*\(/);
+			if (methodMatch) {
+				container.appendChild(document.createTextNode('.'));
+				const span = append(container, $('span.method'));
+				span.textContent = methodMatch[1];
+				pos += 1 + methodMatch[1].length;
+				continue;
+			}
+
+			// 11. 检查函数调用 functionName(
+			const functionMatch = remaining.match(/^([a-zA-Z_]\w*)\s*\(/);
+			if (functionMatch && !this.isKeyword(functionMatch[1], language)) {
+				const span = append(container, $('span.function'));
+				span.textContent = functionMatch[1];
+				pos += functionMatch[1].length;
+				continue;
+			}
+
+			// 12. 检查类型注解（TypeScript: variable: Type）
+			if (language === 'typescript' || language === 'ts') {
+				const typeMatch = remaining.match(/^:\s*([A-Z][a-zA-Z0-9_<>[\],\s]*)/);
+				if (typeMatch) {
+					container.appendChild(document.createTextNode(': '));
+					const span = append(container, $('span.type'));
+					span.textContent = typeMatch[1].trim();
+					pos += typeMatch[0].length;
+					continue;
+				}
+			}
+
+			// 13. 检查类名（大写开头的标识符）
+			const classMatch = remaining.match(/^([A-Z][a-zA-Z0-9_]*)/);
+			if (classMatch && !this.isKeyword(classMatch[1], language)) {
+				const span = append(container, $('span.class'));
+				span.textContent = classMatch[0];
+				pos += classMatch[0].length;
+				continue;
+			}
+
+			// 14. 检查常量（全大写标识符）
+			const constantMatch = remaining.match(/^([A-Z][A-Z0-9_]+)\b/);
+			if (constantMatch && constantMatch[0].length > 1) {
+				const span = append(container, $('span.constant'));
+				span.textContent = constantMatch[0];
+				pos += constantMatch[0].length;
+				continue;
+			}
+
+			// 15. 检查布尔值和空值
+			const boolNullMatch = remaining.match(/^(true|false|True|False|TRUE|FALSE)\b/);
+			if (boolNullMatch) {
+				const span = append(container, $('span.boolean'));
+				span.textContent = boolNullMatch[0];
+				pos += boolNullMatch[0].length;
+				continue;
+			}
+
+			const nullMatch = remaining.match(/^(null|undefined|nil|None|NULL)\b/);
+			if (nullMatch) {
+				const span = append(container, $('span.null'));
+				span.textContent = nullMatch[0];
+				pos += nullMatch[0].length;
+				continue;
+			}
+
+			// 16. 检查关键字
+			const keywordMatch = this.matchKeyword(remaining, language);
+			if (keywordMatch) {
+				const span = append(container, $('span.keyword'));
+				span.textContent = keywordMatch;
+				pos += keywordMatch.length;
+				continue;
+			}
+
+			// 17. 检查内置函数/类型
+			const builtinMatch = this.matchBuiltin(remaining, language);
+			if (builtinMatch) {
+				const span = append(container, $('span.builtin'));
+				span.textContent = builtinMatch;
+				pos += builtinMatch.length;
+				continue;
+			}
+
+			// 18. 检查数字（包括各种进制）
+			const numberMatch = remaining.match(/^(0x[\da-fA-F]+|0b[01]+|0o[0-7]+|\d+\.?\d*([eE][+-]?\d+)?)/);
+			if (numberMatch) {
+				const span = append(container, $('span.number'));
+				span.textContent = numberMatch[0];
+				pos += numberMatch[0].length;
+				continue;
+			}
+
+			// 19. 检查操作符
+			const operatorMatch = remaining.match(/^(===|!==|==|!=|<=|>=|=>|->|&&|\|\||[+\-*/%&|^~<>!=]=?)/);
+			if (operatorMatch) {
+				const span = append(container, $('span.operator'));
+				span.textContent = operatorMatch[0];
+				pos += operatorMatch[0].length;
+				continue;
+			}
+
+			// 20. 普通字符
+			container.appendChild(document.createTextNode(remaining[0]));
+			pos++;
+		}
+	}
+
+	/**
+	 * 解析模板字符串
+	 */
+	private static parseTemplateString(str: string): { content: string; length: number } | null {
+		if (!str.startsWith('`')) {
+			return null;
+		}
+
+		let i = 1;
+		let depth = 0;
+		let content = '`';
+
+		while (i < str.length) {
+			const char = str[i];
+
+			if (char === '\\' && i + 1 < str.length) {
+				content += char + str[i + 1];
+				i += 2;
+				continue;
+			}
+
+			if (char === '$' && str[i + 1] === '{' && depth === 0) {
+				depth++;
+				content += '${';
+				i += 2;
+				continue;
+			}
+
+			if (char === '{' && depth > 0) {
+				depth++;
+			}
+
+			if (char === '}' && depth > 0) {
+				depth--;
+			}
+
+			if (char === '`' && depth === 0) {
+				content += '`';
+				return { content, length: content.length };
+			}
+
+			content += char;
+			i++;
+		}
+
+		return null;
+	}
+
+	/**
+	 * 渲染模板字符串
+	 */
+	private static renderTemplateString(template: string, container: HTMLElement): void {
+		const parts = template.split(/(\$\{[^}]*\})/);
+
+		for (const part of parts) {
+			if (part.startsWith('${') && part.endsWith('}')) {
+				const span = append(container, $('span.template-expr'));
+				span.textContent = part;
+			} else {
+				const span = append(container, $('span.template-string'));
+				span.textContent = part;
+			}
+		}
+	}
+
+	/**
+	 * 检查是否在正则表达式上下文中
+	 */
+	private static isRegexContext(line: string, pos: number): boolean {
+		const before = line.substring(0, pos).trimEnd();
+		const regexContextPrefixes = ['=', '(', ',', '[', '!', '&', '|', ':', ';', '{', 'return', 'typeof', 'instanceof'];
+		return regexContextPrefixes.some(p => before.endsWith(p)) || before === '';
+	}
+
+	/**
+	 * 检查是否在标签内
+	 */
+	private static isInsideTag(line: string, pos: number): boolean {
+		const before = line.substring(0, pos);
+		const lastOpen = before.lastIndexOf('<');
+		const lastClose = before.lastIndexOf('>');
+		return lastOpen > lastClose;
+	}
+
+	/**
+	 * 检查是否是关键字
+	 */
+	private static isKeyword(word: string, language: string): boolean {
+		const keywords = this.getKeywords(language);
+		return keywords.includes(word);
+	}
+
+	/**
+	 * 匹配关键字
+	 */
+	private static matchKeyword(str: string, language: string): string | null {
+		const keywords = this.getKeywords(language);
+		for (const keyword of keywords) {
+			const regex = new RegExp(`^\\b(${keyword})\\b`);
+			const match = str.match(regex);
+			if (match) {
+				return match[0];
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * 获取语言关键字
+	 */
+	private static getKeywords(language: string): string[] {
+		const commonKeywords = [
+			'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'break', 'continue',
+			'return', 'try', 'catch', 'finally', 'throw', 'new', 'delete', 'typeof', 'instanceof'
+		];
+
+		const languageKeywords: Record<string, string[]> = {
+			javascript: [...commonKeywords,
+				'function', 'const', 'let', 'var', 'class', 'extends', 'super', 'this',
+				'import', 'export', 'default', 'from', 'as', 'async', 'await', 'yield',
+				'static', 'get', 'set', 'of', 'in', 'debugger', 'with'
+			],
+			typescript: [...commonKeywords,
+				'function', 'const', 'let', 'var', 'class', 'extends', 'super', 'this',
+				'import', 'export', 'default', 'from', 'as', 'async', 'await', 'yield',
+				'static', 'get', 'set', 'of', 'in', 'debugger', 'with',
+				'interface', 'type', 'enum', 'namespace', 'module', 'declare', 'abstract',
+				'implements', 'private', 'protected', 'public', 'readonly', 'keyof', 'infer',
+				'is', 'asserts', 'override'
+			],
+			python: [...commonKeywords,
+				'def', 'class', 'import', 'from', 'as', 'pass', 'raise', 'except',
+				'with', 'yield', 'lambda', 'and', 'or', 'not', 'in', 'is', 'global',
+				'nonlocal', 'assert', 'async', 'await', 'elif', 'True', 'False', 'None'
+			],
+			java: [...commonKeywords,
+				'class', 'interface', 'extends', 'implements', 'abstract', 'final',
+				'static', 'public', 'private', 'protected', 'void', 'int', 'long',
+				'float', 'double', 'boolean', 'char', 'byte', 'short', 'package',
+				'import', 'this', 'super', 'native', 'synchronized', 'volatile',
+				'transient', 'strictfp', 'enum', 'assert'
+			],
+			go: [...commonKeywords,
+				'func', 'package', 'import', 'var', 'const', 'type', 'struct',
+				'interface', 'map', 'chan', 'range', 'select', 'defer', 'go',
+				'fallthrough', 'goto'
+			],
+			rust: [...commonKeywords,
+				'fn', 'let', 'mut', 'const', 'static', 'struct', 'enum', 'trait',
+				'impl', 'mod', 'pub', 'crate', 'super', 'self', 'use', 'as', 'where',
+				'async', 'await', 'move', 'ref', 'type', 'dyn', 'unsafe', 'extern',
+				'loop', 'match', 'if', 'else'
+			],
+			sql: [
+				'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'NOT', 'IN', 'LIKE', 'BETWEEN',
+				'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'ON', 'GROUP', 'BY', 'HAVING',
+				'ORDER', 'ASC', 'DESC', 'LIMIT', 'OFFSET', 'INSERT', 'INTO', 'VALUES',
+				'UPDATE', 'SET', 'DELETE', 'CREATE', 'TABLE', 'INDEX', 'DROP', 'ALTER',
+				'ADD', 'COLUMN', 'PRIMARY', 'KEY', 'FOREIGN', 'REFERENCES', 'NULL',
+				'DEFAULT', 'UNIQUE', 'CHECK', 'CONSTRAINT', 'UNION', 'ALL', 'DISTINCT',
+				'AS', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'EXISTS', 'TRUNCATE'
+			],
+			bash: [
+				'if', 'then', 'else', 'elif', 'fi', 'case', 'esac', 'for', 'while',
+				'until', 'do', 'done', 'in', 'function', 'return', 'exit', 'break',
+				'continue', 'export', 'local', 'readonly', 'shift', 'source', 'declare',
+				'echo', 'read', 'set', 'unset', 'eval', 'exec', 'trap'
+			],
+			css: [
+				'@import', '@media', '@keyframes', '@font-face', '@supports', '@page',
+				'!important'
+			]
+		};
+
+		// 处理别名
+		const aliases: Record<string, string> = {
+			'js': 'javascript',
+			'ts': 'typescript',
+			'tsx': 'typescript',
+			'jsx': 'javascript',
+			'py': 'python',
+			'rb': 'ruby',
+			'sh': 'bash',
+			'shell': 'bash',
+			'zsh': 'bash'
+		};
+
+		const normalizedLang = aliases[language] || language;
+		return languageKeywords[normalizedLang] || commonKeywords;
+	}
+
+	/**
+	 * 匹配内置函数/类型
+	 */
+	private static matchBuiltin(str: string, language: string): string | null {
+		const builtins = this.getBuiltins(language);
+		for (const builtin of builtins) {
+			const regex = new RegExp(`^\\b(${builtin})\\b`);
+			const match = str.match(regex);
+			if (match) {
+				return match[0];
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * 获取内置函数/类型
+	 */
+	private static getBuiltins(language: string): string[] {
+		const builtins: Record<string, string[]> = {
+			javascript: [
+				'console', 'Math', 'JSON', 'Object', 'Array', 'String', 'Number', 'Boolean',
+				'Date', 'RegExp', 'Error', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Promise',
+				'Symbol', 'Proxy', 'Reflect', 'parseInt', 'parseFloat', 'isNaN', 'isFinite',
+				'encodeURI', 'decodeURI', 'encodeURIComponent', 'decodeURIComponent',
+				'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'fetch',
+				'document', 'window', 'navigator', 'location', 'history', 'localStorage',
+				'sessionStorage', 'XMLHttpRequest', 'FormData', 'Blob', 'File', 'FileReader',
+				'URL', 'URLSearchParams', 'Headers', 'Request', 'Response', 'AbortController'
+			],
+			typescript: [
+				'console', 'Math', 'JSON', 'Object', 'Array', 'String', 'Number', 'Boolean',
+				'Date', 'RegExp', 'Error', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Promise',
+				'Symbol', 'Proxy', 'Reflect', 'Partial', 'Required', 'Readonly', 'Pick',
+				'Omit', 'Exclude', 'Extract', 'NonNullable', 'ReturnType', 'Parameters',
+				'ConstructorParameters', 'InstanceType', 'Record', 'Awaited'
+			],
+			python: [
+				'print', 'len', 'range', 'str', 'int', 'float', 'bool', 'list', 'dict',
+				'set', 'tuple', 'type', 'isinstance', 'issubclass', 'hasattr', 'getattr',
+				'setattr', 'delattr', 'open', 'input', 'format', 'sorted', 'reversed',
+				'enumerate', 'zip', 'map', 'filter', 'reduce', 'any', 'all', 'sum', 'min',
+				'max', 'abs', 'round', 'pow', 'divmod', 'hex', 'oct', 'bin', 'ord', 'chr',
+				'repr', 'eval', 'exec', 'compile', 'globals', 'locals', 'vars', 'dir',
+				'help', 'id', 'hash', 'iter', 'next', 'slice', 'super', 'classmethod',
+				'staticmethod', 'property', 'object', 'Exception', 'BaseException'
+			]
+		};
+
+		const aliases: Record<string, string> = {
+			'js': 'javascript',
+			'ts': 'typescript',
+			'tsx': 'typescript',
+			'jsx': 'javascript',
+			'py': 'python'
+		};
+
+		const normalizedLang = aliases[language] || language;
+		return builtins[normalizedLang] || [];
 	}
 }

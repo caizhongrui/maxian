@@ -95,6 +95,8 @@ export interface ContextCondense {
 	prevContextTokens: number;
 	newContextTokens: number;
 	summary: string;
+	/** 标记是否会自动继续任务 */
+	autoContinue?: boolean;
 }
 
 /**

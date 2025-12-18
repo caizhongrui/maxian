@@ -104,12 +104,17 @@ export interface ToolUseStreamChunk {
 
 /**
  * 使用量流块
+ * 支持精确 Token 统计和缓存 Token 统计
  */
 export interface UsageStreamChunk {
 	type: 'usage';
 	inputTokens: number;
 	outputTokens: number;
 	totalTokens: number;
+	/** 缓存读取的 token 数（用于 prompt caching） */
+	cacheReadInputTokens?: number;
+	/** 缓存写入的 token 数（用于 prompt caching） */
+	cacheCreationInputTokens?: number;
 }
 
 /**
