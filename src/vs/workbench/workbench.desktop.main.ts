@@ -210,7 +210,7 @@ import './contrib/database/browser/database.contribution.js';
 import './contrib/database/electron-sandbox/databaseService.js';
 
 // RepoMap Service (P1优化：PageRank智能排序)
-import './contrib/maxian/node/repomap/repoMapServiceImpl.js';
+import './contrib/maxian/electron-sandbox/repoMapService.js';
 
 //#endregion
 

@@ -122,6 +122,8 @@ import { ICSSDevelopmentService, CSSDevelopmentService } from '../../platform/cs
 import { ExtensionSignatureVerificationService, IExtensionSignatureVerificationService } from '../../platform/extensionManagement/node/extensionSignatureVerificationService.js';
 import { IDatabaseMainService } from '../../workbench/contrib/database/electron-main/databaseMainService.js';
 import { DatabaseServiceImpl } from '../../workbench/contrib/database/node/databaseServiceImpl.js';
+import { IRepoMapService } from '../../workbench/contrib/maxian/common/repomap/repoMapService.js';
+import { RepoMapService } from '../../workbench/contrib/maxian/node/repomap/repoMapServiceImpl.js';
 
 /**
  * The main VS Code application. There will only ever be one instance,
@@ -1125,6 +1127,9 @@ export class CodeApplication extends Disposable {
 		// Database
 		services.set(IDatabaseMainService, new SyncDescriptor(DatabaseServiceImpl, undefined, true));
 
+		// RepoMap
+		services.set(IRepoMapService, new SyncDescriptor(RepoMapService, undefined, true));
+
 		// Init services that require it
 		await Promises.settled([
 			backupMainService.initialize(),
@@ -1256,6 +1261,10 @@ export class CodeApplication extends Disposable {
 		// Database
 		const databaseChannel = ProxyChannel.fromService(accessor.get(IDatabaseMainService), disposables);
 		mainProcessElectronServer.registerChannel('database', databaseChannel);
+
+		// RepoMap
+		const repoMapChannel = ProxyChannel.fromService(accessor.get(IRepoMapService), disposables);
+		mainProcessElectronServer.registerChannel('repoMap', repoMapChannel);
 	}
 
 	private async openFirstWindow(accessor: ServicesAccessor, initialProtocolUrls: IInitialProtocolUrls | undefined): Promise<ICodeWindow[]> {

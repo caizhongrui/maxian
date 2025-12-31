@@ -11,10 +11,10 @@
  */
 
 import * as path from 'path';
-import { TagExtractor } from './TagExtractor';
-import { ReferenceGraphBuilder } from './ReferenceGraphBuilder';
-import { PageRankSorter } from './PageRankSorter';
-import { Tag, RepoMapOptions, RepoMapContext } from './types';
+import { TagExtractor } from './TagExtractor.js';
+import { ReferenceGraphBuilder } from './ReferenceGraphBuilder.js';
+import { PageRankSorter } from './PageRankSorter.js';
+import { Tag, RepoMapOptions, RepoMapContext } from './types.js';
 
 /**
  * RepoMapGenerator - 主类

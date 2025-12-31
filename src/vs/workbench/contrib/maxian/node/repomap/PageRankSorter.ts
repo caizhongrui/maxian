@@ -9,8 +9,8 @@
  * 参考 Aider 的实现（第506行 nx.pagerank）和后续的rank分配逻辑
  */
 
-import { DirectedGraph } from './ReferenceGraphBuilder';
-import { Tag, PageRankConfig } from './types';
+import { DirectedGraph } from './ReferenceGraphBuilder.js';
+import { Tag, PageRankConfig } from './types.js';
 
 /**
  * PageRankSorter - 实现PageRank算法

@@ -4,7 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2275ab4c-04ae-4410-9ed3-fbad38337a34" name="Changes" comment="" />
+    <list default="true" id="2275ab4c-04ae-4410-9ed3-fbad38337a34" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/src/vs/workbench/contrib/maxian/browser/EnvironmentContextTracker.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/vs/workbench/contrib/maxian/browser/EnvironmentContextTracker.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/vs/workbench/contrib/maxian/node/repomap/repoMapServiceImpl.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/vs/workbench/contrib/maxian/node/repomap/repoMapServiceImpl.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/vs/workbench/workbench.desktop.main.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/vs/workbench/workbench.desktop.main.ts" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -26,8 +30,9 @@
   "keyToString": {
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "temp-clean-branch",
+    "git-widget-placeholder": "feature/agent-architecture-optimization",
     "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -57,6 +62,7 @@
       <updated>1764121827754</updated>
       <workItem from="1764121830157" duration="619000" />
       <workItem from="1764549576750" duration="600000" />
+      <workItem from="1767162777218" duration="358000" />
     </task>
     <servers />
   </component>

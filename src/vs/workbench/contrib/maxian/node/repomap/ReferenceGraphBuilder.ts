@@ -9,7 +9,7 @@
  * 参考 Aider 的 get_ranked_tags 实现
  */
 
-import { Tag, GraphEdge, WeightFactors } from './types';
+import { Tag, GraphEdge, WeightFactors } from './types.js';
 
 /**
  * 简化的图结构

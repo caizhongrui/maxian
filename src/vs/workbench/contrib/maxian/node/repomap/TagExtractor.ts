@@ -12,7 +12,7 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as TreeSitter from 'web-tree-sitter';
-import { Tag, TagCacheEntry, SupportedLanguage, LanguageConfig } from './types';
+import { Tag, TagCacheEntry, SupportedLanguage, LanguageConfig } from './types.js';
 
 /**
  * 语言配置映射

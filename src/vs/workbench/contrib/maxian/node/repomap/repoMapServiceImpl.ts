@@ -7,7 +7,6 @@ import { IRepoMapService, IRepoMapContext } from '../../common/repomap/repoMapSe
 import { RepoMapGenerator } from './RepoMapGenerator.js';
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { URI } from '../../../../../base/common/uri.js';
-import { registerSingleton, InstantiationType } from '../../../../../platform/instantiation/common/extensions.js';
 import * as path from 'path';
 
 /**
@@ -122,6 +121,3 @@ export class RepoMapService implements IRepoMapService {
 		};
 	}
 }
-
-// 注册服务
-registerSingleton(IRepoMapService, RepoMapService, InstantiationType.Delayed);

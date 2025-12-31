@@ -70,17 +70,17 @@ export class EnvironmentContextTracker {
 		const activeTerminals: TerminalInfo[] = [];
 
 		for (const terminal of terminals) {
-			const isRunning = terminal.processReady;
-
+			// 简化：假设所有存在的终端都是运行中的
+			// VSCode内部API对终端状态的访问有限制
 			activeTerminals.push({
 				id: terminal.instanceId.toString(),
 				name: terminal.title,
-				isRunning,
-				processId: undefined  // VSCode内部API限制
+				isRunning: true,  // 简化实现
+				processId: undefined
 			});
 		}
 
-		return activeTerminals.filter(t => t.isRunning);
+		return activeTerminals;
 	}
 
 	/**
