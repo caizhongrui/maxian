@@ -272,6 +272,11 @@ export class TagExtractor {
 
 		// 4. 解析代码
 		const tree = parser.parse(code);
+		if (!tree) {
+			console.error('[TagExtractor] 解析失败:', filePath);
+			return [];
+		}
+
 		const relPath = path.relative(this.workspaceRoot, filePath);
 
 		// 5. 提取定义和引用
