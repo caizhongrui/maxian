@@ -6,7 +6,7 @@
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
-import * as path from 'path';
+import { basename, extname } from '../../../../base/common/path.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { ITerminalService } from '../../terminal/browser/terminal.js';
 import { ISearchService } from '../../../services/search/common/search.js';
@@ -1986,7 +1986,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 					}
 				} else {
 					// 检查文件扩展名
-					const ext = path.extname(name);
+					const ext = extname(name);
 					if (extensions.includes(ext)) {
 						files.push(entry.resource.fsPath);
 
