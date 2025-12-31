@@ -31,6 +31,8 @@ import { DifyHandler, DifyConfiguration } from '../common/api/difyHandler.js';
 import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
 import { IAILogService } from '../../../../platform/aiLog/common/aiLog.js';
 import { IRequestService } from '../../../../platform/request/common/request.js';
+import { EnvironmentContextTracker } from '../common/context-tracking/EnvironmentContextTracker.js';
+import { FileContextTracker } from '../common/context-tracking/FileContextTracker.js';
 
 export const IMaxianService = createDecorator<IMaxianService>('maxianService');
 
@@ -331,6 +333,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private autoApprovedTools: Set<string> = new Set();  // 自动批准的工具名称
 	private autoApprovedCommands: Set<string> = new Set();  // 自动批准的命令（* 表示所有命令）
 
+	// 上下文跟踪器（P0优化：environment_details增强）
+	private environmentTracker: EnvironmentContextTracker;
+	private fileTracker: FileContextTracker | null = null;
+
 	constructor(
 		@IFileService private readonly fileService: IFileService,
 		@ITerminalService private readonly terminalService: ITerminalService,
@@ -350,6 +356,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 		// 使用IInstantiationService创建DiffViewProvider实例，确保依赖注入正确工作
 		this.diffViewProvider = this.instantiationService.createInstance(DiffViewProvider);
 		this._register(this.diffViewProvider);
+
+		// P0优化：初始化环境上下文跟踪器
+		this.environmentTracker = new EnvironmentContextTracker();
+		console.log('[Maxian] 环境上下文跟踪器已初始化');
 	}
 
 	/**
@@ -691,10 +701,21 @@ export class MaxianService extends Disposable implements IMaxianService {
 		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
 
 		try {
+			// P0优化：生成 environment_details 并附加到用户消息
+			const recentlyModifiedFiles = this.fileTracker?.getAndClearRecentlyModifiedFiles() || [];
+			const environmentDetails = await this.environmentTracker.generateEnvironmentDetails(recentlyModifiedFiles);
+
+			// 组合完整消息
+			const fullMessage = environmentDetails
+				? `${message}\n\n${environmentDetails}`
+				: message;
+
+			console.log('[Maxian] 已附加 environment_details，总长度:', fullMessage.length);
+
 			// 创建新的TaskService实例，并重置取消标志
 			this.currentTaskCancelled = false;
 			this.currentTask = new TaskService({
-				task: message,
+				task: fullMessage,
 				apiHandler: this.apiHandler,
 				toolExecutor: this.toolExecutor,
 				getSystemPrompt: () => this.getSystemPrompt(),
