@@ -6,6 +6,7 @@
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
+import * as path from 'path';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { ITerminalService } from '../../terminal/browser/terminal.js';
 import { ISearchService } from '../../../services/search/common/search.js';

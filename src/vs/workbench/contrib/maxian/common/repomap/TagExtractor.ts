@@ -159,29 +159,53 @@ export class TagExtractor {
 	 * 必须在使用前调用
 	 */
 	async initialize(): Promise<void> {
-		await Parser.init();
+		try {
+			await Parser.init();
 
-		// 初始化TypeScript解析器
-		const tsParser = new Parser();
-		const tsLang = await Parser.Language.load('/path/to/tree-sitter-typescript.wasm');
-		tsParser.setLanguage(tsLang);
-		this.parsers.set(SupportedLanguage.TypeScript, tsParser);
-		this.parsers.set(SupportedLanguage.JavaScript, tsParser);
+			// 获取wasm文件的基础路径
+			// 在VSCode扩展中，使用node_modules相对路径
+			const getWasmPath = (filename: string) => {
+				// 使用相对路径，构建时会正确解析
+				return `${this.workspaceRoot}/node_modules/${filename}`;
+			};
 
-		// 初始化Python解析器
-		const pyParser = new Parser();
-		const pyLang = await Parser.Language.load('/path/to/tree-sitter-python.wasm');
-		pyParser.setLanguage(pyLang);
-		this.parsers.set(SupportedLanguage.Python, pyParser);
+			// 初始化TypeScript解析器
+			const tsParser = new Parser();
+			try {
+				const tsLang = await Parser.Language.load(getWasmPath('tree-sitter-typescript/tree-sitter-typescript.wasm'));
+				tsParser.setLanguage(tsLang);
+				this.parsers.set(SupportedLanguage.TypeScript, tsParser);
+				this.parsers.set(SupportedLanguage.JavaScript, tsParser);
+			} catch (e) {
+				console.warn('[TagExtractor] TypeScript解析器加载失败:', e);
+			}
 
-		// 初始化Java解析器
-		const javaParser = new Parser();
-		const javaLang = await Parser.Language.load('/path/to/tree-sitter-java.wasm');
-		javaParser.setLanguage(javaLang);
-		this.parsers.set(SupportedLanguage.Java, javaParser);
+			// 初始化Python解析器
+			const pyParser = new Parser();
+			try {
+				const pyLang = await Parser.Language.load(getWasmPath('tree-sitter-python/tree-sitter-python.wasm'));
+				pyParser.setLanguage(pyLang);
+				this.parsers.set(SupportedLanguage.Python, pyParser);
+			} catch (e) {
+				console.warn('[TagExtractor] Python解析器加载失败:', e);
+			}
 
-		if (this.verbose) {
-			console.log('[TagExtractor] 初始化完成，支持语言:', Array.from(this.parsers.keys()));
+			// 初始化Java解析器
+			const javaParser = new Parser();
+			try {
+				const javaLang = await Parser.Language.load(getWasmPath('tree-sitter-java/tree-sitter-java.wasm'));
+				javaParser.setLanguage(javaLang);
+				this.parsers.set(SupportedLanguage.Java, javaParser);
+			} catch (e) {
+				console.warn('[TagExtractor] Java解析器加载失败:', e);
+			}
+
+			if (this.verbose) {
+				console.log('[TagExtractor] 初始化完成，支持语言:', Array.from(this.parsers.keys()));
+			}
+		} catch (error) {
+			console.error('[TagExtractor] 初始化失败:', error);
+			// 即使初始化失败，也不抛出错误，只是功能降级
 		}
 	}
 
