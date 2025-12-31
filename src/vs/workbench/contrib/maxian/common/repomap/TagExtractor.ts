@@ -290,7 +290,7 @@ export class TagExtractor {
 	 * 使用query提取符号
 	 */
 	private async extractWithQuery(
-		tree: Parser.Tree,
+		tree: TreeSitter.Tree,
 		queryStr: string,
 		kind: 'def' | 'ref',
 		relPath: string,
