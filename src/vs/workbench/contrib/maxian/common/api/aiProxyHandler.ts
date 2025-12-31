@@ -170,7 +170,8 @@ export class AiProxyHandler implements IApiHandler {
 				...(aiProxyTools && aiProxyTools.length > 0 ? {
 					tools: aiProxyTools,
 					toolChoice: 'auto',
-					parallelToolCalls: true  // 启用并行工具调用（驼峰命名，匹配后端Java DTO）
+					parallelToolCalls: true,        // 启用并行工具调用（驼峰命名，匹配后端Java DTO）
+					parallel_tool_calls: true       // 同时发送下划线格式（阿里云千问API格式）
 				} : {})
 			};
 
@@ -185,15 +186,17 @@ export class AiProxyHandler implements IApiHandler {
 			// 调试日志：确认工具是否正确发送
 			console.log('[Maxian] AiProxy 请求:', {
 				businessCode: requestBody.businessCode,
-			provider: requestBody.provider,
-			model: requestBody.model,
+				provider: requestBody.provider,
+				model: requestBody.model,
 				apiType: requestBody.apiType,
 				toolsCount: aiProxyTools?.length || 0,
 				messagesCount: aiProxyMessages.length,
-				hasTools: !!(aiProxyTools && aiProxyTools.length > 0)
+				hasTools: !!(aiProxyTools && aiProxyTools.length > 0),
+				parallelToolCalls: requestBody.parallelToolCalls  // ✅ 显示并行工具调用状态
 			});
 			if (aiProxyTools && aiProxyTools.length > 0) {
 				console.log('[Maxian] 工具列表:', aiProxyTools.map(t => t.function.name));
+				console.log('[Maxian] 并行工具调用已启用 - AI可以在一次响应中调用多个工具');
 			}
 
 			// 构建 API 端点
