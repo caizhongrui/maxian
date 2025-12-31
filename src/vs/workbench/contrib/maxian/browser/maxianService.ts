@@ -34,7 +34,8 @@ import { IAILogService } from '../../../../platform/aiLog/common/aiLog.js';
 import { IRequestService } from '../../../../platform/request/common/request.js';
 import { EnvironmentContextTracker } from '../common/context-tracking/EnvironmentContextTracker.js';
 import { FileContextTracker } from '../common/context-tracking/FileContextTracker.js';
-import { RepoMapGenerator, RepoMapContext } from '../common/repomap/index.js';
+// TODO: RepoMap需要在node层实现service接口，browser层不能直接使用
+// import { RepoMapGenerator, RepoMapContext } from '../node/repomap/index.js';
 
 export const IMaxianService = createDecorator<IMaxianService>('maxianService');
 
@@ -340,7 +341,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private fileTracker: FileContextTracker | null = null;
 
 	// RepoMap生成器（P1优化：最大影响50-60%）
-	private repoMapGenerator: RepoMapGenerator | null = null;
+	// TODO: 需要在node层实现service接口
+	// private repoMapGenerator: RepoMapGenerator | null = null;
 	private lastRepoMap: string | null = null;
 	private lastRepoMapTime: number = 0;
 
@@ -423,16 +425,17 @@ export class MaxianService extends Disposable implements IMaxianService {
 		console.log('[Maxian] 工具执行器已初始化，工作区:', workspaceRoot);
 
 		// P1优化：初始化 RepoMapGenerator
-		if (workspaceRoot) {
-			this.repoMapGenerator = new RepoMapGenerator({
-				workspaceRoot,
-				maxTokens: 2048,
-				mapMulNoFiles: 8,
-				verbose: false  // 生产环境设为false
-			});
-			await this.repoMapGenerator.initialize();
-			console.log('[Maxian] RepoMapGenerator已初始化');
-		}
+		// TODO: 需要创建RepoMapService在node层，browser层通过service接口调用
+		// if (workspaceRoot) {
+		// 	this.repoMapGenerator = new RepoMapGenerator({
+		// 		workspaceRoot,
+		// 		maxTokens: 2048,
+		// 		mapMulNoFiles: 8,
+		// 		verbose: false
+		// 	});
+		// 	await this.repoMapGenerator.initialize();
+		// 	console.log('[Maxian] RepoMapGenerator已初始化');
+		// }
 
 		// 从StorageService读取认证凭据（与authService使用相同的key）
 		const credentials = this.loadAuthCredentials();
@@ -725,10 +728,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 			const environmentDetails = await this.environmentTracker.generateEnvironmentDetails(recentlyModifiedFiles);
 
 			// P1优化：生成 RepoMap（首次或文件变化时）
+			// TODO: 暂时禁用，需要在node层实现service
 			let repoMap = '';
-			if (this.repoMapGenerator && this.shouldGenerateRepoMap(recentlyModifiedFiles)) {
-				repoMap = await this.generateRepoMap(workspaceRoot);
-			}
+			// if (this.repoMapGenerator && this.shouldGenerateRepoMap(recentlyModifiedFiles)) {
+			// 	repoMap = await this.generateRepoMap(workspaceRoot);
+			// }
 
 			// 组合完整消息
 			const messageParts = [message];
