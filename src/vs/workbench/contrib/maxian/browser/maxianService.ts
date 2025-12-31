@@ -33,6 +33,7 @@ import { IAILogService } from '../../../../platform/aiLog/common/aiLog.js';
 import { IRequestService } from '../../../../platform/request/common/request.js';
 import { EnvironmentContextTracker } from '../common/context-tracking/EnvironmentContextTracker.js';
 import { FileContextTracker } from '../common/context-tracking/FileContextTracker.js';
+import { RepoMapGenerator, RepoMapContext } from '../common/repomap/index.js';
 
 export const IMaxianService = createDecorator<IMaxianService>('maxianService');
 
@@ -337,6 +338,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private environmentTracker: EnvironmentContextTracker;
 	private fileTracker: FileContextTracker | null = null;
 
+	// RepoMap生成器（P1优化：最大影响50-60%）
+	private repoMapGenerator: RepoMapGenerator | null = null;
+	private lastRepoMap: string | null = null;
+	private lastRepoMapTime: number = 0;
+
 	constructor(
 		@IFileService private readonly fileService: IFileService,
 		@ITerminalService private readonly terminalService: ITerminalService,
@@ -414,6 +420,18 @@ export class MaxianService extends Disposable implements IMaxianService {
 		);
 
 		console.log('[Maxian] 工具执行器已初始化，工作区:', workspaceRoot);
+
+		// P1优化：初始化 RepoMapGenerator
+		if (workspaceRoot) {
+			this.repoMapGenerator = new RepoMapGenerator({
+				workspaceRoot,
+				maxTokens: 2048,
+				mapMulNoFiles: 8,
+				verbose: false  // 生产环境设为false
+			});
+			await this.repoMapGenerator.initialize();
+			console.log('[Maxian] RepoMapGenerator已初始化');
+		}
 
 		// 从StorageService读取认证凭据（与authService使用相同的key）
 		const credentials = this.loadAuthCredentials();
@@ -705,12 +723,26 @@ export class MaxianService extends Disposable implements IMaxianService {
 			const recentlyModifiedFiles = this.fileTracker?.getAndClearRecentlyModifiedFiles() || [];
 			const environmentDetails = await this.environmentTracker.generateEnvironmentDetails(recentlyModifiedFiles);
 
-			// 组合完整消息
-			const fullMessage = environmentDetails
-				? `${message}\n\n${environmentDetails}`
-				: message;
+			// P1优化：生成 RepoMap（首次或文件变化时）
+			let repoMap = '';
+			if (this.repoMapGenerator && this.shouldGenerateRepoMap(recentlyModifiedFiles)) {
+				repoMap = await this.generateRepoMap(workspaceRoot);
+			}
 
-			console.log('[Maxian] 已附加 environment_details，总长度:', fullMessage.length);
+			// 组合完整消息
+			const messageParts = [message];
+			if (environmentDetails) {
+				messageParts.push(environmentDetails);
+			}
+			if (repoMap) {
+				messageParts.push(repoMap);
+			}
+			const fullMessage = messageParts.join('\n\n');
+
+			console.log('[Maxian] 消息组合完成，总长度:', fullMessage.length,
+				'(原始:', message.length,
+				'+ env:', environmentDetails.length,
+				'+ repomap:', repoMap.length, ')');
 
 			// 创建新的TaskService实例，并重置取消标志
 			this.currentTaskCancelled = false;
@@ -1819,8 +1851,161 @@ export class MaxianService extends Disposable implements IMaxianService {
 		console.log('[Maxian] 所有自动批准规则已清除');
 	}
 
+	/**
+	 * 判断是否应该生成RepoMap
+	 * 策略：首次使用或有文件修改时重新生成
+	 */
+	private shouldGenerateRepoMap(recentlyModifiedFiles: string[]): boolean {
+		// 1. 首次生成
+		if (!this.lastRepoMap) {
+			return true;
+		}
+
+		// 2. 有文件修改（重新生成以反映最新代码结构）
+		if (recentlyModifiedFiles.length > 0) {
+			return true;
+		}
+
+		// 3. 距离上次生成超过5分钟（避免过于频繁）
+		const now = Date.now();
+		if (now - this.lastRepoMapTime > 5 * 60 * 1000) {
+			return true;
+		}
+
+		// 使用缓存
+		return false;
+	}
+
+	/**
+	 * 生成RepoMap
+	 */
+	private async generateRepoMap(workspaceRoot: string): Promise<string> {
+		if (!this.repoMapGenerator) {
+			return '';
+		}
+
+		try {
+			console.log('[Maxian] 开始生成RepoMap...');
+			const startTime = Date.now();
+
+			// 1. 获取工作区中的所有代码文件
+			const allFiles = await this.getWorkspaceCodeFiles(workspaceRoot);
+
+			// 2. 准备上下文（首次生成时chatFiles为空）
+			const context: RepoMapContext = {
+				chatFiles: [],  // TODO: 后续可以从任务历史中提取
+				otherFiles: allFiles,
+				mentionedFiles: new Set(),  // TODO: 从用户消息中提取
+				mentionedIdents: new Set(), // TODO: 从用户消息中提取
+				tokenBudget: 2048
+			};
+
+			// 3. 生成RepoMap
+			const repoMap = await this.repoMapGenerator.generateRanked(context);
+
+			const endTime = Date.now();
+			console.log(`[Maxian] RepoMap生成完成，耗时 ${endTime - startTime}ms，长度 ${repoMap.length} 字符`);
+
+			// 4. 更新缓存时间
+			this.lastRepoMap = repoMap;
+			this.lastRepoMapTime = Date.now();
+
+			return repoMap;
+		} catch (error) {
+			console.error('[Maxian] RepoMap生成失败:', error);
+			return '';
+		}
+	}
+
+	/**
+	 * 获取工作区中的所有代码文件
+	 * 排除node_modules、.git等目录
+	 */
+	private async getWorkspaceCodeFiles(workspaceRoot: string): Promise<string[]> {
+		// 简化实现：使用glob查找常见代码文件
+		const extensions = ['.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.go', '.rs', '.c', '.cpp', '.h', '.hpp'];
+		const files: string[] = [];
+
+		try {
+			const { IFileService } = await import('../../../../platform/files/common/files.js');
+			const URI = await import('../../../../base/common/uri.js');
+
+			const workspaceUri = URI.URI.file(workspaceRoot);
+
+			// 递归查找代码文件（限制深度和数量）
+			const found = await this.findCodeFilesRecursive(workspaceUri, extensions, 0, 500);
+			files.push(...found);
+
+			console.log(`[Maxian] 找到 ${files.length} 个代码文件`);
+		} catch (error) {
+			console.error('[Maxian] 获取工作区文件失败:', error);
+		}
+
+		return files;
+	}
+
+	/**
+	 * 递归查找代码文件
+	 */
+	private async findCodeFilesRecursive(
+		dirUri: any,
+		extensions: string[],
+		depth: number,
+		maxFiles: number
+	): Promise<string[]> {
+		const files: string[] = [];
+
+		// 限制递归深度
+		if (depth > 10 || files.length >= maxFiles) {
+			return files;
+		}
+
+		try {
+			const entries = await this.fileService.resolve(dirUri);
+
+			if (!entries.children) {
+				return files;
+			}
+
+			for (const entry of entries.children) {
+				const name = entry.name;
+
+				// 跳过特定目录
+				if (name === 'node_modules' || name === '.git' || name === 'dist' ||
+					name === 'build' || name === 'out' || name.startsWith('.')) {
+					continue;
+				}
+
+				if (entry.isDirectory) {
+					// 递归子目录
+					const subFiles = await this.findCodeFilesRecursive(entry.resource, extensions, depth + 1, maxFiles - files.length);
+					files.push(...subFiles);
+
+					if (files.length >= maxFiles) {
+						break;
+					}
+				} else {
+					// 检查文件扩展名
+					const ext = path.extname(name);
+					if (extensions.includes(ext)) {
+						files.push(entry.resource.fsPath);
+
+						if (files.length >= maxFiles) {
+							break;
+						}
+					}
+				}
+			}
+		} catch (error) {
+			console.error('[Maxian] 读取目录失败:', dirUri.fsPath, error);
+		}
+
+		return files;
+	}
+
 	override dispose(): void {
 		console.log('[Maxian] 码弦服务正在销毁');
 		super.dispose();
 	}
 }
+
