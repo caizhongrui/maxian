@@ -365,7 +365,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 		this._register(this.diffViewProvider);
 
 		// P0优化：初始化环境上下文跟踪器
-		this.environmentTracker = new EnvironmentContextTracker();
+		this.environmentTracker = new EnvironmentContextTracker(
+			_editorService,
+			this.terminalService,
+			this.workspaceContextService
+		);
 		console.log('[Maxian] 环境上下文跟踪器已初始化');
 	}
 

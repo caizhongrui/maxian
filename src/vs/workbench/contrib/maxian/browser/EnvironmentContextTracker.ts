@@ -3,8 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as vscode from 'vscode';
-import * as path from 'path';
+/**
+ * 环境上下文跟踪器（Browser层）
+ * 使用VSCode Service接口而不是直接导入vscode模块
+ */
+
+import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { ITerminalService } from '../../terminal/browser/terminal.js';
+import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 
 /**
  * 终端信息接口
@@ -18,103 +24,59 @@ export interface TerminalInfo {
 
 /**
  * 环境上下文跟踪器
- * 负责收集IDE环境信息，包括：
- * - 可见文件
- * - 打开的标签
- * - 活跃终端
- * - 工作区信息
+ * 通过依赖注入获取编辑器、终端等服务
  */
 export class EnvironmentContextTracker {
-	private cwd: string | undefined;
-
-	constructor() {
-		this.cwd = this.getCwd();
-	}
-
-	/**
-	 * 获取当前工作目录
-	 */
-	private getCwd(): string | undefined {
-		return vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath).at(0);
-	}
-
-	/**
-	 * 获取相对路径
-	 */
-	private getRelativePath(absolutePath: string): string {
-		if (!this.cwd) {
-			return absolutePath;
-		}
-		try {
-			const rel = path.relative(this.cwd, absolutePath);
-			// 如果相对路径以..开头，说明文件在工作区外，返回绝对路径
-			if (rel.startsWith('..')) {
-				return absolutePath;
-			}
-			return rel;
-		} catch {
-			return absolutePath;
-		}
-	}
+	constructor(
+		private readonly editorService: IEditorService,
+		private readonly terminalService: ITerminalService,
+		private readonly workspaceService: IWorkspaceContextService
+	) {}
 
 	/**
 	 * 获取当前可见的文件
-	 * Cline重点：用户正在查看的文件
 	 */
 	async getVisibleFiles(): Promise<string[]> {
-		const visibleEditors = vscode.window.visibleTextEditors;
-		const files = visibleEditors
-			.map(editor => this.getRelativePath(editor.document.uri.fsPath))
-			.filter(f => !f.includes('.git') && !f.includes('node_modules'));
+		const editors = this.editorService.visibleEditors;
+		const files: string[] = [];
 
-		return [...new Set(files)]; // 去重
-	}
-
-	/**
-	 * 获取所有打开的标签
-	 * Cline重点：所有打开的文件，不只是可见的
-	 */
-	async getOpenTabs(): Promise<string[]> {
-		const tabs: string[] = [];
-
-		// 遍历所有标签组
-		for (const tabGroup of vscode.window.tabGroups.all) {
-			for (const tab of tabGroup.tabs) {
-				if (tab.input instanceof vscode.TabInputText) {
-					const filePath = this.getRelativePath(tab.input.uri.fsPath);
-					if (!filePath.includes('.git') && !filePath.includes('node_modules')) {
-						tabs.push(filePath);
-					}
+		for (const editor of editors) {
+			const resource = editor.resource;
+			if (resource && resource.scheme === 'file') {
+				const fsPath = resource.fsPath;
+				if (!fsPath.includes('.git') && !fsPath.includes('node_modules')) {
+					files.push(this.getRelativePath(fsPath));
 				}
 			}
 		}
 
-		return [...new Set(tabs)]; // 去重
+		return [...new Set(files)];
+	}
+
+	/**
+	 * 获取所有打开的标签
+	 */
+	async getOpenTabs(): Promise<string[]> {
+		// 简化实现：使用visibleEditors
+		// VSCode源码中访问tabGroups需要更复杂的service
+		return await this.getVisibleFiles();
 	}
 
 	/**
 	 * 获取活跃终端信息
-	 * ⭐ Cline特别强调：这是environment_details中最重要的信息！
-	 * 用于避免重复启动服务（如dev server已在运行）
 	 */
 	async getActiveTerminals(): Promise<TerminalInfo[]> {
-		const terminals = vscode.window.terminals;
+		const terminals = this.terminalService.instances;
 		const activeTerminals: TerminalInfo[] = [];
 
 		for (const terminal of terminals) {
-			// 检查终端是否有正在运行的进程
-			// 注意：VSCode API限制，我们无法直接获取终端命令和输出
-			// 但可以通过exitStatus判断终端是否活跃
-			const isRunning = !terminal.exitStatus;
-
-			// processId是异步的，需要await
-			const processId = await terminal.processId;
+			const isRunning = terminal.processReady;
 
 			activeTerminals.push({
-				id: terminal.name,
-				name: terminal.name,
+				id: terminal.instanceId.toString(),
+				name: terminal.title,
 				isRunning,
-				processId
+				processId: undefined  // VSCode内部API限制
 			});
 		}
 
@@ -122,8 +84,29 @@ export class EnvironmentContextTracker {
 	}
 
 	/**
+	 * 获取相对路径
+	 */
+	private getRelativePath(absolutePath: string): string {
+		const workspace = this.workspaceService.getWorkspace();
+		const workspaceRoot = workspace.folders[0]?.uri.fsPath;
+
+		if (!workspaceRoot) {
+			return absolutePath;
+		}
+
+		try {
+			// 简单的相对路径计算
+			if (absolutePath.startsWith(workspaceRoot)) {
+				return absolutePath.substring(workspaceRoot.length + 1);
+			}
+			return absolutePath;
+		} catch {
+			return absolutePath;
+		}
+	}
+
+	/**
 	 * 生成完整的 environment_details
-	 * 这个方法会被添加到每个用户消息的末尾
 	 */
 	async generateEnvironmentDetails(recentlyModifiedFiles?: string[]): Promise<string> {
 		const sections: string[] = [];
@@ -137,26 +120,22 @@ export class EnvironmentContextTracker {
 		// 2. 打开的标签
 		const openTabs = await this.getOpenTabs();
 		if (openTabs.length > 0) {
-			// 只显示与可见文件不同的标签
 			const otherTabs = openTabs.filter(t => !visibleFiles.includes(t));
 			if (otherTabs.length > 0) {
 				sections.push(`## 打开的标签\n${otherTabs.slice(0, 10).map(f => `- ${f}`).join('\n')}`);
-				if (otherTabs.length > 10) {
-					sections.push(`还有 ${otherTabs.length - 10} 个打开的标签...`);
-				}
 			}
 		}
 
-		// 3. 活跃终端 ⭐ 重要！
+		// 3. 活跃终端
 		const terminals = await this.getActiveTerminals();
 		if (terminals.length > 0) {
 			const terminalInfo = terminals.map(t =>
-				`- ${t.name}${t.processId ? ` (PID: ${t.processId})` : ''}: 运行中`
+				`- ${t.name}: 运行中`
 			).join('\n');
 			sections.push(`## 活跃终端\n${terminalInfo}\n\n⚠️ 注意：执行命令前检查是否有相关服务正在运行，避免重复启动`);
 		}
 
-		// 4. 最近修改的文件（由外部传入）
+		// 4. 最近修改的文件
 		if (recentlyModifiedFiles && recentlyModifiedFiles.length > 0) {
 			sections.push(`## 最近修改的文件\n${recentlyModifiedFiles.map(f => `- ${f}`).join('\n')}\n\n⚠️ 这些文件可能需要重新读取`);
 		}
@@ -165,8 +144,10 @@ export class EnvironmentContextTracker {
 		sections.push(`## 当前时间\n${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`);
 
 		// 6. 工作区信息
-		if (this.cwd) {
-			sections.push(`## 工作目录\n${path.basename(this.cwd)}`);
+		const workspace = this.workspaceService.getWorkspace();
+		if (workspace.folders.length > 0) {
+			const workspaceName = workspace.folders[0].name;
+			sections.push(`## 工作目录\n${workspaceName}`);
 		}
 
 		if (sections.length === 0) {
@@ -177,12 +158,11 @@ export class EnvironmentContextTracker {
 	}
 
 	/**
-	 * 生成简化版environment_details（用于上下文压缩后）
+	 * 生成简化版environment_details
 	 */
 	async generateCompactEnvironmentDetails(): Promise<string> {
 		const sections: string[] = [];
 
-		// 只包含最关键的信息
 		const visibleFiles = await this.getVisibleFiles();
 		if (visibleFiles.length > 0) {
 			sections.push(`可见文件: ${visibleFiles.join(', ')}`);
