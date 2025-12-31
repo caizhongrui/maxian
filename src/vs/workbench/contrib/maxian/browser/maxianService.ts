@@ -1928,7 +1928,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 		const files: string[] = [];
 
 		try {
-			const { IFileService } = await import('../../../../platform/files/common/files.js');
 			const URI = await import('../../../../base/common/uri.js');
 
 			const workspaceUri = URI.URI.file(workspaceRoot);

@@ -11,8 +11,13 @@
 
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import Parser from 'web-tree-sitter';
+import * as TreeSitter from 'web-tree-sitter';
 import { Tag, TagCacheEntry, SupportedLanguage, LanguageConfig } from './types';
+
+// web-tree-sitter类型别名
+type Parser = TreeSitter.Parser;
+type Tree = TreeSitter.Tree;
+type Language = TreeSitter.Language;
 
 /**
  * 语言配置映射
@@ -160,7 +165,7 @@ export class TagExtractor {
 	 */
 	async initialize(): Promise<void> {
 		try {
-			await Parser.init();
+			await TreeSitter.init();
 
 			// 获取wasm文件的基础路径
 			// 在VSCode扩展中，使用node_modules相对路径
@@ -170,9 +175,9 @@ export class TagExtractor {
 			};
 
 			// 初始化TypeScript解析器
-			const tsParser = new Parser();
+			const tsParser = new TreeSitter();
 			try {
-				const tsLang = await Parser.Language.load(getWasmPath('tree-sitter-typescript/tree-sitter-typescript.wasm'));
+				const tsLang = await TreeSitter.Language.load(getWasmPath('tree-sitter-typescript/tree-sitter-typescript.wasm'));
 				tsParser.setLanguage(tsLang);
 				this.parsers.set(SupportedLanguage.TypeScript, tsParser);
 				this.parsers.set(SupportedLanguage.JavaScript, tsParser);
@@ -181,9 +186,9 @@ export class TagExtractor {
 			}
 
 			// 初始化Python解析器
-			const pyParser = new Parser();
+			const pyParser = new TreeSitter();
 			try {
-				const pyLang = await Parser.Language.load(getWasmPath('tree-sitter-python/tree-sitter-python.wasm'));
+				const pyLang = await TreeSitter.Language.load(getWasmPath('tree-sitter-python/tree-sitter-python.wasm'));
 				pyParser.setLanguage(pyLang);
 				this.parsers.set(SupportedLanguage.Python, pyParser);
 			} catch (e) {
@@ -191,9 +196,9 @@ export class TagExtractor {
 			}
 
 			// 初始化Java解析器
-			const javaParser = new Parser();
+			const javaParser = new TreeSitter();
 			try {
-				const javaLang = await Parser.Language.load(getWasmPath('tree-sitter-java/tree-sitter-java.wasm'));
+				const javaLang = await TreeSitter.Language.load(getWasmPath('tree-sitter-java/tree-sitter-java.wasm'));
 				javaParser.setLanguage(javaLang);
 				this.parsers.set(SupportedLanguage.Java, javaParser);
 			} catch (e) {
@@ -300,7 +305,7 @@ export class TagExtractor {
 
 		try {
 			// 创建query
-			const query = tree.getLanguage().query(queryStr);
+			const query = tree.language.query(queryStr);
 
 			// 执行query
 			const captures = query.captures(tree.rootNode);

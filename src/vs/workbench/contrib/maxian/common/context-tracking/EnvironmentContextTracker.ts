@@ -13,7 +13,7 @@ export interface TerminalInfo {
 	id: string;
 	name: string;
 	isRunning: boolean;
-	processId?: number;
+	processId?: number | undefined;
 }
 
 /**
@@ -107,11 +107,14 @@ export class EnvironmentContextTracker {
 			// 但可以通过exitStatus判断终端是否活跃
 			const isRunning = !terminal.exitStatus;
 
+			// processId是异步的，需要await
+			const processId = await terminal.processId;
+
 			activeTerminals.push({
 				id: terminal.name,
 				name: terminal.name,
 				isRunning,
-				processId: terminal.processId
+				processId
 			});
 		}
 
