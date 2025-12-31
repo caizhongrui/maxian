@@ -6,7 +6,6 @@
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
-import { extname } from '../../../../base/common/path.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { ITerminalService } from '../../terminal/browser/terminal.js';
 import { ISearchService } from '../../../services/search/common/search.js';
@@ -34,8 +33,7 @@ import { IAILogService } from '../../../../platform/aiLog/common/aiLog.js';
 import { IRequestService } from '../../../../platform/request/common/request.js';
 import { EnvironmentContextTracker } from '../common/context-tracking/EnvironmentContextTracker.js';
 import { FileContextTracker } from '../common/context-tracking/FileContextTracker.js';
-// TODO: RepoMap需要在node层实现service接口，browser层不能直接使用
-// import { RepoMapGenerator, RepoMapContext } from '../node/repomap/index.js';
+import { IRepoMapService, IRepoMapContext } from '../common/repomap/repoMapService.js';
 
 export const IMaxianService = createDecorator<IMaxianService>('maxianService');
 
@@ -340,9 +338,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private environmentTracker: EnvironmentContextTracker;
 	private fileTracker: FileContextTracker | null = null;
 
-	// RepoMap生成器（P1优化：最大影响50-60%）
-	// TODO: 需要在node层实现service接口
-	// private repoMapGenerator: RepoMapGenerator | null = null;
+	// RepoMap服务（P1优化：最大影响50-60%）
+	private repoMapService: IRepoMapService | null = null;
 	private lastRepoMap: string | null = null;
 	private lastRepoMapTime: number = 0;
 
@@ -358,7 +355,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IStorageService private readonly storageService: IStorageService,
 		@IAILogService private readonly aiLogService: IAILogService,
-		@IRequestService private readonly requestService: IRequestService
+		@IRequestService private readonly requestService: IRequestService,
+		@IRepoMapService private readonly _repoMapService: IRepoMapService
 	) {
 		super();
 		this.apiFactory = new ApiFactory(this.configurationService);
@@ -424,18 +422,12 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		console.log('[Maxian] 工具执行器已初始化，工作区:', workspaceRoot);
 
-		// P1优化：初始化 RepoMapGenerator
-		// TODO: 需要创建RepoMapService在node层，browser层通过service接口调用
-		// if (workspaceRoot) {
-		// 	this.repoMapGenerator = new RepoMapGenerator({
-		// 		workspaceRoot,
-		// 		maxTokens: 2048,
-		// 		mapMulNoFiles: 8,
-		// 		verbose: false
-		// 	});
-		// 	await this.repoMapGenerator.initialize();
-		// 	console.log('[Maxian] RepoMapGenerator已初始化');
-		// }
+		// P1优化：初始化 RepoMapService
+		if (workspaceRoot) {
+			this.repoMapService = this._repoMapService;
+			await this.repoMapService.initialize(workspaceRoot);
+			console.log('[Maxian] RepoMapService已初始化');
+		}
 
 		// 从StorageService读取认证凭据（与authService使用相同的key）
 		const credentials = this.loadAuthCredentials();
@@ -728,11 +720,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 			const environmentDetails = await this.environmentTracker.generateEnvironmentDetails(recentlyModifiedFiles);
 
 			// P1优化：生成 RepoMap（首次或文件变化时）
-			// TODO: 暂时禁用，需要在node层实现service
 			let repoMap = '';
-			// if (this.repoMapGenerator && this.shouldGenerateRepoMap(recentlyModifiedFiles)) {
-			// 	repoMap = await this.generateRepoMap(workspaceRoot);
-			// }
+			if (this.repoMapService && this.shouldGenerateRepoMap(recentlyModifiedFiles)) {
+				repoMap = await this.generateRepoMap(workspaceRoot);
+			}
 
 			// 组合完整消息
 			const messageParts = [message];
@@ -1885,7 +1876,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 	 * 生成RepoMap
 	 */
 	private async generateRepoMap(workspaceRoot: string): Promise<string> {
-		if (!this.repoMapGenerator) {
+		if (!this.repoMapService) {
 			return '';
 		}
 
@@ -1894,10 +1885,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 			const startTime = Date.now();
 
 			// 1. 获取工作区中的所有代码文件
-			const allFiles = await this.getWorkspaceCodeFiles(workspaceRoot);
+			const allFiles = await this.repoMapService.getWorkspaceCodeFiles(workspaceRoot);
 
 			// 2. 准备上下文（首次生成时chatFiles为空）
-			const context: RepoMapContext = {
+			const context: IRepoMapContext = {
 				chatFiles: [],  // TODO: 后续可以从任务历史中提取
 				otherFiles: allFiles,
 				mentionedFiles: new Set(),  // TODO: 从用户消息中提取
@@ -1906,7 +1897,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			};
 
 			// 3. 生成RepoMap
-			const repoMap = await this.repoMapGenerator.generateRanked(context);
+			const repoMap = await this.repoMapService.generateRanked(context);
 
 			const endTime = Date.now();
 			console.log(`[Maxian] RepoMap生成完成，耗时 ${endTime - startTime}ms，长度 ${repoMap.length} 字符`);
@@ -1920,91 +1911,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 			console.error('[Maxian] RepoMap生成失败:', error);
 			return '';
 		}
-	}
-
-	/**
-	 * 获取工作区中的所有代码文件
-	 * 排除node_modules、.git等目录
-	 */
-	private async getWorkspaceCodeFiles(workspaceRoot: string): Promise<string[]> {
-		// 简化实现：使用glob查找常见代码文件
-		const extensions = ['.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.go', '.rs', '.c', '.cpp', '.h', '.hpp'];
-		const files: string[] = [];
-
-		try {
-			const URI = await import('../../../../base/common/uri.js');
-
-			const workspaceUri = URI.URI.file(workspaceRoot);
-
-			// 递归查找代码文件（限制深度和数量）
-			const found = await this.findCodeFilesRecursive(workspaceUri, extensions, 0, 500);
-			files.push(...found);
-
-			console.log(`[Maxian] 找到 ${files.length} 个代码文件`);
-		} catch (error) {
-			console.error('[Maxian] 获取工作区文件失败:', error);
-		}
-
-		return files;
-	}
-
-	/**
-	 * 递归查找代码文件
-	 */
-	private async findCodeFilesRecursive(
-		dirUri: any,
-		extensions: string[],
-		depth: number,
-		maxFiles: number
-	): Promise<string[]> {
-		const files: string[] = [];
-
-		// 限制递归深度
-		if (depth > 10 || files.length >= maxFiles) {
-			return files;
-		}
-
-		try {
-			const entries = await this.fileService.resolve(dirUri);
-
-			if (!entries.children) {
-				return files;
-			}
-
-			for (const entry of entries.children) {
-				const name = entry.name;
-
-				// 跳过特定目录
-				if (name === 'node_modules' || name === '.git' || name === 'dist' ||
-					name === 'build' || name === 'out' || name.startsWith('.')) {
-					continue;
-				}
-
-				if (entry.isDirectory) {
-					// 递归子目录
-					const subFiles = await this.findCodeFilesRecursive(entry.resource, extensions, depth + 1, maxFiles - files.length);
-					files.push(...subFiles);
-
-					if (files.length >= maxFiles) {
-						break;
-					}
-				} else {
-					// 检查文件扩展名
-					const ext = extname(name);
-					if (extensions.includes(ext)) {
-						files.push(entry.resource.fsPath);
-
-						if (files.length >= maxFiles) {
-							break;
-						}
-					}
-				}
-			}
-		} catch (error) {
-			console.error('[Maxian] 读取目录失败:', dirUri.fsPath, error);
-		}
-
-		return files;
 	}
 
 	override dispose(): void {
