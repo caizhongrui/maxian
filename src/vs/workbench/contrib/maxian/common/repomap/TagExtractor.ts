@@ -14,11 +14,6 @@ import * as fs from 'fs/promises';
 import * as TreeSitter from 'web-tree-sitter';
 import { Tag, TagCacheEntry, SupportedLanguage, LanguageConfig } from './types';
 
-// web-tree-sitter类型别名
-type Parser = TreeSitter.Parser;
-type Tree = TreeSitter.Tree;
-type Language = TreeSitter.Language;
-
 /**
  * 语言配置映射
  * 定义每种语言的 tree-sitter query
@@ -139,7 +134,7 @@ const LANGUAGE_CONFIGS: Record<SupportedLanguage, LanguageConfig> = {
  * TagExtractor - 提取代码符号
  */
 export class TagExtractor {
-	private parsers: Map<SupportedLanguage, Parser> = new Map();
+	private parsers: Map<SupportedLanguage, TreeSitter.Parser> = new Map();
 	private tagsCache: Map<string, TagCacheEntry> = new Map();
 	private workspaceRoot: string;
 	private verbose: boolean;
@@ -165,7 +160,7 @@ export class TagExtractor {
 	 */
 	async initialize(): Promise<void> {
 		try {
-			await TreeSitter.init();
+			await TreeSitter.Parser.init();
 
 			// 获取wasm文件的基础路径
 			// 在VSCode扩展中，使用node_modules相对路径
@@ -175,7 +170,7 @@ export class TagExtractor {
 			};
 
 			// 初始化TypeScript解析器
-			const tsParser = new TreeSitter();
+			const tsParser = new TreeSitter.Parser();
 			try {
 				const tsLang = await TreeSitter.Language.load(getWasmPath('tree-sitter-typescript/tree-sitter-typescript.wasm'));
 				tsParser.setLanguage(tsLang);
@@ -186,7 +181,7 @@ export class TagExtractor {
 			}
 
 			// 初始化Python解析器
-			const pyParser = new TreeSitter();
+			const pyParser = new TreeSitter.Parser();
 			try {
 				const pyLang = await TreeSitter.Language.load(getWasmPath('tree-sitter-python/tree-sitter-python.wasm'));
 				pyParser.setLanguage(pyLang);
@@ -196,7 +191,7 @@ export class TagExtractor {
 			}
 
 			// 初始化Java解析器
-			const javaParser = new TreeSitter();
+			const javaParser = new TreeSitter.Parser();
 			try {
 				const javaLang = await TreeSitter.Language.load(getWasmPath('tree-sitter-java/tree-sitter-java.wasm'));
 				javaParser.setLanguage(javaLang);
