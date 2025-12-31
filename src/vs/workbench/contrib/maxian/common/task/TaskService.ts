@@ -35,6 +35,7 @@ import {
 	AISummaryCompactor,
 	TieredCompactionManager,
 } from '../context/contextCompaction.js';
+import { FocusChainManager } from '../focusChain/FocusChainManager.js';
 
 const MAX_CONSECUTIVE_MISTAKES = 3; // 最大连续错误次数
 
@@ -165,6 +166,9 @@ export class TaskService extends Disposable {
 	// 分层压缩管理器
 	private readonly tieredCompactionManager: TieredCompactionManager;
 
+	// P0优化：FocusChain 任务进度管理器
+	private readonly focusChainManager: FocusChainManager;
+
 	// Message history
 	private apiConversationHistory: MessageParam[] = [];
 	clineMessages: ClineMessage[] = [];
@@ -225,6 +229,12 @@ export class TaskService extends Disposable {
 		this.contextCompactor = new ContextCompactor(MAX_CONTEXT_TOKENS);
 		this.aiSummaryCompactor = new AISummaryCompactor();
 		this.tieredCompactionManager = new TieredCompactionManager();
+
+		// P0优化：初始化 FocusChain 任务进度管理器
+		this.focusChainManager = new FocusChainManager();
+		if (options.task) {
+			this.focusChainManager.setTaskDescription(options.task);
+		}
 
 		// 初始化 Agent 编排器
 		this.agentOrchestrator = new AgentOrchestrator(
@@ -766,6 +776,13 @@ export class TaskService extends Disposable {
 			systemPrompt = this.agentOrchestrator.generateEnhancedPrompt(systemPrompt, this.taskContext);
 		}
 
+		// P0优化：附加 FocusChain 提示词（如果需要）
+		const focusChainPrompt = this.focusChainManager.getPromptForCurrentState();
+		if (focusChainPrompt) {
+			systemPrompt += `\n\n${focusChainPrompt}`;
+			console.log('[TaskService] 已附加 FocusChain 提示词');
+		}
+
 		const toolDefinitions = this.getToolDefinitions();
 
 		// 记录当前上下文大小
@@ -777,6 +794,9 @@ export class TaskService extends Disposable {
 		} else {
 			await this.say('api_req_retried', `正在重试 API 请求 (尝试 ${retryAttempt + 1})...`);
 		}
+
+		// P0优化：增加 API 调用计数（用于FocusChain提醒）
+		this.focusChainManager.incrementApiCallCount();
 
 		return this.apiHandler.createMessage(systemPrompt, this.apiConversationHistory, toolDefinitions);
 	}
@@ -1160,6 +1180,12 @@ export class TaskService extends Disposable {
 			// 更新工具使用统计
 			this.toolUsage[toolUse.name] = (this.toolUsage[toolUse.name] || 0) + 1;
 			this.consecutiveMistakeCount = 0;
+
+			// P0优化：如果是 todowrite 工具，更新 FocusChain 清单
+			if (toolUse.name === 'todowrite' && toolUse.input && toolUse.input.todos) {
+				this.focusChainManager.updateChecklist(toolUse.input.todos);
+				console.log('[TaskService] FocusChain 清单已更新，共', toolUse.input.todos.length, '项任务');
+			}
 
 			return {
 				shouldContinue: true,
