@@ -11,8 +11,8 @@ import { createDecorator } from '../../../../../platform/instantiation/common/in
 export interface IRepoMapContext {
 	chatFiles: string[];             // 当前对话中的文件
 	otherFiles: string[];            // 其他文件
-	mentionedFiles?: Set<string>;    // 用户提到的文件
-	mentionedIdents?: Set<string>;   // 用户提到的标识符
+	mentionedFiles?: string[];       // 用户提到的文件（IPC传输使用数组）
+	mentionedIdents?: string[];      // 用户提到的标识符（IPC传输使用数组）
 	tokenBudget: number;             // Token预算
 }
 

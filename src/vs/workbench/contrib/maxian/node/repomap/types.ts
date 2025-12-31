@@ -69,13 +69,13 @@ export interface RepoMapOptions {
 }
 
 /**
- * RepoMap生成上下文
+ * RepoMap生成上下文（内部使用，支持Set）
  */
 export interface RepoMapContext {
 	chatFiles: string[];             // 当前对话中的文件
 	otherFiles: string[];            // 其他文件
-	mentionedFiles?: Set<string>;    // 用户提到的文件
-	mentionedIdents?: Set<string>;   // 用户提到的标识符
+	mentionedFiles?: Set<string>;    // 用户提到的文件（内部使用Set）
+	mentionedIdents?: Set<string>;   // 用户提到的标识符（内部使用Set）
 	tokenBudget: number;             // Token预算
 }
 

@@ -39,7 +39,14 @@ export class RepoMapService implements IRepoMapService {
 			return '';
 		}
 
-		return await this.generator.generateRanked(context);
+		// 将数组转换为Set（IPC传输后需要）
+		const convertedContext: any = {
+			...context,
+			mentionedFiles: context.mentionedFiles ? new Set(context.mentionedFiles) : new Set(),
+			mentionedIdents: context.mentionedIdents ? new Set(context.mentionedIdents) : new Set()
+		};
+
+		return await this.generator.generateRanked(convertedContext);
 	}
 
 	async getWorkspaceCodeFiles(workspaceRoot: string): Promise<string[]> {

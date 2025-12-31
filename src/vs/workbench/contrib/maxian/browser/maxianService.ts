@@ -1895,8 +1895,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 			const context: IRepoMapContext = {
 				chatFiles: [],  // TODO: 后续可以从任务历史中提取
 				otherFiles: allFiles,
-				mentionedFiles: new Set(),  // TODO: 从用户消息中提取
-				mentionedIdents: new Set(), // TODO: 从用户消息中提取
+				mentionedFiles: [],  // TODO: 从用户消息中提取
+				mentionedIdents: [], // TODO: 从用户消息中提取
 				tokenBudget: 2048
 			};
 
