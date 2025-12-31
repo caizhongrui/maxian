@@ -31,7 +31,7 @@ import { DifyHandler, DifyConfiguration } from '../common/api/difyHandler.js';
 import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
 import { IAILogService } from '../../../../platform/aiLog/common/aiLog.js';
 import { IRequestService } from '../../../../platform/request/common/request.js';
-import { EnvironmentContextTracker } from '../common/context-tracking/EnvironmentContextTracker.js';
+import { EnvironmentContextTracker } from './EnvironmentContextTracker.js';
 import { FileContextTracker } from '../common/context-tracking/FileContextTracker.js';
 import { IRepoMapService, IRepoMapContext } from '../common/repomap/repoMapService.js';
 
