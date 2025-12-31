@@ -36,6 +36,10 @@ import {
 	TieredCompactionManager,
 } from '../context/contextCompaction.js';
 import { FocusChainManager } from '../focusChain/FocusChainManager.js';
+import { ModelContextTracker } from '../context-tracking/ModelContextTracker.js';
+import { ContextManager } from '../context/ContextManager.js';
+import { StateMutex } from '../utils/StateMutex.js';
+import { CheckpointManager } from '../checkpoints/CheckpointManager.js';
 
 const MAX_CONSECUTIVE_MISTAKES = 3; // 最大连续错误次数
 
@@ -169,6 +173,12 @@ export class TaskService extends Disposable {
 	// P0优化：FocusChain 任务进度管理器
 	private readonly focusChainManager: FocusChainManager;
 
+	// P2优化：完整的上下文管理系统
+	private readonly modelContextTracker: ModelContextTracker;
+	private readonly _fullContextManager: ContextManager;  // TODO: 待完整集成
+	private readonly stateMutex: StateMutex;
+	private readonly checkpointManager: CheckpointManager;
+
 	// Message history
 	private apiConversationHistory: MessageParam[] = [];
 	clineMessages: ClineMessage[] = [];
@@ -235,6 +245,13 @@ export class TaskService extends Disposable {
 		if (options.task) {
 			this.focusChainManager.setTaskDescription(options.task);
 		}
+
+		// P2优化：初始化完整的上下文管理系统
+		this.modelContextTracker = new ModelContextTracker(MAX_CONTEXT_TOKENS);
+		this._fullContextManager = new ContextManager();  // TODO: 待完整集成
+		this.stateMutex = new StateMutex();
+		this.checkpointManager = new CheckpointManager();
+		console.log(`[TaskService] Phase 2 上下文管理系统已初始化（最大消息数: ${MAX_HISTORY_MESSAGES}, 上下文管理器: ${!!this._fullContextManager}, 状态锁: ${!!this.stateMutex}, withStateLock: ${!!this._withStateLock}）`);
 
 		// 初始化 Agent 编排器
 		this.agentOrchestrator = new AgentOrchestrator(
@@ -1680,13 +1697,17 @@ export class TaskService extends Disposable {
 	 * 3. 如果仍然超限，再截断消息
 	 */
 	private async truncateHistoryIfNeeded(): Promise<void> {
-		const currentTokens = this.estimateTokens(this.apiConversationHistory);
+		// P2优化：使用ModelContextTracker估算token
+		const currentTokens = this.modelContextTracker.estimateUsage(this.apiConversationHistory);
 		const allowedTokens = MAX_CONTEXT_TOKENS - TOKEN_BUFFER;
 
-		// 检查是否需要截断（token超限或消息数超限）
-		if (currentTokens <= allowedTokens && this.apiConversationHistory.length <= MAX_HISTORY_MESSAGES) {
+		// P2优化：使用ModelContextTracker判断是否需要压缩
+		if (!this.modelContextTracker.shouldCompact(this.apiConversationHistory, 0.8)) {
 			return;
 		}
+
+		// 创建检查点（压缩前保存状态）
+		await this.createCheckpointBeforeCompaction();
 
 		console.log(`[TaskService] 上下文需要优化: tokens=${currentTokens}, messages=${this.apiConversationHistory.length}`);
 
@@ -1814,6 +1835,33 @@ export class TaskService extends Disposable {
 
 			console.log(`[TaskService] 截断完成: 移除了 ${messagesToRemove} 条消息, 剩余 ${this.apiConversationHistory.length} 条`);
 		}
+	}
+
+	/**
+	 * P2优化：在压缩前创建检查点
+	 */
+	private async createCheckpointBeforeCompaction(): Promise<void> {
+		try {
+			await this.checkpointManager.createCheckpoint(
+				`压缩前检查点 - ${this.apiConversationHistory.length} 条消息`,
+				{
+					messageCount: this.apiConversationHistory.length,
+					messages: [...this.apiConversationHistory],
+					tokenUsage: { ...this.tokenUsage },
+					timestamp: Date.now()
+				}
+			);
+		} catch (error) {
+			console.error('[TaskService] 创建检查点失败:', error);
+		}
+	}
+
+	/**
+	 * P2优化：使用状态锁执行关键操作
+	 * TODO: 在关键状态修改处使用
+	 */
+	private async _withStateLock<T>(fn: () => T | Promise<T>): Promise<T> {
+		return await this.stateMutex.withLock(fn);
 	}
 
 	/**

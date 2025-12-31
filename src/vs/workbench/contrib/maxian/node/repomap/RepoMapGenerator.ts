@@ -106,16 +106,19 @@ export class RepoMapGenerator {
 	private async generateUncached(context: RepoMapContext, tokenBudget: number): Promise<string> {
 		const allFiles = [...context.chatFiles, ...context.otherFiles];
 
+		console.log(`[RepoMapGenerator] 开始生成，文件数: ${allFiles.length}`);
+
 		if (allFiles.length === 0) {
+			console.warn('[RepoMapGenerator] 没有文件，返回空');
 			return '';
 		}
 
 		// 1. 提取所有tags
-		if (this.verbose) {
-			console.log(`[RepoMapGenerator] 提取tags，共 ${allFiles.length} 个文件`);
-		}
+		console.log(`[RepoMapGenerator] 提取tags，共 ${allFiles.length} 个文件`);
 
 		const allTags = await this.tagExtractor.extractTagsFromFiles(allFiles);
+
+		console.log(`[RepoMapGenerator] 提取到 ${allTags.length} 个tags`);
 
 		if (allTags.length === 0) {
 			if (this.verbose) {

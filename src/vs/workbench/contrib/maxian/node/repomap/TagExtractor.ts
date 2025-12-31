@@ -11,8 +11,16 @@
 
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { fileURLToPath } from 'url';
 import * as TreeSitter from 'web-tree-sitter';
 import { Tag, TagCacheEntry, SupportedLanguage, LanguageConfig } from './types.js';
+
+// 获取当前文件的目录（ES模块方式）
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 计算到项目根目录的路径（从out/vs/workbench/contrib/maxian/node/repomap回到根目录）
+const projectRoot = path.resolve(__dirname, '../../../../../../..');
 
 /**
  * 语言配置映射
@@ -163,17 +171,14 @@ export class TagExtractor {
 			await TreeSitter.Parser.init();
 
 			// 获取wasm文件路径
-			// wasm文件在IDE的安装目录中，不是用户项目的node_modules
-			// 使用require.resolve来找到正确的路径
-			const getWasmPath = (packageName: string): string => {
+			// 直接使用项目根目录的node_modules
+			const getWasmPath = (packageName: string, wasmFileName: string): string => {
 				try {
-					// 动态require找到包的路径
-					const packagePath = require.resolve(packageName);
-					// 从包路径找到wasm文件
-					const wasmPath = packagePath.replace(/\.js$/, '.wasm');
+					const wasmPath = path.join(projectRoot, 'node_modules', packageName, wasmFileName);
+					console.log(`[TagExtractor] ${packageName} wasm路径: ${wasmPath}`);
 					return wasmPath;
 				} catch (e) {
-					console.error(`[TagExtractor] 无法定位 ${packageName}:`, e);
+					console.error(`[TagExtractor] 构建wasm路径失败:`, e);
 					return '';
 				}
 			};
@@ -181,7 +186,7 @@ export class TagExtractor {
 			// 初始化TypeScript解析器
 			const tsParser = new TreeSitter.Parser();
 			try {
-				const tsWasm = getWasmPath('tree-sitter-typescript');
+				const tsWasm = getWasmPath('tree-sitter-typescript', 'tree-sitter-typescript.wasm');
 				if (tsWasm) {
 					const tsLang = await TreeSitter.Language.load(tsWasm);
 					tsParser.setLanguage(tsLang);
@@ -196,7 +201,7 @@ export class TagExtractor {
 			// 初始化Python解析器
 			const pyParser = new TreeSitter.Parser();
 			try {
-				const pyWasm = getWasmPath('tree-sitter-python');
+				const pyWasm = getWasmPath('tree-sitter-python', 'tree-sitter-python.wasm');
 				if (pyWasm) {
 					const pyLang = await TreeSitter.Language.load(pyWasm);
 					pyParser.setLanguage(pyLang);
@@ -210,7 +215,7 @@ export class TagExtractor {
 			// 初始化Java解析器
 			const javaParser = new TreeSitter.Parser();
 			try {
-				const javaWasm = getWasmPath('tree-sitter-java');
+				const javaWasm = getWasmPath('tree-sitter-java', 'tree-sitter-java.wasm');
 				if (javaWasm) {
 					const javaLang = await TreeSitter.Language.load(javaWasm);
 					javaParser.setLanguage(javaLang);

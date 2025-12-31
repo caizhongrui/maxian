@@ -22,15 +22,17 @@ export class RepoMapService implements IRepoMapService {
 	) {}
 
 	async initialize(workspaceRoot: string): Promise<void> {
+		console.log('[RepoMapService] 开始初始化, workspaceRoot:', workspaceRoot);
 		this.generator = new RepoMapGenerator({
 			workspaceRoot,
 			maxTokens: 2048,
 			mapMulNoFiles: 8,
-			verbose: false
+			verbose: true  // 开启详细日志
 		});
 
+		console.log('[RepoMapService] RepoMapGenerator已创建，准备初始化TagExtractor');
 		await this.generator.initialize();
-		console.log('[RepoMapService] 初始化完成');
+		console.log('[RepoMapService] TagExtractor初始化完成');
 	}
 
 	async generateRanked(context: IRepoMapContext): Promise<string> {
@@ -77,11 +79,15 @@ export class RepoMapService implements IRepoMapService {
 		}
 
 		try {
+			console.log(`[RepoMapService] 扫描目录: ${dirUri.fsPath}, 深度: ${depth}`);
 			const entries = await this.fileService.resolve(dirUri);
 
 			if (!entries.children) {
+				console.log(`[RepoMapService] 目录无子项: ${dirUri.fsPath}`);
 				return files;
 			}
+
+			console.log(`[RepoMapService] 目录有 ${entries.children.length} 个子项`);
 
 			for (const entry of entries.children) {
 				const name = entry.name;

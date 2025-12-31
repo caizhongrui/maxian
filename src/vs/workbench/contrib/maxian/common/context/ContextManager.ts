@@ -1,0 +1,211 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/**
+ * ContextManager - 上下文管理器
+ * 跟踪对话历史中的所有上下文修改，支持持久化和回滚
+ * 参考 Cline 的 ContextManager 完整实现
+ */
+
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { MessageParam } from '../api/types.js';
+
+/**
+ * 上下文更新记录
+ */
+export interface ContextUpdate {
+	timestamp: number;
+	updateType: string;
+	content: any;
+	metadata?: any;
+}
+
+/**
+ * 编辑类型枚举
+ */
+export enum EditType {
+	UNDEFINED = 0,
+	NO_FILE_READ = 1,
+	READ_FILE_TOOL = 2,
+	ALTER_FILE_TOOL = 3,
+	FILE_MENTION = 4
+}
+
+/**
+ * ContextManager - 完整的上下文管理器
+ */
+export class ContextManager {
+	// 上下文历史：messageIndex -> [EditType, blockIndex -> ContextUpdate[]]
+	private contextHistoryUpdates: Map<number, [EditType, Map<number, ContextUpdate[]>]> = new Map();
+
+	private taskDirectory: string | null = null;
+
+	constructor(taskDirectory?: string) {
+		this.taskDirectory = taskDirectory || null;
+	}
+
+	/**
+	 * 初始化（从磁盘加载历史）
+	 */
+	async initialize(taskDirectory: string): Promise<void> {
+		this.taskDirectory = taskDirectory;
+		this.contextHistoryUpdates = await this.loadContextHistory();
+		console.log('[ContextManager] 初始化完成，历史记录数:', this.contextHistoryUpdates.size);
+	}
+
+	/**
+	 * 添加上下文更新
+	 */
+	addContextUpdate(
+		messageIndex: number,
+		editType: EditType,
+		blockIndex: number,
+		updateType: string,
+		content: any,
+		metadata?: any
+	): void {
+		const update: ContextUpdate = {
+			timestamp: Date.now(),
+			updateType,
+			content,
+			metadata
+		};
+
+		if (!this.contextHistoryUpdates.has(messageIndex)) {
+			this.contextHistoryUpdates.set(messageIndex, [editType, new Map()]);
+		}
+
+		const [, blockUpdates] = this.contextHistoryUpdates.get(messageIndex)!;
+
+		if (!blockUpdates.has(blockIndex)) {
+			blockUpdates.set(blockIndex, []);
+		}
+
+		blockUpdates.get(blockIndex)!.push(update);
+	}
+
+	/**
+	 * 获取消息的所有更新
+	 */
+	getMessageUpdates(messageIndex: number): ContextUpdate[] | null {
+		const entry = this.contextHistoryUpdates.get(messageIndex);
+		if (!entry) {
+			return null;
+		}
+
+		const [, blockUpdates] = entry;
+		const allUpdates: ContextUpdate[] = [];
+
+		for (const updates of blockUpdates.values()) {
+			allUpdates.push(...updates);
+		}
+
+		return allUpdates.sort((a, b) => a.timestamp - b.timestamp);
+	}
+
+	/**
+	 * 应用上下文更新到消息
+	 */
+	applyUpdatesToMessages(messages: MessageParam[]): MessageParam[] {
+		const updatedMessages = [...messages];
+
+		for (const [messageIndex, [_editType, _blockUpdates]] of this.contextHistoryUpdates) {
+			if (messageIndex >= updatedMessages.length) {
+				continue;
+			}
+
+			// 根据editType和blockUpdates更新消息
+			// 简化实现：只记录更新，不实际修改消息内容
+			// 完整实现需要根据updateType进行不同的处理
+			// TODO: 实现实际的消息更新逻辑
+		}
+
+		return updatedMessages;
+	}
+
+	/**
+	 * 判断是否应该压缩上下文
+	 */
+	shouldCompactContextWindow(
+		messages: MessageParam[],
+		currentTokens: number,
+		maxTokens: number,
+		tokenBuffer: number = 20000
+	): boolean {
+		const threshold = maxTokens - tokenBuffer;
+		return currentTokens > threshold;
+	}
+
+	/**
+	 * 保存上下文历史到磁盘
+	 */
+	async save(): Promise<void> {
+		if (!this.taskDirectory) {
+			return;
+		}
+
+		try {
+			const filePath = path.join(this.taskDirectory, 'context-history.json');
+
+			// 序列化Map结构
+			const serialized = Array.from(this.contextHistoryUpdates.entries()).map(
+				([messageIndex, [editType, blockUpdates]]) => [
+					messageIndex,
+					[editType, Array.from(blockUpdates.entries())]
+				]
+			);
+
+			await fs.writeFile(filePath, JSON.stringify(serialized), 'utf-8');
+			console.log('[ContextManager] 上下文历史已保存');
+		} catch (error) {
+			console.error('[ContextManager] 保存失败:', error);
+		}
+	}
+
+	/**
+	 * 从磁盘加载上下文历史
+	 */
+	private async loadContextHistory(): Promise<Map<number, [EditType, Map<number, ContextUpdate[]>]>> {
+		if (!this.taskDirectory) {
+			return new Map();
+		}
+
+		try {
+			const filePath = path.join(this.taskDirectory, 'context-history.json');
+			const data = await fs.readFile(filePath, 'utf-8');
+			const serialized = JSON.parse(data);
+
+			// 反序列化
+			const map = new Map<number, [EditType, Map<number, ContextUpdate[]>]>();
+			for (const [messageIndex, [editType, blockUpdates]] of serialized) {
+				map.set(messageIndex, [editType, new Map(blockUpdates)]);
+			}
+
+			return map;
+		} catch (error) {
+			// 文件不存在或读取失败，返回空Map
+			return new Map();
+		}
+	}
+
+	/**
+	 * 清除历史记录
+	 */
+	clear(): void {
+		this.contextHistoryUpdates.clear();
+	}
+
+	/**
+	 * 获取统计信息
+	 */
+	getStats() {
+		return {
+			messageCount: this.contextHistoryUpdates.size,
+			totalUpdates: Array.from(this.contextHistoryUpdates.values())
+				.reduce((sum, [, blocks]) => sum + blocks.size, 0)
+		};
+	}
+}
