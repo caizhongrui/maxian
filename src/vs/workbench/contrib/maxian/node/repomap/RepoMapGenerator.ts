@@ -236,11 +236,25 @@ export class RepoMapGenerator {
 	private formatRepoMap(tags: Tag[], chatFiles: Set<string>): string {
 		const lines: string[] = [];
 
-		// 添加说明前缀（参考Aider的repo_content_prefix）
-		lines.push('# 代码库地图（RepoMap）');
+		// 添加醒目的使用说明
+		lines.push('# 代码库地图（RepoMap）- ⚠️ 必读！');
 		lines.push('');
-		lines.push('这是你的git仓库中的文件摘要。');
-		lines.push('如果需要查看完整文件内容，使用 read_file 工具。');
+		lines.push('⚠️ **重要**: 这是通过 PageRank 算法智能排序的代码库结构！');
+		lines.push('');
+		lines.push('**使用策略（必须遵守）**：');
+		lines.push('1. 📍 下面列出的文件和类已经是最相关的（PageRank排序）');
+		lines.push('2. 🚫 禁止使用 list_files 逐层探索目录');
+		lines.push('3. ✅ 直接从下面的列表选择文件，使用 batch + read_file 批量读取');
+		lines.push('4. ✅ 下面的类名和方法名可以直接用于理解代码结构');
+		lines.push('');
+		lines.push('**示例正确用法**：');
+		lines.push('看到 LoginHelper.java 有 getUserId 方法');
+		lines.push('→ 直接 read_file("boyo-common/src/main/java/com/boyo/common/helper/LoginHelper.java")');
+		lines.push('');
+		lines.push('**错误用法（禁止）**：');
+		lines.push('❌ list_files(".") → list_files("src") → list_files("src/main") → ...');
+		lines.push('');
+		lines.push('---');
 		lines.push('');
 
 		// 按文件分组

@@ -89,10 +89,18 @@ export class SearchTool {
 	 * @returns 搜索结果
 	 */
 	async codebaseSearch(toolUse: CodebaseSearchToolUse): Promise<ToolResponse> {
-		const { query, path, file_pattern } = toolUse.params;
+		let { query, path, file_pattern } = toolUse.params;
 
 		if (!query) {
 			return '错误: 未提供搜索查询';
+		}
+
+		// P1优化：清理query，移除AI错误传入的上下文标签
+		const originalQuery = query;
+		query = this.cleanSearchQuery(query);
+
+		if (query !== originalQuery) {
+			console.log('[SearchTool] Query已清理，原始长度:', originalQuery.length, '清理后:', query.length);
 		}
 
 		const startTime = Date.now();
@@ -246,5 +254,33 @@ export class SearchTool {
 		} catch (error) {
 			return `列出代码定义失败: ${error instanceof Error ? error.message : String(error)}`;
 		}
+	}
+
+	/**
+	 * P1优化：清理搜索查询
+	 * 移除AI错误传入的environment_details和repo_map标签
+	 */
+	private cleanSearchQuery(query: string): string {
+		let cleaned = query;
+
+		// 移除 <environment_details> 标签及其内容
+		cleaned = cleaned.replace(/<environment_details>[\s\S]*?<\/environment_details>/g, '');
+
+		// 移除 <repo_map> 标签及其内容
+		cleaned = cleaned.replace(/<repo_map>[\s\S]*?<\/repo_map>/g, '');
+
+		// 移除多余的空行
+		cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+		// trim
+		cleaned = cleaned.trim();
+
+		// 如果清理后为空，尝试提取第一行
+		if (!cleaned && query) {
+			const firstLine = query.split('\n')[0];
+			cleaned = firstLine.replace(/<[^>]+>/g, '').trim();
+		}
+
+		return cleaned || query;
 	}
 }

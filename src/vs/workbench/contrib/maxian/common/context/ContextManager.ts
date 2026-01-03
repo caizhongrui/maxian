@@ -113,7 +113,7 @@ export class ContextManager {
 	applyUpdatesToMessages(messages: MessageParam[]): MessageParam[] {
 		const updatedMessages = [...messages];
 
-		for (const [messageIndex, [editType, blockUpdates]] of this.contextHistoryUpdates) {
+		for (const [messageIndex, [_editType, blockUpdates]] of this.contextHistoryUpdates) {
 			if (messageIndex >= updatedMessages.length) {
 				continue;
 			}

@@ -1034,7 +1034,13 @@ export class MaxianService extends Disposable implements IMaxianService {
 		const availableTools = this.getAvailableTools();
 
 		// 直接使用本地生成，工具描述在IDE中硬编码
-		const prompt = SystemPromptGenerator.generate(workspaceRoot, availableTools, systemInfo, this.currentMode);
+		let prompt = SystemPromptGenerator.generate(workspaceRoot, availableTools, systemInfo, this.currentMode);
+
+		// P1优化：如果将要附加RepoMap，添加使用说明
+		if (this.repoMapService && this.lastRepoMap) {
+			prompt += `\n\n====\n\nREPOMAP USAGE (关键！)\n\n⚠️ 你的用户消息中包含 <repo_map> 标签！这是最重要的上下文信息！\n\n<repo_map> 包含：\n- 整个代码库的结构（已通过PageRank智能排序）\n- 所有主要的类、函数、方法\n- 最相关的代码排在最前面\n\n**强制使用规则**：\n1. 📍 先查看 <repo_map>，了解代码结构\n2. 🚫 禁止使用 list_files 逐层探索目录（浪费时间！）\n3. ✅ 从 RepoMap 中直接选择相关文件\n4. ✅ 使用 batch 工具批量读取多个文件\n5. ✅ RepoMap 中的文件路径可以直接用于 read_file\n\n**示例正确流程**：\n- 看 RepoMap → 发现 LoginHelper.java 有 getUserId 方法\n- 直接使用：batch([read_file("LoginHelper.java"), read_file("LoginUser.java")])\n\n**错误流程（绝对禁止）**：\n- list_files(".") → list_files("src") → list_files("src/main") → ...\n- 这样做会浪费5-10次API调用！\n\n记住：RepoMap 已经帮你找到了最相关的代码，直接使用它！`;
+		}
+
 		console.log('[Maxian] 本地生成系统提示词，长度:', prompt.length);
 		return prompt;
 	}
