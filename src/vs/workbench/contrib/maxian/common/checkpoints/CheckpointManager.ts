@@ -28,19 +28,17 @@ export interface Checkpoint {
  */
 export class CheckpointManager {
 	private checkpoints: Map<string, Checkpoint> = new Map();
-	private taskDirectory: string | null = null;
 	private maxCheckpoints: number = 20;  // 最多保留20个检查点
 
-	constructor(taskDirectory?: string, maxCheckpoints: number = 20) {
-		this.taskDirectory = taskDirectory || null;
+	constructor(_taskDirectory?: string, maxCheckpoints: number = 20) {
 		this.maxCheckpoints = maxCheckpoints;
+		// taskDirectory暂时不使用（持久化待实现）
 	}
 
 	/**
 	 * 初始化
 	 */
-	async initialize(taskDirectory: string): Promise<void> {
-		this.taskDirectory = taskDirectory;
+	async initialize(_taskDirectory: string): Promise<void> {
 		await this.loadCheckpoints();
 		console.log('[CheckpointManager] 初始化完成，检查点数:', this.checkpoints.size);
 	}

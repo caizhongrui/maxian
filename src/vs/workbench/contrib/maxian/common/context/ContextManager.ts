@@ -41,17 +41,14 @@ export class ContextManager {
 	// 上下文历史：messageIndex -> [EditType, blockIndex -> ContextUpdate[]]
 	private contextHistoryUpdates: Map<number, [EditType, Map<number, ContextUpdate[]>]> = new Map();
 
-	private taskDirectory: string | null = null;
-
-	constructor(taskDirectory?: string) {
-		this.taskDirectory = taskDirectory || null;
+	constructor(_taskDirectory?: string) {
+		// taskDirectory暂时不使用（持久化待实现）
 	}
 
 	/**
 	 * 初始化（从磁盘加载历史）
 	 */
-	async initialize(taskDirectory: string): Promise<void> {
-		this.taskDirectory = taskDirectory;
+	async initialize(_taskDirectory: string): Promise<void> {
 		this.contextHistoryUpdates = await this.loadContextHistory();
 		console.log('[ContextManager] 初始化完成，历史记录数:', this.contextHistoryUpdates.size);
 	}
