@@ -9,8 +9,8 @@
  * 参考 Cline 的 ContextManager 完整实现
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
+// import * as fs from 'fs/promises';  // TODO: 移到node层实现持久化
+// import * as path from 'path';
 import { MessageParam } from '../api/types.js';
 
 /**
@@ -242,52 +242,17 @@ export class ContextManager {
 	 * 保存上下文历史到磁盘
 	 */
 	async save(): Promise<void> {
-		if (!this.taskDirectory) {
-			return;
-		}
-
-		try {
-			const filePath = path.join(this.taskDirectory, 'context-history.json');
-
-			// 序列化Map结构
-			const serialized = Array.from(this.contextHistoryUpdates.entries()).map(
-				([messageIndex, [editType, blockUpdates]]) => [
-					messageIndex,
-					[editType, Array.from(blockUpdates.entries())]
-				]
-			);
-
-			await fs.writeFile(filePath, JSON.stringify(serialized), 'utf-8');
-			console.log('[ContextManager] 上下文历史已保存');
-		} catch (error) {
-			console.error('[ContextManager] 保存失败:', error);
-		}
+		// TODO: 持久化功能需要移到node层实现
+		// 使用service接口或移到electron-main
+		console.log('[ContextManager] 保存跳过（持久化待实现）');
 	}
 
 	/**
 	 * 从磁盘加载上下文历史
 	 */
 	private async loadContextHistory(): Promise<Map<number, [EditType, Map<number, ContextUpdate[]>]>> {
-		if (!this.taskDirectory) {
-			return new Map();
-		}
-
-		try {
-			const filePath = path.join(this.taskDirectory, 'context-history.json');
-			const data = await fs.readFile(filePath, 'utf-8');
-			const serialized = JSON.parse(data);
-
-			// 反序列化
-			const map = new Map<number, [EditType, Map<number, ContextUpdate[]>]>();
-			for (const [messageIndex, [editType, blockUpdates]] of serialized) {
-				map.set(messageIndex, [editType, new Map(blockUpdates)]);
-			}
-
-			return map;
-		} catch (error) {
-			// 文件不存在或读取失败，返回空Map
-			return new Map();
-		}
+		// TODO: 加载功能需要移到node层实现
+		return new Map();
 	}
 
 	/**

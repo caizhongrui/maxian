@@ -9,8 +9,8 @@
  * 参考 Cline 的 ICheckpointManager 接口
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
+// import * as fs from 'fs/promises';  // TODO: 移到node层
+// import * as path from 'path';
 
 /**
  * 检查点数据
@@ -131,36 +131,15 @@ export class CheckpointManager {
 	 * 保存检查点到磁盘
 	 */
 	private async saveCheckpoints(): Promise<void> {
-		if (!this.taskDirectory) {
-			return;
-		}
-
-		try {
-			const filePath = path.join(this.taskDirectory, 'checkpoints.json');
-			const serialized = Array.from(this.checkpoints.entries());
-			await fs.writeFile(filePath, JSON.stringify(serialized, null, 2), 'utf-8');
-		} catch (error) {
-			console.error('[CheckpointManager] 保存失败:', error);
-		}
+		// TODO: 持久化需要移到node层或通过service
+		console.log('[CheckpointManager] 保存跳过（持久化待实现）');
 	}
 
 	/**
 	 * 从磁盘加载检查点
 	 */
 	private async loadCheckpoints(): Promise<void> {
-		if (!this.taskDirectory) {
-			return;
-		}
-
-		try {
-			const filePath = path.join(this.taskDirectory, 'checkpoints.json');
-			const data = await fs.readFile(filePath, 'utf-8');
-			const serialized = JSON.parse(data);
-
-			this.checkpoints = new Map(serialized);
-		} catch (error) {
-			// 文件不存在或读取失败，保持空Map
-		}
+		// TODO: 加载需要移到node层
 	}
 
 	/**
