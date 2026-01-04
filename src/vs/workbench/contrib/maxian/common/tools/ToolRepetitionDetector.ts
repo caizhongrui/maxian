@@ -5,18 +5,37 @@
 
 // Copied from Kilocode: src/core/tools/ToolRepetitionDetector.ts
 // Adapted for tianhe-zhikai-ide: 使用本地i18n系统
+// P2优化：增强Doom Loop检测（借鉴Cline）
 
 import { ToolUse } from './toolTypes.js';
 import { t } from '../i18n/index.js';
 
 /**
+ * P2优化：工具调用历史条目
+ */
+interface ToolCallHistoryEntry {
+	name: string;
+	paramsHash: string;
+	timestamp: number;
+}
+
+/**
  * Class for detecting consecutive identical tool calls
  * to prevent the AI from getting stuck in a loop.
+ * P2优化：增强Doom Loop检测，包括循环模式和API调用次数检测
  */
 export class ToolRepetitionDetector {
 	private previousToolCallJson: string | null = null;
 	private consecutiveIdenticalToolCallCount: number = 0;
 	private readonly consecutiveIdenticalToolCallLimit: number;
+
+	// P2优化：Doom Loop检测
+	private toolCallHistory: ToolCallHistoryEntry[] = [];
+	private readonly HISTORY_WINDOW_SIZE = 20; // 保留最近20个工具调用
+	private readonly LOOP_DETECTION_THRESHOLD = 5; // 同一工具调用5次触发检测
+	private readonly TIME_WINDOW_MS = 60000; // 60秒时间窗口
+	private doomLoopDetected = false;
+	private doomLoopCount = 0;
 
 	/**
 	 * Creates a new ToolRepetitionDetector
@@ -29,6 +48,7 @@ export class ToolRepetitionDetector {
 	/**
 	 * Checks if the current tool call is identical to the previous one
 	 * and determines if execution should be allowed
+	 * P2优化：增加Doom Loop检测
 	 *
 	 * @param currentToolCallBlock ToolUse object representing the current tool call
 	 * @returns Object indicating if execution is allowed and a message to show if not
@@ -40,30 +60,29 @@ export class ToolRepetitionDetector {
 			messageDetail: string;
 		};
 	} {
-		// Note: browser_action tool is not currently supported
-		// The browser scroll action check is commented out for now
-
 		// Serialize the block to a canonical JSON string for comparison
 		const currentToolCallJson = this.serializeToolUse(currentToolCallBlock);
+		const paramsHash = this.hashParams(currentToolCallBlock.params);
 
-		// Compare with previous tool call
+		// P2优化：记录到历史
+		this.addToHistory(currentToolCallBlock.name, paramsHash);
+
+		// 连续相同检测
 		if (this.previousToolCallJson === currentToolCallJson) {
 			this.consecutiveIdenticalToolCallCount++;
 		} else {
-			this.consecutiveIdenticalToolCallCount = 0; // Reset to 0 for a new tool
+			this.consecutiveIdenticalToolCallCount = 0;
 			this.previousToolCallJson = currentToolCallJson;
 		}
 
-		// Check if limit is reached (0 means unlimited)
+		// 检查连续相同限制
 		if (
 			this.consecutiveIdenticalToolCallLimit > 0 &&
 			this.consecutiveIdenticalToolCallCount >= this.consecutiveIdenticalToolCallLimit
 		) {
-			// Reset counters to allow recovery if user guides the AI past this point
 			this.consecutiveIdenticalToolCallCount = 0;
 			this.previousToolCallJson = null;
 
-			// Return result indicating execution should not be allowed
 			return {
 				allowExecution: false,
 				askUser: {
@@ -76,8 +95,127 @@ export class ToolRepetitionDetector {
 			};
 		}
 
-		// Execution is allowed
+		// P2优化：Doom Loop检测（时间窗口内的循环模式）
+		const doomLoopResult = this.detectDoomLoop(currentToolCallBlock.name, paramsHash);
+		if (doomLoopResult.detected) {
+			this.doomLoopDetected = true;
+			this.doomLoopCount++;
+			console.warn(`[ToolRepetitionDetector] Doom Loop检测触发: ${currentToolCallBlock.name} (第${this.doomLoopCount}次)`);
+
+			return {
+				allowExecution: false,
+				askUser: {
+					messageKey: 'doom_loop_detected',
+					messageDetail: doomLoopResult.message,
+				},
+			};
+		}
+
 		return { allowExecution: true };
+	}
+
+	/**
+	 * P2优化：添加工具调用到历史
+	 */
+	private addToHistory(name: string, paramsHash: string): void {
+		const entry: ToolCallHistoryEntry = {
+			name,
+			paramsHash,
+			timestamp: Date.now()
+		};
+
+		this.toolCallHistory.push(entry);
+
+		// 限制历史大小
+		if (this.toolCallHistory.length > this.HISTORY_WINDOW_SIZE) {
+			this.toolCallHistory.shift();
+		}
+	}
+
+	/**
+	 * P2优化：检测Doom Loop
+	 * 在时间窗口内，如果同一工具调用超过阈值次数，触发检测
+	 */
+	private detectDoomLoop(name: string, paramsHash: string): { detected: boolean; message: string } {
+		const now = Date.now();
+		const windowStart = now - this.TIME_WINDOW_MS;
+
+		// 统计时间窗口内相同工具调用的次数
+		const recentCalls = this.toolCallHistory.filter(entry =>
+			entry.timestamp >= windowStart &&
+			entry.name === name &&
+			entry.paramsHash === paramsHash
+		);
+
+		if (recentCalls.length >= this.LOOP_DETECTION_THRESHOLD) {
+			return {
+				detected: true,
+				message: `检测到潜在的无限循环：工具 "${name}" 在 ${Math.round(this.TIME_WINDOW_MS / 1000)} 秒内被调用了 ${recentCalls.length} 次，参数相同。请检查任务逻辑或提供新的指导。`
+			};
+		}
+
+		// 检测工具循环模式（如A->B->A->B->A->B）
+		const patternResult = this.detectLoopPattern();
+		if (patternResult.detected) {
+			return patternResult;
+		}
+
+		return { detected: false, message: '' };
+	}
+
+	/**
+	 * P2优化：检测工具调用循环模式
+	 * 如：A->B->A->B->A->B 或 A->B->C->A->B->C
+	 */
+	private detectLoopPattern(): { detected: boolean; message: string } {
+		if (this.toolCallHistory.length < 6) {
+			return { detected: false, message: '' };
+		}
+
+		// 检测最近的调用中是否有重复的模式
+		const recentCalls = this.toolCallHistory.slice(-10).map(e => `${e.name}:${e.paramsHash.substring(0, 8)}`);
+
+		// 检测长度为2-4的循环模式
+		for (let patternLen = 2; patternLen <= 4; patternLen++) {
+			if (recentCalls.length < patternLen * 3) continue;
+
+			const pattern = recentCalls.slice(-patternLen);
+			let matchCount = 0;
+
+			for (let i = recentCalls.length - patternLen; i >= patternLen; i -= patternLen) {
+				const segment = recentCalls.slice(i - patternLen, i);
+				if (segment.join(',') === pattern.join(',')) {
+					matchCount++;
+				} else {
+					break;
+				}
+			}
+
+			if (matchCount >= 2) {
+				const patternNames = pattern.map(p => p.split(':')[0]).join(' -> ');
+				return {
+					detected: true,
+					message: `检测到工具调用循环模式：${patternNames}（重复${matchCount + 1}次）。这可能表示任务陷入了死循环，请提供新的指导。`
+				};
+			}
+		}
+
+		return { detected: false, message: '' };
+	}
+
+	/**
+	 * P2优化：计算参数哈希（用于快速比较）
+	 */
+	private hashParams(params: Record<string, any>): string {
+		const json = JSON.stringify(params, Object.keys(params).sort());
+		// 简单哈希
+		let hash = 0;
+		for (let i = 0; i < json.length; i++) {
+			const char = json.charCodeAt(i);
+			hash = ((hash << 5) - hash) + char;
+			hash = hash & hash;
+		}
+		return hash.toString(16);
 	}
 
 	/**
@@ -128,9 +266,28 @@ export class ToolRepetitionDetector {
 	/**
 	 * Reset the detector state
 	 * Useful when starting a new task or conversation
+	 * P2优化：同时重置Doom Loop检测状态
 	 */
 	public reset(): void {
 		this.previousToolCallJson = null;
 		this.consecutiveIdenticalToolCallCount = 0;
+		this.toolCallHistory = [];
+		this.doomLoopDetected = false;
+		// 不重置doomLoopCount，保留统计
+	}
+
+	/**
+	 * P2优化：获取Doom Loop统计
+	 */
+	public getDoomLoopStats(): {
+		detected: boolean;
+		count: number;
+		historySize: number;
+	} {
+		return {
+			detected: this.doomLoopDetected,
+			count: this.doomLoopCount,
+			historySize: this.toolCallHistory.length
+		};
 	}
 }

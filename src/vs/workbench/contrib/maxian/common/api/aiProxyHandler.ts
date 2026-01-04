@@ -117,11 +117,44 @@ interface AiProxyStreamEvent {
 /**
  * AiProxy API Handler
  * 实现 IApiHandler 接口，用于调用统一的 AI 代理服务
+ *
+ * 性能优化：
+ * - P0: 超时和重试机制
+ * - P1: Rate Limit 自适应（借鉴 Continue）
+ * - P1: Prompt Cache 支持（借鉴 Cline/Aider）
+ * - P1: 系统提示词本地缓存
  */
 export class AiProxyHandler implements IApiHandler {
 	private config: AiProxyConfiguration;
 	private currentRequestId: string | null = null;
 	private modelInfo: ModelInfo;
+	private currentAbortController: AbortController | null = null;
+
+	// 🚀 超时和重试配置
+	private readonly REQUEST_TIMEOUT = 120000; // 120秒超时（流式响应需要较长时间）
+	private readonly MAX_RETRIES = 2; // 最大重试次数
+	private readonly RETRY_DELAY = 1000; // 重试延迟（毫秒）
+	private readonly RETRY_BACKOFF = 2; // 重试退避倍数
+	private readonly JITTER_FACTOR = 0.3; // 抖动因子（借鉴Continue）
+
+	// P1优化：Rate Limit 统计
+	private rateLimitHits = 0;
+	private lastRateLimitTime = 0;
+
+	// P1优化：Prompt Cache 支持（借鉴 Cline/Aider）
+	private lastSystemPromptHash: string | null = null;
+	private systemPromptCacheHits = 0;
+	private systemPromptCacheMisses = 0;
+	private readonly PROMPT_CACHE_CONFIG = {
+		/** 是否启用 Prompt Cache（取决于后端支持） */
+		enabled: true,
+		/** 最大缓存消息数（借鉴 Continue） */
+		maxCachingMessages: 4,
+		/** 缓存的最小 token 阈值（大于此值才值得缓存） */
+		minTokensForCaching: 500,
+		/** 缓存预热间隔（5分钟，借鉴 Aider） */
+		cacheWarmupInterval: 5 * 60 * 1000,
+	};
 
 	constructor(config: AiProxyConfiguration) {
 		this.config = config;
@@ -139,6 +172,277 @@ export class AiProxyHandler implements IApiHandler {
 	}
 
 	/**
+	 * 🚀 带超时的fetch请求
+	 */
+	private async fetchWithTimeout(
+		url: string,
+		options: RequestInit,
+		timeout: number
+	): Promise<Response> {
+		const controller = new AbortController();
+		this.currentAbortController = controller;
+
+		const timeoutId = setTimeout(() => {
+			controller.abort();
+			console.warn(`[Maxian] API请求超时 (${timeout}ms)`);
+		}, timeout);
+
+		try {
+			const response = await fetch(url, {
+				...options,
+				signal: controller.signal
+			});
+			return response;
+		} finally {
+			clearTimeout(timeoutId);
+		}
+	}
+
+	/**
+	 * 🚀 判断错误是否可重试
+	 */
+	private isRetryableError(error: any): boolean {
+		// 网络错误可重试
+		if (error.name === 'TypeError' && error.message.includes('fetch')) {
+			return true;
+		}
+		// 超时可重试
+		if (error.name === 'AbortError') {
+			return true;
+		}
+		// 特定HTTP状态码可重试（429 Too Many Requests, 500 Internal Server Error, 502, 503, 504）
+		if (error.status && [429, 500, 502, 503, 504].includes(error.status)) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * 🚀 计算重试延迟（指数退避 + 抖动）
+	 * P1优化：借鉴Continue的抖动策略，避免雷群效应
+	 */
+	private getRetryDelay(attempt: number, rateLimitDelay?: number): number {
+		// 如果有Rate Limit指定的延迟，优先使用
+		if (rateLimitDelay && rateLimitDelay > 0) {
+			return rateLimitDelay;
+		}
+
+		// 基础延迟 + 指数退避
+		const baseDelay = this.RETRY_DELAY * Math.pow(this.RETRY_BACKOFF, attempt);
+
+		// 添加抖动（±30%）
+		const jitter = baseDelay * this.JITTER_FACTOR * (Math.random() * 2 - 1);
+		const delay = Math.round(baseDelay + jitter);
+
+		// 限制最大延迟为30秒
+		return Math.min(delay, 30000);
+	}
+
+	/**
+	 * P1优化：从响应头解析Rate Limit延迟
+	 * 借鉴Continue的实现：支持Retry-After和X-RateLimit-Reset头
+	 */
+	private parseRateLimitDelay(response: Response): number | undefined {
+		// 检查 Retry-After 头
+		const retryAfter = response.headers.get('Retry-After');
+		if (retryAfter) {
+			// Retry-After 可以是秒数或HTTP日期
+			const seconds = parseInt(retryAfter, 10);
+			if (!isNaN(seconds)) {
+				console.log(`[Maxian] 检测到 Retry-After: ${seconds}s`);
+				this.rateLimitHits++;
+				this.lastRateLimitTime = Date.now();
+				return seconds * 1000;
+			}
+
+			// 尝试解析为日期
+			const date = new Date(retryAfter);
+			if (!isNaN(date.getTime())) {
+				const delayMs = date.getTime() - Date.now();
+				if (delayMs > 0) {
+					console.log(`[Maxian] 检测到 Retry-After (日期): ${delayMs}ms`);
+					this.rateLimitHits++;
+					this.lastRateLimitTime = Date.now();
+					return delayMs;
+				}
+			}
+		}
+
+		// 检查 X-RateLimit-Reset 头（一些API使用这个）
+		const rateLimitReset = response.headers.get('X-RateLimit-Reset') ||
+							   response.headers.get('X-RateLimit-Reset-Requests');
+		if (rateLimitReset) {
+			const resetTime = parseInt(rateLimitReset, 10);
+			if (!isNaN(resetTime)) {
+				// 可能是Unix时间戳或秒数
+				let delayMs: number;
+				if (resetTime > 1000000000) {
+					// Unix时间戳
+					delayMs = resetTime * 1000 - Date.now();
+				} else {
+					// 秒数
+					delayMs = resetTime * 1000;
+				}
+				if (delayMs > 0) {
+					console.log(`[Maxian] 检测到 X-RateLimit-Reset: ${delayMs}ms`);
+					this.rateLimitHits++;
+					this.lastRateLimitTime = Date.now();
+					return delayMs;
+				}
+			}
+		}
+
+		return undefined;
+	}
+
+	/**
+	 * P1优化：获取Rate Limit统计
+	 */
+	public getRateLimitStats(): { hits: number; lastHitTime: number } {
+		return {
+			hits: this.rateLimitHits,
+			lastHitTime: this.lastRateLimitTime
+		};
+	}
+
+	/**
+	 * P1优化：获取 Prompt Cache 统计
+	 */
+	public getPromptCacheStats(): {
+		enabled: boolean;
+		hits: number;
+		misses: number;
+		hitRate: string;
+	} {
+		const total = this.systemPromptCacheHits + this.systemPromptCacheMisses;
+		const hitRate = total > 0 ? ((this.systemPromptCacheHits / total) * 100).toFixed(1) : '0';
+		return {
+			enabled: this.PROMPT_CACHE_CONFIG.enabled,
+			hits: this.systemPromptCacheHits,
+			misses: this.systemPromptCacheMisses,
+			hitRate,
+		};
+	}
+
+	/**
+	 * P1优化：计算字符串哈希（用于系统提示词比较）
+	 * 借鉴 Aider 的简单哈希实现
+	 */
+	private hashString(str: string): string {
+		let hash = 0;
+		for (let i = 0; i < str.length; i++) {
+			const char = str.charCodeAt(i);
+			hash = ((hash << 5) - hash) + char;
+			hash = hash & hash; // 转换为32位整数
+		}
+		return hash.toString(16);
+	}
+
+	/**
+	 * P1优化：检查系统提示词是否可缓存
+	 */
+	private isSystemPromptCacheable(systemPrompt: string): boolean {
+		if (!this.PROMPT_CACHE_CONFIG.enabled) {
+			return false;
+		}
+
+		// 估算 token 数（每4个字符约1个token）
+		const estimatedTokens = Math.ceil(systemPrompt.length / 4);
+
+		// 只有大于阈值的提示词才值得缓存
+		return estimatedTokens >= this.PROMPT_CACHE_CONFIG.minTokensForCaching;
+	}
+
+	/**
+	 * P1优化：处理系统提示词缓存
+	 * 借鉴 Cline 的 cache_control 标记策略
+	 */
+	private processSystemPromptForCache(systemPrompt: string): {
+		prompt: string;
+		cached: boolean;
+		hash: string;
+	} {
+		const hash = this.hashString(systemPrompt);
+
+		// 检查是否与上次相同
+		if (this.lastSystemPromptHash === hash) {
+			this.systemPromptCacheHits++;
+			console.log(`[Maxian] 系统提示词缓存命中 (命中率: ${this.getPromptCacheStats().hitRate}%)`);
+			return {
+				prompt: systemPrompt,
+				cached: true,
+				hash,
+			};
+		}
+
+		// 缓存未命中
+		this.systemPromptCacheMisses++;
+		this.lastSystemPromptHash = hash;
+		console.log(`[Maxian] 系统提示词缓存未命中，新哈希: ${hash}`);
+
+		return {
+			prompt: systemPrompt,
+			cached: false,
+			hash,
+		};
+	}
+
+	/**
+	 * P1优化：为消息添加缓存控制标记
+	 * 借鉴 Cline/Continue 的实现
+	 * 注意：这主要用于 Anthropic API，对于其他 API 可能需要适配
+	 */
+	private addCacheControlToMessages(messages: AiProxyMessage[]): AiProxyMessage[] {
+		if (!this.PROMPT_CACHE_CONFIG.enabled) {
+			return messages;
+		}
+
+		// 标记策略（借鉴 Continue 的 optimized 策略）：
+		// 1. 系统消息始终标记为可缓存
+		// 2. 大消息（>500 tokens）标记为可缓存
+		// 3. 最多标记 maxCachingMessages 个消息
+
+		let cachedCount = 0;
+
+		return messages.map((msg, index) => {
+			// 系统消息始终可缓存
+			if (msg.role === 'system') {
+				return {
+					...msg,
+					// 添加缓存控制标记（如果后端支持）
+					// @ts-ignore - cache_control 是扩展字段
+					cache_control: { type: 'ephemeral' },
+				};
+			}
+
+			// 限制缓存数量
+			if (cachedCount >= this.PROMPT_CACHE_CONFIG.maxCachingMessages) {
+				return msg;
+			}
+
+			// 大消息可缓存
+			const estimatedTokens = Math.ceil(msg.content.length / 4);
+			if (estimatedTokens >= this.PROMPT_CACHE_CONFIG.minTokensForCaching) {
+				cachedCount++;
+				return {
+					...msg,
+					// @ts-ignore
+					cache_control: { type: 'ephemeral' },
+				};
+			}
+
+			return msg;
+		});
+	}
+
+	/**
+	 * 🚀 延迟函数
+	 */
+	private delay(ms: number): Promise<void> {
+		return new Promise(resolve => setTimeout(resolve, ms));
+	}
+
+	/**
 	 * 创建消息并返回流式响应
 	 * 实现 IApiHandler 接口
 	 */
@@ -151,8 +455,16 @@ export class AiProxyHandler implements IApiHandler {
 			// 生成请求ID
 			this.currentRequestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+			// P1优化：处理系统提示词缓存
+			const cacheResult = this.isSystemPromptCacheable(systemPrompt)
+				? this.processSystemPromptForCache(systemPrompt)
+				: { prompt: systemPrompt, cached: false, hash: '' };
+
 			// 转换消息格式
-			const aiProxyMessages = this.convertMessages(systemPrompt, messages);
+			let aiProxyMessages = this.convertMessages(cacheResult.prompt, messages);
+
+			// P1优化：为消息添加缓存控制标记
+			aiProxyMessages = this.addCacheControlToMessages(aiProxyMessages);
 
 			// 转换工具定义
 			const aiProxyTools = tools ? this.convertTools(tools) : undefined;
@@ -192,7 +504,9 @@ export class AiProxyHandler implements IApiHandler {
 				toolsCount: aiProxyTools?.length || 0,
 				messagesCount: aiProxyMessages.length,
 				hasTools: !!(aiProxyTools && aiProxyTools.length > 0),
-				parallelToolCalls: requestBody.parallelToolCalls  // ✅ 显示并行工具调用状态
+				parallelToolCalls: requestBody.parallelToolCalls,  // ✅ 显示并行工具调用状态
+				promptCached: cacheResult.cached,  // P1优化：显示缓存状态
+				promptCacheHitRate: this.getPromptCacheStats().hitRate + '%',
 			});
 			if (aiProxyTools && aiProxyTools.length > 0) {
 				console.log('[Maxian] 工具列表:', aiProxyTools.map(t => t.function.name));
@@ -201,23 +515,78 @@ export class AiProxyHandler implements IApiHandler {
 
 			// 构建 API 端点
 			const apiEndpoint = this.buildApiEndpoint();
-
-			// 发送请求
-			const response = await fetch(apiEndpoint, {
+			const requestOptions: RequestInit = {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
 					'Accept': 'text/event-stream'
 				},
 				body: JSON.stringify(requestBody)
-			});
+			};
 
-			if (!response.ok) {
-				const errorText = await response.text();
-				console.error('[Maxian] AiProxy API 错误:', response.status, errorText);
+			// 🚀 带超时和重试的请求（P1优化：支持Rate Limit自适应）
+			let lastError: any = null;
+			let response: Response | null = null;
+			let rateLimitDelay: number | undefined = undefined;
+
+			for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
+				try {
+					if (attempt > 0) {
+						// P1优化：优先使用Rate Limit指定的延迟
+						const retryDelay = this.getRetryDelay(attempt - 1, rateLimitDelay);
+						console.log(`[Maxian] 重试API请求 (${attempt}/${this.MAX_RETRIES})，等待 ${retryDelay}ms ${rateLimitDelay ? '(Rate Limit)' : ''}`);
+						await this.delay(retryDelay);
+						rateLimitDelay = undefined; // 重置Rate Limit延迟
+					}
+
+					const startTime = Date.now();
+					response = await this.fetchWithTimeout(apiEndpoint, requestOptions, this.REQUEST_TIMEOUT);
+					const elapsed = Date.now() - startTime;
+					console.log(`[Maxian] API请求完成，耗时: ${elapsed}ms`);
+
+					if (response.ok) {
+						break; // 成功，退出重试循环
+					}
+
+					// HTTP错误
+					const errorText = await response.text();
+					lastError = { status: response.status, message: errorText };
+					console.error(`[Maxian] AiProxy API 错误 (${response.status}):`, errorText);
+
+					// P1优化：解析Rate Limit延迟
+					if (response.status === 429) {
+						rateLimitDelay = this.parseRateLimitDelay(response);
+					}
+
+					// 检查是否可重试
+					if (!this.isRetryableError(lastError) || attempt === this.MAX_RETRIES) {
+						const errorChunk: ErrorStreamChunk = {
+							type: 'error',
+							error: `AiProxy API 错误 (${response.status}): ${errorText}`
+						};
+						yield errorChunk;
+						return;
+					}
+				} catch (error) {
+					lastError = error;
+					console.error(`[Maxian] API请求失败 (尝试 ${attempt + 1}):`, error);
+
+					// 检查是否可重试
+					if (!this.isRetryableError(error) || attempt === this.MAX_RETRIES) {
+						const errorChunk: ErrorStreamChunk = {
+							type: 'error',
+							error: error instanceof Error ? error.message : String(error)
+						};
+						yield errorChunk;
+						return;
+					}
+				}
+			}
+
+			if (!response || !response.ok) {
 				const errorChunk: ErrorStreamChunk = {
 					type: 'error',
-					error: `AiProxy API 错误 (${response.status}): ${errorText}`
+					error: `API请求失败: ${lastError?.message || '未知错误'}`
 				};
 				yield errorChunk;
 				return;
@@ -235,6 +604,7 @@ export class AiProxyHandler implements IApiHandler {
 			yield errorChunk;
 		} finally {
 			this.currentRequestId = null;
+			this.currentAbortController = null;
 		}
 	}
 
@@ -493,14 +863,22 @@ export class AiProxyHandler implements IApiHandler {
 
 	/**
 	 * 中止当前请求
-	 * 使用HTTP透传模式端点
+	 * 🚀 优化：使用AbortController立即中止客户端请求
 	 */
 	async stopCurrentRequest(): Promise<boolean> {
+		// 首先使用AbortController立即中止客户端请求
+		if (this.currentAbortController) {
+			console.log('[Maxian] 使用AbortController中止请求');
+			this.currentAbortController.abort();
+			this.currentAbortController = null;
+		}
+
 		if (!this.currentRequestId) {
 			return false;
 		}
 
 		try {
+			// 同时通知后端中止处理
 			const baseUrl = this.config.apiUrl.replace(/\/$/, '');
 			const response = await fetch(`${baseUrl}/ai/proxy/stop/${this.currentRequestId}`, {
 				method: 'POST',

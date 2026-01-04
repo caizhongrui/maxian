@@ -11,13 +11,25 @@
  */
 
 import * as path from 'path';
+import * as fs from 'fs';
 import { TagExtractor } from './TagExtractor.js';
 import { ReferenceGraphBuilder } from './ReferenceGraphBuilder.js';
 import { PageRankSorter } from './PageRankSorter.js';
 import { Tag, RepoMapOptions, RepoMapContext } from './types.js';
 
 /**
+ * P0优化: RepoMap缓存条目
+ * 包含生成的map和文件mtime快照
+ */
+interface RepoMapCacheEntry {
+	map: string;
+	mtimeSnapshot: Map<string, number>;  // 文件路径 -> mtime
+	timestamp: number;                    // 缓存创建时间
+}
+
+/**
  * RepoMapGenerator - 主类
+ * P0优化：增强缓存机制（基于mtime失效 + Token采样估算）
  */
 export class RepoMapGenerator {
 	private tagExtractor: TagExtractor;
@@ -28,10 +40,15 @@ export class RepoMapGenerator {
 	private maxTokens: number;
 	private mapMulNoFiles: number;
 	private verbose: boolean;
+	// @ts-expect-error: workspaceRoot保留以备将来持久化缓存使用
+	private readonly _workspaceRoot: string;
 
-	// 缓存
-	private mapCache: Map<string, string> = new Map();
+	// P0优化：增强缓存（基于mtime失效）
+	private mapCache: Map<string, RepoMapCacheEntry> = new Map();
 	private lastGeneratedMap: string | null = null;
+	private readonly CACHE_TTL = 5 * 60 * 1000; // 缓存有效期5分钟
+	private cacheHits = 0;
+	private cacheMisses = 0;
 
 	constructor(options: RepoMapOptions) {
 		this.tagExtractor = new TagExtractor(options.workspaceRoot, options.verbose);
@@ -41,6 +58,7 @@ export class RepoMapGenerator {
 		this.maxTokens = options.maxTokens || 2048;
 		this.mapMulNoFiles = options.mapMulNoFiles || 8;
 		this.verbose = options.verbose || false;
+		this._workspaceRoot = options.workspaceRoot;
 	}
 
 	/**
@@ -56,19 +74,33 @@ export class RepoMapGenerator {
 	/**
 	 * 生成排序后的RepoMap
 	 * 参考 Aider 的 get_ranked_tags_map 方法（第557-608行）
+	 * P0优化：增强缓存机制（基于mtime失效）
 	 */
 	async generateRanked(context: RepoMapContext): Promise<string> {
 		// 1. 生成缓存key
 		const cacheKey = this.getCacheKey(context);
+		const allFiles = [...context.chatFiles, ...context.otherFiles];
 
-		// 检查缓存
-		if (this.mapCache.has(cacheKey)) {
-			if (this.verbose) {
-				console.log('[RepoMapGenerator] 使用缓存结果');
+		// P0优化：检查缓存（带mtime验证）
+		const cached = this.mapCache.get(cacheKey);
+		if (cached) {
+			const isCacheValid = this.isCacheValid(cached, allFiles);
+			if (isCacheValid) {
+				this.cacheHits++;
+				if (this.verbose) {
+					console.log(`[RepoMapGenerator] 使用缓存结果 (命中率: ${this.getCacheHitRate()}%)`);
+				}
+				return cached.map;
+			} else {
+				// 缓存失效，删除
+				this.mapCache.delete(cacheKey);
+				if (this.verbose) {
+					console.log('[RepoMapGenerator] 缓存失效（文件已修改）');
+				}
 			}
-			return this.mapCache.get(cacheKey)!;
 		}
 
+		this.cacheMisses++;
 		const startTime = Date.now();
 
 		// 2. 调整token预算（无chat files时扩大）
@@ -89,14 +121,97 @@ export class RepoMapGenerator {
 
 		const endTime = Date.now();
 		if (this.verbose) {
-			console.log(`[RepoMapGenerator] 生成耗时 ${endTime - startTime}ms`);
+			console.log(`[RepoMapGenerator] 生成耗时 ${endTime - startTime}ms (缓存命中率: ${this.getCacheHitRate()}%)`);
 		}
 
-		// 4. 缓存结果
-		this.mapCache.set(cacheKey, result);
+		// 4. P0优化：缓存结果（带mtime快照）
+		const mtimeSnapshot = this.createMtimeSnapshot(allFiles);
+		this.mapCache.set(cacheKey, {
+			map: result,
+			mtimeSnapshot,
+			timestamp: Date.now()
+		});
 		this.lastGeneratedMap = result;
 
 		return result;
+	}
+
+	/**
+	 * P0优化：验证缓存是否有效
+	 * 检查：1. TTL未过期 2. 文件mtime未变化
+	 */
+	private isCacheValid(entry: RepoMapCacheEntry, files: string[]): boolean {
+		// 检查TTL
+		if (Date.now() - entry.timestamp > this.CACHE_TTL) {
+			return false;
+		}
+
+		// 检查文件mtime（采样检查，避免全量检查）
+		// 策略：检查最多20个文件，随机采样
+		const filesToCheck = files.length <= 20
+			? files
+			: this.sampleFiles(files, 20);
+
+		for (const file of filesToCheck) {
+			try {
+				const currentMtime = fs.statSync(file).mtimeMs;
+				const cachedMtime = entry.mtimeSnapshot.get(file);
+
+				if (cachedMtime === undefined || currentMtime !== cachedMtime) {
+					return false;
+				}
+			} catch {
+				// 文件不存在或无法访问，缓存失效
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * P0优化：创建文件mtime快照
+	 */
+	private createMtimeSnapshot(files: string[]): Map<string, number> {
+		const snapshot = new Map<string, number>();
+
+		for (const file of files) {
+			try {
+				const mtime = fs.statSync(file).mtimeMs;
+				snapshot.set(file, mtime);
+			} catch {
+				// 忽略无法访问的文件
+			}
+		}
+
+		return snapshot;
+	}
+
+	/**
+	 * P0优化：随机采样文件列表
+	 */
+	private sampleFiles(files: string[], count: number): string[] {
+		if (files.length <= count) {
+			return files;
+		}
+
+		const sampled: string[] = [];
+		const step = Math.floor(files.length / count);
+
+		for (let i = 0; i < files.length && sampled.length < count; i += step) {
+			sampled.push(files[i]);
+		}
+
+		return sampled;
+	}
+
+	/**
+	 * P0优化：获取缓存命中率
+	 */
+	private getCacheHitRate(): string {
+		const total = this.cacheHits + this.cacheMisses;
+		if (total === 0) return '0';
+		return ((this.cacheHits / total) * 100).toFixed(1);
 	}
 
 	/**
@@ -303,12 +418,41 @@ export class RepoMapGenerator {
 	}
 
 	/**
-	 * 估算token数
-	 * 简化实现：1 token ≈ 4 个字符（英文）或 2 个字符（中文）
-	 * 平均使用 3 个字符
+	 * P0优化：Token采样估算（借鉴Aider）
+	 * 对于小文本：精确计算
+	 * 对于大文本：1%采样后线性外推，大幅减少计算量
 	 */
 	private estimateTokens(text: string): number {
-		return Math.ceil(text.length / 3);
+		const textLength = text.length;
+
+		// 小文本直接计算
+		if (textLength < 500) {
+			return Math.ceil(textLength / 3);
+		}
+
+		// 大文本采样估算
+		const lines = text.split('\n');
+		const numLines = lines.length;
+
+		// 每100行采样1行（1%采样率）
+		const step = Math.max(1, Math.floor(numLines / 100));
+		const sampledLines: string[] = [];
+
+		for (let i = 0; i < numLines; i += step) {
+			sampledLines.push(lines[i]);
+		}
+
+		const sampleText = sampledLines.join('\n');
+		const sampleTokens = Math.ceil(sampleText.length / 3);
+
+		// 线性外推
+		const estimatedTokens = Math.ceil(sampleTokens / sampleText.length * textLength);
+
+		if (this.verbose) {
+			console.log(`[RepoMapGenerator] Token采样估算: 文本${textLength}字符, 采样${sampleText.length}字符, 估算${estimatedTokens}tokens`);
+		}
+
+		return estimatedTokens;
 	}
 
 	/**
@@ -346,16 +490,23 @@ export class RepoMapGenerator {
 
 	/**
 	 * 获取统计信息
+	 * P0优化：增加缓存命中率统计
 	 */
 	getStats(): {
 		mapCacheSize: number;
 		tagCacheSize: number;
 		lastMapLength: number;
+		cacheHitRate: string;
+		cacheHits: number;
+		cacheMisses: number;
 	} {
 		return {
 			mapCacheSize: this.mapCache.size,
 			tagCacheSize: this.tagExtractor.getCacheStats().size,
-			lastMapLength: this.lastGeneratedMap?.length || 0
+			lastMapLength: this.lastGeneratedMap?.length || 0,
+			cacheHitRate: this.getCacheHitRate(),
+			cacheHits: this.cacheHits,
+			cacheMisses: this.cacheMisses
 		};
 	}
 }

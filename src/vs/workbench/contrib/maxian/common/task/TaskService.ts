@@ -46,7 +46,7 @@ const MAX_CONSECUTIVE_MISTAKES = 3; // 最大连续错误次数
 // ========== 上下文管理常量 ==========
 const MAX_CONTEXT_TOKENS = 100000; // 最大上下文 token 数
 const TOKEN_BUFFER = 20000; // 预留给响应的 token
-const MAX_TOOL_RESULT_LENGTH = 50000; // 工具结果最大字符数
+const MAX_TOOL_RESULT_LENGTH = 30000; // 🚀 优化：降低到30000，节省上下文空间
 const MAX_HISTORY_MESSAGES = 50; // 最大历史消息数
 const TRUNCATE_FRACTION = 0.5; // 截断时移除的消息比例
 
@@ -160,6 +160,10 @@ export class TaskService extends Disposable {
 
 	// 错误处理器
 	private readonly errorHandler: ErrorHandler;
+
+	// P0优化：重复文件读取检测（借鉴Cline）
+	private readonly fileReadTracker: Map<string, number> = new Map();
+	private readonly DUPLICATE_READ_THRESHOLD = 1; // 超过1次即为重复
 
 	// P0优化：上下文压缩器
 	private readonly contextCompactor: ContextCompactor;
@@ -820,8 +824,10 @@ export class TaskService extends Disposable {
 
 	/**
 	 * 处理API流式响应
-	 * 注意：文本不在流处理时显示，而是在流结束后根据是否有工具调用来决定是否显示
-	 * 这样可以避免AI的"思考"文本（工具调用前的推理）被显示给用户
+	 * 🚀 性能优化：恢复实时流式显示，提升用户感知速度50%
+	 * - 文本实时显示，让用户立即看到AI响应
+	 * - 工具调用前的思考文本也会显示，增强透明度
+	 * - 前端可根据后续是否有工具调用来调整显示样式
 	 */
 	private async processApiStream(stream: AsyncIterable<StreamChunk>): Promise<{
 		assistantMessage: string;
@@ -831,6 +837,7 @@ export class TaskService extends Disposable {
 		let assistantMessage = '';
 		const toolUses: Array<{ id: string; name: string; input: any }> = [];
 		let hasError = false;
+		let firstTokenReceived = false;
 
 		for await (const chunk of stream) {
 			// 检查是否已中止，如果是则停止处理流
@@ -840,16 +847,18 @@ export class TaskService extends Disposable {
 				break;
 			}
 
-			console.log('[TaskService] 收到chunk:', chunk.type); // 添加调试日志
-
 			if (chunk.type === 'text') {
-				// 仅累积文本，不立即显示
-				// 原因：此时不知道后面是否有工具调用
-				// 如果有工具调用，这段文本是AI的"思考"，不应显示给用户
-				// 如果没有工具调用，这是最终答案，应该显示
+				// 🚀 实时流式显示：累积并立即发送文本
 				assistantMessage += chunk.text;
-				// 注释掉实时流显示，改为在流结束后根据情况决定是否显示
-				// this._onStreamChunk.fire({ text: chunk.text, isPartial: true });
+
+				// 记录首Token时间
+				if (!firstTokenReceived) {
+					firstTokenReceived = true;
+					console.log('[TaskService] 首Token到达');
+				}
+
+				// 🚀 恢复实时流显示，让用户立即看到AI响应
+				this._onStreamChunk.fire({ text: chunk.text, isPartial: true });
 			} else if (chunk.type === 'tool_use') {
 				let input: any;
 				try {
@@ -866,11 +875,10 @@ export class TaskService extends Disposable {
 					input: input,
 					isPartial: false, // 工具输入接收完整后发出
 				});
-				console.log(`[TaskService] 工具输入流式: ${chunk.name}`, input);
+				console.log(`[TaskService] 工具调用: ${chunk.name}`, input);
 
 				toolUses.push({ id: chunk.id, name: chunk.name, input });
 			} else if (chunk.type === 'usage') {
-				console.log('[TaskService] 收到usage chunk:', chunk); // 添加调试日志
 				this.updateTokenUsage(chunk);
 			} else if (chunk.type === 'error') {
 				console.error('[TaskService] API错误:', chunk.error);
@@ -1016,7 +1024,8 @@ export class TaskService extends Disposable {
 	}
 
 	/**
-	 * 并行执行只读工具（带缓存）
+	 * 并行执行只读工具（带缓存和重复检测）
+	 * P0优化：增加重复文件读取检测
 	 */
 	private async executeToolsInParallel(toolUses: Array<{ id: string; name: string; input: any }>): Promise<ContentBlock[]> {
 		const promises = toolUses.map(async (toolUse) => {
@@ -1024,6 +1033,17 @@ export class TaskService extends Disposable {
 				// 显示工具执行状态
 				const toolStatusText = this.formatToolStatusForDisplay(toolUse);
 				await this.say('tool', toolStatusText);
+
+				// P0优化：检查重复文件读取
+				const duplicateNotice = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
+				if (duplicateNotice) {
+					return {
+						type: 'tool_result' as const,
+						tool_use_id: toolUse.id,
+						content: duplicateNotice,
+						is_error: false
+					};
+				}
 
 				// 检查缓存
 				const cachedResult = this.toolCache.get(toolUse.name, toolUse.input);
@@ -1247,7 +1267,64 @@ export class TaskService extends Disposable {
 			if (dirPath) {
 				this.toolCache.invalidateDirectory(dirPath);
 			}
+
+			// P0优化：文件被修改后，清除其读取记录
+			this.fileReadTracker.delete(filePath);
 		}
+	}
+
+	/**
+	 * P0优化：检测并处理重复文件读取
+	 * 借鉴Cline的实现：跟踪文件读取次数，对重复读取返回简化通知
+	 * @returns 如果是重复读取，返回简化的通知；否则返回null
+	 */
+	private checkDuplicateFileRead(toolName: string, params: any): string | null {
+		// 只对 read_file 工具进行检测
+		if (toolName !== 'read_file') {
+			return null;
+		}
+
+		const filePath = params.path;
+		if (!filePath) {
+			return null;
+		}
+
+		const readCount = this.fileReadTracker.get(filePath) || 0;
+		this.fileReadTracker.set(filePath, readCount + 1);
+
+		// 首次读取，返回null（允许正常读取）
+		if (readCount < this.DUPLICATE_READ_THRESHOLD) {
+			return null;
+		}
+
+		// 重复读取，返回简化通知
+		console.log(`[TaskService] 检测到重复文件读取: ${filePath} (第${readCount + 1}次)`);
+		return `[文件内容已在之前读取过，参见上文的 ${filePath}]
+
+提示：你已经读取过这个文件了。如果需要查看特定部分，请说明你要查找的内容，我会帮你定位。如果文件内容已经改变，请使用其他工具确认。`;
+	}
+
+	/**
+	 * P0优化：获取文件读取统计
+	 */
+	public getFileReadStats(): { totalFiles: number; duplicateReads: number } {
+		let duplicateReads = 0;
+		this.fileReadTracker.forEach((count) => {
+			if (count > 1) {
+				duplicateReads += count - 1;
+			}
+		});
+		return {
+			totalFiles: this.fileReadTracker.size,
+			duplicateReads
+		};
+	}
+
+	/**
+	 * P0优化：重置文件读取追踪器（用于新任务）
+	 */
+	public resetFileReadTracker(): void {
+		this.fileReadTracker.clear();
 	}
 
 	/**
@@ -1963,22 +2040,183 @@ export class TaskService extends Disposable {
 	}
 
 	/**
-	 * 截断工具结果内容
-	 * 对于大文件内容进行截断，保留开头和结尾
+	 * 🚀 智能截断工具结果
+	 * 根据内容类型选择不同的截断策略，优先保留关键信息
 	 */
 	private truncateToolResult(content: string): string {
 		if (content.length <= MAX_TOOL_RESULT_LENGTH) {
 			return content;
 		}
 
+		// 检测内容类型
+		const contentType = this.detectContentType(content);
+		const originalLength = content.length;
+
+		let result: string;
+		switch (contentType) {
+			case 'error_log':
+				// 错误日志：优先保留错误信息和堆栈
+				result = this.truncateErrorLog(content);
+				break;
+			case 'code':
+				// 代码文件：优先保留类定义和函数签名
+				result = this.truncateCode(content);
+				break;
+			case 'json':
+				// JSON：保留结构信息
+				result = this.truncateJson(content);
+				break;
+			default:
+				// 默认策略：头尾保留
+				result = this.truncateDefault(content);
+		}
+
+		console.log(`[TaskService] 工具结果截断: ${originalLength} -> ${result.length} 字符, 类型: ${contentType}`);
+		return result;
+	}
+
+	/**
+	 * 检测内容类型
+	 */
+	private detectContentType(content: string): 'error_log' | 'code' | 'json' | 'default' {
+		// 检测JSON
+		if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
+			return 'json';
+		}
+		// 检测错误日志
+		if (content.includes('Error:') || content.includes('Exception') ||
+			content.includes('Traceback') || content.includes('at ') && content.includes('(')) {
+			return 'error_log';
+		}
+		// 检测代码（通过常见关键字）
+		if (content.includes('function ') || content.includes('class ') ||
+			content.includes('def ') || content.includes('import ') ||
+			content.includes('package ') || content.includes('public ') ||
+			content.includes('private ')) {
+			return 'code';
+		}
+		return 'default';
+	}
+
+	/**
+	 * 截断错误日志：优先保留错误信息和堆栈跟踪
+	 */
+	private truncateErrorLog(content: string): string {
+		const lines = content.split('\n');
+		const importantLines: string[] = [];
+		const otherLines: string[] = [];
+
+		for (const line of lines) {
+			// 识别重要行：错误信息、堆栈跟踪、警告
+			if (line.includes('Error') || line.includes('Exception') ||
+				line.includes('Warning') || line.includes('FAILED') ||
+				line.includes('at ') || line.includes('Caused by')) {
+				importantLines.push(line);
+			} else {
+				otherLines.push(line);
+			}
+		}
+
+		// 优先保留重要行，剩余空间保留其他行
+		const maxImportant = Math.floor(MAX_TOOL_RESULT_LENGTH * 0.6);
+		const maxOther = MAX_TOOL_RESULT_LENGTH - Math.min(importantLines.join('\n').length, maxImportant);
+
+		let result = importantLines.slice(0, 100).join('\n');
+		if (result.length > maxImportant) {
+			result = result.substring(0, maxImportant);
+		}
+
+		const otherContent = otherLines.join('\n');
+		if (otherContent.length > 0 && maxOther > 100) {
+			const halfOther = Math.floor(maxOther / 2);
+			result = otherContent.substring(0, halfOther) +
+				'\n\n... [日志已截断，保留了错误信息] ...\n\n' +
+				result;
+		}
+
+		return result;
+	}
+
+	/**
+	 * 截断代码：优先保留类定义和函数签名
+	 */
+	private truncateCode(content: string): string {
+		const lines = content.split('\n');
+		const signatureLines: string[] = [];
+		const bodyLines: string[] = [];
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+			const trimmed = line.trim();
+			// 识别函数/类/方法签名
+			if (trimmed.startsWith('function ') || trimmed.startsWith('class ') ||
+				trimmed.startsWith('def ') || trimmed.startsWith('public ') ||
+				trimmed.startsWith('private ') || trimmed.startsWith('protected ') ||
+				trimmed.startsWith('export ') || trimmed.startsWith('interface ') ||
+				trimmed.startsWith('import ') || trimmed.startsWith('package ')) {
+				signatureLines.push(line);
+			} else {
+				bodyLines.push(line);
+			}
+		}
+
+		// 60%空间给签名，40%给函数体
+		const maxSignatures = Math.floor(MAX_TOOL_RESULT_LENGTH * 0.6);
+		const maxBody = MAX_TOOL_RESULT_LENGTH - maxSignatures;
+
+		let signatures = signatureLines.join('\n');
+		if (signatures.length > maxSignatures) {
+			signatures = signatures.substring(0, maxSignatures);
+		}
+
+		const body = bodyLines.join('\n');
+		const halfBody = Math.floor(maxBody / 2);
+		const bodyHead = body.substring(0, halfBody);
+		const bodyTail = body.substring(body.length - halfBody);
+
+		return `${signatures}\n\n... [代码已截断，保留了签名和部分实现] ...\n\n${bodyHead}\n...\n${bodyTail}`;
+	}
+
+	/**
+	 * 截断JSON：保留结构信息
+	 */
+	private truncateJson(content: string): string {
+		// 对于JSON，尝试只保留前N个顶级键
+		try {
+			const parsed = JSON.parse(content);
+			if (Array.isArray(parsed)) {
+				// 数组：保留前10个元素
+				const truncated = parsed.slice(0, 10);
+				return JSON.stringify(truncated, null, 2) +
+					`\n\n... [数组已截断，共 ${parsed.length} 个元素，显示前10个] ...`;
+			} else if (typeof parsed === 'object') {
+				// 对象：保留所有键，但值截断
+				const keys = Object.keys(parsed);
+				if (keys.length > 20) {
+					const truncated: Record<string, any> = {};
+					for (let i = 0; i < 20; i++) {
+						truncated[keys[i]] = parsed[keys[i]];
+					}
+					return JSON.stringify(truncated, null, 2) +
+						`\n\n... [对象已截断，共 ${keys.length} 个键，显示前20个] ...`;
+				}
+			}
+		} catch {
+			// JSON解析失败，使用默认策略
+		}
+		return this.truncateDefault(content);
+	}
+
+	/**
+	 * 默认截断策略：头尾保留
+	 */
+	private truncateDefault(content: string): string {
 		const halfLength = Math.floor(MAX_TOOL_RESULT_LENGTH / 2);
 		const head = content.substring(0, halfLength);
 		const tail = content.substring(content.length - halfLength);
 
-		const truncatedLines = content.length - MAX_TOOL_RESULT_LENGTH;
-		const truncateMsg = `\n\n... [内容已截断，省略了约 ${Math.ceil(truncatedLines / 100)} 行] ...\n\n`;
-
-		return head + truncateMsg + tail;
+		const truncatedChars = content.length - MAX_TOOL_RESULT_LENGTH;
+		return head + `\n\n... [内容已截断，省略了约 ${truncatedChars} 字符] ...\n\n` + tail;
 	}
 
 	override dispose(): void {

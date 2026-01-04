@@ -11,11 +11,27 @@ import { IRipgrepService } from '../../../../services/ripgrep/common/ripgrep.js'
 import * as glob from '../../../../../base/common/glob.js';
 
 /**
+ * P1优化：搜索结果缓存条目
+ */
+interface SearchCacheEntry {
+	result: string;
+	timestamp: number;
+}
+
+/**
  * 搜索工具类
  * 实现文件搜索和代码库搜索功能
  * 优化：直接使用 ISearchService (底层使用 ripgrep)，简化搜索策略
+ * P1优化：增加搜索结果缓存
  */
 export class SearchTool {
+	// P1优化：搜索结果缓存
+	private readonly searchCache: Map<string, SearchCacheEntry> = new Map();
+	private readonly CACHE_TTL = 30000; // 30秒缓存
+	private readonly MAX_CACHE_SIZE = 100;
+	private cacheHits = 0;
+	private cacheMisses = 0;
+
 	constructor(
 		private readonly searchService: ISearchService,
 		// @ts-expect-error: ripgrepService保留以备将来使用
@@ -85,6 +101,7 @@ export class SearchTool {
 	 * 代码库搜索
 	 * 优化：直接使用 ISearchService.textSearch()（底层使用 ripgrep）
 	 * 简化策略：先执行直接搜索，只在无结果时尝试回退
+	 * P1优化：增加搜索结果缓存
 	 * @param toolUse 代码库搜索工具使用信息
 	 * @returns 搜索结果
 	 */
@@ -104,9 +121,19 @@ export class SearchTool {
 		}
 
 		const startTime = Date.now();
+		const searchPath = path || this.workspaceRoot;
+
+		// P1优化：检查缓存
+		const cacheKey = this.getCacheKey(query, searchPath, file_pattern);
+		const cachedResult = this.getFromCache(cacheKey);
+		if (cachedResult) {
+			this.cacheHits++;
+			console.log(`[SearchTool] 使用缓存结果 (命中率: ${this.getCacheHitRate()}%)`);
+			return cachedResult;
+		}
+		this.cacheMisses++;
 
 		try {
-			const searchPath = path || this.workspaceRoot;
 			const folderUri = URI.file(searchPath);
 
 			const includePattern: glob.IExpression | undefined = file_pattern
@@ -129,18 +156,21 @@ export class SearchTool {
 				// 如果直接搜索有结果，直接返回
 				if (results.size > 0) {
 					clearTimeout(timeoutId);
-					return this.formatSearchResults(query, results, startTime);
+					const result = this.formatSearchResults(query, results, startTime);
+					this.setCache(cacheKey, result);
+					return result;
 				}
 
-				// 策略2: 如果直接搜索无结果，尝试关键词分词搜索
-				const keywords = query.split(/\s+/).filter(w => w.length > 2);
-				if (keywords.length > 1) {
-					console.log('[SearchTool] 直接搜索无结果，尝试关键词搜索:', keywords.slice(0, 2));
+				// 策略2: 如果直接搜索无结果，使用智能关键词提取（支持中文）
+				const keywords = this.extractSearchKeywords(query);
+				if (keywords.length > 0) {
+					console.log('[SearchTool] 直接搜索无结果，尝试关键词搜索:', keywords.slice(0, 5));
 					const keywordStart = Date.now();
 
-					// 只搜索前2个关键词
-					for (const keyword of keywords.slice(0, 2)) {
+					// 搜索提取的关键词（最多5个）
+					for (const keyword of keywords.slice(0, 5)) {
 						if (cts.token.isCancellationRequested) break;
+						if (results.size >= 50) break; // 足够结果就停止
 						const keywordResults = await this.performTextSearchDirect(folderUri, keyword, includePattern, false, cts.token);
 						keywordResults.forEach((v, k) => results.set(k, v));
 					}
@@ -150,7 +180,9 @@ export class SearchTool {
 				}
 
 				clearTimeout(timeoutId);
-				return this.formatSearchResults(query, results, startTime);
+				const result = this.formatSearchResults(query, results, startTime);
+				this.setCache(cacheKey, result);
+				return result;
 			} finally {
 				clearTimeout(timeoutId);
 				cts.dispose();
@@ -269,11 +301,18 @@ export class SearchTool {
 		// 移除 <repo_map> 标签及其内容
 		cleaned = cleaned.replace(/<repo_map>[\s\S]*?<\/repo_map>/g, '');
 
+		// 移除 <preloaded_code> 标签及其内容（预加载的代码）
+		cleaned = cleaned.replace(/<preloaded_code>[\s\S]*?<\/preloaded_code>/g, '');
+
 		// 移除多余的空行
 		cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
 
 		// trim
 		cleaned = cleaned.trim();
+
+		// 移除换行符，避免正则表达式解析错误
+		// ripgrep 不支持换行符作为搜索内容
+		cleaned = cleaned.replace(/[\r\n]+/g, ' ').trim();
 
 		// 如果清理后为空，尝试提取第一行
 		if (!cleaned && query) {
@@ -282,5 +321,141 @@ export class SearchTool {
 		}
 
 		return cleaned || query;
+	}
+
+	/**
+	 * 提取搜索关键词
+	 * 支持中文分词和英文单词提取
+	 */
+	private extractSearchKeywords(query: string): string[] {
+		const keywords: string[] = [];
+
+		// 1. 提取英文单词（驼峰命名、下划线命名等）
+		const englishWords = query.match(/[a-zA-Z][a-zA-Z0-9_]*[a-zA-Z0-9]/g) || [];
+		keywords.push(...englishWords.filter(w => w.length >= 3));
+
+		// 2. 中文关键词提取 - 基于常见编程术语
+		const chineseTerms = [
+			'登录', '注册', '验证', '验证码', '短信', '用户', '密码',
+			'接口', '服务', '控制器', '配置', '参数', '请求', '响应',
+			'数据', '查询', '新增', '修改', '删除', '列表', '详情',
+			'权限', '角色', '菜单', '日志', '缓存', '任务', '定时',
+			'上传', '下载', '导入', '导出', '审核', '流程', '工作流',
+			'支付', '订单', '商品', '库存', '会员', '积分', '优惠',
+			'消息', '通知', '推送', '邮件', '模板', '配置', '系统'
+		];
+
+		for (const term of chineseTerms) {
+			if (query.includes(term)) {
+				keywords.push(term);
+			}
+		}
+
+		// 3. 如果没有找到关键词，尝试按常见分隔符分割中文
+		if (keywords.length === 0) {
+			const chineseWords = query.split(/[，。、；：！？\s]+/).filter(w => w.length >= 2 && w.length <= 10);
+			keywords.push(...chineseWords.slice(0, 5));
+		}
+
+		// 去重
+		return [...new Set(keywords)];
+	}
+
+	// ========== P1优化：搜索缓存方法 ==========
+
+	/**
+	 * 生成缓存键
+	 */
+	private getCacheKey(query: string, path: string, filePattern?: string): string {
+		return `${query}:${path}:${filePattern || ''}`;
+	}
+
+	/**
+	 * 从缓存获取结果
+	 */
+	private getFromCache(key: string): string | null {
+		const entry = this.searchCache.get(key);
+		if (!entry) {
+			return null;
+		}
+
+		// 检查TTL
+		if (Date.now() - entry.timestamp > this.CACHE_TTL) {
+			this.searchCache.delete(key);
+			return null;
+		}
+
+		return entry.result;
+	}
+
+	/**
+	 * 设置缓存
+	 */
+	private setCache(key: string, result: string): void {
+		// 清理过期缓存和限制大小
+		if (this.searchCache.size >= this.MAX_CACHE_SIZE) {
+			this.cleanCache();
+		}
+
+		this.searchCache.set(key, {
+			result,
+			timestamp: Date.now()
+		});
+	}
+
+	/**
+	 * 清理过期缓存
+	 */
+	private cleanCache(): void {
+		const now = Date.now();
+		const keysToDelete: string[] = [];
+
+		this.searchCache.forEach((entry, key) => {
+			if (now - entry.timestamp > this.CACHE_TTL) {
+				keysToDelete.push(key);
+			}
+		});
+
+		keysToDelete.forEach(key => this.searchCache.delete(key));
+
+		// 如果仍然超过限制，删除最旧的
+		if (this.searchCache.size >= this.MAX_CACHE_SIZE) {
+			const entries = Array.from(this.searchCache.entries())
+				.sort((a, b) => a[1].timestamp - b[1].timestamp);
+
+			const toDelete = entries.slice(0, Math.floor(this.MAX_CACHE_SIZE / 2));
+			toDelete.forEach(([key]) => this.searchCache.delete(key));
+		}
+	}
+
+	/**
+	 * 获取缓存命中率
+	 */
+	private getCacheHitRate(): string {
+		const total = this.cacheHits + this.cacheMisses;
+		if (total === 0) return '0';
+		return ((this.cacheHits / total) * 100).toFixed(1);
+	}
+
+	/**
+	 * 获取缓存统计
+	 */
+	public getCacheStats(): { size: number; hitRate: string; hits: number; misses: number } {
+		return {
+			size: this.searchCache.size,
+			hitRate: this.getCacheHitRate(),
+			hits: this.cacheHits,
+			misses: this.cacheMisses
+		};
+	}
+
+	/**
+	 * 清除缓存
+	 */
+	public clearCache(): void {
+		this.searchCache.clear();
+		this.cacheHits = 0;
+		this.cacheMisses = 0;
+		console.log('[SearchTool] 搜索缓存已清除');
 	}
 }
