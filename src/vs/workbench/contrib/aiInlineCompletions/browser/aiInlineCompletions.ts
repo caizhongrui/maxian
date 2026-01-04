@@ -65,18 +65,36 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			console.log('[AI Inline Completions] ✅ Manual mode - Explicit trigger accepted');
 		} else if (triggerMode === 'automatic') {
 			// 自动模式：接受所有触发
-			// 但仍然需要检查一些基本条件，避免过于频繁的调用
+			// 检查触发条件
 
 			const prefixTrimmed = prefix.trim();
+			const isNewLine = lineContent.trim().length === 0; // 当前行为空（换行场景）
 
-			// 如果前缀太短（少于 2 个字符），不触发
-			if (prefixTrimmed.length < 2 && context.triggerKind === 0) {
+			// 换行场景：检查上一行是否有代码，有则允许触发
+			if (isNewLine && context.triggerKind === 0) {
+				// 获取上一行内容
+				const prevLineNum = position.lineNumber - 1;
+				if (prevLineNum >= 1) {
+					const prevLine = model.getLineContent(prevLineNum).trim();
+					// 上一行有代码内容，允许换行补全
+					if (prevLine.length > 0) {
+						console.log('[AI Inline Completions] ✅ Automatic mode - new line after code, triggering');
+					} else {
+						console.log('[AI Inline Completions] ❌ Automatic mode - empty line context, skipping');
+						return undefined;
+					}
+				} else {
+					console.log('[AI Inline Completions] ❌ Automatic mode - first line empty, skipping');
+					return undefined;
+				}
+			} else if (prefixTrimmed.length < 1 && context.triggerKind === 0) {
+				// 非换行场景：至少需要1个字符
 				console.log('[AI Inline Completions] ❌ Automatic mode - prefix too short (' + prefixTrimmed.length + ' chars), skipping');
 				return undefined;
+			} else {
+				console.log('[AI Inline Completions] ✅ Automatic mode - trigger accepted (triggerKind:',
+					context.triggerKind === 0 ? 'Auto' : 'Explicit', ', prefix:', prefixTrimmed.length, 'chars)');
 			}
-
-			console.log('[AI Inline Completions] ✅ Automatic mode - trigger accepted (triggerKind:',
-				context.triggerKind === 0 ? 'Auto' : 'Explicit', ')');
 		} else {
 			console.log('[AI Inline Completions] ❌ Unknown trigger mode:', triggerMode);
 			return undefined;
@@ -279,69 +297,77 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		console.log('[AI Inline Completions] 使用本地提示词');
 		const parts: string[] = [];
 
-		// 系统角色定义（更严格）
-		parts.push(`You are a precise code completion engine for ${context.languageId}.`);
-		parts.push('Your ONLY task is to output the exact code that should be inserted at <CURSOR>.');
+		// 检测是否是换行场景
+		const isNewLine = context.prefix.trim().length === 0 && context.suffix.trim().length === 0;
+
+		// 系统角色定义
+		parts.push(`你是一个专业的${context.languageId}代码补全引擎。`);
+		parts.push('你的任务是预测并生成用户接下来要写的代码。');
 		parts.push('');
 
 		// 添加结构化上下文
 		if (context.currentClass || context.currentMethod || context.frameworks) {
-			parts.push('【CONTEXT】');
+			parts.push('【当前上下文】');
 
 			if (context.currentClass) {
-				parts.push(`Class: ${context.currentClass}`);
+				parts.push(`当前类: ${context.currentClass}`);
 				if (context.currentMethod) {
-					parts.push(`Method: ${context.currentMethod}`);
+					parts.push(`当前方法: ${context.currentMethod}`);
 				}
 			}
 
 			if (context.frameworks && context.frameworks.length > 0) {
-				parts.push(`Frameworks: ${context.frameworks.join(', ')}`);
+				parts.push(`使用框架: ${context.frameworks.join(', ')}`);
 			}
 
 			if (context.imports && context.imports.length > 0) {
-				const importSummary = context.imports.slice(0, 5).map((imp: any) => imp.modulePath);
-				parts.push(`Imports: ${importSummary.join(', ')}${context.imports.length > 5 ? '...' : ''}`);
+				const importSummary = context.imports.slice(0, 8).map((imp: any) => imp.modulePath);
+				parts.push(`已导入: ${importSummary.join(', ')}${context.imports.length > 8 ? '...' : ''}`);
 			}
 
 			parts.push('');
 		}
 
-		// 严格规则（强调多次）
-		parts.push('【CRITICAL RULES】');
-		parts.push('⚠️ FORBIDDEN:');
-		parts.push('  - NO explanations or descriptions');
-		parts.push('  - NO markdown (```) or code blocks');
-		parts.push('  - NO conversational text (like "here is", "you can", etc.)');
-		parts.push('  - NO questions or suggestions');
-		parts.push('  - NO repeating existing code (prefix/suffix)');
-		parts.push('');
-		parts.push('✅ REQUIRED:');
-		parts.push('  - Output ONLY the completion code');
-		parts.push('  - Match the indentation style');
-		parts.push('  - Use correct syntax for ' + context.languageId);
-		parts.push('  - Keep it concise (1-10 lines preferred)');
-		parts.push('');
-
 		// 代码上下文
 		const beforeCode = context.beforeLines.join('\n');
 		const afterCode = context.afterLines.join('\n');
 
-		parts.push('【CODE BEFORE CURSOR】');
+		parts.push('【光标前的代码】');
+		parts.push('```' + context.languageId);
 		parts.push(beforeCode);
+		if (context.prefix) {
+			parts.push(context.prefix);
+		}
+		parts.push('```');
 		parts.push('');
 
-		parts.push('【CURRENT LINE】');
-		parts.push(`${context.prefix}<CURSOR>${context.suffix}`);
-		parts.push('');
+		if (afterCode.trim()) {
+			parts.push('【光标后的代码】');
+			parts.push('```' + context.languageId);
+			if (context.suffix) {
+				parts.push(context.suffix);
+			}
+			parts.push(afterCode);
+			parts.push('```');
+			parts.push('');
+		}
 
-		parts.push('【CODE AFTER CURSOR】');
-		parts.push(afterCode);
+		// 输出要求
+		parts.push('【要求】');
+		if (isNewLine) {
+			parts.push('用户刚按下回车，请预测下一行代码。');
+			parts.push('根据上下文逻辑，生成最可能的下一行或下几行代码。');
+		} else {
+			parts.push('用户正在输入代码，请补全当前行。');
+		}
 		parts.push('');
-
-		// 最终指令（强调）
-		parts.push('【OUTPUT】');
-		parts.push('Insert at <CURSOR> (CODE ONLY, NO EXPLANATIONS):');
+		parts.push('输出规则：');
+		parts.push('1. 只输出代码，不要任何解释、注释或markdown标记');
+		parts.push('2. 保持与上下文一致的缩进风格');
+		parts.push('3. 代码要符合' + context.languageId + '语法');
+		parts.push('4. 生成1-5行高质量代码');
+		parts.push('');
+		parts.push('直接输出代码：');
 
 		const finalPrompt = parts.join('\n');
 		console.log('[AI Inline Completions] 本地提示词内容（前500字符）:', finalPrompt.substring(0, 500));
