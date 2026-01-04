@@ -117,6 +117,22 @@ export interface IToolInputStreamingEvent {
 }
 
 /**
+ * 任务列表事件（待办事项更新）
+ */
+export interface ITodoListEvent {
+	todos: ITodoItem[];        // 任务列表
+}
+
+/**
+ * 任务项
+ */
+export interface ITodoItem {
+	content: string;           // 任务内容
+	status: 'pending' | 'in_progress' | 'completed';  // 任务状态
+	activeForm: string;        // 进行中状态的描述文本
+}
+
+/**
  * 码弦服务接口
  */
 export interface IMaxianService {
@@ -248,6 +264,12 @@ export interface IMaxianService {
 	readonly onToolInputStreaming: Event<IToolInputStreamingEvent>;
 
 	/**
+	 * 任务列表更新事件
+	 * （todowrite工具更新任务列表时触发）
+	 */
+	readonly onTodoListUpdate: Event<ITodoListEvent>;
+
+	/**
 	 * 设置工具自动批准规则
 	 * @param toolName 工具名称
 	 * @param autoApprove 是否自动批准
@@ -313,6 +335,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	private readonly _onToolInputStreaming = this._register(new Emitter<IToolInputStreamingEvent>());
 	readonly onToolInputStreaming: Event<IToolInputStreamingEvent> = this._onToolInputStreaming.event;
+
+	private readonly _onTodoListUpdate = this._register(new Emitter<ITodoListEvent>());
+	readonly onTodoListUpdate: Event<ITodoListEvent> = this._onTodoListUpdate.event;
 
 	private _initialized = false;
 	private toolExecutor: IToolExecutor | null = null;
@@ -1015,6 +1040,15 @@ export class MaxianService extends Disposable implements IMaxianService {
 			});
 			this._register(toolInputStreamingDisposable);
 
+			// 监听任务列表更新事件，转发到UI
+			const todoListUpdatedDisposable = this.currentTask.onTodoListUpdated((event) => {
+				console.log('[Maxian] 任务列表更新:', event.todos.length, '项任务');
+				this._onTodoListUpdate.fire({
+					todos: event.todos
+				});
+			});
+			this._register(todoListUpdatedDisposable);
+
 			// 启动任务
 			await this.currentTask.start();
 
@@ -1352,11 +1386,33 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 15. update_todo_list - 更新待办列表
 			{
 				name: 'update_todo_list',
-				description: '更新任务待办列表。跟踪任务进度、管理多个待办项。',
+				description: '管理任务待办列表。用于跟踪复杂多步骤任务的进度。每个待办项必须包含content(任务描述)、status(状态)、activeForm(进行中描述)。同时只能有一个任务处于in_progress状态。',
 				parameters: {
 					type: 'object',
 					properties: {
-						todos: { type: 'array', description: '待办事项列表' }
+						todos: {
+							type: 'array',
+							description: '待办事项数组，每个元素代表一个独立的任务项',
+							items: {
+								type: 'object',
+								properties: {
+									content: {
+										type: 'string',
+										description: '任务描述（祈使句形式，如"实现用户登录功能"）'
+									},
+									status: {
+										type: 'string',
+										enum: ['pending', 'in_progress', 'completed'],
+										description: '任务状态：pending(待处理)、in_progress(进行中，同时只能有一个)、completed(已完成)'
+									},
+									activeForm: {
+										type: 'string',
+										description: '进行中状态的描述（现在进行时，如"正在实现用户登录功能"）'
+									}
+								},
+								required: ['content', 'status', 'activeForm']
+							}
+						}
 					},
 					required: ['todos']
 				}

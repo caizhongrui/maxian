@@ -14,8 +14,8 @@ import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
-import { IMaxianService, type ITokenUsageEvent, type ITaskProgressEvent, type IToolInputStreamingEvent } from './maxianService.js';
-import { $, append } from '../../../../base/browser/dom.js';
+import { IMaxianService, type ITokenUsageEvent, type ITaskProgressEvent, type IToolInputStreamingEvent, type ITodoListEvent, type ITodoItem } from './maxianService.js';
+import { $, append, clearNode } from '../../../../base/browser/dom.js';
 import { ISecretStorageService } from '../../../../platform/secrets/common/secrets.js';
 import { getAllModes, DEFAULT_MODE, type Mode } from '../common/modes/modeTypes.js';
 import { MarkdownRendererDom } from './markdownRendererDom.js';
@@ -96,6 +96,9 @@ export class MaxianView extends ViewPane {
 	private taskProgressStep: HTMLElement | null = null; // 当前步骤描述
 	// 工具输入流式显示相关
 	private toolInputStreamingElements: Map<string, HTMLElement> = new Map(); // 工具ID到显示元素的映射
+	// 任务列表相关
+	private todoListContainer: HTMLElement | null = null; // 任务列表容器
+	private todoListContent: HTMLElement | null = null; // 任务列表内容区域
 
 	constructor(
 		options: IViewPaneOptions,
@@ -175,11 +178,20 @@ export class MaxianView extends ViewPane {
 			this.handleToolInputStreaming(event);
 		}));
 
+		// 监听任务列表更新事件
+		this._register(this.maxianService.onTodoListUpdate(event => {
+			this.handleTodoListUpdate(event);
+		}));
+
 		// ========== 创建消息区域 ==========
 		this.messageArea = append(this.container, $('div.maxian-messages'));
 
 		// ========== 创建任务进度条区域（消息区域上方） ==========
 		this.createTaskProgressBar();
+
+		// ========== 创建任务列表区域（进度条下方） ==========
+		this.createTodoListContainer();
+
 		this.messageArea.style.flex = '1';
 		this.messageArea.style.overflowY = 'auto';
 		this.messageArea.style.padding = '16px';
@@ -1558,8 +1570,30 @@ export class MaxianView extends ViewPane {
 				to { transform: rotate(360deg); }
 			}
 
+			@keyframes todo-spin {
+				from { transform: rotate(0deg); }
+				to { transform: rotate(360deg); }
+			}
+
 			.codicon-modifier-spin {
 				animation: spin 1s linear infinite;
+			}
+
+			/* ========== 任务列表样式 ========== */
+			.todo-list-container {
+				border-radius: 0;
+			}
+
+			.todo-list-header:hover {
+				background: var(--vscode-list-hoverBackground) !important;
+			}
+
+			.todo-item:hover .todo-index {
+				opacity: 1 !important;
+			}
+
+			.todo-spinner {
+				animation: todo-spin 1s linear infinite !important;
 			}
 
 			/* ========== 滚动条美化 ========== */
@@ -2654,7 +2688,9 @@ export class MaxianView extends ViewPane {
 				cancelMark.style.display = 'flex';
 				cancelMark.style.alignItems = 'center';
 				cancelMark.style.gap = '6px';
-				cancelMark.innerHTML = '<span class="codicon codicon-warning"></span><span>任务已取消</span>';
+				append(cancelMark, $('span.codicon.codicon-warning'));
+				const cancelText = append(cancelMark, $('span'));
+				cancelText.textContent = '任务已取消';
 				element.appendChild(cancelMark);
 			}
 		});
@@ -3126,7 +3162,10 @@ export class MaxianView extends ViewPane {
 
 		// Retry按钮
 		const retryButton = append(buttonContainer, $('button')) as HTMLButtonElement;
-		retryButton.innerHTML = '<span class="codicon codicon-refresh" style="margin-right:4px;"></span>立即重试';
+		const retryIcon = append(retryButton, $('span.codicon.codicon-refresh'));
+		retryIcon.style.marginRight = '4px';
+		const retryText = append(retryButton, $('span'));
+		retryText.textContent = '立即重试';
 		retryButton.style.padding = '6px 16px';
 		retryButton.style.backgroundColor = 'var(--vscode-button-background)';
 		retryButton.style.color = 'var(--vscode-button-foreground)';
@@ -3147,7 +3186,12 @@ export class MaxianView extends ViewPane {
 			this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
 			retryButton.disabled = true;
 			cancelButton.disabled = true;
-			retryButton.innerHTML = '<span class="codicon codicon-loading codicon-modifier-spin" style="margin-right:4px;"></span>正在重试...';
+			// 更新按钮内容
+			clearNode(retryButton);
+			const loadingIcon = append(retryButton, $('span.codicon.codicon-loading.codicon-modifier-spin'));
+			loadingIcon.style.marginRight = '4px';
+			const loadingText = append(retryButton, $('span'));
+			loadingText.textContent = '正在重试...';
 		};
 
 		// Cancel按钮
@@ -4318,8 +4362,309 @@ export class MaxianView extends ViewPane {
 		this.toolInputStreamingElements.clear();
 	}
 
+	// ========== 任务列表（Todo List）相关方法 ==========
+
+	/**
+	 * 创建任务列表容器
+	 * 显示在进度条下方，用于展示任务清单
+	 */
+	private createTodoListContainer(): void {
+		// 创建任务列表容器（插入到消息区域之前）
+		this.todoListContainer = $('div.todo-list-container');
+		this.container.insertBefore(this.todoListContainer, this.messageArea);
+
+		this.todoListContainer.style.cssText = `
+			padding: 0;
+			background: var(--vscode-editor-background);
+			display: none;
+			border-bottom: 1px solid var(--vscode-widget-border);
+		`;
+
+		// 创建可折叠的头部
+		const header = append(this.todoListContainer, $('div.todo-list-header'));
+		header.style.cssText = `
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 8px 12px;
+			cursor: pointer;
+			user-select: none;
+			background: var(--vscode-sideBarSectionHeader-background);
+			border-bottom: 1px solid var(--vscode-widget-border);
+		`;
+
+		// 左侧：图标 + 标题 + 计数
+		const headerLeft = append(header, $('div.todo-list-header-left'));
+		headerLeft.style.cssText = `
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		`;
+
+		// 展开/折叠箭头
+		const arrow = append(headerLeft, $('span.todo-list-arrow'));
+		arrow.textContent = '▼';
+		arrow.style.cssText = `
+			font-size: 10px;
+			color: var(--vscode-foreground);
+			transition: transform 0.2s ease;
+		`;
+
+		// 任务图标
+		const icon = append(headerLeft, $('span.todo-list-icon'));
+		icon.textContent = '📋';
+		icon.style.fontSize = '14px';
+
+		// 标题
+		const title = append(headerLeft, $('span.todo-list-title'));
+		title.textContent = '任务列表';
+		title.style.cssText = `
+			font-size: 12px;
+			font-weight: 600;
+			color: var(--vscode-foreground);
+		`;
+
+		// 计数徽章
+		const badge = append(headerLeft, $('span.todo-list-badge'));
+		badge.style.cssText = `
+			font-size: 11px;
+			padding: 1px 6px;
+			border-radius: 10px;
+			background: var(--vscode-badge-background);
+			color: var(--vscode-badge-foreground);
+		`;
+		badge.textContent = '0/0';
+
+		// 右侧进度指示
+		const progressInfo = append(header, $('span.todo-list-progress-info'));
+		progressInfo.style.cssText = `
+			font-size: 11px;
+			color: var(--vscode-descriptionForeground);
+		`;
+
+		// 创建任务列表内容区域
+		this.todoListContent = append(this.todoListContainer, $('div.todo-list-content'));
+		this.todoListContent.style.cssText = `
+			max-height: 200px;
+			overflow-y: auto;
+			padding: 8px 12px;
+			display: block;
+		`;
+
+		// 折叠/展开功能 - 默认展开
+		let isCollapsed = false;
+		header.addEventListener('click', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			isCollapsed = !isCollapsed;
+			console.log('[MaxianView] 任务列表折叠状态:', isCollapsed);
+			arrow.style.transform = isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+			if (this.todoListContent) {
+				this.todoListContent.style.display = isCollapsed ? 'none' : 'block';
+			}
+		});
+	}
+
+	/**
+	 * 处理任务列表更新事件
+	 */
+	private handleTodoListUpdate(event: ITodoListEvent): void {
+		console.log('[MaxianView] 任务列表更新:', event.todos.length, '项');
+
+		if (!this.todoListContainer || !this.todoListContent) {
+			return;
+		}
+
+		// 显示容器
+		this.todoListContainer.style.display = 'block';
+
+		// 计算完成数
+		const completedCount = event.todos.filter(t => t.status === 'completed').length;
+		const totalCount = event.todos.length;
+
+		// 更新徽章
+		const badge = this.todoListContainer.querySelector('.todo-list-badge') as HTMLElement;
+		if (badge) {
+			badge.textContent = `${completedCount}/${totalCount}`;
+			if (completedCount === totalCount && totalCount > 0) {
+				badge.style.background = 'var(--vscode-charts-green)';
+			} else {
+				badge.style.background = 'var(--vscode-badge-background)';
+			}
+		}
+
+		// 更新进度信息
+		const progressInfo = this.todoListContainer.querySelector('.todo-list-progress-info') as HTMLElement;
+		if (progressInfo) {
+			const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+			if (completedCount === totalCount && totalCount > 0) {
+				progressInfo.textContent = '✅ 全部完成';
+				progressInfo.style.color = 'var(--vscode-charts-green)';
+			} else {
+				progressInfo.textContent = `${percent}% 完成`;
+				progressInfo.style.color = 'var(--vscode-descriptionForeground)';
+			}
+		}
+
+		// 确保内容区域可见（默认展开）
+		if (this.todoListContent) {
+			this.todoListContent.style.display = 'block';
+		}
+
+		// 重置箭头状态
+		const arrow = this.todoListContainer.querySelector('.todo-list-arrow') as HTMLElement;
+		if (arrow) {
+			arrow.style.transform = 'rotate(0deg)';
+		}
+
+		// 渲染任务列表
+		this.renderTodoList(event.todos);
+
+		console.log('[MaxianView] 任务列表渲染完成，todos:', event.todos);
+	}
+
+	/**
+	 * 渲染任务列表内容
+	 */
+	private renderTodoList(todos: ITodoItem[]): void {
+		console.log('[MaxianView] renderTodoList 开始, todos数量:', todos.length, 'todoListContent存在:', !!this.todoListContent);
+
+		if (!this.todoListContent) {
+			console.log('[MaxianView] todoListContent 不存在，退出');
+			return;
+		}
+
+		// 清空现有内容
+		clearNode(this.todoListContent);
+		console.log('[MaxianView] 已清空内容，开始渲染');
+
+		if (todos.length === 0) {
+			const emptyMsg = append(this.todoListContent, $('div.todo-empty'));
+			emptyMsg.textContent = '暂无任务';
+			emptyMsg.style.cssText = `
+				color: var(--vscode-descriptionForeground);
+				font-size: 12px;
+				text-align: center;
+				padding: 16px;
+			`;
+			return;
+		}
+
+		// 创建任务列表
+		const list = append(this.todoListContent, $('ul.todo-items'));
+		list.style.cssText = `
+			list-style: none;
+			padding: 0;
+			margin: 0;
+		`;
+
+		todos.forEach((todo, index) => {
+			console.log(`[MaxianView] 渲染任务 ${index + 1}:`, todo.content, '状态:', todo.status);
+			const item = append(list, $('li.todo-item'));
+			item.style.cssText = `
+				display: flex;
+				align-items: flex-start;
+				gap: 8px;
+				padding: 6px 4px;
+				border-radius: 4px;
+				transition: background 0.15s ease;
+			`;
+
+			// 悬停效果
+			item.addEventListener('mouseenter', () => {
+				item.style.background = 'var(--vscode-list-hoverBackground)';
+			});
+			item.addEventListener('mouseleave', () => {
+				item.style.background = 'transparent';
+			});
+
+			// 状态图标
+			const statusIcon = append(item, $('span.todo-status-icon'));
+			statusIcon.style.cssText = `
+				flex-shrink: 0;
+				width: 18px;
+				height: 18px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-size: 14px;
+			`;
+
+			switch (todo.status) {
+				case 'completed': {
+					const icon = append(statusIcon, $('span'));
+					icon.style.color = 'var(--vscode-charts-green)';
+					icon.textContent = '✅';
+					break;
+				}
+				case 'in_progress': {
+					// 使用 CSS 动画实现旋转的加载图标
+					const spinner = append(statusIcon, $('span.todo-spinner'));
+					spinner.style.cssText = `
+						display: inline-block;
+						width: 14px;
+						height: 14px;
+						border: 2px solid var(--vscode-charts-blue);
+						border-top-color: transparent;
+						border-radius: 50%;
+						animation: todo-spin 1s linear infinite;
+					`;
+					break;
+				}
+				case 'pending':
+				default: {
+					const icon = append(statusIcon, $('span'));
+					icon.style.color = 'var(--vscode-descriptionForeground)';
+					icon.textContent = '⬜';
+					break;
+				}
+			}
+
+			// 任务内容
+			const content = append(item, $('span.todo-content'));
+			content.style.cssText = `
+				flex: 1;
+				font-size: 12px;
+				line-height: 1.5;
+				color: ${todo.status === 'completed' ? 'var(--vscode-descriptionForeground)' : 'var(--vscode-foreground)'};
+				${todo.status === 'completed' ? 'text-decoration: line-through;' : ''}
+			`;
+
+			// 显示内容或进行中描述
+			if (todo.status === 'in_progress' && todo.activeForm) {
+				content.textContent = todo.activeForm;
+				content.style.fontWeight = '500';
+			} else {
+				content.textContent = todo.content;
+			}
+
+			// 序号
+			const indexSpan = append(item, $('span.todo-index'));
+			indexSpan.textContent = `#${index + 1}`;
+			indexSpan.style.cssText = `
+				flex-shrink: 0;
+				font-size: 10px;
+				color: var(--vscode-descriptionForeground);
+				opacity: 0.6;
+			`;
+		});
+	}
+
+	/**
+	 * 清空任务列表
+	 */
+	private clearTodoList(): void {
+		if (this.todoListContainer) {
+			this.todoListContainer.style.display = 'none';
+		}
+		if (this.todoListContent) {
+			clearNode(this.todoListContent);
+		}
+	}
+
 	override dispose(): void {
 		this.clearToolInputStreaming();
+		this.clearTodoList();
 		super.dispose();
 	}
 }

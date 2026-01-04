@@ -210,6 +210,16 @@ export class TaskService extends Disposable {
 	}>());
 	readonly onStepUpdated = this._onStepUpdated.event;
 
+	// 任务列表更新事件（todowrite工具触发）
+	private readonly _onTodoListUpdated = this._register(new Emitter<{
+		todos: Array<{
+			content: string;
+			status: 'pending' | 'in_progress' | 'completed';
+			activeForm: string;
+		}>;
+	}>());
+	readonly onTodoListUpdated = this._onTodoListUpdated.event;
+
 	constructor(options: TaskServiceOptions) {
 		super();
 
@@ -1218,10 +1228,14 @@ export class TaskService extends Disposable {
 			this.toolUsage[toolUse.name] = (this.toolUsage[toolUse.name] || 0) + 1;
 			this.consecutiveMistakeCount = 0;
 
-			// P0优化：如果是 todowrite 工具，更新 FocusChain 清单
-			if (toolUse.name === 'todowrite' && toolUse.input && toolUse.input.todos) {
+			// P0优化：如果是 update_todo_list 工具，更新 FocusChain 清单并触发UI更新
+			if ((toolUse.name === 'update_todo_list' || toolUse.name === 'todowrite') && toolUse.input && toolUse.input.todos) {
 				this.focusChainManager.updateChecklist(toolUse.input.todos);
 				console.log('[TaskService] FocusChain 清单已更新，共', toolUse.input.todos.length, '项任务');
+
+				// 触发任务列表更新事件，通知UI更新
+				this._onTodoListUpdated.fire({ todos: toolUse.input.todos });
+				console.log('[TaskService] 已触发任务列表更新事件');
 			}
 
 			return {

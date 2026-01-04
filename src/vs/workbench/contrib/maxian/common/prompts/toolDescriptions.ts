@@ -151,7 +151,26 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 **使用**：复杂多步骤任务（3个以上步骤）
 **不使用**：单一简单任务
 
-**要点**：同时只有一个任务为 in_progress`,
+**参数 todos**：待办事项数组，每个元素包含：
+- content: 任务描述（祈使句，如"实现登录功能"）
+- status: 状态（pending/in_progress/completed）
+- activeForm: 进行中描述（现在进行时，如"正在实现登录功能"）
+
+**示例**：
+\`\`\`json
+{
+  "todos": [
+    {"content": "分析现有代码", "status": "completed", "activeForm": "分析现有代码"},
+    {"content": "实现新功能", "status": "in_progress", "activeForm": "正在实现新功能"},
+    {"content": "编写测试", "status": "pending", "activeForm": "编写测试"}
+  ]
+}
+\`\`\`
+
+**要点**：
+- 每个任务独立一个对象，不要合并
+- 同时只有一个任务为 in_progress
+- 完成任务后立即标记为 completed`,
 
 	// P0优化：批量执行工具
 	batch: `## batch 【最重要的工具 - 必须优先使用！】
