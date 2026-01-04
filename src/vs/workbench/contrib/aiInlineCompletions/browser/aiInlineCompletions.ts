@@ -306,7 +306,10 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		parts.push('');
 
 		// 添加结构化上下文
-		if (context.currentClass || context.currentMethod || context.frameworks) {
+		const hasStructuredContext = context.currentClass || context.currentMethod ||
+			context.frameworks || context.methodParams || context.currentClassFields;
+
+		if (hasStructuredContext) {
 			parts.push('【当前上下文】');
 
 			if (context.currentClass) {
@@ -314,6 +317,16 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 				if (context.currentMethod) {
 					parts.push(`当前方法: ${context.currentMethod}`);
 				}
+			}
+
+			// 添加方法参数信息（关键！让AI知道可用的变量）
+			if (context.methodParams && context.methodParams.length > 0) {
+				parts.push(`方法参数: ${context.methodParams.join(', ')}`);
+			}
+
+			// 添加类字段信息
+			if (context.currentClassFields && context.currentClassFields.length > 0) {
+				parts.push(`类字段: ${context.currentClassFields.slice(0, 10).join(', ')}${context.currentClassFields.length > 10 ? '...' : ''}`);
 			}
 
 			if (context.frameworks && context.frameworks.length > 0) {
@@ -356,16 +369,16 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		parts.push('【要求】');
 		if (isNewLine) {
 			parts.push('用户刚按下回车，请预测下一行代码。');
-			parts.push('根据上下文逻辑，生成最可能的下一行或下几行代码。');
 		} else {
 			parts.push('用户正在输入代码，请补全当前行。');
 		}
 		parts.push('');
-		parts.push('输出规则：');
-		parts.push('1. 只输出代码，不要任何解释、注释或markdown标记');
-		parts.push('2. 保持与上下文一致的缩进风格');
-		parts.push('3. 代码要符合' + context.languageId + '语法');
-		parts.push('4. 生成1-5行高质量代码');
+		parts.push('关键规则：');
+		parts.push('1. 仔细分析上下文代码的模式和风格，生成一致的代码');
+		parts.push('2. 使用上下文中已出现的变量名、方法名和类名');
+		parts.push('3. 参考前面代码的调用方式（如 bo.getXxx()、Entity::getXxx 等模式）');
+		parts.push('4. 只输出代码，不要任何解释或markdown');
+		parts.push('5. 保持缩进一致');
 		parts.push('');
 		parts.push('直接输出代码：');
 

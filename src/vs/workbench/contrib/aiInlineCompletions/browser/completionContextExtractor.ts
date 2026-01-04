@@ -72,7 +72,18 @@ export interface CompletionContext {
 	classes?: Array<{
 		name: string;
 		methods: string[];
+		fields?: string[];
 	}>;
+
+	/**
+	 * 当前类的字段列表
+	 */
+	currentClassFields?: string[];
+
+	/**
+	 * 方法参数信息
+	 */
+	methodParams?: string[];
 
 	/**
 	 * 文件级别的函数列表
@@ -111,6 +122,10 @@ export class CompletionContextExtractor {
 		const beforeLines = this.getBeforeLines(model, position);
 		const afterLines = this.getAfterLines(model, position);
 
+		// 提取方法参数和类字段（简单解析）
+		const methodParams = this.extractMethodParams(beforeLines);
+		const classFields = this.extractClassFields(beforeLines);
+
 		// 创建基础上下文
 		const context: CompletionContext = {
 			fileUri: uri,
@@ -118,7 +133,9 @@ export class CompletionContextExtractor {
 			prefix,
 			suffix,
 			beforeLines,
-			afterLines
+			afterLines,
+			methodParams: methodParams.length > 0 ? methodParams : undefined,
+			currentClassFields: classFields.length > 0 ? classFields : undefined
 		};
 
 		// 尝试提取结构化代码信息
@@ -174,10 +191,10 @@ export class CompletionContextExtractor {
 	}
 
 	/**
-	 * 获取光标前的代码行
+	 * 获取光标前的代码行（增加到50行，包含更多上下文）
 	 */
 	private getBeforeLines(model: ITextModel, position: Position): string[] {
-		const startLine = Math.max(1, position.lineNumber - 30);
+		const startLine = Math.max(1, position.lineNumber - 50);
 		const lines: string[] = [];
 
 		for (let i = startLine; i < position.lineNumber; i++) {
@@ -188,11 +205,11 @@ export class CompletionContextExtractor {
 	}
 
 	/**
-	 * 获取光标后的代码行
+	 * 获取光标后的代码行（增加到50行，包含更多上下文）
 	 */
 	private getAfterLines(model: ITextModel, position: Position): string[] {
 		const totalLines = model.getLineCount();
-		const endLine = Math.min(totalLines, position.lineNumber + 30);
+		const endLine = Math.min(totalLines, position.lineNumber + 50);
 		const lines: string[] = [];
 
 		for (let i = position.lineNumber + 1; i <= endLine; i++) {
@@ -200,6 +217,52 @@ export class CompletionContextExtractor {
 		}
 
 		return lines;
+	}
+
+	/**
+	 * 从代码中提取方法参数（简单解析）
+	 */
+	private extractMethodParams(beforeLines: string[]): string[] {
+		const params: string[] = [];
+
+		// 向上查找方法定义
+		for (let i = beforeLines.length - 1; i >= 0; i--) {
+			const line = beforeLines[i];
+			// 匹配方法定义，如: public void method(Type1 param1, Type2 param2)
+			const methodMatch = line.match(/(?:public|private|protected)?\s*\w+\s+\w+\s*\(([^)]*)\)/);
+			if (methodMatch) {
+				const paramStr = methodMatch[1];
+				// 解析参数
+				const paramParts = paramStr.split(',');
+				for (const part of paramParts) {
+					const trimmed = part.trim();
+					if (trimmed) {
+						// 提取类型和名称，如: "OtaVersionBo bo"
+						params.push(trimmed);
+					}
+				}
+				break;
+			}
+		}
+
+		return params;
+	}
+
+	/**
+	 * 从代码中提取当前类的字段定义
+	 */
+	private extractClassFields(beforeLines: string[]): string[] {
+		const fields: string[] = [];
+
+		for (const line of beforeLines) {
+			// 匹配字段定义，如: private String name;
+			const fieldMatch = line.match(/^\s*(?:private|protected|public)?\s*(\w+(?:<[^>]+>)?)\s+(\w+)\s*[;=]/);
+			if (fieldMatch) {
+				fields.push(`${fieldMatch[1]} ${fieldMatch[2]}`);
+			}
+		}
+
+		return fields;
 	}
 
 	/**
