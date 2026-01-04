@@ -40,7 +40,7 @@ import {
 	type DiffStats,
 	type ToolStatus,
 	TOOL_STATUS_TEXT,
-	TOOL_STATUS_COLOR,
+	// TOOL_STATUS_COLOR 已通过 CSS 类名替代
 	// 以下导入保留用于后续功能
 	// createProgressBar,
 	// type TokenStats,
@@ -1226,6 +1226,359 @@ export class MaxianView extends ViewPane {
 			.markdown-content tr:nth-child(even) {
 				background-color: var(--vscode-editor-inactiveSelectionBackground);
 			}
+
+			/* ========== 优化：消息气泡样式 ========== */
+			.maxian-message {
+				margin-bottom: 12px;
+				padding: 12px 16px;
+				border-radius: 12px;
+				position: relative;
+				transition: box-shadow 0.2s ease;
+			}
+
+			.maxian-message:hover {
+				box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+			}
+
+			.maxian-message-ai {
+				background: linear-gradient(135deg,
+					var(--vscode-editor-inactiveSelectionBackground) 0%,
+					rgba(var(--vscode-charts-blue-rgb, 66, 133, 244), 0.08) 100%);
+				border-left: 4px solid var(--vscode-charts-blue);
+			}
+
+			.maxian-message-user {
+				background: linear-gradient(135deg,
+					var(--vscode-textCodeBlock-background) 0%,
+					rgba(var(--vscode-textLink-foreground-rgb, 66, 133, 244), 0.08) 100%);
+				border-left: 4px solid var(--vscode-textLink-foreground);
+			}
+
+			/* 消息头部 */
+			.maxian-message-header {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				margin-bottom: 8px;
+			}
+
+			.maxian-message-avatar {
+				width: 24px;
+				height: 24px;
+				border-radius: 6px;
+				object-fit: contain;
+				flex-shrink: 0;
+			}
+
+			.maxian-message-sender {
+				font-weight: 600;
+				font-size: 13px;
+				flex: 1;
+			}
+
+			.maxian-message-time {
+				font-size: 10px;
+				color: var(--vscode-descriptionForeground);
+				opacity: 0;
+				transition: opacity 0.2s ease;
+			}
+
+			.maxian-message:hover .maxian-message-time {
+				opacity: 1;
+			}
+
+			.maxian-message-actions {
+				display: flex;
+				gap: 4px;
+				opacity: 0;
+				transition: opacity 0.2s ease;
+			}
+
+			.maxian-message:hover .maxian-message-actions {
+				opacity: 1;
+			}
+
+			.maxian-action-btn {
+				background: transparent;
+				border: none;
+				cursor: pointer;
+				padding: 4px;
+				border-radius: 4px;
+				color: var(--vscode-descriptionForeground);
+				transition: all 0.15s ease;
+			}
+
+			.maxian-action-btn:hover {
+				background: var(--vscode-toolbar-hoverBackground);
+				color: var(--vscode-foreground);
+			}
+
+			/* ========== 优化：工具状态卡片 ========== */
+			.maxian-tool-card {
+				margin-bottom: 10px;
+				padding: 12px 16px;
+				background: var(--vscode-editor-background);
+				border: 1px solid var(--vscode-widget-border);
+				border-radius: 10px;
+				position: relative;
+				overflow: hidden;
+				transition: all 0.2s ease;
+			}
+
+			.maxian-tool-card::before {
+				content: '';
+				position: absolute;
+				top: 0;
+				left: 0;
+				width: 4px;
+				height: 100%;
+				background: var(--vscode-charts-blue);
+				transition: background 0.2s ease;
+			}
+
+			.maxian-tool-card.tool-running::before {
+				background: var(--vscode-charts-blue);
+				animation: tool-pulse 1.5s ease-in-out infinite;
+			}
+
+			.maxian-tool-card.tool-completed::before {
+				background: var(--vscode-charts-green);
+			}
+
+			.maxian-tool-card.tool-error::before {
+				background: var(--vscode-errorForeground);
+			}
+
+			.maxian-tool-card:hover {
+				border-color: var(--vscode-focusBorder);
+				box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+			}
+
+			@keyframes tool-pulse {
+				0%, 100% { opacity: 1; }
+				50% { opacity: 0.5; }
+			}
+
+			.maxian-tool-header {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+			}
+
+			.maxian-tool-icon {
+				width: 32px;
+				height: 32px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				background: var(--vscode-button-secondaryBackground);
+				border-radius: 8px;
+				flex-shrink: 0;
+			}
+
+			.maxian-tool-icon .codicon {
+				font-size: 16px;
+				color: var(--vscode-charts-blue);
+			}
+
+			.maxian-tool-info {
+				flex: 1;
+				min-width: 0;
+			}
+
+			.maxian-tool-title {
+				font-weight: 600;
+				font-size: 13px;
+				color: var(--vscode-foreground);
+				display: flex;
+				align-items: center;
+				gap: 6px;
+			}
+
+			.maxian-tool-detail {
+				font-size: 12px;
+				color: var(--vscode-descriptionForeground);
+				font-family: var(--vscode-editor-font-family);
+				margin-top: 2px;
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+
+			.maxian-tool-status-badge {
+				font-size: 10px;
+				padding: 2px 8px;
+				border-radius: 12px;
+				font-weight: 500;
+				text-transform: uppercase;
+				letter-spacing: 0.5px;
+			}
+
+			.maxian-tool-status-running {
+				background: rgba(var(--vscode-charts-blue-rgb, 66, 133, 244), 0.2);
+				color: var(--vscode-charts-blue);
+			}
+
+			.maxian-tool-status-completed {
+				background: rgba(var(--vscode-charts-green-rgb, 52, 168, 83), 0.2);
+				color: var(--vscode-charts-green);
+			}
+
+			.maxian-tool-status-error {
+				background: rgba(var(--vscode-errorForeground-rgb, 244, 67, 54), 0.2);
+				color: var(--vscode-errorForeground);
+			}
+
+			/* 工具结果预览 */
+			.maxian-tool-result {
+				margin-top: 10px;
+				padding: 10px 12px;
+				background: var(--vscode-textCodeBlock-background);
+				border-radius: 6px;
+				font-family: var(--vscode-editor-font-family);
+				font-size: 12px;
+				max-height: 150px;
+				overflow: auto;
+				white-space: pre-wrap;
+				word-break: break-word;
+			}
+
+			.maxian-tool-result-toggle {
+				display: flex;
+				align-items: center;
+				gap: 6px;
+				margin-top: 8px;
+				padding: 4px 8px;
+				background: transparent;
+				border: none;
+				cursor: pointer;
+				font-size: 11px;
+				color: var(--vscode-textLink-foreground);
+				border-radius: 4px;
+				transition: background 0.15s ease;
+			}
+
+			.maxian-tool-result-toggle:hover {
+				background: var(--vscode-toolbar-hoverBackground);
+			}
+
+			/* ========== 优化：工具确认卡片 ========== */
+			.maxian-approval-card {
+				margin-bottom: 12px;
+				border-radius: 12px;
+				overflow: hidden;
+				border: 2px solid var(--vscode-widget-border);
+				background: var(--vscode-editor-inactiveSelectionBackground);
+				transition: all 0.2s ease;
+			}
+
+			.maxian-approval-card:hover {
+				border-color: var(--vscode-focusBorder);
+			}
+
+			.maxian-approval-header {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				padding: 12px 16px;
+				background: var(--vscode-editor-background);
+				cursor: pointer;
+				user-select: none;
+			}
+
+			.maxian-approval-header:hover {
+				background: var(--vscode-list-hoverBackground);
+			}
+
+			.maxian-approval-content {
+				padding: 12px 16px;
+			}
+
+			.maxian-approval-buttons {
+				display: flex;
+				gap: 10px;
+				flex-wrap: wrap;
+				margin-top: 12px;
+			}
+
+			.maxian-btn {
+				padding: 8px 20px;
+				border: none;
+				border-radius: 6px;
+				cursor: pointer;
+				font-weight: 600;
+				font-size: 13px;
+				display: flex;
+				align-items: center;
+				gap: 6px;
+				transition: all 0.15s ease;
+			}
+
+			.maxian-btn-primary {
+				background: var(--vscode-button-background);
+				color: var(--vscode-button-foreground);
+			}
+
+			.maxian-btn-primary:hover {
+				background: var(--vscode-button-hoverBackground);
+			}
+
+			.maxian-btn-secondary {
+				background: var(--vscode-button-secondaryBackground);
+				color: var(--vscode-button-secondaryForeground);
+			}
+
+			.maxian-btn-secondary:hover {
+				background: var(--vscode-button-secondaryHoverBackground);
+			}
+
+			.maxian-btn-outline {
+				background: transparent;
+				border: 1px solid var(--vscode-charts-green);
+				color: var(--vscode-charts-green);
+			}
+
+			.maxian-btn-outline:hover {
+				background: rgba(var(--vscode-charts-green-rgb, 52, 168, 83), 0.1);
+			}
+
+			.maxian-btn:disabled {
+				opacity: 0.5;
+				cursor: not-allowed;
+			}
+
+			/* ========== 加载动画 ========== */
+			@keyframes blink {
+				0%, 100% { opacity: 1; }
+				50% { opacity: 0.3; }
+			}
+
+			@keyframes spin {
+				from { transform: rotate(0deg); }
+				to { transform: rotate(360deg); }
+			}
+
+			.codicon-modifier-spin {
+				animation: spin 1s linear infinite;
+			}
+
+			/* ========== 滚动条美化 ========== */
+			.maxian-messages::-webkit-scrollbar {
+				width: 8px;
+			}
+
+			.maxian-messages::-webkit-scrollbar-track {
+				background: transparent;
+			}
+
+			.maxian-messages::-webkit-scrollbar-thumb {
+				background: var(--vscode-scrollbarSlider-background);
+				border-radius: 4px;
+			}
+
+			.maxian-messages::-webkit-scrollbar-thumb:hover {
+				background: var(--vscode-scrollbarSlider-hoverBackground);
+			}
 		`;
 		this.container.appendChild(style);
 	}
@@ -1269,21 +1622,40 @@ export class MaxianView extends ViewPane {
 			this.currentAiMessageText = '';
 			this.currentToolStatusElement = null;
 
-			// 显示用户消息
-			const userMsg = append(this.messageArea, $('div'));
-			userMsg.style.marginBottom = '10px';
-			userMsg.style.padding = '10px 15px';
-			userMsg.style.backgroundColor = 'var(--vscode-textCodeBlock-background)';
-			userMsg.style.borderRadius = '6px';
-			userMsg.style.borderLeft = '3px solid var(--vscode-textLink-foreground)';
+			// 显示用户消息 - 使用优化后的样式
+			const userMsg = append(this.messageArea, $('div.maxian-message.maxian-message-user'));
 
-			const userLabel = append(userMsg, $('div'));
-			userLabel.style.fontWeight = '600';
-			userLabel.style.marginBottom = '6px';
-			userLabel.style.color = 'var(--vscode-textLink-foreground)';
-			userLabel.style.fontSize = '13px';
-			userLabel.textContent = '👤 你';
+			// 消息头部
+			const userHeader = append(userMsg, $('div.maxian-message-header'));
 
+			// 用户头像（使用 codicon）
+			const userAvatar = append(userHeader, $('div'));
+			userAvatar.style.width = '24px';
+			userAvatar.style.height = '24px';
+			userAvatar.style.borderRadius = '6px';
+			userAvatar.style.background = 'var(--vscode-textLink-foreground)';
+			userAvatar.style.display = 'flex';
+			userAvatar.style.alignItems = 'center';
+			userAvatar.style.justifyContent = 'center';
+			const userIcon = append(userAvatar, $('span.codicon.codicon-account'));
+			userIcon.style.color = 'var(--vscode-button-foreground)';
+			userIcon.style.fontSize = '14px';
+
+			// 发送者名称
+			const userSender = append(userHeader, $('span.maxian-message-sender'));
+			userSender.style.color = 'var(--vscode-textLink-foreground)';
+			userSender.textContent = '你';
+
+			// 时间戳
+			const userTime = append(userHeader, $('span.maxian-message-time'));
+			userTime.textContent = formatTime(Date.now());
+
+			// 操作按钮区域
+			const userActions = append(userHeader, $('div.maxian-message-actions'));
+			const msgContent = event.content;
+			createCopyButton(userActions, () => msgContent);
+
+			// 消息内容
 			const userContent = append(userMsg, $('div'));
 			userContent.style.whiteSpace = 'pre-wrap';
 			userContent.style.wordBreak = 'break-word';
@@ -1619,10 +1991,22 @@ export class MaxianView extends ViewPane {
 
 	/**
 	 * 渲染文本消息
+	 * 优化：使用新的消息气泡样式，添加时间戳和操作按钮
 	 */
 	private renderTextMessage(text: string, partial?: boolean): void {
 		if (!text && !partial) {
-			// 流结束信号
+			// 流结束信号 - 添加操作按钮
+			if (this.currentAiMessageElement) {
+				const parentMsg = this.currentAiMessageElement.parentElement;
+				if (parentMsg) {
+					// 添加复制按钮到消息操作区
+					const actionsArea = parentMsg.querySelector('.maxian-message-actions');
+					if (actionsArea && !actionsArea.querySelector('.copy-btn')) {
+						const finalText = this.currentAiMessageText;
+						createCopyButton(actionsArea as HTMLElement, () => finalText);
+					}
+				}
+			}
 			this.currentAiMessageElement = null;
 			this.currentAiMessageText = '';
 			return;
@@ -1634,33 +2018,29 @@ export class MaxianView extends ViewPane {
 		}
 
 		if (!this.currentAiMessageElement) {
-			// 创建新的AI消息元素
-			const aiMsg = append(this.messageArea, $('div'));
-			aiMsg.style.marginBottom = '10px';
-			aiMsg.style.padding = '10px 15px';
-			aiMsg.style.backgroundColor = 'var(--vscode-editor-inactiveSelectionBackground)';
-			aiMsg.style.borderRadius = '6px';
-			aiMsg.style.borderLeft = '3px solid var(--vscode-charts-blue)';
+			// 创建新的AI消息元素 - 使用优化后的样式
+			const aiMsg = append(this.messageArea, $('div.maxian-message.maxian-message-ai'));
 
-			const aiLabel = append(aiMsg, $('div'));
-			aiLabel.style.fontWeight = '600';
-			aiLabel.style.marginBottom = '6px';
-			aiLabel.style.fontSize = '13px';
-			aiLabel.style.color = 'var(--vscode-charts-blue)';
-			aiLabel.style.display = 'flex';
-			aiLabel.style.alignItems = 'center';
-			aiLabel.style.gap = '6px';
+			// 消息头部
+			const aiHeader = append(aiMsg, $('div.maxian-message-header'));
 
-			const aiIcon = append(aiLabel, $('img')) as HTMLImageElement;
+			// 头像
+			const aiIcon = append(aiHeader, $('img.maxian-message-avatar')) as HTMLImageElement;
 			aiIcon.src = FileAccess.asBrowserUri('vs/workbench/contrib/maxian/browser/media/icons/maxian-avatar.png').toString(true);
-			aiIcon.style.width = '18px';
-			aiIcon.style.height = '18px';
-			aiIcon.style.objectFit = 'contain';
-			aiIcon.style.borderRadius = '3px';
 
-			const aiText = append(aiLabel, $('span'));
-			aiText.textContent = '码弦';
+			// 发送者名称
+			const aiSender = append(aiHeader, $('span.maxian-message-sender'));
+			aiSender.style.color = 'var(--vscode-charts-blue)';
+			aiSender.textContent = '码弦';
 
+			// 时间戳
+			const aiTime = append(aiHeader, $('span.maxian-message-time'));
+			aiTime.textContent = formatTime(Date.now());
+
+			// 操作按钮区域（复制按钮在消息完成后添加）
+			append(aiHeader, $('div.maxian-message-actions'));
+
+			// 消息内容
 			const aiContent = append(aiMsg, $('div'));
 			aiContent.style.color = 'var(--vscode-foreground)';
 			aiContent.style.lineHeight = '1.6';
@@ -1992,7 +2372,7 @@ export class MaxianView extends ViewPane {
 			// 获取执行状态（默认为running）
 			const status: ToolStatus = toolInfo.status || 'running';
 			const statusText = TOOL_STATUS_TEXT[status] || '执行中';
-			const statusColor = TOOL_STATUS_COLOR[status] || 'var(--vscode-charts-blue)';
+			// statusColor 已通过 CSS 类名控制，无需变量
 
 			// 根据工具类型确定图标和动作描述
 			const toolIconClass = getToolIcon(toolInfo.tool);
@@ -2074,11 +2454,23 @@ export class MaxianView extends ViewPane {
 
 			// 如果已有工具状态元素，更新内容而不是创建新的
 			if (this.currentToolStatusElement) {
+				// 更新卡片状态类
+				this.currentToolStatusElement.classList.remove('tool-running', 'tool-completed', 'tool-error');
+				if (status === 'running') {
+					this.currentToolStatusElement.classList.add('tool-running');
+				} else if (status === 'completed') {
+					this.currentToolStatusElement.classList.add('tool-completed');
+				} else if (status === 'error') {
+					this.currentToolStatusElement.classList.add('tool-error');
+				}
+
 				// 更新图标
 				const iconElement = this.currentToolStatusElement.querySelector('.tool-status-icon') as HTMLElement;
 				if (iconElement) {
 					iconElement.className = `codicon ${toolIconClass} tool-status-icon`;
-					iconElement.style.color = statusColor;
+					if (status === 'running') {
+						iconElement.classList.add('codicon-modifier-spin');
+					}
 				}
 
 				// 更新状态文本
@@ -2087,11 +2479,18 @@ export class MaxianView extends ViewPane {
 					textElement.textContent = fullStatusText;
 				}
 
-				// 更新状态标签颜色
+				// 更新状态标签
 				const statusBadge = this.currentToolStatusElement.querySelector('.tool-status-badge') as HTMLElement;
 				if (statusBadge) {
 					statusBadge.textContent = statusText;
-					statusBadge.style.backgroundColor = statusColor;
+					statusBadge.className = 'maxian-tool-status-badge tool-status-badge';
+					if (status === 'running') {
+						statusBadge.classList.add('maxian-tool-status-running');
+					} else if (status === 'completed') {
+						statusBadge.classList.add('maxian-tool-status-completed');
+					} else if (status === 'error') {
+						statusBadge.classList.add('maxian-tool-status-error');
+					}
 					statusBadge.style.display = status !== 'running' ? 'inline-block' : 'none';
 				}
 
@@ -2109,72 +2508,57 @@ export class MaxianView extends ViewPane {
 					loadingDots.style.display = status === 'running' ? 'inline' : 'none';
 				}
 			} else {
-				// 创建新的工具状态元素
-				const toolStatusContainer = append(this.messageArea, $('div'));
-				toolStatusContainer.style.marginBottom = '10px';
-				toolStatusContainer.style.padding = '10px 14px';
-				toolStatusContainer.style.backgroundColor = 'var(--vscode-editor-background)';
-				toolStatusContainer.style.border = '1px solid var(--vscode-widget-border)';
-				toolStatusContainer.style.borderRadius = '6px';
-				toolStatusContainer.style.display = 'flex';
-				toolStatusContainer.style.flexDirection = 'column';
-				toolStatusContainer.style.gap = '6px';
+				// 创建新的工具状态元素 - 使用优化后的卡片样式
+				const statusClass = status === 'running' ? 'tool-running' :
+					status === 'completed' ? 'tool-completed' :
+					status === 'error' ? 'tool-error' : '';
 
-				// 状态行（图标 + 状态文本 + 状态标签）
-				const statusRow = append(toolStatusContainer, $('div'));
-				statusRow.style.display = 'flex';
-				statusRow.style.alignItems = 'center';
-				statusRow.style.gap = '8px';
+				const toolStatusContainer = append(this.messageArea, $(`div.maxian-tool-card.${statusClass}`));
 
-				// 图标
-				const toolIcon = append(statusRow, $(`span.codicon.${toolIconClass}.tool-status-icon`));
-				toolIcon.style.color = statusColor;
-				toolIcon.style.fontSize = '14px';
-				toolIcon.style.flexShrink = '0';
+				// 工具头部
+				const toolHeader = append(toolStatusContainer, $('div.maxian-tool-header'));
 
-				// 状态文本
-				const toolText = append(statusRow, $('span.tool-status-text'));
-				toolText.style.fontSize = '13px';
-				toolText.style.color = 'var(--vscode-foreground)';
-				toolText.style.fontWeight = '500';
+				// 工具图标容器
+				const iconContainer = append(toolHeader, $('div.maxian-tool-icon'));
+				const toolIcon = append(iconContainer, $(`span.codicon.${toolIconClass}.tool-status-icon`));
+				if (status === 'running') {
+					toolIcon.classList.add('codicon-modifier-spin');
+				}
+
+				// 工具信息区域
+				const toolInfoArea = append(toolHeader, $('div.maxian-tool-info'));
+
+				// 工具标题行
+				const toolTitleRow = append(toolInfoArea, $('div.maxian-tool-title'));
+				const toolText = append(toolTitleRow, $('span.tool-status-text'));
 				toolText.textContent = fullStatusText;
 
-				// 加载指示器（三个点动画）
-				const loadingDots = append(statusRow, $('span.tool-loading-dots'));
-				loadingDots.style.color = 'var(--vscode-descriptionForeground)';
-				loadingDots.style.marginLeft = '2px';
+				// 加载指示器
+				const loadingDots = append(toolTitleRow, $('span.tool-loading-dots'));
 				loadingDots.textContent = '...';
+				loadingDots.style.color = 'var(--vscode-descriptionForeground)';
 				loadingDots.style.animation = 'blink 1s infinite';
 				loadingDots.style.display = status === 'running' ? 'inline' : 'none';
 
-				// 状态标签（非running时显示）
-				const statusBadge = append(statusRow, $('span.tool-status-badge'));
-				statusBadge.style.fontSize = '10px';
-				statusBadge.style.padding = '2px 6px';
-				statusBadge.style.borderRadius = '10px';
-				statusBadge.style.backgroundColor = statusColor;
-				statusBadge.style.color = 'var(--vscode-button-foreground)';
-				statusBadge.style.marginLeft = 'auto';
+				// 详情行
+				if (detailText) {
+					const detailRow = append(toolInfoArea, $('div.maxian-tool-detail.tool-status-detail'));
+					detailRow.textContent = detailText;
+					detailRow.title = detailText;
+				}
+
+				// 状态标签
+				const statusBadgeClass = status === 'running' ? 'maxian-tool-status-running' :
+					status === 'completed' ? 'maxian-tool-status-completed' :
+					status === 'error' ? 'maxian-tool-status-error' : '';
+
+				const statusBadge = append(toolHeader, $(`span.maxian-tool-status-badge.tool-status-badge.${statusBadgeClass}`));
 				statusBadge.textContent = statusText;
 				statusBadge.style.display = status !== 'running' ? 'inline-block' : 'none';
 
-				// 详情行（文件路径等）- 使用美化显示
-				const detailRow = append(toolStatusContainer, $('div.tool-status-detail'));
-				detailRow.style.fontSize = '12px';
-				detailRow.style.color = 'var(--vscode-descriptionForeground)';
-				detailRow.style.fontFamily = 'var(--vscode-editor-font-family)';
-				detailRow.style.marginLeft = '22px';
-				detailRow.style.wordBreak = 'break-all';
-				detailRow.style.overflow = 'hidden';
-				detailRow.style.textOverflow = 'ellipsis';
-				detailRow.style.whiteSpace = 'nowrap';
-				detailRow.textContent = detailText;
-				detailRow.title = detailText;
-				detailRow.style.display = detailText ? 'block' : 'none';
-
 				this.currentToolStatusElement = toolStatusContainer;
 
-				// 添加动画样式
+				// 动画样式已在 addStyles 中全局添加，无需重复添加
 				const styleId = 'maxian-tool-status-animation';
 				if (!document.getElementById(styleId)) {
 					const style = document.createElement('style');
