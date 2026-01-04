@@ -39,16 +39,16 @@ configurationRegistry.registerConfiguration({
 		},
 		'zhikai.ai.completionTriggerMode': {
 			type: 'string',
-			default: 'manual',
+			default: 'automatic',
 			enum: [
-				'manual',
-				'automatic'
+				'automatic',
+				'manual'
 			],
 			enumDescriptions: [
-				'手动触发（推荐）- 按快捷键（Alt+K 或 Cmd+I）时才调用 AI',
-				'自动触发 - 输入代码时自动调用 AI（会增加 API 调用次数和成本）'
+				'自动触发（默认）- 输入代码时自动调用 AI',
+				'手动触发 - 按快捷键（Alt+K 或 Cmd+I）时才调用 AI'
 			],
-			description: 'AI 补全触发模式：手动（manual）或自动（automatic）',
+			description: 'AI 补全触发模式：自动（automatic）或手动（manual）',
 			scope: ConfigurationScope.WINDOW,
 			order: 4
 		},
