@@ -15,6 +15,10 @@ import { CompletionValidator } from './completionValidator.js';
 import { IRequestService, asJson } from '../../../../platform/request/common/request.js';
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
 import { IModelService } from '../../../../editor/common/services/model.js';
+// 新增的服务导入
+import { completionCacheService, CompletionCacheData } from './completionCacheService.js';
+import { completionRanker } from './completionRanker.js';
+import { completionFeedbackService } from './completionFeedbackService.js';
 
 export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 
@@ -42,10 +46,18 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	private lastInputTime: number = 0;
 	private inputIntervalHistory: number[] = [];
 
-	// 补全结果缓存
+	// 补全结果缓存（已迁移到 completionCacheService，保留兼容性）
 	private completionCache: Map<string, { result: string[]; timestamp: number }> = new Map();
 	private readonly completionCacheTTL = 10 * 60 * 1000; // 10分钟
 	private readonly maxCompletionCacheSize = 100;
+
+	// 最后一次补全信息（用于反馈收集）
+	private lastCompletionContext?: {
+		completions: string[];
+		context: CompletionContext;
+		score: number;
+		responseTime: number;
+	};
 
 	constructor(
 		private readonly aiService: IAIService,
@@ -305,19 +317,45 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			// 使用验证后的补全
 			completions = validatedCompletions;
 
-			// 缓存结果
-			if (completions.length > 0) {
-				this.cacheCompletion(cacheKey, completions);
-			}
-
 			if (completions.length === 0) {
 				console.warn('[AI Inline Completions] No valid completions after validation');
 				return undefined;
 			}
 
+			// 使用排序器对补全进行多维度排序
+			const validationScoreMap = new Map<string, number>();
+			for (const completion of completions) {
+				const result = this.completionValidator.validate(completion, enhancedContext);
+				validationScoreMap.set(completion, result.confidenceScore);
+			}
+
+			const rankedCompletions = completionRanker.rank(completions, enhancedContext, validationScoreMap);
+			console.log('[AI Inline Completions] 📊 Ranked completions:', rankedCompletions.map(r => ({
+				score: r.score,
+				reason: r.reason,
+				preview: r.text.substring(0, 40)
+			})));
+
+			// 使用排序后的补全
+			const sortedCompletions = rankedCompletions.map(r => r.text);
+			const avgScore = rankedCompletions.length > 0
+				? rankedCompletions.reduce((sum, r) => sum + r.score, 0) / rankedCompletions.length
+				: 0;
+
+			// 缓存结果（包含验证分数）
+			this.cacheCompletion(cacheKey, sortedCompletions, avgScore / 100);
+
+			// 保存最后一次补全上下文（用于反馈收集）
+			this.lastCompletionContext = {
+				completions: sortedCompletions,
+				context: enhancedContext,
+				score: avgScore,
+				responseTime
+			};
+
 			// Convert to InlineCompletion items
 			// Provide explicit range for better compatibility
-			const items: InlineCompletion[] = completions.map(completion => {
+			const items: InlineCompletion[] = sortedCompletions.map(completion => {
 				const item: InlineCompletion = {
 					insertText: completion,
 					range: {
@@ -851,40 +889,63 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	}
 
 	/**
-	 * 从缓存获取补全结果
+	 * 从缓存获取补全结果（使用多层缓存服务）
 	 */
 	private getCachedCompletion(cacheKey: string): string[] | undefined {
+		// 优先使用 L1 内存缓存（同步）
 		const cached = this.completionCache.get(cacheKey);
-		if (!cached) {
-			return undefined;
+		if (cached && (Date.now() - cached.timestamp) < this.completionCacheTTL) {
+			console.log('[AI Inline Completions] 💾 L1 Cache hit for completion');
+			return cached.result;
 		}
 
-		// 检查是否过期
-		if (Date.now() - cached.timestamp > this.completionCacheTTL) {
-			this.completionCache.delete(cacheKey);
-			return undefined;
-		}
-
-		console.log('[AI Inline Completions] 💾 Cache hit for completion');
-		return cached.result;
+		// 注意：L2/L3 是异步的，这里保持同步接口兼容性
+		// 异步缓存命中会在下次请求时生效
+		return undefined;
 	}
 
 	/**
-	 * 添加补全结果到缓存
+	 * 从缓存获取补全结果（异步版本，使用多层缓存）
+	 * 用于预加载和缓存预热场景
 	 */
-	private cacheCompletion(cacheKey: string, result: string[]): void {
-		// 检查缓存容量
+	public async getCachedCompletionAsync(cacheKey: string): Promise<string[] | undefined> {
+		// 使用多层缓存服务
+		const cached = await completionCacheService.get(cacheKey);
+		if (cached) {
+			console.log('[AI Inline Completions] 💾 Multi-layer cache hit');
+			// 同步到 L1
+			this.completionCache.set(cacheKey, {
+				result: cached.completions,
+				timestamp: Date.now()
+			});
+			return cached.completions;
+		}
+		return undefined;
+	}
+
+	/**
+	 * 添加补全结果到缓存（写入多层缓存）
+	 */
+	private cacheCompletion(cacheKey: string, result: string[], validationScore?: number): void {
+		// 写入 L1 内存缓存
 		if (this.completionCache.size >= this.maxCompletionCacheSize) {
-			// 删除最旧的条目
 			const firstKey = this.completionCache.keys().next().value;
 			if (firstKey) {
 				this.completionCache.delete(firstKey);
 			}
 		}
-
 		this.completionCache.set(cacheKey, {
 			result,
 			timestamp: Date.now()
+		});
+
+		// 异步写入多层缓存
+		const cacheData: CompletionCacheData = {
+			completions: result,
+			validationScore
+		};
+		completionCacheService.set(cacheKey, cacheData).catch(err => {
+			console.warn('[AI Inline Completions] Failed to write to multi-layer cache:', err);
 		});
 	}
 
@@ -893,5 +954,72 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	 */
 	clearCompletionCache(): void {
 		this.completionCache.clear();
+		completionCacheService.clear().catch(() => { });
+	}
+
+	/**
+	 * 获取缓存统计信息
+	 */
+	getCacheStats(): { l1Size: number; multiLayerStats: any } {
+		return {
+			l1Size: this.completionCache.size,
+			multiLayerStats: completionCacheService.getStats()
+		};
+	}
+
+	/**
+	 * 记录用户接受了补全
+	 */
+	recordCompletionAccepted(completionText: string): void {
+		if (this.lastCompletionContext) {
+			completionFeedbackService.recordAccepted(
+				completionText,
+				{
+					languageId: this.lastCompletionContext.context.languageId,
+					currentClass: this.lastCompletionContext.context.currentClass,
+					currentMethod: this.lastCompletionContext.context.currentMethod,
+					framework: this.lastCompletionContext.context.frameworkContext?.name,
+					prefix: this.lastCompletionContext.context.prefix
+				},
+				this.lastCompletionContext.score,
+				this.lastCompletionContext.responseTime
+			);
+			// 记录到排序器以学习用户习惯
+			completionRanker.recordAcceptedCompletion(completionText);
+		}
+	}
+
+	/**
+	 * 记录用户拒绝了补全
+	 */
+	recordCompletionRejected(): void {
+		if (this.lastCompletionContext && this.lastCompletionContext.completions.length > 0) {
+			completionFeedbackService.recordRejected(
+				this.lastCompletionContext.completions[0],
+				{
+					languageId: this.lastCompletionContext.context.languageId,
+					currentClass: this.lastCompletionContext.context.currentClass,
+					currentMethod: this.lastCompletionContext.context.currentMethod,
+					framework: this.lastCompletionContext.context.frameworkContext?.name,
+					prefix: this.lastCompletionContext.context.prefix
+				},
+				this.lastCompletionContext.score,
+				this.lastCompletionContext.responseTime
+			);
+		}
+	}
+
+	/**
+	 * 获取反馈统计
+	 */
+	getFeedbackStats(): any {
+		return completionFeedbackService.getStats();
+	}
+
+	/**
+	 * 获取优化建议
+	 */
+	getOptimizationSuggestions(): any[] {
+		return completionFeedbackService.generateOptimizationSuggestions();
 	}
 }
