@@ -41,11 +41,15 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	private rejectedCount = 0;
 	private readonly acceptanceThreshold = 0.35; // 采纳率低于35%时增加过滤
 
-	// 动态防抖参数 - 更短的防抖，更智能的过滤
-	private baseDebounceDelay = 300; // 降回300ms（通过智能过滤控制频率）
-	private baseMinRequestInterval = 800; // 降回800ms
-	private adaptiveDebounceDelay = 300;
-	private adaptiveMinInterval = 800;
+	// 动态防抖参数 - 短防抖 + 智能过滤（参考 Copilot 75ms，折中取 150ms）
+	private baseDebounceDelay = 150; // 150ms（Copilot 是 75ms）
+	private baseMinRequestInterval = 500; // 500ms 最小间隔
+	private adaptiveDebounceDelay = 150;
+	private adaptiveMinInterval = 500;
+
+	// 🆕 场景采纳率学习（记录不同触发场景的采纳率）
+	private scenarioStats: Map<string, { accepted: number; rejected: number }> = new Map();
+	private lastTriggerScenario: string = '';
 
 	// 响应时间跟踪（用于自适应调整）
 	private responseTimeHistory: number[] = [];
@@ -199,13 +203,27 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 				return undefined;
 			}
 
-			// 3️⃣ 采纳率过滤（参考 Copilot 的 contextualFilterScore）
-			const acceptanceRate = this.getAcceptanceRate();
-			if (acceptanceRate < this.acceptanceThreshold && triggerScore.score < 0.8) {
-				// 采纳率低且触发分数不高，增加过滤
-				console.log('[AI Inline Completions] ⏳ Skip: low acceptance rate (' + acceptanceRate.toFixed(2) + ') and moderate trigger score');
+			// 3️⃣ 场景采纳率过滤（学习用户习惯）
+			const scenarioKey = this.getScenarioKey(triggerScore.reason);
+			const scenarioRate = this.getScenarioAcceptanceRate(scenarioKey);
+
+			// 如果该场景采纳率很低（<20%）且样本足够（>10次），跳过
+			const scenarioStats = this.scenarioStats.get(scenarioKey);
+			const scenarioTotal = scenarioStats ? scenarioStats.accepted + scenarioStats.rejected : 0;
+			if (scenarioTotal >= 10 && scenarioRate < 0.2) {
+				console.log('[AI Inline Completions] ⏳ Skip: scenario "' + scenarioKey + '" has low acceptance rate (' + scenarioRate.toFixed(2) + ')');
 				return undefined;
 			}
+
+			// 4️⃣ 全局采纳率过滤
+			const acceptanceRate = this.getAcceptanceRate();
+			if (acceptanceRate < this.acceptanceThreshold && triggerScore.score < 0.8) {
+				console.log('[AI Inline Completions] ⏳ Skip: low global acceptance rate (' + acceptanceRate.toFixed(2) + ')');
+				return undefined;
+			}
+
+			// 保存当前场景（用于后续记录采纳/拒绝）
+			this.lastTriggerScenario = scenarioKey;
 
 			// 4️⃣ 最小请求间隔（动态调整）
 			const effectiveInterval = triggerScore.score > 0.8 ? this.adaptiveMinInterval * 0.5 : this.adaptiveMinInterval;
@@ -1041,7 +1059,7 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	}
 
 	/**
-	 * 🆕 获取采纳率（用于预测过滤）
+	 * 🆕 获取全局采纳率
 	 */
 	private getAcceptanceRate(): number {
 		const total = this.acceptedCount + this.rejectedCount;
@@ -1052,19 +1070,80 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	}
 
 	/**
-	 * 🆕 记录补全被采纳
+	 * 🆕 获取场景键（用于场景统计）
 	 */
-	public recordAcceptance(): void {
-		this.acceptedCount++;
-		console.log('[AI Inline Completions] ✅ Completion accepted. Rate:', this.getAcceptanceRate().toFixed(2));
+	private getScenarioKey(reason: string): string {
+		// 从触发原因中提取主要场景
+		// 例如: "trigger_char:., method_chain" -> "trigger_char:."
+		const parts = reason.split(', ');
+		if (parts.length > 0) {
+			return parts[0]; // 使用第一个原因作为场景键
+		}
+		return 'unknown';
 	}
 
 	/**
-	 * 🆕 记录补全被拒绝
+	 * 🆕 获取场景采纳率
+	 */
+	private getScenarioAcceptanceRate(scenarioKey: string): number {
+		const stats = this.scenarioStats.get(scenarioKey);
+		if (!stats) {
+			return 0.5; // 无数据，返回中性值
+		}
+		const total = stats.accepted + stats.rejected;
+		if (total < 3) {
+			return 0.5; // 样本太少
+		}
+		return stats.accepted / total;
+	}
+
+	/**
+	 * 🆕 记录补全被采纳（包含场景学习）
+	 */
+	public recordAcceptance(): void {
+		this.acceptedCount++;
+
+		// 场景学习
+		if (this.lastTriggerScenario) {
+			const stats = this.scenarioStats.get(this.lastTriggerScenario) || { accepted: 0, rejected: 0 };
+			stats.accepted++;
+			this.scenarioStats.set(this.lastTriggerScenario, stats);
+			console.log('[AI Inline Completions] ✅ Accepted in scenario "' + this.lastTriggerScenario + '". Scenario rate:', this.getScenarioAcceptanceRate(this.lastTriggerScenario).toFixed(2));
+		}
+
+		console.log('[AI Inline Completions] ✅ Global rate:', this.getAcceptanceRate().toFixed(2));
+	}
+
+	/**
+	 * 🆕 记录补全被拒绝（包含场景学习）
 	 */
 	public recordRejection(): void {
 		this.rejectedCount++;
-		console.log('[AI Inline Completions] ❌ Completion rejected. Rate:', this.getAcceptanceRate().toFixed(2));
+
+		// 场景学习
+		if (this.lastTriggerScenario) {
+			const stats = this.scenarioStats.get(this.lastTriggerScenario) || { accepted: 0, rejected: 0 };
+			stats.rejected++;
+			this.scenarioStats.set(this.lastTriggerScenario, stats);
+			console.log('[AI Inline Completions] ❌ Rejected in scenario "' + this.lastTriggerScenario + '". Scenario rate:', this.getScenarioAcceptanceRate(this.lastTriggerScenario).toFixed(2));
+		}
+
+		console.log('[AI Inline Completions] ❌ Global rate:', this.getAcceptanceRate().toFixed(2));
+	}
+
+	/**
+	 * 🆕 获取场景统计信息（用于调试）
+	 */
+	public getScenarioStats(): Map<string, { accepted: number; rejected: number; rate: number }> {
+		const result = new Map<string, { accepted: number; rejected: number; rate: number }>();
+		for (const [key, stats] of this.scenarioStats) {
+			const total = stats.accepted + stats.rejected;
+			result.set(key, {
+				...stats,
+				rate: total > 0 ? stats.accepted / total : 0
+			});
+		}
+		return result;
 	}
 
 	/**
