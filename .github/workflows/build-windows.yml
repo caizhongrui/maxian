@@ -34,10 +34,36 @@ jobs:
       run: npm run download-builtin-extensions
       continue-on-error: true
 
-    - name: 构建 Windows 客户端 (x64) - 修复Windows路径问题
+    - name: 构建 Windows 客户端 (x64)
       run: |
         npm run gulp vscode-win32-x64-min
-        npm run gulp vscode-win32-x64-inno-updater
+      env:
+        VSCODE_MIXIN_PASSWORD: placeholder
+
+    - name: 验证构建输出
+      run: |
+        $buildDir = Join-Path (Split-Path $pwd -Parent) "VSCode-win32-x64"
+        Write-Host "检查构建目录: $buildDir"
+        if (Test-Path $buildDir) {
+          Write-Host "✅ 构建目录存在"
+          Get-ChildItem $buildDir -Recurse -Depth 2 | Select-Object -First 20
+          $productJson = Join-Path $buildDir "resources\app\product.json"
+          if (Test-Path $productJson) {
+            Write-Host "✅ product.json 存在"
+          } else {
+            Write-Host "❌ product.json 不存在"
+            exit 1
+          }
+        } else {
+          Write-Host "❌ 构建目录不存在: $buildDir"
+          Write-Host "当前目录内容:"
+          Get-ChildItem (Split-Path $pwd -Parent)
+          exit 1
+        }
+      shell: pwsh
+
+    - name: 复制 Inno Updater
+      run: npm run gulp vscode-win32-x64-inno-updater
 
     - name: 生成系统级安装包
       run: npm run gulp vscode-win32-x64-system-setup
@@ -61,7 +87,9 @@ jobs:
 
     - name: 打包绿色版（便携版）
       run: |
-        Compress-Archive -Path .build/win32-x64/VSCode-win32-x64 -DestinationPath tianhe-zhikai-portable-x64.zip
+        $buildDir = Join-Path (Split-Path $pwd -Parent) "VSCode-win32-x64"
+        Write-Host "打包目录: $buildDir"
+        Compress-Archive -Path $buildDir -DestinationPath tianhe-zhikai-portable-x64.zip
       shell: pwsh
 
     - name: 上传绿色版
