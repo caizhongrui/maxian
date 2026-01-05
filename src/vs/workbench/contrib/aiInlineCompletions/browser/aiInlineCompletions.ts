@@ -3,27 +3,64 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken } from '../../../../base/common/cancellation.js';
+import { CancellationToken, CancellationTokenSource } from '../../../../base/common/cancellation.js';
 import { Position } from '../../../../editor/common/core/position.js';
 import { ITextModel } from '../../../../editor/common/model.js';
 import { InlineCompletion, InlineCompletionContext, InlineCompletions, InlineCompletionsProvider } from '../../../../editor/common/languages.js';
 import { IAIService } from '../../../../platform/ai/common/ai.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IMultiLanguageService } from '../../multilang/browser/multilang.contribution.js';
-import { CompletionContextExtractor } from './completionContextExtractor.js';
+import { CompletionContextExtractor, CompletionContext } from './completionContextExtractor.js';
+import { CompletionValidator } from './completionValidator.js';
 import { IRequestService, asJson } from '../../../../platform/request/common/request.js';
+import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
+import { IModelService } from '../../../../editor/common/services/model.js';
 
 export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 
 	private readonly contextExtractor: CompletionContextExtractor;
+	private readonly completionValidator: CompletionValidator;
+
+	// 防抖相关 - 动态策略
+	private debounceTimer: ReturnType<typeof setTimeout> | undefined;
+	private pendingCancellation: CancellationTokenSource | undefined;
+	private lastRequestTime: number = 0;
+
+	// 动态防抖参数
+	private baseDebounceDelay = 300; // 基础防抖延迟 300ms
+	private baseMinRequestInterval = 500; // 基础最小请求间隔 500ms
+	private adaptiveDebounceDelay = 300; // 自适应防抖延迟
+	private adaptiveMinInterval = 500; // 自适应最小间隔
+
+	// 响应时间跟踪
+	private responseTimeHistory: number[] = [];
+	private readonly maxHistorySize = 10;
+	private readonly slowThreshold = 2000; // 慢响应阈值 2s
+	private readonly fastThreshold = 500; // 快响应阈值 500ms
+
+	// 用户输入速度跟踪
+	private lastInputTime: number = 0;
+	private inputIntervalHistory: number[] = [];
+
+	// 补全结果缓存
+	private completionCache: Map<string, { result: string[]; timestamp: number }> = new Map();
+	private readonly completionCacheTTL = 10 * 60 * 1000; // 10分钟
+	private readonly maxCompletionCacheSize = 100;
 
 	constructor(
 		private readonly aiService: IAIService,
 		private readonly configurationService: IConfigurationService,
 		private readonly requestService: IRequestService,
-		multiLanguageService: IMultiLanguageService
+		multiLanguageService: IMultiLanguageService,
+		languageFeaturesService?: ILanguageFeaturesService,
+		modelService?: IModelService
 	) {
-		this.contextExtractor = new CompletionContextExtractor(multiLanguageService);
+		this.contextExtractor = new CompletionContextExtractor(
+			multiLanguageService,
+			languageFeaturesService,
+			modelService
+		);
+		this.completionValidator = new CompletionValidator();
 	}
 
 	async provideInlineCompletions(
@@ -100,6 +137,66 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			return undefined;
 		}
 
+		// === 动态防抖逻辑：仅对自动触发生效 ===
+		if (triggerMode === 'automatic' && context.triggerKind === 0) {
+			const now = Date.now();
+			const timeSinceLastRequest = now - this.lastRequestTime;
+
+			// 更新用户输入间隔历史
+			if (this.lastInputTime > 0) {
+				const inputInterval = now - this.lastInputTime;
+				this.inputIntervalHistory.push(inputInterval);
+				if (this.inputIntervalHistory.length > this.maxHistorySize) {
+					this.inputIntervalHistory.shift();
+				}
+			}
+			this.lastInputTime = now;
+
+			// 动态调整防抖参数
+			this.updateAdaptiveDebounce();
+
+			// 检查是否在最小请求间隔内
+			if (timeSinceLastRequest < this.adaptiveMinInterval) {
+				console.log('[AI Inline Completions] ⏳ Debounce: too soon since last request (' + timeSinceLastRequest + 'ms < ' + this.adaptiveMinInterval + 'ms), skipping');
+				return undefined;
+			}
+
+			// 取消之前的待处理请求
+			if (this.pendingCancellation) {
+				this.pendingCancellation.cancel();
+				this.pendingCancellation = undefined;
+			}
+
+			// 清除之前的防抖计时器
+			if (this.debounceTimer) {
+				clearTimeout(this.debounceTimer);
+				this.debounceTimer = undefined;
+			}
+
+			// 使用 Promise 实现防抖等待
+			const currentDebounceDelay = this.adaptiveDebounceDelay;
+			const shouldProceed = await new Promise<boolean>((resolve) => {
+				this.debounceTimer = setTimeout(() => {
+					this.debounceTimer = undefined;
+					// 检查是否已被取消
+					if (token.isCancellationRequested) {
+						resolve(false);
+					} else {
+						resolve(true);
+					}
+				}, currentDebounceDelay);
+			});
+
+			if (!shouldProceed || token.isCancellationRequested) {
+				console.log('[AI Inline Completions] ⏳ Debounce: request cancelled during wait');
+				return undefined;
+			}
+
+			// 更新最后请求时间
+			this.lastRequestTime = Date.now();
+			console.log('[AI Inline Completions] ⏳ Debounce: proceeding after ' + currentDebounceDelay + 'ms wait (adaptive)');
+		}
+
 		// Get complete context: before and after cursor
 		// (lineContent and prefix already declared above for debugging)
 		// suffix is included in enhancedContext later
@@ -137,31 +234,84 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			currentClass: enhancedContext.currentClass,
 			currentMethod: enhancedContext.currentMethod,
 			frameworks: enhancedContext.frameworks,
-			importsCount: enhancedContext.imports?.length || 0
+			importsCount: enhancedContext.imports?.length || 0,
+			// 🆕 增强的上下文信息
+			hasMethodReference: !!enhancedContext.methodReference,
+			methodRefClass: enhancedContext.methodReference?.className,
+			methodRefCandidates: enhancedContext.methodReference?.candidates?.length || 0,
+			typeDefinitionsCount: enhancedContext.typeDefinitions?.length || 0,
+			variableTypesCount: enhancedContext.variableTypes?.size || 0
 		});
 
 		// Build enhanced prompt with structural information
 		const prompt = await this.buildEnhancedPrompt(enhancedContext);
 
+		// 检查缓存
+		const cacheKey = this.generateCacheKey(enhancedContext);
+		const cachedCompletions = this.getCachedCompletion(cacheKey);
+		if (cachedCompletions && cachedCompletions.length > 0) {
+			console.log('[AI Inline Completions] 💾 Using cached completions');
+			// 直接返回缓存结果
+			const items: InlineCompletion[] = cachedCompletions.map(completion => ({
+				insertText: completion,
+				range: {
+					startLineNumber: position.lineNumber,
+					startColumn: position.column,
+					endLineNumber: position.lineNumber,
+					endColumn: position.column
+				}
+			}));
+			return { items };
+		}
+
 		try {
 			console.log('[AI Inline Completions] Calling AI service...');
+			const requestStartTime = Date.now();
 
 			// 使用优化的参数调用 AI
 			const aiResponse = await this.aiService.complete(prompt, {
-				temperature: 0.1,  // 极低温度，确保输出确定性
+				temperature: 0.05,  // 极低温度，确保输出确定性（从0.1降低到0.05）
 				maxTokens: 1200,   // 支持较长的代码补全
-				systemMessage: 'You are a code completion engine. Output ONLY code, NO explanations, NO markdown, NO conversational text.',
+				systemMessage: 'You are a code completion engine. Output ONLY code, NO explanations, NO markdown, NO conversational text. NEVER generate methods or fields that do not exist in the provided type definitions.',
 				businessCode: 'IDE_CODE_COMPLETION'  // 代码补全业务场景
 			});
 
-			console.log('[AI Inline Completions] AI response length:', aiResponse.length);
+			// 记录响应时间
+			const responseTime = Date.now() - requestStartTime;
+			this.recordResponseTime(responseTime);
+			console.log('[AI Inline Completions] AI response time:', responseTime + 'ms, length:', aiResponse.length);
 
 			// Extract and clean the completion
-			const completions = this.extractCompletions(aiResponse, prefix);
-			console.log('[AI Inline Completions] Extracted completions:', completions);
+			let completions = this.extractCompletions(aiResponse, prefix);
+			console.log('[AI Inline Completions] Extracted completions:', completions.length);
+
+			// 验证补全内容
+			const validatedCompletions: string[] = [];
+			for (const completion of completions) {
+				const validationResult = this.completionValidator.validate(completion, enhancedContext);
+				console.log('[AI Inline Completions] 🔍 Validation result:',
+					'valid=' + validationResult.isValid,
+					'score=' + validationResult.confidenceScore.toFixed(2),
+					'issues=' + validationResult.issues.length);
+
+				if (!this.completionValidator.shouldReject(validationResult)) {
+					validatedCompletions.push(completion);
+				} else {
+					console.warn('[AI Inline Completions] ❌ Rejected completion due to validation issues:',
+						validationResult.issues.map(i => i.message).join(', '));
+				}
+			}
+
+			// 使用验证后的补全
+			completions = validatedCompletions;
+
+			// 缓存结果
+			if (completions.length > 0) {
+				this.cacheCompletion(cacheKey, completions);
+			}
 
 			if (completions.length === 0) {
-				console.warn('[AI Inline Completions] No valid completions extracted');
+				console.warn('[AI Inline Completions] No valid completions after validation');
 				return undefined;
 			}
 
@@ -280,7 +430,7 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	 * Build enhanced prompt with structural code information
 	 * 强制 AI 返回纯代码，不返回任何解释
 	 */
-	private async buildEnhancedPrompt(context: any): Promise<string> {
+	private async buildEnhancedPrompt(context: CompletionContext): Promise<string> {
 		console.log('[AI Inline Completions] buildEnhancedPrompt called');
 
 		// 尝试从后端获取提示词
@@ -341,6 +491,138 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			parts.push('');
 		}
 
+		// 🆕 添加 Java 方法引用上下文（关键优化！）
+		if (context.methodReference) {
+			parts.push('【⚠️ 方法引用约束 - 必须严格遵守】');
+			parts.push(`当前正在编写 ${context.methodReference.className}::${context.methodReference.methodPrefix || ''} 方法引用`);
+			if (context.methodReference.candidates.length > 0) {
+				parts.push('');
+				parts.push(`🔒 ${context.methodReference.className} 类【仅有】以下方法，禁止生成其他方法名：`);
+				parts.push(context.methodReference.candidates.slice(0, 20).join(', '));
+				parts.push('');
+				parts.push('❌ 严禁生成上述列表中不存在的方法名！');
+				parts.push('❌ 如果不确定方法是否存在，宁可不生成！');
+			}
+			parts.push('');
+		}
+
+		// 🆕 添加类型定义信息（从 LSP 获取）- 增强版
+		if (context.typeDefinitions && context.typeDefinitions.length > 0) {
+			parts.push('【⚠️ 类型约束 - 必须严格遵守】');
+			parts.push('以下是上下文中涉及的类型及其【完整】的可用成员：');
+			parts.push('');
+
+			for (const typeDef of context.typeDefinitions.slice(0, 5)) {
+				parts.push(`🔒 类型 ${typeDef.typeName}：`);
+
+				// 显示字段（增强版）
+				if (typeDef.enhancedFields && typeDef.enhancedFields.length > 0) {
+					const fieldsList = typeDef.enhancedFields
+						.slice(0, 10)
+						.map(f => `${f.type} ${f.name}`)
+						.join(', ');
+					parts.push(`  【字段】${fieldsList}`);
+				} else if (typeDef.fields.length > 0) {
+					parts.push(`  【字段】${typeDef.fields.slice(0, 10).join(', ')}`);
+				}
+
+				// 显示方法（增强版，包含签名）
+				if (typeDef.enhancedMethods && typeDef.enhancedMethods.length > 0) {
+					const publicMethods = typeDef.enhancedMethods
+						.filter(m => m.accessModifier !== 'private')
+						.slice(0, 15);
+					if (publicMethods.length > 0) {
+						const methodsList = publicMethods
+							.map(m => m.signature || m.name)
+							.join('; ');
+						parts.push(`  【方法】${methodsList}`);
+					}
+				} else if (typeDef.methods.length > 0) {
+					parts.push(`  【方法】${typeDef.methods.slice(0, 15).join(', ')}`);
+				}
+
+				// 显示继承信息
+				if (typeDef.parentClass) {
+					parts.push(`  【继承】extends ${typeDef.parentClass}`);
+				}
+				if (typeDef.interfaces && typeDef.interfaces.length > 0) {
+					parts.push(`  【实现】implements ${typeDef.interfaces.join(', ')}`);
+				}
+
+				parts.push('');
+			}
+
+			parts.push('❌ 严禁调用上述类型中不存在的方法或访问不存在的字段！');
+			parts.push('❌ 严禁生成类型中未列出的 getter/setter 方法！');
+			parts.push('');
+		}
+
+		// 🆕 添加变量类型映射
+		if (context.variableTypes && context.variableTypes.size > 0) {
+			parts.push('【局部变量类型】');
+			const entries = Array.from(context.variableTypes.entries()).slice(0, 10);
+			for (const [varName, typeName] of entries) {
+				parts.push(`  ${varName}: ${typeName}`);
+			}
+			parts.push('');
+		}
+
+		// 🆕 添加框架特化上下文
+		if (context.frameworkContext) {
+			const fc = context.frameworkContext;
+			parts.push('【框架上下文】');
+			parts.push(`框架: ${fc.name}${fc.version ? ` v${fc.version}` : ''}`);
+
+			if (fc.contextType) {
+				parts.push(`上下文类型: ${fc.contextType}`);
+			}
+
+			if (fc.annotations && fc.annotations.length > 0) {
+				parts.push(`已使用注解: ${fc.annotations.join(', ')}`);
+			}
+
+			if (fc.hints && fc.hints.length > 0) {
+				parts.push('');
+				parts.push('💡 框架提示:');
+				for (const hint of fc.hints.slice(0, 5)) {
+					parts.push(`  - ${hint}`);
+				}
+			}
+
+			if (fc.patterns && fc.patterns.length > 0) {
+				parts.push('');
+				parts.push('📝 常用模式:');
+				for (const pattern of fc.patterns.slice(0, 3)) {
+					parts.push(`  ${pattern}`);
+				}
+			}
+
+			parts.push('');
+		}
+
+		// 🆕 添加跨文件上下文
+		if (context.relatedFiles && context.relatedFiles.length > 0) {
+			parts.push('【相关文件上下文】');
+			parts.push('以下是当前文件导入的相关模块信息，可参考其定义：');
+			parts.push('');
+
+			for (const relFile of context.relatedFiles.slice(0, 3)) {
+				const fileName = relFile.filepath.split('/').pop() || relFile.filepath;
+				parts.push(`📁 ${fileName} (${relFile.fileType}):`);
+
+				if (relFile.definitions.length > 0) {
+					parts.push(`  定义: ${relFile.definitions.slice(0, 5).join(', ')}`);
+				}
+
+				// 只在摘要较短时添加
+				if (relFile.summary && relFile.summary.length < 300) {
+					parts.push(`  摘要: ${relFile.summary.substring(0, 200)}...`);
+				}
+
+				parts.push('');
+			}
+		}
+
 		// 代码上下文
 		const beforeCode = context.beforeLines.join('\n');
 		const afterCode = context.afterLines.join('\n');
@@ -367,20 +649,31 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 
 		// 输出要求
 		parts.push('【要求】');
-		if (isNewLine) {
+		if (context.methodReference) {
+			// Java 方法引用场景的特殊要求
+			parts.push(`用户正在输入 ${context.methodReference.className}:: 方法引用。`);
+			parts.push('请补全方法名，必须使用上面列出的可用方法之一。');
+		} else if (isNewLine) {
 			parts.push('用户刚按下回车，请预测下一行代码。');
 		} else {
 			parts.push('用户正在输入代码，请补全当前行。');
 		}
 		parts.push('');
-		parts.push('关键规则：');
-		parts.push('1. 仔细分析上下文代码的模式和风格，生成一致的代码');
-		parts.push('2. 使用上下文中已出现的变量名、方法名和类名');
-		parts.push('3. 参考前面代码的调用方式（如 bo.getXxx()、Entity::getXxx 等模式）');
-		parts.push('4. 只输出代码，不要任何解释或markdown');
-		parts.push('5. 保持缩进一致');
+		parts.push('【🔒 关键规则 - 必须严格遵守】');
 		parts.push('');
-		parts.push('直接输出代码：');
+		parts.push('1. 【代码风格】仔细分析上下文代码的模式和风格，生成一致的代码');
+		parts.push('2. 【变量使用】只使用上下文中已出现或明确定义的变量名、方法名和类名');
+		parts.push('3. 【类型约束】如果提供了类型定义信息，必须只使用该类型实际存在的字段和方法');
+		parts.push('4. 【禁止猜测】禁止生成任何未在上下文中出现的方法名或字段名');
+		parts.push('5. 【输出格式】只输出代码，不要任何解释、注释或markdown标记');
+		parts.push('6. 【缩进格式】保持与上下文一致的缩进');
+		parts.push('');
+		parts.push('⚠️ 违规示例（禁止）：');
+		parts.push('  - 生成类型中不存在的 getXxx() 方法');
+		parts.push('  - 访问类型中不存在的字段');
+		parts.push('  - 调用未导入或未定义的方法');
+		parts.push('');
+		parts.push('直接输出代码（无解释）：');
 
 		const finalPrompt = parts.join('\n');
 		console.log('[AI Inline Completions] 本地提示词内容（前500字符）:', finalPrompt.substring(0, 500));
@@ -390,7 +683,7 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	/**
 	 * 从后端API获取代码补全提示词
 	 */
-	private async fetchCompletionPromptFromBackend(context: any): Promise<string | null> {
+	private async fetchCompletionPromptFromBackend(context: CompletionContext): Promise<string | null> {
 		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
 		console.log('[AI Inline Completions] fetchCompletionPromptFromBackend - apiUrl:', apiUrl);
 
@@ -403,7 +696,7 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			const url = `${apiUrl.replace(/\/$/, '')}/system/ai/prompt/completion`;
 			console.log('[AI Inline Completions] 准备请求后端提示词API:', url);
 
-			// 准备请求数据
+			// 准备请求数据（包含增强的上下文信息）
 			const requestData = {
 				languageId: context.languageId,
 				prefix: context.prefix,
@@ -413,13 +706,55 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 				currentClass: context.currentClass,
 				currentMethod: context.currentMethod,
 				frameworks: context.frameworks,
-				recentEdits: context.recentEdits
+				recentEdits: context.recentEdits,
+				// 🆕 添加增强的上下文信息
+				methodReference: context.methodReference ? {
+					className: context.methodReference.className,
+					methodPrefix: context.methodReference.methodPrefix,
+					candidates: context.methodReference.candidates
+				} : undefined,
+				typeDefinitions: context.typeDefinitions?.map(td => ({
+					typeName: td.typeName,
+					methods: td.methods,
+					fields: td.fields,
+					// 🆕 增强的方法信息
+					enhancedMethods: td.enhancedMethods?.map(m => ({
+						name: m.name,
+						returnType: m.returnType,
+						parameters: m.parameters,
+						signature: m.signature
+					})),
+					parentClass: td.parentClass,
+					interfaces: td.interfaces
+				})),
+				variableTypes: context.variableTypes ? Object.fromEntries(context.variableTypes) : undefined,
+				cursorContext: context.cursorContext,
+				// 🆕 框架特化上下文
+				frameworkContext: context.frameworkContext ? {
+					name: context.frameworkContext.name,
+					version: context.frameworkContext.version,
+					contextType: context.frameworkContext.contextType,
+					annotations: context.frameworkContext.annotations,
+					hints: context.frameworkContext.hints,
+					patterns: context.frameworkContext.patterns
+				} : undefined,
+				// 🆕 跨文件上下文
+				relatedFiles: context.relatedFiles?.map(rf => ({
+					filepath: rf.filepath,
+					fileType: rf.fileType,
+					definitions: rf.definitions
+				}))
 			};
 
 			console.log('[AI Inline Completions] 请求数据:', {
 				languageId: requestData.languageId,
 				currentClass: requestData.currentClass,
-				currentMethod: requestData.currentMethod
+				currentMethod: requestData.currentMethod,
+				hasMethodReference: !!requestData.methodReference,
+				typeDefinitionsCount: requestData.typeDefinitions?.length || 0,
+				hasFrameworkContext: !!requestData.frameworkContext,
+				frameworkName: requestData.frameworkContext?.name,
+				relatedFilesCount: requestData.relatedFiles?.length || 0
 			});
 
 			const response = await this.requestService.request({
@@ -449,5 +784,114 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 
 	freeInlineCompletions(): void {
 		// Cleanup if needed
+	}
+
+	/**
+	 * 更新自适应防抖参数
+	 * 根据响应时间和用户输入速度动态调整
+	 */
+	private updateAdaptiveDebounce(): void {
+		// 根据响应时间调整
+		if (this.responseTimeHistory.length >= 3) {
+			const avgResponseTime = this.responseTimeHistory.reduce((a, b) => a + b, 0) / this.responseTimeHistory.length;
+
+			if (avgResponseTime > this.slowThreshold) {
+				// 响应慢，增加防抖时间
+				this.adaptiveDebounceDelay = Math.min(this.baseDebounceDelay * 2, 800);
+				this.adaptiveMinInterval = Math.min(this.baseMinRequestInterval * 1.5, 1000);
+			} else if (avgResponseTime < this.fastThreshold) {
+				// 响应快，减少防抖时间
+				this.adaptiveDebounceDelay = Math.max(this.baseDebounceDelay * 0.7, 150);
+				this.adaptiveMinInterval = Math.max(this.baseMinRequestInterval * 0.7, 300);
+			} else {
+				// 正常响应，使用基础值
+				this.adaptiveDebounceDelay = this.baseDebounceDelay;
+				this.adaptiveMinInterval = this.baseMinRequestInterval;
+			}
+		}
+
+		// 根据用户输入速度调整
+		if (this.inputIntervalHistory.length >= 3) {
+			const avgInputInterval = this.inputIntervalHistory.reduce((a, b) => a + b, 0) / this.inputIntervalHistory.length;
+
+			// 如果用户输入很快（小于200ms），增加防抖避免过多请求
+			if (avgInputInterval < 200) {
+				this.adaptiveDebounceDelay = Math.max(this.adaptiveDebounceDelay, avgInputInterval * 2);
+			}
+		}
+
+		console.log('[AI Inline Completions] 📊 Adaptive debounce updated:',
+			'delay=' + this.adaptiveDebounceDelay + 'ms',
+			'interval=' + this.adaptiveMinInterval + 'ms');
+	}
+
+	/**
+	 * 记录响应时间
+	 */
+	private recordResponseTime(timeMs: number): void {
+		this.responseTimeHistory.push(timeMs);
+		if (this.responseTimeHistory.length > this.maxHistorySize) {
+			this.responseTimeHistory.shift();
+		}
+	}
+
+	/**
+	 * 生成补全缓存的 key
+	 */
+	private generateCacheKey(context: CompletionContext): string {
+		// 使用前缀、后缀和关键上下文信息生成缓存 key
+		const keyParts = [
+			context.languageId,
+			context.prefix.slice(-100), // 最后100个字符
+			context.suffix.slice(0, 50), // 前50个字符
+			context.currentClass || '',
+			context.currentMethod || ''
+		];
+		return keyParts.join('|');
+	}
+
+	/**
+	 * 从缓存获取补全结果
+	 */
+	private getCachedCompletion(cacheKey: string): string[] | undefined {
+		const cached = this.completionCache.get(cacheKey);
+		if (!cached) {
+			return undefined;
+		}
+
+		// 检查是否过期
+		if (Date.now() - cached.timestamp > this.completionCacheTTL) {
+			this.completionCache.delete(cacheKey);
+			return undefined;
+		}
+
+		console.log('[AI Inline Completions] 💾 Cache hit for completion');
+		return cached.result;
+	}
+
+	/**
+	 * 添加补全结果到缓存
+	 */
+	private cacheCompletion(cacheKey: string, result: string[]): void {
+		// 检查缓存容量
+		if (this.completionCache.size >= this.maxCompletionCacheSize) {
+			// 删除最旧的条目
+			const firstKey = this.completionCache.keys().next().value;
+			if (firstKey) {
+				this.completionCache.delete(firstKey);
+			}
+		}
+
+		this.completionCache.set(cacheKey, {
+			result,
+			timestamp: Date.now()
+		});
+	}
+
+	/**
+	 * 清除补全缓存
+	 */
+	clearCompletionCache(): void {
+		this.completionCache.clear();
 	}
 }

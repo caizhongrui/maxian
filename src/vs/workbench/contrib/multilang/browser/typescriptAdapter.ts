@@ -31,7 +31,7 @@ import {
 export class TypeScriptAdapter implements ILanguageAdapter {
 	readonly language = 'typescript';
 	readonly displayName = 'TypeScript';
-	readonly fileExtensions = ['.ts', '.tsx'];
+	readonly fileExtensions = ['.ts', '.tsx', '.js', '.jsx', '.vue', '.mjs', '.cjs', '.html'];
 
 	async parseAST(code: string, token?: CancellationToken): Promise<any> {
 		return {

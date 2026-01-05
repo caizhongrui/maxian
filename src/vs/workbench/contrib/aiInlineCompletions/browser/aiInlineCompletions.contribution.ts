@@ -6,6 +6,7 @@
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
+import { IModelService } from '../../../../editor/common/services/model.js';
 import { AIInlineCompletionsProvider } from './aiInlineCompletions.js';
 import { IAIService } from '../../../../platform/ai/common/ai.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
@@ -18,6 +19,7 @@ class AIInlineCompletionsContribution extends Disposable implements IWorkbenchCo
 
 	constructor(
 		@ILanguageFeaturesService languageFeaturesService: ILanguageFeaturesService,
+		@IModelService modelService: IModelService,
 		@IAIService aiService: IAIService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IRequestService requestService: IRequestService,
@@ -25,7 +27,14 @@ class AIInlineCompletionsContribution extends Disposable implements IWorkbenchCo
 	) {
 		super();
 
-		const provider = new AIInlineCompletionsProvider(aiService, configurationService, requestService, multiLanguageService);
+		const provider = new AIInlineCompletionsProvider(
+			aiService,
+			configurationService,
+			requestService,
+			multiLanguageService,
+			languageFeaturesService,
+			modelService
+		);
 
 		// Register for all languages using '*' selector
 		const registration = languageFeaturesService.inlineCompletionsProvider.register(
