@@ -25,28 +25,38 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	private readonly contextExtractor: CompletionContextExtractor;
 	private readonly completionValidator: CompletionValidator;
 
-	// 防抖相关 - 动态策略
+	// 防抖相关 - 智能策略（参考 Copilot）
 	private debounceTimer: ReturnType<typeof setTimeout> | undefined;
 	private pendingCancellation: CancellationTokenSource | undefined;
 	private lastRequestTime: number = 0;
 
-	// 动态防抖参数 - 大幅增强以降低API调用频率
-	private baseDebounceDelay = 800; // 基础防抖延迟 800ms（从300ms提升）
-	private baseMinRequestInterval = 1500; // 基础最小请求间隔 1500ms（从500ms提升）
-	private adaptiveDebounceDelay = 800; // 自适应防抖延迟
-	private adaptiveMinInterval = 1500; // 自适应最小间隔
-	private lastCompletionTime = 0; // 上次完成补全的时间
-	private readonly completionCooldown = 2000; // 补全冷却期 2秒
+	// 🆕 智能触发策略 - 基于内容而非固定时间
+	private readonly triggerCharacters = new Set(['.', '(', '::', '->', '=>', ',', '{', '[', '=', ' ']);
+	private readonly triggerKeywords = new Set(['return', 'if', 'for', 'while', 'function', 'const', 'let', 'var', 'class', 'import', 'export', 'async', 'await', 'new', 'throw', 'try', 'catch']);
+	private lastPrefix: string = ''; // 用于检测实际内容变化
+	private lastPosition: { line: number; column: number } = { line: 0, column: 0 };
 
-	// 响应时间跟踪
+	// 🆕 采纳率跟踪（参考 Copilot 的 contextualFilterScore）
+	private acceptedCount = 0;
+	private rejectedCount = 0;
+	private readonly acceptanceThreshold = 0.35; // 采纳率低于35%时增加过滤
+
+	// 动态防抖参数 - 更短的防抖，更智能的过滤
+	private baseDebounceDelay = 300; // 降回300ms（通过智能过滤控制频率）
+	private baseMinRequestInterval = 800; // 降回800ms
+	private adaptiveDebounceDelay = 300;
+	private adaptiveMinInterval = 800;
+
+	// 响应时间跟踪（用于自适应调整）
 	private responseTimeHistory: number[] = [];
 	private readonly maxHistorySize = 10;
-	private readonly slowThreshold = 2000; // 慢响应阈值 2s
-	private readonly fastThreshold = 500; // 快响应阈值 500ms
+	private readonly slowThreshold = 2000;
+	private readonly fastThreshold = 500;
 
-	// 用户输入速度跟踪
-	private lastInputTime: number = 0;
+	// 用户输入速度跟踪（保留用于自适应调整）
 	private inputIntervalHistory: number[] = [];
+	private lastInputTime: number = 0;
+	private lastCompletionTime = 0;
 
 	// 补全结果缓存（已迁移到 completionCacheService，保留兼容性）
 	private completionCache: Map<string, { result: string[]; timestamp: number }> = new Map();
@@ -151,19 +161,60 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			return undefined;
 		}
 
-		// === 动态防抖逻辑：仅对自动触发生效 ===
+		// === 🆕 智能触发逻辑（参考 Copilot）：基于内容变化而非固定时间 ===
 		if (triggerMode === 'automatic' && context.triggerKind === 0) {
 			const now = Date.now();
 			const timeSinceLastRequest = now - this.lastRequestTime;
-			const timeSinceLastCompletion = now - this.lastCompletionTime;
 
-			// 冷却期检查：如果刚完成一次补全，需要等待冷却期
-			if (this.lastCompletionTime > 0 && timeSinceLastCompletion < this.completionCooldown) {
-				console.log('[AI Inline Completions] ⏳ Cooldown: too soon since last completion (' + timeSinceLastCompletion + 'ms < ' + this.completionCooldown + 'ms), skipping');
+			// 1️⃣ 检测是否是真正的内容变化（而非光标移动）
+			const contentChanged = prefix !== this.lastPrefix;
+			const positionChanged = position.lineNumber !== this.lastPosition.line ||
+			                        position.column !== this.lastPosition.column;
+
+			if (!contentChanged && positionChanged) {
+				// 只是光标移动，不触发
+				console.log('[AI Inline Completions] ⏳ Skip: cursor move without content change');
+				this.lastPosition = { line: position.lineNumber, column: position.column };
 				return undefined;
 			}
 
-			// 更新用户输入间隔历史
+			// 1.5️⃣ 冷却期检查：刚完成补全后短暂休息
+			const timeSinceLastCompletion = now - this.lastCompletionTime;
+			if (this.lastCompletionTime > 0 && timeSinceLastCompletion < 500) {
+				console.log('[AI Inline Completions] ⏳ Skip: cooldown after completion (' + timeSinceLastCompletion + 'ms)');
+				return undefined;
+			}
+
+			// 更新追踪状态
+			this.lastPrefix = prefix;
+			this.lastPosition = { line: position.lineNumber, column: position.column };
+
+			// 2️⃣ 智能触发条件检查
+			const triggerScore = this.calculateTriggerScore(prefix, lineContent, position, model);
+			console.log('[AI Inline Completions] 📊 Trigger score:', triggerScore.score, 'reason:', triggerScore.reason);
+
+			if (triggerScore.score < 0.5) {
+				// 触发分数太低，跳过
+				console.log('[AI Inline Completions] ⏳ Skip: low trigger score (' + triggerScore.score.toFixed(2) + ')');
+				return undefined;
+			}
+
+			// 3️⃣ 采纳率过滤（参考 Copilot 的 contextualFilterScore）
+			const acceptanceRate = this.getAcceptanceRate();
+			if (acceptanceRate < this.acceptanceThreshold && triggerScore.score < 0.8) {
+				// 采纳率低且触发分数不高，增加过滤
+				console.log('[AI Inline Completions] ⏳ Skip: low acceptance rate (' + acceptanceRate.toFixed(2) + ') and moderate trigger score');
+				return undefined;
+			}
+
+			// 4️⃣ 最小请求间隔（动态调整）
+			const effectiveInterval = triggerScore.score > 0.8 ? this.adaptiveMinInterval * 0.5 : this.adaptiveMinInterval;
+			if (timeSinceLastRequest < effectiveInterval) {
+				console.log('[AI Inline Completions] ⏳ Debounce: too soon (' + timeSinceLastRequest + 'ms < ' + effectiveInterval.toFixed(0) + 'ms)');
+				return undefined;
+			}
+
+			// 5️⃣ 更新输入历史（用于自适应调整）
 			if (this.lastInputTime > 0) {
 				const inputInterval = now - this.lastInputTime;
 				this.inputIntervalHistory.push(inputInterval);
@@ -173,14 +224,8 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			}
 			this.lastInputTime = now;
 
-			// 动态调整防抖参数
+			// 6️⃣ 动态调整防抖参数
 			this.updateAdaptiveDebounce();
-
-			// 检查是否在最小请求间隔内
-			if (timeSinceLastRequest < this.adaptiveMinInterval) {
-				console.log('[AI Inline Completions] ⏳ Debounce: too soon since last request (' + timeSinceLastRequest + 'ms < ' + this.adaptiveMinInterval + 'ms), skipping');
-				return undefined;
-			}
 
 			// 取消之前的待处理请求
 			if (this.pendingCancellation) {
@@ -908,6 +953,118 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 
 	freeInlineCompletions(): void {
 		// Cleanup if needed
+	}
+
+	/**
+	 * 🆕 计算触发评分 - 智能判断是否应该触发补全
+	 * 参考 Copilot 的 contextualFilterScore 机制
+	 */
+	private calculateTriggerScore(prefix: string, lineContent: string, position: Position, model: ITextModel): { score: number; reason: string } {
+		let score = 0.5; // 基础分数
+		const reasons: string[] = [];
+
+		const prefixTrimmed = prefix.trim();
+		const lastChar = prefix.slice(-1);
+		const lastWord = prefixTrimmed.split(/\s+/).pop() || '';
+
+		// 1️⃣ 触发字符加分（高优先级触发点）
+		if (this.triggerCharacters.has(lastChar)) {
+			score += 0.3;
+			reasons.push('trigger_char:' + lastChar);
+		}
+
+		// 2️⃣ 关键字后加分
+		if (this.triggerKeywords.has(lastWord.toLowerCase())) {
+			score += 0.25;
+			reasons.push('keyword:' + lastWord);
+		}
+
+		// 3️⃣ 行尾场景（函数定义、条件语句等）
+		if (lastChar === '{' || lastChar === '(' || lineContent.trim().endsWith(':')) {
+			score += 0.2;
+			reasons.push('block_start');
+		}
+
+		// 4️⃣ 换行后有上下文
+		if (prefixTrimmed.length === 0) {
+			const prevLineNum = position.lineNumber - 1;
+			if (prevLineNum >= 1) {
+				const prevLine = model.getLineContent(prevLineNum).trim();
+				if (prevLine.length > 0 && !prevLine.startsWith('//') && !prevLine.startsWith('*')) {
+					score += 0.15;
+					reasons.push('newline_after_code');
+				} else {
+					score -= 0.2;
+					reasons.push('newline_after_comment');
+				}
+			}
+		}
+
+		// 5️⃣ 输入足够长度
+		if (prefixTrimmed.length >= 3) {
+			score += 0.1;
+			reasons.push('sufficient_prefix');
+		} else if (prefixTrimmed.length < 1 && lastChar !== '\n') {
+			score -= 0.3;
+			reasons.push('too_short');
+		}
+
+		// 6️⃣ 方法调用链检测（如 obj.method().）
+		if (/\.[a-zA-Z_$][a-zA-Z0-9_$]*\.$/.test(prefix) || /\.[a-zA-Z_$][a-zA-Z0-9_$]*\(/.test(prefix)) {
+			score += 0.2;
+			reasons.push('method_chain');
+		}
+
+		// 7️⃣ 赋值语句右侧
+		if (/=\s*$/.test(prefix) || /:\s*$/.test(prefix)) {
+			score += 0.2;
+			reasons.push('assignment_rhs');
+		}
+
+		// 8️⃣ 注释中不触发
+		if (/^\s*(\/\/|\/\*|\*)/.test(lineContent)) {
+			score -= 0.5;
+			reasons.push('in_comment');
+		}
+
+		// 9️⃣ 字符串中降低优先级
+		const quoteCount = (prefix.match(/["'`]/g) || []).length;
+		if (quoteCount % 2 === 1) {
+			score -= 0.2;
+			reasons.push('in_string');
+		}
+
+		return {
+			score: Math.max(0, Math.min(1, score)),
+			reason: reasons.join(', ')
+		};
+	}
+
+	/**
+	 * 🆕 获取采纳率（用于预测过滤）
+	 */
+	private getAcceptanceRate(): number {
+		const total = this.acceptedCount + this.rejectedCount;
+		if (total < 5) {
+			return 0.5; // 样本太少，返回中性值
+		}
+		return this.acceptedCount / total;
+	}
+
+	/**
+	 * 🆕 记录补全被采纳
+	 */
+	public recordAcceptance(): void {
+		this.acceptedCount++;
+		console.log('[AI Inline Completions] ✅ Completion accepted. Rate:', this.getAcceptanceRate().toFixed(2));
+	}
+
+	/**
+	 * 🆕 记录补全被拒绝
+	 */
+	public recordRejection(): void {
+		this.rejectedCount++;
+		console.log('[AI Inline Completions] ❌ Completion rejected. Rate:', this.getAcceptanceRate().toFixed(2));
 	}
 
 	/**
