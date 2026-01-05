@@ -573,31 +573,13 @@ export class MaxianService extends Disposable implements IMaxianService {
 					console.log('[Maxian] 复用现有DifyHandler实例（配置未改变，保留conversation_id）');
 				}
 			} else {
-				// 从VSCode配置中读取（向后兼容）
-				difyApiUrl = this.configurationService.getValue<string>('zhikai.dify.apiUrl') || 'http://dify.boyocloud.com/v1';
-				difyApiKey = this.configurationService.getValue<string>('zhikai.dify.apiKey') || '';
-
-				if (!difyApiKey) {
-					console.error('[Maxian] Dify API Key 未配置');
-					this._onMessage.fire({
-						type: 'error',
-						content: '错误: 请选择一个知识库，或在设置中配置 zhikai.dify.apiKey'
-					});
-					return;
-				}
-
-				// 只在没有 DifyHandler 或配置不同时重新初始化
-				if (!this.difyHandler) {
-				const difyConfig: DifyConfiguration = {
-					apiUrl: difyApiUrl,
-					apiKey: difyApiKey,
-					user: difyUser,
-					proxyBaseUrl: proxyBaseUrl,  // 使用代理服务
-					requestService: this.requestService
-				};
-				this.difyHandler = new DifyHandler(difyConfig);
-				console.log('[Maxian] DifyHandler 已从VSCode配置初始化');
-				}
+				// 未选择知识库，提示用户
+				console.error('[Maxian] 未选择知识库');
+				this._onMessage.fire({
+					type: 'error',
+					content: '请先选择一个知识库。如果知识库列表为空，请检查是否已登录。'
+				});
+				return;
 			}
 
 			console.log('[Maxian] 使用 Dify 知识库接口发送消息');

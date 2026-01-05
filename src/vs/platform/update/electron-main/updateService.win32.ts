@@ -94,7 +94,7 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 				// response.data 包含 UpdateCheckResponse 对象
 				const updateInfo = response?.data;
 
-				if (!updateInfo || !updateInfo.url || !updateInfo.version) {
+				if (!updateInfo || (!updateInfo.url && !updateInfo.filePath) || !updateInfo.version) {
 					this.logService.info('No update available');
 					this.telemetryService.publicLog2<{ explicit: boolean }, UpdateNotAvailableClassification>('update:notAvailable', { explicit: !!context });
 					this.setState(State.Idle(updateType));
@@ -103,9 +103,20 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 
 				this.logService.info('Update available:', updateInfo.version);
 
-				// 构建完整的下载URL（拼接apiUrl）
+				// 优先使用 filePath（OSS直接下载地址），fallback 到内网下载端点
 				const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
-				const downloadUrl = `${apiUrl}${updateInfo.url}`;
+				let downloadUrl: string;
+				if (updateInfo.filePath) {
+					// OSS 直接下载地址（完整 URL）
+					downloadUrl = updateInfo.filePath;
+					this.logService.info('Using OSS download URL (filePath)');
+				} else if (updateInfo.url) {
+					// 内网相对路径，需要拼接 apiUrl
+					downloadUrl = `${apiUrl}${updateInfo.url}`;
+					this.logService.info('Using internal download URL (url)');
+				} else {
+					downloadUrl = '';
+				}
 
 				// 构建IUpdate对象
 				const update: IUpdate = {

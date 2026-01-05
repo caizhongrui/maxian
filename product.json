@@ -636,6 +636,22 @@
 				},
 				"publisherDisplayName": "shd101wyy"
 			}
+		},
+		{
+			"name": "k--kato.intellij-idea-keybindings",
+			"version": "1.7.2",
+			"sha256": null,
+			"repo": "https://github.com/kasecato/vscode-intellij-idea-keybindings.git",
+			"metadata": {
+				"id": "k--kato.intellij-idea-keybindings",
+				"publisherId": {
+					"publisherId": "",
+					"publisherName": "k--kato",
+					"displayName": "Keisuke Kato",
+					"flags": "verified"
+				},
+				"publisherDisplayName": "Keisuke Kato"
+			}
 		}
 	],
 	"extensionRecommendations": [
