@@ -30,11 +30,13 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	private pendingCancellation: CancellationTokenSource | undefined;
 	private lastRequestTime: number = 0;
 
-	// 动态防抖参数
-	private baseDebounceDelay = 300; // 基础防抖延迟 300ms
-	private baseMinRequestInterval = 500; // 基础最小请求间隔 500ms
-	private adaptiveDebounceDelay = 300; // 自适应防抖延迟
-	private adaptiveMinInterval = 500; // 自适应最小间隔
+	// 动态防抖参数 - 大幅增强以降低API调用频率
+	private baseDebounceDelay = 800; // 基础防抖延迟 800ms（从300ms提升）
+	private baseMinRequestInterval = 1500; // 基础最小请求间隔 1500ms（从500ms提升）
+	private adaptiveDebounceDelay = 800; // 自适应防抖延迟
+	private adaptiveMinInterval = 1500; // 自适应最小间隔
+	private lastCompletionTime = 0; // 上次完成补全的时间
+	private readonly completionCooldown = 2000; // 补全冷却期 2秒
 
 	// 响应时间跟踪
 	private responseTimeHistory: number[] = [];
@@ -153,6 +155,13 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		if (triggerMode === 'automatic' && context.triggerKind === 0) {
 			const now = Date.now();
 			const timeSinceLastRequest = now - this.lastRequestTime;
+			const timeSinceLastCompletion = now - this.lastCompletionTime;
+
+			// 冷却期检查：如果刚完成一次补全，需要等待冷却期
+			if (this.lastCompletionTime > 0 && timeSinceLastCompletion < this.completionCooldown) {
+				console.log('[AI Inline Completions] ⏳ Cooldown: too soon since last completion (' + timeSinceLastCompletion + 'ms < ' + this.completionCooldown + 'ms), skipping');
+				return undefined;
+			}
 
 			// 更新用户输入间隔历史
 			if (this.lastInputTime > 0) {
@@ -273,6 +282,8 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 					endColumn: position.column
 				}
 			}));
+			// 更新冷却时间（缓存命中也需要冷却）
+			this.lastCompletionTime = Date.now();
 			return { items };
 		}
 
@@ -373,6 +384,9 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 				length: typeof i.insertText === 'string' ? i.insertText.length : 0
 			})));
 
+			// 更新冷却时间
+			this.lastCompletionTime = Date.now();
+
 			return {
 				items
 			};
@@ -383,7 +397,7 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	}
 
 	/**
-	 * 提取 AI 返回的代码补全（强化过滤）
+	 * 提取 AI 返回的代码补全（强化过滤 + 前缀去重）
 	 */
 	private extractCompletions(aiResponse: string, prefix: string): string[] {
 		const results: string[] = [];
@@ -430,8 +444,18 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			return [];
 		}
 
+		// 🆕 步骤 3.5: 移除前缀重复 - 关键修复！
+		// 如果 AI 返回的内容以用户已输入的前缀开头，需要移除
+		cleanedResponse = this.removePrefixDuplication(cleanedResponse, prefix);
+
 		// 步骤 4: 分割为行并处理
 		const allLines = cleanedResponse.split('\n');
+
+		// 过滤空结果
+		if (allLines.length === 0 || (allLines.length === 1 && allLines[0].trim().length === 0)) {
+			console.log('[AI Inline Completions] Empty result after prefix removal');
+			return [];
+		}
 
 		// 步骤 5: 提供补全选项（优先完整，然后部分）
 		// 选项 1: 完整补全（最多 15 行）
@@ -462,6 +486,68 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		});
 
 		return results;
+	}
+
+	/**
+	 * 移除 AI 返回内容中与用户已输入前缀重复的部分
+	 * 解决 "return " -> "return xxx" 应用后变成 "return return xxx" 的问题
+	 */
+	private removePrefixDuplication(response: string, prefix: string): string {
+		if (!prefix || prefix.trim().length === 0) {
+			return response;
+		}
+
+		const prefixTrimmed = prefix.trim();
+		const prefixWords = prefixTrimmed.split(/\s+/);
+		const lastWord = prefixWords[prefixWords.length - 1];
+
+		// 检查响应是否以前缀的最后一个词开始（常见重复场景）
+		// 例如：用户输入 "return "，AI 返回 "return result;"
+		if (lastWord && response.trim().toLowerCase().startsWith(lastWord.toLowerCase())) {
+			const responseLines = response.split('\n');
+			const firstLine = responseLines[0];
+
+			// 尝试找到重复的部分并移除
+			const lowerFirstLine = firstLine.toLowerCase();
+			const lowerLastWord = lastWord.toLowerCase();
+
+			if (lowerFirstLine.startsWith(lowerLastWord)) {
+				// 移除重复的词
+				const remaining = firstLine.substring(lastWord.length);
+				responseLines[0] = remaining.trimStart();
+				const result = responseLines.join('\n');
+				console.log('[AI Inline Completions] 🔧 Removed prefix duplication:', lastWord, '-> trimmed');
+				return result;
+			}
+		}
+
+		// 检查更长的前缀重复（整行重复）
+		const responseFirstLine = response.split('\n')[0].trim();
+		const prefixLine = prefix.trim();
+
+		// 如果响应的第一行完全包含前缀
+		if (responseFirstLine.startsWith(prefixLine)) {
+			const remaining = response.substring(prefixLine.length);
+			if (remaining.trim().length > 0) {
+				console.log('[AI Inline Completions] 🔧 Removed full prefix duplication');
+				return remaining.trimStart();
+			}
+		}
+
+		// 检查前缀末尾与响应开头的重叠
+		// 例如：prefix="getData(" response="getData(id)" -> 应返回 "id)"
+		for (let i = Math.min(prefixTrimmed.length, 50); i > 0; i--) {
+			const prefixEnd = prefixTrimmed.slice(-i);
+			if (response.startsWith(prefixEnd)) {
+				const result = response.substring(i);
+				if (result.trim().length > 0) {
+					console.log('[AI Inline Completions] 🔧 Removed overlapping prefix:', prefixEnd);
+					return result;
+				}
+			}
+		}
+
+		return response;
 	}
 
 	/**
