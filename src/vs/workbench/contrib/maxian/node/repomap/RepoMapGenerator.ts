@@ -40,7 +40,6 @@ export class RepoMapGenerator {
 	private maxTokens: number;
 	private mapMulNoFiles: number;
 	private verbose: boolean;
-	// @ts-expect-error: workspaceRoot保留以备将来持久化缓存使用
 	private readonly _workspaceRoot: string;
 
 	// P0优化：增强缓存（基于mtime失效）
@@ -243,7 +242,7 @@ export class RepoMapGenerator {
 		}
 
 		// 2. 构建引用图
-		const chatFilesSet = new Set(context.chatFiles.map(f => path.relative(this.tagExtractor['workspaceRoot'], f)));
+		const chatFilesSet = new Set(context.chatFiles.map(f => path.relative(this._workspaceRoot, f)));
 		const graph = this.graphBuilder.buildGraph(
 			allTags,
 			chatFilesSet,
