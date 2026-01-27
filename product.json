@@ -1,673 +1,689 @@
 {
-	"nameShort": "maxian",
-	"nameLong": "码弦",
-	"nameLongAscii": "Maxian",
-	"applicationName": "maxian",
-	"dataFolderName": ".maxian",
-	"quality": "stable",
-	"commit": "1.108.0",
-	"win32MutexName": "maxian",
-	"licenseName": "MIT",
-	"licenseUrl": "https://github.com/tianhe-zhikai/tianhe-zhikai-ide/blob/main/LICENSE.txt",
-	"serverLicenseUrl": "https://github.com/tianhe-zhikai/tianhe-zhikai-ide/blob/main/LICENSE.txt",
-	"serverGreeting": [],
-	"serverLicense": [],
-	"serverLicensePrompt": "",
-	"serverApplicationName": "maxian-server",
-	"serverDataFolderName": ".maxian-server",
-	"tunnelApplicationName": "maxian-tunnel",
-	"win32DirName": "maxian",
-	"win32NameVersion": "码弦",
-	"win32NameVersionAscii": "Maxian",
-	"win32RegValueName": "maxian",
-	"win32x64AppId": "{{A77B7E06-80BA-4137-BCF4-654B95CCEBC5}",
-	"win32arm64AppId": "{{A1ACE434-89C5-48D1-88D3-E2991DF85475}",
-	"win32x64UserAppId": "{{AB6B787D-37A0-49E8-AE24-8559A032BE0C}",
-	"win32arm64UserAppId": "{{AAEBF0C8-F733-4AD4-BADE-FDB816D53D7B}",
-	"win32AppUserModelId": "maxian.IDE",
-	"win32ShellNameShort": "码弦",
-	"win32ShellNameShortAscii": "Maxian",
-	"win32TunnelServiceMutex": "maxian-tunnelservice",
-	"win32TunnelMutex": "maxian-tunnel",
-	"darwinBundleIdentifier": "com.maxian.ide",
-	"linuxIconName": "maxian",
-	"licenseFileName": "LICENSE.txt",
-	"reportIssueUrl": "https://github.com/tianhe-zhikai/tianhe-zhikai-ide/issues/new",
-	"nodejsRepository": "https://nodejs.org",
-	"urlProtocol": "code-oss",
-	"webviewContentExternalBaseUrlTemplate": "https://{{uuid}}.vscode-cdn.net/insider/ef65ac1ba57f57f2a3961bfe94aa20481caca4c6/out/vs/workbench/contrib/webview/browser/pre/",
-	"locale": "zh-cn",
-	"extensionsGallery": {
-		"serviceUrl": "https://open-vsx.org/vscode/gallery",
-		"itemUrl": "https://open-vsx.org/vscode/item",
-		"resourceUrlTemplate": "https://open-vsx.org/vscode/asset/{publisher}/{name}/{version}/{path}",
-		"controlUrl": "",
-		"nlsBaseUrl": "https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/package"
-	},
-	"builtInExtensions": [
-		{
-			"name": "ms-vscode.js-debug-companion",
-			"version": "1.1.3",
-			"sha256": "7380a890787452f14b2db7835dfa94de538caf358ebc263f9d46dd68ac52de93",
-			"repo": "https://github.com/microsoft/vscode-js-debug-companion",
-			"metadata": {
-				"id": "99cb0b7f-7354-4278-b8da-6cc79972169d",
-				"publisherId": {
-					"publisherId": "5f5636e7-69ed-4afe-b5d6-8d231fb3d3ee",
-					"publisherName": "ms-vscode",
-					"displayName": "Microsoft",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "Microsoft"
-			}
-		},
-		{
-			"name": "ms-vscode.js-debug",
-			"version": "1.95.3",
-			"sha256": "77b61197558a46140534deb7d8dd3c9d5038b9cb7ea8195e272c6a3a882d8e73",
-			"repo": "https://github.com/microsoft/vscode-js-debug",
-			"metadata": {
-				"id": "25629058-ddac-4e17-abba-74678e126c5d",
-				"publisherId": {
-					"publisherId": "5f5636e7-69ed-4afe-b5d6-8d231fb3d3ee",
-					"publisherName": "ms-vscode",
-					"displayName": "Microsoft",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "Microsoft"
-			}
-		},
-		{
-			"name": "ms-vscode.vscode-js-profile-table",
-			"version": "1.0.10",
-			"sha256": "7361748ddf9fd09d8a2ed1f2a2d7376a2cf9aae708692820b799708385c38e08",
-			"repo": "https://github.com/microsoft/vscode-js-profile-visualizer",
-			"metadata": {
-				"id": "7e52b41b-71ad-457b-ab7e-0620f1fc4feb",
-				"publisherId": {
-					"publisherId": "5f5636e7-69ed-4afe-b5d6-8d231fb3d3ee",
-					"publisherName": "ms-vscode",
-					"displayName": "Microsoft",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "Microsoft"
-			}
-		},
-		{
-			"name": "redhat.java",
-			"version": "1.51.2025113008",
-			"sha256": null,
-			"repo": "https://github.com/redhat-developer/vscode-java.git",
-			"metadata": {
-				"id": "redhat.java",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "redhat",
-					"displayName": "Red Hat",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "Red Hat"
-			}
-		},
-		{
-			"name": "vscjava.vscode-java-debug",
-			"version": "0.58.3",
-			"sha256": null,
-			"repo": "https://github.com/Microsoft/vscode-java-debug.git",
-			"metadata": {
-				"id": "vscjava.vscode-java-debug",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "vscjava",
-					"displayName": "vscjava",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "vscjava"
-			}
-		},
-		{
-			"name": "vscjava.vscode-java-test",
-			"version": "0.43.2",
-			"sha256": null,
-			"repo": "https://github.com/Microsoft/vscode-java-test.git",
-			"metadata": {
-				"id": "vscjava.vscode-java-test",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "vscjava",
-					"displayName": "vscjava",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "vscjava"
-			}
-		},
-		{
-			"name": "vscjava.vscode-maven",
-			"version": "0.44.0",
-			"sha256": null,
-			"repo": "https://github.com/Microsoft/vscode-maven.git",
-			"metadata": {
-				"id": "vscjava.vscode-maven",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "vscjava",
-					"displayName": "vscjava",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "vscjava"
-			}
-		},
-		{
-			"name": "vscjava.vscode-java-dependency",
-			"version": "0.26.3",
-			"sha256": null,
-			"repo": "https://github.com/Microsoft/vscode-java-dependency.git",
-			"metadata": {
-				"id": "vscjava.vscode-java-dependency",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "vscjava",
-					"displayName": "vscjava",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "vscjava"
-			}
-		},
-		{
-			"name": "vue.volar",
-			"version": "3.2.1",
-			"sha256": null,
-			"repo": "https://github.com/vuejs/language-tools.git",
-			"metadata": {
-				"id": "vue.volar",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "Vue",
-					"displayName": "Vue",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "Vue"
-			}
-		},
-		{
-			"name": "dbaeumer.vscode-eslint",
-			"version": "3.0.16",
-			"sha256": null,
-			"repo": "https://github.com/Microsoft/vscode-eslint.git",
-			"metadata": {
-				"id": "dbaeumer.vscode-eslint",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "dbaeumer",
-					"displayName": "dbaeumer",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "dbaeumer"
-			}
-		},
-		{
-			"name": "esbenp.prettier-vscode",
-			"version": "11.0.0",
-			"sha256": null,
-			"repo": "https://github.com/prettier/prettier-vscode.git",
-			"metadata": {
-				"id": "esbenp.prettier-vscode",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "esbenp",
-					"displayName": "esbenp",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "esbenp"
-			}
-		},
-		{
-			"name": "vmware.vscode-spring-boot",
-			"version": "2.0.2025120108",
-			"sha256": null,
-			"repo": "https://github.com/spring-projects/spring-tools.git",
-			"metadata": {
-				"id": "vmware.vscode-spring-boot",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "VMware",
-					"displayName": "VMware",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "VMware"
-			}
-		},
-		{
-			"name": "vscjava.vscode-spring-initializr",
-			"version": "0.11.2",
-			"sha256": null,
-			"repo": "https://github.com/Microsoft/vscode-spring-initializr.git",
-			"metadata": {
-				"id": "vscjava.vscode-spring-initializr",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "vscjava",
-					"displayName": "vscjava",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "vscjava"
-			}
-		},
-		{
-			"name": "vscjava.vscode-spring-boot-dashboard",
-			"version": "0.14.0",
-			"sha256": null,
-			"repo": "https://github.com/Microsoft/vscode-spring-boot-dashboard.git",
-			"metadata": {
-				"id": "vscjava.vscode-spring-boot-dashboard",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "vscjava",
-					"displayName": "vscjava",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "vscjava"
-			}
-		},
-		{
-			"name": "ritwickdey.LiveServer",
-			"version": "5.7.9",
-			"sha256": null,
-			"repo": "https://github.com/ritwickdey/vscode-live-server.git",
-			"metadata": {
-				"id": "ritwickdey.liveserver",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "ritwickdey",
-					"displayName": "ritwickdey",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "ritwickdey"
-			}
-		},
-		{
-			"name": "bradlc.vscode-tailwindcss",
-			"version": "0.14.28",
-			"sha256": null,
-			"repo": "https://github.com/tailwindlabs/tailwindcss-intellisense.git",
-			"metadata": {
-				"id": "bradlc.vscode-tailwindcss",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "bradlc",
-					"displayName": "bradlc",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "bradlc"
-			}
-		},
-		{
-			"name": "ecmel.vscode-html-css",
-			"version": "2.0.13",
-			"sha256": null,
-			"repo": "https://github.com/ecmel/vscode-html-css.git",
-			"metadata": {
-				"id": "ecmel.vscode-html-css",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "ecmel",
-					"displayName": "ecmel",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "ecmel"
-			}
-		},
-		{
-			"name": "zignd.html-css-class-completion",
-			"version": "1.20.0",
-			"sha256": null,
-			"repo": "https://github.com/Zignd/HTML-CSS-Class-Completion",
-			"metadata": {
-				"id": "zignd.html-css-class-completion",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "Zignd",
-					"displayName": "Zignd",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "Zignd"
-			}
-		},
-		{
-			"name": "pranaygp.vscode-css-peek",
-			"version": "4.4.3",
-			"sha256": null,
-			"repo": "https://github.com/pranaygp/vscode-css-peek.git",
-			"metadata": {
-				"id": "pranaygp.vscode-css-peek",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "pranaygp",
-					"displayName": "pranaygp",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "pranaygp"
-			}
-		},
-		{
-			"name": "stylelint.vscode-stylelint",
-			"version": "1.5.3",
-			"sha256": null,
-			"repo": "https://github.com/stylelint/vscode-stylelint.git",
-			"metadata": {
-				"id": "stylelint.vscode-stylelint",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "stylelint",
-					"displayName": "stylelint",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "stylelint"
-			}
-		},
-		{
-			"name": "christian-kohler.path-intellisense",
-			"version": "2.8.0",
-			"sha256": null,
-			"repo": "https://github.com/ChristianKohler/PathIntellisense.git",
-			"metadata": {
-				"id": "christian-kohler.path-intellisense",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "christian-kohler",
-					"displayName": "christian-kohler",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "christian-kohler"
-			}
-		},
-		{
-			"name": "christian-kohler.npm-intellisense",
-			"version": "1.4.5",
-			"sha256": null,
-			"repo": "https://github.com/ChristianKohler/NpmIntellisense.git",
-			"metadata": {
-				"id": "christian-kohler.npm-intellisense",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "christian-kohler",
-					"displayName": "christian-kohler",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "christian-kohler"
-			}
-		},
-		{
-			"name": "wix.vscode-import-cost",
-			"version": "3.3.0",
-			"sha256": null,
-			"repo": "https://github.com/wix/import-cost.git",
-			"metadata": {
-				"id": "wix.vscode-import-cost",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "wix",
-					"displayName": "wix",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "wix"
-			}
-		},
-		{
-			"name": "donjayamanne.githistory",
-			"version": "0.6.20",
-			"sha256": null,
-			"repo": "https://github.com/DonJayamanne/gitHistoryVSCode.git",
-			"metadata": {
-				"id": "donjayamanne.githistory",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "donjayamanne",
-					"displayName": "donjayamanne",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "donjayamanne"
-			}
-		},
-		{
-			"name": "formulahendry.auto-close-tag",
-			"version": "0.5.15",
-			"sha256": null,
-			"repo": "https://github.com/formulahendry/vscode-auto-close-tag.git",
-			"metadata": {
-				"id": "formulahendry.auto-close-tag",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "formulahendry",
-					"displayName": "formulahendry",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "formulahendry"
-			}
-		},
-		{
-			"name": "formulahendry.auto-rename-tag",
-			"version": "0.1.10",
-			"sha256": null,
-			"repo": "https://github.com/formulahendry/vscode-auto-rename-tag.git",
-			"metadata": {
-				"id": "formulahendry.auto-rename-tag",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "formulahendry",
-					"displayName": "formulahendry",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "formulahendry"
-			}
-		},
-		{
-			"name": "aaron-bond.better-comments",
-			"version": "3.0.2",
-			"sha256": null,
-			"repo": "https://github.com/aaron-bond/better-comments.git",
-			"metadata": {
-				"id": "aaron-bond.better-comments",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "aaron-bond",
-					"displayName": "aaron-bond",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "aaron-bond"
-			}
-		},
-		{
-			"name": "usernamehw.errorlens",
-			"version": "3.26.0",
-			"sha256": null,
-			"repo": "https://github.com/usernamehw/vscode-error-lens.git",
-			"metadata": {
-				"id": "usernamehw.errorlens",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "usernamehw",
-					"displayName": "usernamehw",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "usernamehw"
-			}
-		},
-		{
-			"name": "oderwat.indent-rainbow",
-			"version": "8.3.1",
-			"sha256": null,
-			"repo": "https://github.com/oderwat/vscode-indent-rainbow.git",
-			"metadata": {
-				"id": "oderwat.indent-rainbow",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "oderwat",
-					"displayName": "oderwat",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "oderwat"
-			}
-		},
-		{
-			"name": "PKief.material-icon-theme",
-			"version": "5.29.0",
-			"sha256": null,
-			"repo": "https://github.com/material-extensions/vscode-material-icon-theme.git",
-			"metadata": {
-				"id": "pkief.material-icon-theme",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "PKief",
-					"displayName": "PKief",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "PKief"
-			}
-		},
-		{
-			"name": "vscode-icons-team.vscode-icons",
-			"version": "12.15.0",
-			"sha256": null,
-			"repo": "https://github.com/vscode-icons/vscode-icons.git",
-			"metadata": {
-				"id": "vscode-icons-team.vscode-icons",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "vscode-icons-team",
-					"displayName": "vscode-icons-team",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "vscode-icons-team"
-			}
-		},
-		{
-			"name": "MS-CEINTL.vscode-language-pack-zh-hans",
-			"version": "1.106.0",
-			"sha256": null,
-			"repo": "https://github.com/Microsoft/vscode-loc.git",
-			"metadata": {
-				"id": "ms-ceintl.vscode-language-pack-zh-hans",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "MS-CEINTL",
-					"displayName": "MS-CEINTL",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "MS-CEINTL"
-			}
-		},
-		{
-			"name": "humao.rest-client",
-			"version": "0.25.0",
-			"sha256": null,
-			"repo": "https://github.com/Huachao/vscode-restclient.git",
-			"metadata": {
-				"id": "humao.rest-client",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "humao",
-					"displayName": "humao",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "humao"
-			}
-		},
-		{
-			"name": "ms-azuretools.vscode-docker",
-			"version": "2.0.0",
-			"sha256": null,
-			"repo": "https://github.com/microsoft/vscode-docker.git",
-			"metadata": {
-				"id": "ms-azuretools.vscode-docker",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "ms-azuretools",
-					"displayName": "ms-azuretools",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "ms-azuretools"
-			}
-		},
-		{
-			"name": "redhat.vscode-yaml",
-			"version": "1.20.2025120208",
-			"sha256": null,
-			"repo": "https://github.com/redhat-developer/vscode-yaml.git",
-			"metadata": {
-				"id": "redhat.vscode-yaml",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "redhat",
-					"displayName": "Red Hat",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "Red Hat"
-			}
-		},
-		{
-			"name": "yzhang.markdown-all-in-one",
-			"version": "3.6.2",
-			"sha256": null,
-			"repo": "https://github.com/yzhang-gh/vscode-markdown.git",
-			"metadata": {
-				"id": "yzhang.markdown-all-in-one",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "yzhang",
-					"displayName": "yzhang",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "yzhang"
-			}
-		},
-		{
-			"name": "shd101wyy.markdown-preview-enhanced",
-			"version": "0.8.20",
-			"sha256": null,
-			"repo": "https://github.com/shd101wyy/vscode-markdown-preview-enhanced.git",
-			"metadata": {
-				"id": "shd101wyy.markdown-preview-enhanced",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "shd101wyy",
-					"displayName": "shd101wyy",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "shd101wyy"
-			}
-		},
-		{
-			"name": "k--kato.intellij-idea-keybindings",
-			"version": "1.7.2",
-			"sha256": null,
-			"repo": "https://github.com/kasecato/vscode-intellij-idea-keybindings.git",
-			"metadata": {
-				"id": "k--kato.intellij-idea-keybindings",
-				"publisherId": {
-					"publisherId": "",
-					"publisherName": "k--kato",
-					"displayName": "Keisuke Kato",
-					"flags": "verified"
-				},
-				"publisherDisplayName": "Keisuke Kato"
-			}
-		}
-	],
-	"extensionRecommendations": [
-		"redhat.java",
-		"vscjava.vscode-java-debug",
-		"vscjava.vscode-java-test",
-		"vscjava.vscode-maven",
-		"vscjava.vscode-java-dependency",
-		"dbaeumer.vscode-eslint",
-		"esbenp.prettier-vscode"
-	],
-	"configurationDefaults": {
-		"telemetry.telemetryLevel": "off",
-		"redhat.telemetry.enabled": false,
-		"files.associations": {
-			"*.vue": "vue"
-		}
-	}
+  "nameShort": "maxian",
+  "nameLong": "码弦",
+  "nameLongAscii": "Maxian",
+  "applicationName": "maxian",
+  "dataFolderName": ".maxian",
+  "quality": "stable",
+  "commit": "1.108.0",
+  "win32MutexName": "maxian",
+  "licenseName": "MIT",
+  "licenseUrl": "https://github.com/tianhe-zhikai/tianhe-zhikai-ide/blob/main/LICENSE.txt",
+  "serverLicenseUrl": "https://github.com/tianhe-zhikai/tianhe-zhikai-ide/blob/main/LICENSE.txt",
+  "serverGreeting": [],
+  "serverLicense": [],
+  "serverLicensePrompt": "",
+  "serverApplicationName": "maxian-server",
+  "serverDataFolderName": ".maxian-server",
+  "tunnelApplicationName": "maxian-tunnel",
+  "win32DirName": "maxian",
+  "win32NameVersion": "码弦",
+  "win32NameVersionAscii": "Maxian",
+  "win32RegValueName": "maxian",
+  "win32x64AppId": "{{A77B7E06-80BA-4137-BCF4-654B95CCEBC5}",
+  "win32arm64AppId": "{{A1ACE434-89C5-48D1-88D3-E2991DF85475}",
+  "win32x64UserAppId": "{{AB6B787D-37A0-49E8-AE24-8559A032BE0C}",
+  "win32arm64UserAppId": "{{AAEBF0C8-F733-4AD4-BADE-FDB816D53D7B}",
+  "win32AppUserModelId": "maxian.IDE",
+  "win32ShellNameShort": "码弦",
+  "win32ShellNameShortAscii": "Maxian",
+  "win32TunnelServiceMutex": "maxian-tunnelservice",
+  "win32TunnelMutex": "maxian-tunnel",
+  "darwinBundleIdentifier": "com.maxian.ide",
+  "linuxIconName": "maxian",
+  "licenseFileName": "LICENSE.txt",
+  "reportIssueUrl": "https://github.com/tianhe-zhikai/tianhe-zhikai-ide/issues/new",
+  "nodejsRepository": "https://nodejs.org",
+  "urlProtocol": "code-oss",
+  "webviewContentExternalBaseUrlTemplate": "https://{{uuid}}.vscode-cdn.net/insider/ef65ac1ba57f57f2a3961bfe94aa20481caca4c6/out/vs/workbench/contrib/webview/browser/pre/",
+  "locale": "zh-cn",
+  "extensionsGallery": {
+    "serviceUrl": "https://open-vsx.org/vscode/gallery",
+    "itemUrl": "https://open-vsx.org/vscode/item",
+    "resourceUrlTemplate": "https://open-vsx.org/vscode/asset/{publisher}/{name}/{version}/{path}",
+    "controlUrl": "",
+    "nlsBaseUrl": "https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/package"
+  },
+  "builtInExtensions": [
+    {
+      "name": "ms-vscode.js-debug-companion",
+      "version": "1.1.3",
+      "sha256": "7380a890787452f14b2db7835dfa94de538caf358ebc263f9d46dd68ac52de93",
+      "repo": "https://github.com/microsoft/vscode-js-debug-companion",
+      "metadata": {
+        "id": "99cb0b7f-7354-4278-b8da-6cc79972169d",
+        "publisherId": {
+          "publisherId": "5f5636e7-69ed-4afe-b5d6-8d231fb3d3ee",
+          "publisherName": "ms-vscode",
+          "displayName": "Microsoft",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "Microsoft"
+      }
+    },
+    {
+      "name": "ms-vscode.js-debug",
+      "version": "1.95.3",
+      "sha256": "77b61197558a46140534deb7d8dd3c9d5038b9cb7ea8195e272c6a3a882d8e73",
+      "repo": "https://github.com/microsoft/vscode-js-debug",
+      "metadata": {
+        "id": "25629058-ddac-4e17-abba-74678e126c5d",
+        "publisherId": {
+          "publisherId": "5f5636e7-69ed-4afe-b5d6-8d231fb3d3ee",
+          "publisherName": "ms-vscode",
+          "displayName": "Microsoft",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "Microsoft"
+      }
+    },
+    {
+      "name": "ms-vscode.vscode-js-profile-table",
+      "version": "1.0.10",
+      "sha256": "7361748ddf9fd09d8a2ed1f2a2d7376a2cf9aae708692820b799708385c38e08",
+      "repo": "https://github.com/microsoft/vscode-js-profile-visualizer",
+      "metadata": {
+        "id": "7e52b41b-71ad-457b-ab7e-0620f1fc4feb",
+        "publisherId": {
+          "publisherId": "5f5636e7-69ed-4afe-b5d6-8d231fb3d3ee",
+          "publisherName": "ms-vscode",
+          "displayName": "Microsoft",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "Microsoft"
+      }
+    },
+    {
+      "name": "redhat.java",
+      "version": "1.51.2025113008",
+      "sha256": null,
+      "repo": "https://github.com/redhat-developer/vscode-java.git",
+      "metadata": {
+        "id": "redhat.java",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "redhat",
+          "displayName": "Red Hat",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "Red Hat"
+      }
+    },
+    {
+      "name": "vscjava.vscode-java-debug",
+      "version": "0.58.3",
+      "sha256": null,
+      "repo": "https://github.com/Microsoft/vscode-java-debug.git",
+      "metadata": {
+        "id": "vscjava.vscode-java-debug",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "vscjava",
+          "displayName": "vscjava",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "vscjava"
+      }
+    },
+    {
+      "name": "vscjava.vscode-java-test",
+      "version": "0.43.2",
+      "sha256": null,
+      "repo": "https://github.com/Microsoft/vscode-java-test.git",
+      "metadata": {
+        "id": "vscjava.vscode-java-test",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "vscjava",
+          "displayName": "vscjava",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "vscjava"
+      }
+    },
+    {
+      "name": "vscjava.vscode-maven",
+      "version": "0.44.0",
+      "sha256": null,
+      "repo": "https://github.com/Microsoft/vscode-maven.git",
+      "metadata": {
+        "id": "vscjava.vscode-maven",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "vscjava",
+          "displayName": "vscjava",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "vscjava"
+      }
+    },
+    {
+      "name": "vscjava.vscode-java-dependency",
+      "version": "0.26.3",
+      "sha256": null,
+      "repo": "https://github.com/Microsoft/vscode-java-dependency.git",
+      "metadata": {
+        "id": "vscjava.vscode-java-dependency",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "vscjava",
+          "displayName": "vscjava",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "vscjava"
+      }
+    },
+    {
+      "name": "vue.volar",
+      "version": "3.2.1",
+      "sha256": null,
+      "repo": "https://github.com/vuejs/language-tools.git",
+      "metadata": {
+        "id": "vue.volar",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "Vue",
+          "displayName": "Vue",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "Vue"
+      }
+    },
+    {
+      "name": "dbaeumer.vscode-eslint",
+      "version": "3.0.16",
+      "sha256": null,
+      "repo": "https://github.com/Microsoft/vscode-eslint.git",
+      "metadata": {
+        "id": "dbaeumer.vscode-eslint",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "dbaeumer",
+          "displayName": "dbaeumer",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "dbaeumer"
+      }
+    },
+    {
+      "name": "esbenp.prettier-vscode",
+      "version": "11.0.0",
+      "sha256": null,
+      "repo": "https://github.com/prettier/prettier-vscode.git",
+      "metadata": {
+        "id": "esbenp.prettier-vscode",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "esbenp",
+          "displayName": "esbenp",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "esbenp"
+      }
+    },
+    {
+      "name": "vmware.vscode-spring-boot",
+      "version": "2.0.2025120108",
+      "sha256": null,
+      "repo": "https://github.com/spring-projects/spring-tools.git",
+      "metadata": {
+        "id": "vmware.vscode-spring-boot",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "VMware",
+          "displayName": "VMware",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "VMware"
+      }
+    },
+    {
+      "name": "vscjava.vscode-spring-initializr",
+      "version": "0.11.2",
+      "sha256": null,
+      "repo": "https://github.com/Microsoft/vscode-spring-initializr.git",
+      "metadata": {
+        "id": "vscjava.vscode-spring-initializr",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "vscjava",
+          "displayName": "vscjava",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "vscjava"
+      }
+    },
+    {
+      "name": "vscjava.vscode-spring-boot-dashboard",
+      "version": "0.14.0",
+      "sha256": null,
+      "repo": "https://github.com/Microsoft/vscode-spring-boot-dashboard.git",
+      "metadata": {
+        "id": "vscjava.vscode-spring-boot-dashboard",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "vscjava",
+          "displayName": "vscjava",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "vscjava"
+      }
+    },
+    {
+      "name": "ritwickdey.LiveServer",
+      "version": "5.7.9",
+      "sha256": null,
+      "repo": "https://github.com/ritwickdey/vscode-live-server.git",
+      "metadata": {
+        "id": "ritwickdey.liveserver",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "ritwickdey",
+          "displayName": "ritwickdey",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "ritwickdey"
+      }
+    },
+    {
+      "name": "bradlc.vscode-tailwindcss",
+      "version": "0.14.28",
+      "sha256": null,
+      "repo": "https://github.com/tailwindlabs/tailwindcss-intellisense.git",
+      "metadata": {
+        "id": "bradlc.vscode-tailwindcss",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "bradlc",
+          "displayName": "bradlc",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "bradlc"
+      }
+    },
+    {
+      "name": "ecmel.vscode-html-css",
+      "version": "2.0.13",
+      "sha256": null,
+      "repo": "https://github.com/ecmel/vscode-html-css.git",
+      "metadata": {
+        "id": "ecmel.vscode-html-css",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "ecmel",
+          "displayName": "ecmel",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "ecmel"
+      }
+    },
+    {
+      "name": "zignd.html-css-class-completion",
+      "version": "1.20.0",
+      "sha256": null,
+      "repo": "https://github.com/Zignd/HTML-CSS-Class-Completion",
+      "metadata": {
+        "id": "zignd.html-css-class-completion",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "Zignd",
+          "displayName": "Zignd",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "Zignd"
+      }
+    },
+    {
+      "name": "pranaygp.vscode-css-peek",
+      "version": "4.4.3",
+      "sha256": null,
+      "repo": "https://github.com/pranaygp/vscode-css-peek.git",
+      "metadata": {
+        "id": "pranaygp.vscode-css-peek",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "pranaygp",
+          "displayName": "pranaygp",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "pranaygp"
+      }
+    },
+    {
+      "name": "stylelint.vscode-stylelint",
+      "version": "1.5.3",
+      "sha256": null,
+      "repo": "https://github.com/stylelint/vscode-stylelint.git",
+      "metadata": {
+        "id": "stylelint.vscode-stylelint",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "stylelint",
+          "displayName": "stylelint",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "stylelint"
+      }
+    },
+    {
+      "name": "christian-kohler.path-intellisense",
+      "version": "2.8.0",
+      "sha256": null,
+      "repo": "https://github.com/ChristianKohler/PathIntellisense.git",
+      "metadata": {
+        "id": "christian-kohler.path-intellisense",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "christian-kohler",
+          "displayName": "christian-kohler",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "christian-kohler"
+      }
+    },
+    {
+      "name": "christian-kohler.npm-intellisense",
+      "version": "1.4.5",
+      "sha256": null,
+      "repo": "https://github.com/ChristianKohler/NpmIntellisense.git",
+      "metadata": {
+        "id": "christian-kohler.npm-intellisense",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "christian-kohler",
+          "displayName": "christian-kohler",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "christian-kohler"
+      }
+    },
+    {
+      "name": "wix.vscode-import-cost",
+      "version": "3.3.0",
+      "sha256": null,
+      "repo": "https://github.com/wix/import-cost.git",
+      "metadata": {
+        "id": "wix.vscode-import-cost",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "wix",
+          "displayName": "wix",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "wix"
+      }
+    },
+    {
+      "name": "donjayamanne.githistory",
+      "version": "0.6.20",
+      "sha256": null,
+      "repo": "https://github.com/DonJayamanne/gitHistoryVSCode.git",
+      "metadata": {
+        "id": "donjayamanne.githistory",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "donjayamanne",
+          "displayName": "donjayamanne",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "donjayamanne"
+      }
+    },
+    {
+      "name": "formulahendry.auto-close-tag",
+      "version": "0.5.15",
+      "sha256": null,
+      "repo": "https://github.com/formulahendry/vscode-auto-close-tag.git",
+      "metadata": {
+        "id": "formulahendry.auto-close-tag",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "formulahendry",
+          "displayName": "formulahendry",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "formulahendry"
+      }
+    },
+    {
+      "name": "formulahendry.auto-rename-tag",
+      "version": "0.1.10",
+      "sha256": null,
+      "repo": "https://github.com/formulahendry/vscode-auto-rename-tag.git",
+      "metadata": {
+        "id": "formulahendry.auto-rename-tag",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "formulahendry",
+          "displayName": "formulahendry",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "formulahendry"
+      }
+    },
+    {
+      "name": "aaron-bond.better-comments",
+      "version": "3.0.2",
+      "sha256": null,
+      "repo": "https://github.com/aaron-bond/better-comments.git",
+      "metadata": {
+        "id": "aaron-bond.better-comments",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "aaron-bond",
+          "displayName": "aaron-bond",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "aaron-bond"
+      }
+    },
+    {
+      "name": "usernamehw.errorlens",
+      "version": "3.26.0",
+      "sha256": null,
+      "repo": "https://github.com/usernamehw/vscode-error-lens.git",
+      "metadata": {
+        "id": "usernamehw.errorlens",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "usernamehw",
+          "displayName": "usernamehw",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "usernamehw"
+      }
+    },
+    {
+      "name": "oderwat.indent-rainbow",
+      "version": "8.3.1",
+      "sha256": null,
+      "repo": "https://github.com/oderwat/vscode-indent-rainbow.git",
+      "metadata": {
+        "id": "oderwat.indent-rainbow",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "oderwat",
+          "displayName": "oderwat",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "oderwat"
+      }
+    },
+    {
+      "name": "PKief.material-icon-theme",
+      "version": "5.29.0",
+      "sha256": null,
+      "repo": "https://github.com/material-extensions/vscode-material-icon-theme.git",
+      "metadata": {
+        "id": "pkief.material-icon-theme",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "PKief",
+          "displayName": "PKief",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "PKief"
+      }
+    },
+    {
+      "name": "vscode-icons-team.vscode-icons",
+      "version": "12.15.0",
+      "sha256": null,
+      "repo": "https://github.com/vscode-icons/vscode-icons.git",
+      "metadata": {
+        "id": "vscode-icons-team.vscode-icons",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "vscode-icons-team",
+          "displayName": "vscode-icons-team",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "vscode-icons-team"
+      }
+    },
+    {
+      "name": "MS-CEINTL.vscode-language-pack-zh-hans",
+      "version": "1.106.0",
+      "sha256": null,
+      "repo": "https://github.com/Microsoft/vscode-loc.git",
+      "metadata": {
+        "id": "ms-ceintl.vscode-language-pack-zh-hans",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "MS-CEINTL",
+          "displayName": "MS-CEINTL",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "MS-CEINTL"
+      }
+    },
+    {
+      "name": "humao.rest-client",
+      "version": "0.25.0",
+      "sha256": null,
+      "repo": "https://github.com/Huachao/vscode-restclient.git",
+      "metadata": {
+        "id": "humao.rest-client",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "humao",
+          "displayName": "humao",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "humao"
+      }
+    },
+    {
+      "name": "ms-azuretools.vscode-docker",
+      "version": "2.0.0",
+      "sha256": null,
+      "repo": "https://github.com/microsoft/vscode-docker.git",
+      "metadata": {
+        "id": "ms-azuretools.vscode-docker",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "ms-azuretools",
+          "displayName": "ms-azuretools",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "ms-azuretools"
+      }
+    },
+    {
+      "name": "redhat.vscode-yaml",
+      "version": "1.20.2025120208",
+      "sha256": null,
+      "repo": "https://github.com/redhat-developer/vscode-yaml.git",
+      "metadata": {
+        "id": "redhat.vscode-yaml",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "redhat",
+          "displayName": "Red Hat",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "Red Hat"
+      }
+    },
+    {
+      "name": "yzhang.markdown-all-in-one",
+      "version": "3.6.2",
+      "sha256": null,
+      "repo": "https://github.com/yzhang-gh/vscode-markdown.git",
+      "metadata": {
+        "id": "yzhang.markdown-all-in-one",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "yzhang",
+          "displayName": "yzhang",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "yzhang"
+      }
+    },
+    {
+      "name": "shd101wyy.markdown-preview-enhanced",
+      "version": "0.8.20",
+      "sha256": null,
+      "repo": "https://github.com/shd101wyy/vscode-markdown-preview-enhanced.git",
+      "metadata": {
+        "id": "shd101wyy.markdown-preview-enhanced",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "shd101wyy",
+          "displayName": "shd101wyy",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "shd101wyy"
+      }
+    },
+    {
+      "name": "k--kato.intellij-idea-keybindings",
+      "version": "1.7.2",
+      "sha256": null,
+      "repo": "https://github.com/kasecato/vscode-intellij-idea-keybindings.git",
+      "metadata": {
+        "id": "k--kato.intellij-idea-keybindings",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "k--kato",
+          "displayName": "Keisuke Kato",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "Keisuke Kato"
+      }
+    },
+    {
+      "name": "lihuiwang.vue-alias-skip",
+      "version": "0.0.25",
+      "sha256": "0fa94ec3ee75ea2b07b64acf88a3a2ef2c7bbde3b95fde38023ce1d3bbd3e611",
+      "repo": "https://github.com/lihuiwang/vue-alias-skip",
+      "metadata": {
+        "id": "lihuiwang.vue-alias-skip",
+        "publisherId": {
+          "publisherId": "",
+          "publisherName": "lihuiwang",
+          "displayName": "Lihui Wang",
+          "flags": "verified"
+        },
+        "publisherDisplayName": "Lihui Wang"
+      }
+    }
+  ],
+  "extensionRecommendations": [
+    "redhat.java",
+    "vscjava.vscode-java-debug",
+    "vscjava.vscode-java-test",
+    "vscjava.vscode-maven",
+    "vscjava.vscode-java-dependency",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode"
+  ],
+  "configurationDefaults": {
+    "telemetry.telemetryLevel": "off",
+    "redhat.telemetry.enabled": false,
+    "files.associations": {
+      "*.vue": "vue"
+    }
+  }
 }
