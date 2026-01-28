@@ -9,7 +9,7 @@
  * 允许一次 API 响应中请求多个工具并行执行，大幅提升效率
  *
  * 关键设计：
- * - 最多 10 个工具并行执行
+ * - 最多 25 个工具并行执行（参考OpenCode）
  * - 禁止嵌套 batch（防止无限递归）
  * - 禁止 edit 类工具（需要用户单独确认）
  * - 每个工具独立执行，部分失败不影响其他
@@ -19,9 +19,56 @@
 
 import { ToolName, ToolResponse, ToolUse } from './toolTypes.js';
 import { IToolExecutor } from './toolExecutor.js';
+import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
+
+export const IBatchToolExecutor = createDecorator<IBatchToolExecutor>('batchToolExecutor');
 
 /**
- * Batch 工具调用参数
+ * Batch 工具调用参数（新统一接口）
+ */
+export interface IBatchToolParams {
+	/** 要并行执行的工具调用数组 */
+	tool_calls: Array<{
+		tool: ToolName;
+		parameters: any;
+	}>;
+}
+
+/**
+ * Batch 工具执行结果（新统一接口）
+ */
+export interface IBatchToolResult {
+	/** 成功执行的工具数量 */
+	successful: number;
+	/** 失败的工具数量 */
+	failed: number;
+	/** 总工具数量 */
+	total: number;
+	/** 每个工具的详细结果 */
+	results: Array<{
+		tool: ToolName;
+		success: boolean;
+		result?: ToolResponse;
+		error?: string;
+	}>;
+	/** 性能和元数据 */
+	metadata?: {
+		duration: number;
+		tools: ToolName[];
+		parallelExecution: boolean;
+	};
+}
+
+/**
+ * Batch 工具执行器接口
+ */
+export interface IBatchToolExecutor {
+	readonly _serviceBrand: undefined;
+	executeBatch(params: IBatchToolParams): Promise<IBatchToolResult>;
+}
+
+/**
+ * Batch 工具调用参数（兼容旧接口）
  */
 export interface BatchToolCall {
 	tool: string;
@@ -29,7 +76,7 @@ export interface BatchToolCall {
 }
 
 /**
- * Batch 工具执行结果
+ * Batch 工具执行结果（兼容旧接口）
  */
 export interface BatchToolResult {
 	tool: string;
@@ -71,7 +118,64 @@ export const BATCH_CONFIG = {
 };
 
 /**
- * Batch 工具执行器
+ * Batch 工具常量（新接口）
+ */
+export const BatchToolConstants = {
+	/** 最小工具调用数量 */
+	MIN_CALLS: 1,
+	/** 最大工具调用数量（参考OpenCode） */
+	MAX_CALLS: 25,
+	/** 禁止在batch中使用的工具 */
+	DISALLOWED_TOOLS: new Set<ToolName>(['batch']),
+};
+
+/**
+ * 验证Batch工具参数
+ */
+export function validateBatchParams(params: IBatchToolParams): { valid: boolean; error?: string } {
+	if (!params.tool_calls || !Array.isArray(params.tool_calls)) {
+		return { valid: false, error: 'tool_calls must be an array' };
+	}
+
+	if (params.tool_calls.length < BatchToolConstants.MIN_CALLS) {
+		return { valid: false, error: `At least ${BatchToolConstants.MIN_CALLS} tool call required` };
+	}
+
+	if (params.tool_calls.length > BatchToolConstants.MAX_CALLS) {
+		return { valid: false, error: `Maximum of ${BatchToolConstants.MAX_CALLS} tool calls allowed` };
+	}
+
+	// 检查是否有禁止的工具
+	for (const call of params.tool_calls) {
+		if (BatchToolConstants.DISALLOWED_TOOLS.has(call.tool)) {
+			return {
+				valid: false,
+				error: `Tool '${call.tool}' is not allowed in batch. Disallowed tools: ${Array.from(BatchToolConstants.DISALLOWED_TOOLS).join(', ')}`
+			};
+		}
+	}
+
+	return { valid: true };
+}
+
+/**
+ * 格式化Batch工具结果
+ */
+export function formatBatchResult(results: IBatchToolResult['results']): string {
+	const successful = results.filter(r => r.success).length;
+	const failed = results.length - successful;
+
+	if (failed === 0) {
+		return `✅ All ${successful} tools executed successfully.\n\nKeep using the batch tool for optimal performance!`;
+	} else if (successful === 0) {
+		return `❌ All ${results.length} tools failed. Check individual errors below.`;
+	} else {
+		return `⚠️ Partially successful: ${successful}/${results.length} succeeded, ${failed} failed.`;
+	}
+}
+
+/**
+ * Batch 工具执行器（旧实现，保持兼容）
  * 负责并行执行多个工具调用
  */
 export class BatchToolExecutor {
