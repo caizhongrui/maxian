@@ -28,7 +28,7 @@ import { IModelService } from '../../../../editor/common/services/model.js';
 import { DiffViewProvider } from './diffViewProvider.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { DifyHandler, DifyConfiguration } from '../common/api/difyHandler.js';
-import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
+import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
 import { IAILogService } from '../../../../platform/aiLog/common/aiLog.js';
 import { IRequestService } from '../../../../platform/request/common/request.js';
 import { EnvironmentContextTracker } from './EnvironmentContextTracker.js';
@@ -502,8 +502,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		console.log('[Maxian] 自动诊断注入器已初始化');
 
-		// 🔧 加载自动批准规则
-		this.loadAutoApproveRules();
+		// 🔥 不再加载自动批准规则，"始终允许"仅针对单个任务会话，不持久化
+		// this.loadAutoApproveRules();
 	}
 
 	/**
@@ -897,6 +897,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 			// 创建新的TaskService实例，并重置取消标志
 			this.currentTaskCancelled = false;
+
+			// 🔥 新任务开始时清除自动批准设置（始终允许是针对单个任务的）
+			this.clearAutoApproveRules();
+			console.log('[Maxian] 新任务开始，已清除之前的自动批准设置');
+
 			this.currentTask = new TaskService({
 				task: fullMessage,
 				apiHandler: this.apiHandler,
@@ -994,6 +999,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 						content: '',
 						isPartial: false
 					});
+					// 🔥 任务完成，清除自动批准设置
+					this.clearAutoApproveRules();
+					console.log('[Maxian] 任务完成，已清除自动批准设置');
 					// 任务结束后重置currentTask，避免取消按钮误触发
 					this.currentTask = null;
 				} else if (status === TaskStatus.ERROR) {
@@ -1002,10 +1010,16 @@ export class MaxianService extends Disposable implements IMaxianService {
 						type: 'error',
 						content: '任务错误'
 					});
+					// 🔥 任务错误，清除自动批准设置
+					this.clearAutoApproveRules();
+					console.log('[Maxian] 任务错误，已清除自动批准设置');
 					// 任务结束后重置currentTask，避免取消按钮误触发
 					this.currentTask = null;
 				} else if (status === TaskStatus.ABORTED) {
 					// ABORTED状态静默处理，不显示任何提示
+					// 🔥 任务中止，清除自动批准设置
+					this.clearAutoApproveRules();
+					console.log('[Maxian] 任务中止，已清除自动批准设置');
 					// 任务结束后重置currentTask，避免取消按钮误触发
 					this.currentTask = null;
 				}
@@ -2138,64 +2152,19 @@ export class MaxianService extends Disposable implements IMaxianService {
 	/**
 	 * 从存储加载自动批准规则
 	 */
-	private loadAutoApproveRules(): void {
-		try {
-			const toolsData = this.storageService.get('maxian.autoApprovedTools', StorageScope.WORKSPACE);
-			if (toolsData) {
-				const tools = JSON.parse(toolsData);
-				this.autoApprovedTools = new Set(tools);
-				console.log('[Maxian] 加载自动批准工具:', tools);
-			}
-
-			const commandsData = this.storageService.get('maxian.autoApprovedCommands', StorageScope.WORKSPACE);
-			if (commandsData) {
-				const commands = JSON.parse(commandsData);
-				this.autoApprovedCommands = new Set(commands);
-				console.log('[Maxian] 加载自动批准命令:', commands);
-			}
-		} catch (error) {
-			console.error('[Maxian] 加载自动批准规则失败:', error);
-		}
-	}
-
-	/**
-	 * 保存自动批准规则到存储
-	 */
-	private saveAutoApproveRules(): void {
-		try {
-			this.storageService.store(
-				'maxian.autoApprovedTools',
-				JSON.stringify(Array.from(this.autoApprovedTools)),
-				StorageScope.WORKSPACE,
-				StorageTarget.USER
-			);
-
-			this.storageService.store(
-				'maxian.autoApprovedCommands',
-				JSON.stringify(Array.from(this.autoApprovedCommands)),
-				StorageScope.WORKSPACE,
-				StorageTarget.USER
-			);
-
-			console.log('[Maxian] 自动批准规则已保存');
-		} catch (error) {
-			console.error('[Maxian] 保存自动批准规则失败:', error);
-		}
-	}
-
 	/**
 	 * 设置工具自动批准规则
 	 */
 	setToolAutoApprove(toolName: string, autoApprove: boolean): void {
 		if (autoApprove) {
 			this.autoApprovedTools.add(toolName);
-			console.log(`[Maxian] 工具 "${toolName}" 已设置为自动批准`);
+			console.log(`[Maxian] 工具 "${toolName}" 已设置为自动批准（仅当前任务有效）`);
 		} else {
 			this.autoApprovedTools.delete(toolName);
 			console.log(`[Maxian] 工具 "${toolName}" 已取消自动批准`);
 		}
-		// 🔧 保存到存储
-		this.saveAutoApproveRules();
+		// 🔥 不再保存到持久化存储，"始终允许"仅针对单个任务会话
+		// this.saveAutoApproveRules();
 	}
 
 	/**
@@ -2211,13 +2180,13 @@ export class MaxianService extends Disposable implements IMaxianService {
 	setCommandAutoApprove(command: string, autoApprove: boolean): void {
 		if (autoApprove) {
 			this.autoApprovedCommands.add(command);
-			console.log(`[Maxian] 命令 "${command}" 已设置为自动批准`);
+			console.log(`[Maxian] 命令 "${command}" 已设置为自动批准（仅当前任务有效）`);
 		} else {
 			this.autoApprovedCommands.delete(command);
 			console.log(`[Maxian] 命令 "${command}" 已取消自动批准`);
 		}
-		// 🔧 保存到存储
-		this.saveAutoApproveRules();
+		// 🔥 不再保存到持久化存储，"始终允许"仅针对单个任务会话
+		// this.saveAutoApproveRules();
 	}
 
 	/**
