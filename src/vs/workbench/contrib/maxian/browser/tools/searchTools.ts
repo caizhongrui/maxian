@@ -81,7 +81,13 @@ export class SearchTool {
 				console.log('[SearchTool] searchFiles 完成，耗时:', elapsed, 'ms，结果数:', result?.results?.length || 0);
 
 				if (!result || !result.results || result.results.length === 0) {
-					return '未找到匹配的文件';
+					// 🔥 优化：当搜索返回0结果时，给AI明确的指导，防止重复搜索
+					const dirExists = await this.checkDirectoryExists(searchPath);
+					if (!dirExists) {
+						return `❌ 未找到匹配的文件\n\n📁 目录 "${searchPath}" 不存在。\n\n💡 建议：如果你需要创建文件，请：\n1. 使用 write_to_file 创建单个文件\n2. 或使用 batch 工具批量创建多个文件（如开发游戏：HTML、CSS、JS同时创建）\n\n⚠️ 重要：不要再次搜索同一个不存在的目录，这会浪费时间和资源！`;
+					} else {
+						return `❌ 未找到匹配的文件\n\n📁 目录 "${searchPath}" 存在但为空或没有匹配 "${includePattern}" 的文件。\n\n💡 建议：\n1. 检查目录路径是否正确\n2. 或使用 list_files 查看目录内容\n3. 或创建新文件（write_to_file 或 batch）\n\n⚠️ 重要：不要再次搜索同一个目录，请尝试其他策略！`;
+					}
 				}
 
 				const files = result.results.map(r => r.resource.fsPath);
@@ -457,5 +463,22 @@ export class SearchTool {
 		this.cacheHits = 0;
 		this.cacheMisses = 0;
 		console.log('[SearchTool] 搜索缓存已清除');
+	}
+
+	/**
+	 * 检查目录是否存在
+	 * 🔥 优化：用于在搜索返回0结果时，判断是"目录不存在"还是"目录为空"
+	 * @param dirPath 目录路径
+	 * @returns 目录是否存在
+	 */
+	private async checkDirectoryExists(dirPath: string): Promise<boolean> {
+		try {
+			const fs = await import('fs');
+			const stats = await fs.promises.stat(dirPath);
+			return stats.isDirectory();
+		} catch (error) {
+			// 如果stat失败（ENOENT等），说明目录不存在
+			return false;
+		}
 	}
 }

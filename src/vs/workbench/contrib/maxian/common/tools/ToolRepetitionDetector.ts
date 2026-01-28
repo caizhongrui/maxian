@@ -32,7 +32,7 @@ export class ToolRepetitionDetector {
 	// P2优化：Doom Loop检测
 	private toolCallHistory: ToolCallHistoryEntry[] = [];
 	private readonly HISTORY_WINDOW_SIZE = 20; // 保留最近20个工具调用
-	private readonly LOOP_DETECTION_THRESHOLD = 5; // 同一工具调用5次触发检测
+	private readonly LOOP_DETECTION_THRESHOLD = 3; // 🔥 优化：降低到3次（从5次），更快检测死循环
 	private readonly TIME_WINDOW_MS = 60000; // 60秒时间窗口
 	private doomLoopDetected = false;
 	private doomLoopCount = 0;
@@ -150,7 +150,7 @@ export class ToolRepetitionDetector {
 		if (recentCalls.length >= this.LOOP_DETECTION_THRESHOLD) {
 			return {
 				detected: true,
-				message: `检测到潜在的无限循环：工具 "${name}" 在 ${Math.round(this.TIME_WINDOW_MS / 1000)} 秒内被调用了 ${recentCalls.length} 次，参数相同。请检查任务逻辑或提供新的指导。`
+				message: `🔴 检测到死循环！工具 "${name}" 在 ${Math.round(this.TIME_WINDOW_MS / 1000)} 秒内被调用了 ${recentCalls.length} 次，参数相同。\n\n⚠️ 这表示你陷入了重复操作，请立即停止并尝试完全不同的策略！\n\n💡 建议：\n1. 如果搜索不到文件，不要继续搜索，应该创建文件\n2. 如果某个工具一直失败，换用其他工具\n3. 如果不确定如何继续，使用 ask_followup_question 询问用户`
 			};
 		}
 
@@ -192,10 +192,10 @@ export class ToolRepetitionDetector {
 			}
 
 			if (matchCount >= 2) {
-				const patternNames = pattern.map(p => p.split(':')[0]).join(' -> ');
+				const patternNames = pattern.map(p => p.split(':')[0]).join(' → ');
 				return {
 					detected: true,
-					message: `检测到工具调用循环模式：${patternNames}（重复${matchCount + 1}次）。这可能表示任务陷入了死循环，请提供新的指导。`
+					message: `🔴 检测到循环模式！工具调用顺序：${patternNames}（重复了${matchCount + 1}次）\n\n⚠️ 这表示你陷入了无意义的循环，当前策略无法解决问题！\n\n💡 必须立即换新策略：\n1. 如果在搜索和查看文件之间循环，应该直接创建文件\n2. 如果在多个工具间循环，说明信息不足，应该 ask_followup_question\n3. 重新思考任务目标，尝试完全不同的方法`
 				};
 			}
 		}
