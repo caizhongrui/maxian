@@ -3201,10 +3201,8 @@ export class MaxianView extends ViewPane {
 	 * 优化：添加变更统计、美化文件路径、工具图标、展开/折叠功能
 	 */
 	private renderToolApproval(message: ClineMessage): void {
-		const toolMsg = append(this.messageArea, $('div'));
-		toolMsg.style.marginBottom = '10px';
-
-		// 尝试解析JSON格式的工具信息
+		// 🔥 首先检查是否已设置自动批准
+		// 尝试解析工具信息以获取工具名称
 		let toolInfo: { tool?: string; path?: string; diff?: string; content?: string; command?: string; originalContent?: string; newContent?: string; operationCount?: number } | null = null;
 		try {
 			if (message.text) {
@@ -3214,6 +3212,20 @@ export class MaxianView extends ViewPane {
 			// 解析失败，使用原始文本
 			toolInfo = null;
 		}
+
+		// 如果工具已设置为自动批准，直接执行批准操作
+		const toolName = toolInfo?.tool || '';
+		if (toolName && this.maxianService.isToolAutoApproved(toolName)) {
+			console.log(`[MaxianView] 工具 "${toolName}" 已自动批准，跳过审批UI`);
+			// 直接执行批准操作
+			this.maxianService.saveDiffAndClose().then(() => {
+				this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
+			});
+			return;
+		}
+
+		const toolMsg = append(this.messageArea, $('div'));
+		toolMsg.style.marginBottom = '10px';
 
 		// 工具图标和类型名称
 		const toolIconClass = toolInfo?.tool ? getToolIcon(toolInfo.tool) : 'codicon-tools';
@@ -3474,11 +3486,19 @@ export class MaxianView extends ViewPane {
 	 * 优化：添加展开/折叠功能
 	 */
 	private renderCommandApproval(message: ClineMessage): void {
+		// 🔥 首先检查是否已设置命令自动批准
+		const cmdText = message.text || '';
+		if (this.maxianService.isCommandAutoApproved('*')) {
+			console.log('[MaxianView] 命令已设置为自动批准，跳过审批UI');
+			// 直接执行批准操作
+			this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
+			return;
+		}
+
 		const cmdMsg = append(this.messageArea, $('div'));
 		cmdMsg.style.marginBottom = '10px';
 
 		// 提取命令摘要（取前50个字符）
-		const cmdText = message.text || '';
 		const cmdSummary = cmdText.length > 50 ? cmdText.substring(0, 50) + '...' : cmdText;
 
 		// 创建可折叠的标题元素
