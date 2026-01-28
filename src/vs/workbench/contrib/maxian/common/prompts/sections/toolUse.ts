@@ -27,8 +27,13 @@ TOOL USE
 - 需要读取多个文件 → 用 batch 并行读取
 - 需要多处搜索 → 用 batch 组合 search_files 和 glob
 - 需要了解多个模块 → 用 batch 并行 codebase_search
+- **需要创建多个文件 → 用 batch 并行创建**（如开发游戏：HTML、CSS、JS）
+- **需要编辑多个文件 → 用 batch 并行修改**（如批量重构）
 
-**禁止在 batch 中使用的工具**：apply_diff、edit_file、write_to_file、execute_command、batch本身
+**禁止在 batch 中使用的工具**（仅3个）：
+- batch（不允许嵌套）
+- ask_followup_question（需要用户交互）
+- attempt_completion（任务完成标志）
 
 # 工具使用格式
 

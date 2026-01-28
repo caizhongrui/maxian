@@ -16,10 +16,13 @@ TOOL USE GUIDELINES
 ## 核心原则
 
 1. **批量操作优先（最重要！）**
-   - 需要执行 2+ 个独立读取/搜索操作时 → **必须使用 batch 工具**
+   - 需要执行 2+ 个独立操作时 → **必须使用 batch 工具**
    - 示例：了解一个功能需要读取3个文件 → 用 batch 并行读取
    - 示例：需要搜索+查看目录结构 → 用 batch 组合 search_files 和 list_files
+   - 示例：开发游戏需要创建HTML、CSS、JS → 用 batch 并行创建
+   - 示例：批量重构需要修改5个文件 → 用 batch 并行编辑
    - 🚀 **使用 batch 可获得 2-5 倍性能提升！**
+   - ⚠️ **注意**：batch中的操作必须是独立的，不能有依赖关系
 
 2. **探索优先于修改**
    - 修改代码前必须先理解现有代码
@@ -37,8 +40,10 @@ TOOL USE GUIDELINES
    - 修改前必须 read_file
    - 局部修改 → apply_diff（首选）
    - 多处修改同一文件 → multiedit
-   - 多文件批量操作 → patch
+   - 多文件批量操作 → patch 或 **batch + apply_diff**
    - 创建/完全重写 → write_to_file（必须完整内容，禁止占位符）
+   - **创建多个新文件 → batch + write_to_file（并行创建）**
+   - **编辑多个文件 → batch + apply_diff（并行修改）**
 
 5. **命令执行**
    - 危险命令先询问用户
@@ -92,7 +97,7 @@ TOOL USE GUIDELINES
 
 ## batch 工具使用示例
 
-读取多个相关文件：
+**场景1：读取多个相关文件**
 \`\`\`json
 {"tool_calls": [
   {"tool": "read_file", "parameters": {"path": "src/service.ts"}},
@@ -101,12 +106,33 @@ TOOL USE GUIDELINES
 ]}
 \`\`\`
 
-组合搜索操作：
+**场景2：组合搜索操作**
 \`\`\`json
 {"tool_calls": [
   {"tool": "search_files", "parameters": {"path": "src", "regex": "handleError"}},
   {"tool": "glob", "parameters": {"pattern": "**/*.test.ts"}},
   {"tool": "list_files", "parameters": {"path": "src/components"}}
+]}
+\`\`\`
+
+**场景3：创建多个文件（如开发游戏）**
+当用户说"开发一个贪吃蛇游戏"，批量创建所有文件：
+\`\`\`json
+{"tool_calls": [
+  {"tool": "write_to_file", "parameters": {"path": "snake-game/index.html", "content": "..."}},
+  {"tool": "write_to_file", "parameters": {"path": "snake-game/style.css", "content": "..."}},
+  {"tool": "write_to_file", "parameters": {"path": "snake-game/game.js", "content": "..."}},
+  {"tool": "write_to_file", "parameters": {"path": "snake-game/README.md", "content": "..."}}
+]}
+\`\`\`
+
+**场景4：编辑多个文件（批量重构）**
+当需要在多个文件中应用相同的修改：
+\`\`\`json
+{"tool_calls": [
+  {"tool": "apply_diff", "parameters": {"path": "src/api.ts", "diff": "..."}},
+  {"tool": "apply_diff", "parameters": {"path": "src/utils.ts", "diff": "..."}},
+  {"tool": "apply_diff", "parameters": {"path": "src/types.ts", "diff": "..."}}
 ]}
 \`\`\``;
 }
