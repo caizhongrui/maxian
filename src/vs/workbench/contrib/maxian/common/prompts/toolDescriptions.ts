@@ -14,14 +14,17 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 	// ==================== 文件操作工具 ====================
 
 	read_file: `## read_file
-读取文件内容，支持行范围限制
+读取文件内容，默认读取整个文件
 
 **使用**：查看文件内容、修改前了解当前代码
 **不使用**：搜索关键词→search_files，查找文件名→glob，不确定文件是否存在→先list_files
 
-**要点**：
+**重要**：
+- ⚠️ 默认读取整个文件，不要分批读取！
+- ⚠️ 不要重复读取同一个文件的不同部分！
+- ✅ 一次调用读取完整文件内容
 - 修改文件前必须先读取
-- 大文件用 start_line/end_line 分段读取`,
+- 仅当文件超过 2000 行时才使用 start_line/end_line 分段读取`,
 
 	write_to_file: `## write_to_file
 创建新文件或完全覆盖现有文件

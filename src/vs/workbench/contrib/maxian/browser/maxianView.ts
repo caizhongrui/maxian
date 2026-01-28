@@ -2620,6 +2620,25 @@ export class MaxianView extends ViewPane {
 						createDiagnosticsSummary(diagnosticsContainer, diagnostics);
 					}
 				}
+
+				// 🔥 工具完成后，3秒后自动移除状态卡片
+				setTimeout(() => {
+					if (toolStatusElement && toolStatusElement.parentElement) {
+						// 添加淡出动画
+						toolStatusElement.style.transition = 'opacity 0.5s ease-out';
+						toolStatusElement.style.opacity = '0';
+						setTimeout(() => {
+							toolStatusElement.remove();
+							// 清除引用
+							if (this.currentToolStatusElement === toolStatusElement) {
+								this.currentToolStatusElement = null;
+							}
+							if (toolId && this.toolStatusElements.has(toolId)) {
+								this.toolStatusElements.delete(toolId);
+							}
+						}, 500); // 等待动画完成
+					}
+				}, 3000); // 3秒后开始淡出
 			}
 
 			this.messageArea.scrollTop = this.messageArea.scrollHeight;

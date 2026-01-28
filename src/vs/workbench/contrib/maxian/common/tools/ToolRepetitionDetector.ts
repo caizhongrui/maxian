@@ -154,10 +154,48 @@ export class ToolRepetitionDetector {
 			};
 		}
 
+		// 🔥 检测重复读取同一文件的不同部分（参数不同但目标相同）
+		if (name === 'read_file') {
+			const sameFileResult = this.detectSameFileReading();
+			if (sameFileResult.detected) {
+				return sameFileResult;
+			}
+		}
+
 		// 检测工具循环模式（如A->B->A->B->A->B）
 		const patternResult = this.detectLoopPattern();
 		if (patternResult.detected) {
 			return patternResult;
+		}
+
+		return { detected: false, message: '' };
+	}
+
+	/**
+	 * 🔥 检测重复读取同一文件的不同部分
+	 * 例如：连续多次 read_file("game.js", start_line=1, end_line=100)
+	 *                  read_file("game.js", start_line=101, end_line=200)
+	 */
+	private detectSameFileReading(): { detected: boolean; message: string } {
+		const now = Date.now();
+		const windowStart = now - this.TIME_WINDOW_MS;
+
+		// 获取最近的 read_file 调用
+		const recentReadFiles = this.toolCallHistory.filter(entry =>
+			entry.timestamp >= windowStart &&
+			entry.name === 'read_file'
+		);
+
+		if (recentReadFiles.length < 3) {
+			return { detected: false, message: '' };
+		}
+
+		// 简单检测：最近 3 次以上调用都是 read_file，很可能是重复读取
+		if (recentReadFiles.length >= 3) {
+			return {
+				detected: true,
+				message: `🔴 检测到重复读取文件！你在 ${Math.round(this.TIME_WINDOW_MS / 1000)} 秒内调用了 ${recentReadFiles.length} 次 read_file。\n\n⚠️ 不要分批读取文件！应该一次性读取完整文件内容。\n\n💡 正确做法：\n1. 使用 read_file(path) 读取整个文件（不带 start_line/end_line 参数）\n2. 如果文件太大（>2000行），可以使用 start_line/end_line 读取关键部分\n3. 但不要连续多次读取同一文件的不同部分！\n\n💡 如果你需要了解文件结构，使用 list_code_definition_names 工具！`
+			};
 		}
 
 		return { detected: false, message: '' };
