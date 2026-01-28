@@ -817,8 +817,38 @@ export class TaskService extends Disposable {
 				try {
 					input = typeof chunk.input === 'string' ? JSON.parse(chunk.input) : chunk.input;
 				} catch (e) {
-					console.error('[TaskService] 工具参数解析失败:', chunk.input);
-					input = {};
+					const inputStr = typeof chunk.input === 'string' ? chunk.input : JSON.stringify(chunk.input);
+					const inputLength = inputStr.length;
+					console.error(`[TaskService] 工具参数解析失败 (工具:${chunk.name}, 长度:${inputLength})`);
+					console.error('[TaskService] 错误信息:', e);
+					console.error('[TaskService] 参数内容预览 (前500字符):', inputStr.substring(0, 500));
+					console.error('[TaskService] 参数内容预览 (后500字符):', inputStr.substring(Math.max(0, inputLength - 500)));
+
+					// 🔧 修复：对于batch工具，尝试手动解析JSON（可能被大内容影响）
+					if (chunk.name === 'batch' && typeof chunk.input === 'string') {
+						console.log('[TaskService] 尝试手动解析batch工具参数...');
+						try {
+							// 尝试提取 tool_calls 内容（可能是XML格式）
+							const toolCallsMatch = chunk.input.match(/<tool_calls>([\s\S]*?)<\/tool_calls>/);
+							if (toolCallsMatch) {
+								const toolCallsStr = toolCallsMatch[1].trim();
+								console.log('[TaskService] 提取到tool_calls内容，长度:', toolCallsStr.length);
+								const toolCalls = JSON.parse(toolCallsStr);
+								input = { tool_calls: toolCalls };
+								console.log('[TaskService] batch参数解析成功，工具数量:', toolCalls.length);
+							} else {
+								// 如果不是XML格式，尝试直接解析为对象
+								input = typeof chunk.input === 'object' ? chunk.input : {};
+								console.warn('[TaskService] 未找到tool_calls标签，使用原始input或空对象');
+							}
+						} catch (e2) {
+							console.error('[TaskService] 手动解析也失败:', e2);
+							input = {};
+						}
+					} else {
+						// 其他工具解析失败时设为空对象
+						input = {};
+					}
 				}
 
 				// 发出工具输入流式事件（用于实时显示工具调用信息）

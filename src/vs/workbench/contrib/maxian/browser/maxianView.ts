@@ -1908,11 +1908,13 @@ export class MaxianView extends ViewPane {
 				break;
 
 			case 'api_req_started':
-				// API请求开始 - 静默处理，不在UI中显示（与kilocode一致）
+				// API请求开始 - 显示思考状态，避免前端卡住的感觉
+				this.renderSystemMessage('🤔 码弦正在思考...');
 				break;
 
 			case 'api_req_finished':
-				// API请求完成 - 静默处理（kilocode不再使用api_req_finished）
+				// API请求完成 - 移除思考状态消息
+				// Note: 工具调用会立即显示，所以这里无需额外UI
 				break;
 
 			case 'api_req_retried':
