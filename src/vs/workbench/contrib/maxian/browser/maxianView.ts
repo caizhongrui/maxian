@@ -4327,18 +4327,62 @@ export class MaxianView extends ViewPane {
 			return;
 		}
 
-		// 🔧 如果是成功完成（非错误），直接移除工具卡片
+		// 🔧 如果是成功完成（非错误），根据工具类型决定是否自动移除
 		if (!event.isError) {
-			// 添加淡出动画
-			toolStatusElement.style.transition = 'opacity 0.3s ease-out';
-			toolStatusElement.style.opacity = '0';
+			// 对于以下工具类型，成功后自动移除（不需要用户看结果）
+			const autoRemoveTools = new Set([
+				'batch',           // batch工具：子工具结果已在各自卡片显示
+				'skill',           // skill工具：仅加载技能，无需显示
+				'new_task',        // 新建任务：结果在任务列表显示
+				'update_todo_list' // 更新任务列表：结果在任务列表显示
+			]);
 
-			// 300ms后移除元素
-			setTimeout(() => {
-				toolStatusElement.remove();
-				this.toolStatusElements.delete(event.toolId);
-				console.log('[MaxianView] 工具卡片已移除:', event.toolId);
-			}, 300);
+			if (autoRemoveTools.has(event.toolName)) {
+				// 短暂显示完成状态，然后自动移除
+				toolStatusElement.classList.remove('tool-running');
+				toolStatusElement.classList.add('tool-completed');
+
+				// 添加淡出动画
+				toolStatusElement.style.transition = 'opacity 0.5s ease-out';
+				setTimeout(() => {
+					toolStatusElement.style.opacity = '0';
+				}, 1000); // 1秒后开始淡出
+
+				// 1.5秒后移除元素
+				setTimeout(() => {
+					toolStatusElement.remove();
+					this.toolStatusElements.delete(event.toolId);
+					console.log('[MaxianView] 工具卡片已自动移除:', event.toolId);
+				}, 1500);
+				return;
+			}
+
+			// 其他工具：更新为完成状态但保留显示（用户可能需要查看结果）
+			toolStatusElement.classList.remove('tool-running');
+			toolStatusElement.classList.add('tool-completed');
+
+			// 停止图标旋转动画
+			const iconElement = toolStatusElement.querySelector('.tool-status-icon') as HTMLElement;
+			if (iconElement) {
+				iconElement.classList.remove('codicon-modifier-spin');
+			}
+
+			// 隐藏加载动画
+			const loadingDots = toolStatusElement.querySelector('.tool-loading-dots') as HTMLElement;
+			if (loadingDots) {
+				loadingDots.style.display = 'none';
+			}
+
+			// 显示"完成"状态标签
+			const statusBadge = toolStatusElement.querySelector('.tool-status-badge') as HTMLElement;
+			if (statusBadge) {
+				statusBadge.textContent = '完成';
+				statusBadge.style.display = 'inline-block';
+				statusBadge.classList.remove('maxian-tool-status-running', 'maxian-tool-status-error');
+				statusBadge.classList.add('maxian-tool-status-completed');
+			}
+
+			console.log('[MaxianView] 工具完成状态已更新（保留显示）:', event.toolId);
 			return;
 		}
 
