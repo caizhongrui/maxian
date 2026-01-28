@@ -70,6 +70,7 @@ export const toolParamNames = [
 	'column',         // LSP 列号参数
 	'useCache',       // webfetch 缓存参数
 	'format',         // webfetch 输出格式参数
+	'skill_name',     // skill 工具参数
 ] as const;
 
 export type ToolParamName = (typeof toolParamNames)[number];
@@ -97,8 +98,12 @@ export const toolNames = [
 	'webfetch',     // P0优化：网页获取工具
 	'task',         // P1优化：子Agent委托
 	'patch',        // P1优化：多文件批量操作
-	'lsp_hover',    // P1优化：LSP悬停信息
-	'lsp_diagnostics', // P1优化：LSP诊断信息
+	'lsp_hover',    // LSP功能：悬停信息
+	'lsp_diagnostics', // LSP功能：诊断信息
+	'lsp_definition', // LSP功能：定义位置
+	'lsp_references', // LSP功能：引用查找
+	'lsp_type_definition', // LSP功能：类型定义
+	'skill',        // Skills系统：按需加载专业知识
 ] as const;
 
 // 工具名称
@@ -191,6 +196,31 @@ export interface GlobToolUse extends ToolUse {
 	params: Partial<Pick<Record<ToolParamName, string>, 'path' | 'file_pattern'>>;
 }
 
+export interface LspHoverToolUse extends ToolUse {
+	name: 'lsp_hover';
+	params: Partial<Pick<Record<ToolParamName, string>, 'path' | 'line' | 'column'>>;
+}
+
+export interface LspDiagnosticsToolUse extends ToolUse {
+	name: 'lsp_diagnostics';
+	params: Partial<Pick<Record<ToolParamName, string>, 'path'>>;
+}
+
+export interface LspDefinitionToolUse extends ToolUse {
+	name: 'lsp_definition';
+	params: Partial<Pick<Record<ToolParamName, string>, 'path' | 'line' | 'column'>>;
+}
+
+export interface LspReferencesToolUse extends ToolUse {
+	name: 'lsp_references';
+	params: Partial<Pick<Record<ToolParamName, string>, 'path' | 'line' | 'column'>>;
+}
+
+export interface LspTypeDefinitionToolUse extends ToolUse {
+	name: 'lsp_type_definition';
+	params: Partial<Pick<Record<ToolParamName, string>, 'path' | 'line' | 'column'>>;
+}
+
 // 工具显示名称
 export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 	execute_command: '执行命令',
@@ -214,12 +244,16 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 	webfetch: '获取网页',         // P0优化
 	task: '子任务委托',           // P1优化
 	patch: '多文件补丁',          // P1优化
-	lsp_hover: 'LSP悬停',        // P1优化
-	lsp_diagnostics: 'LSP诊断',  // P1优化
+	lsp_hover: 'LSP悬停',        // LSP功能
+	lsp_diagnostics: 'LSP诊断',  // LSP功能
+	lsp_definition: 'LSP定义',   // LSP功能
+	lsp_references: 'LSP引用',   // LSP功能
+	lsp_type_definition: 'LSP类型定义', // LSP功能
+	skill: '加载专业知识',        // Skills系统
 } as const;
 
 // 工具分组
-export type ToolGroup = 'read' | 'edit' | 'command' | 'web' | 'lsp' | 'agent';
+export type ToolGroup = 'read' | 'edit' | 'command' | 'web' | 'lsp' | 'agent' | 'skills';
 
 export type ToolGroupConfig = {
 	tools: readonly string[];
@@ -258,6 +292,9 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 		tools: [
 			'lsp_hover',
 			'lsp_diagnostics',
+			'lsp_definition',
+			'lsp_references',
+			'lsp_type_definition',
 		],
 	},
 	agent: {
@@ -265,6 +302,12 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 			'task',           // 子Agent委托
 			'batch',          // 批量执行
 		],
+	},
+	skills: {
+		tools: [
+			'skill',          // 按需加载Skills
+		],
+		alwaysAvailable: true,  // Skills始终可用
 	},
 };
 
@@ -274,4 +317,5 @@ export const ALWAYS_AVAILABLE_TOOLS: ToolName[] = [
 	'attempt_completion',
 	'new_task',
 	'update_todo_list',
+	'skill',           // Skills始终可用
 ] as const;

@@ -179,13 +179,12 @@ export class LoginDialog extends Disposable {
 			await this.configurationService.updateValue('zhikai.auth.apiUrl', data.apiUrl);
 			await this.configurationService.updateValue('zhikai.auth.username', data.username);
 
-			// 密码保存到加密存储（Secret Storage）
-			if (data.rememberMe) {
-				await this.secretStorageService.set(LoginDialog.PASSWORD_KEY, data.password);
-			} else {
-				// 不记住密码，清除已保存的密码
-				await this.secretStorageService.delete(LoginDialog.PASSWORD_KEY);
-			}
+			// ⚠️ 架构修复：密码已由 authService.login() 保存到 StorageService
+			// 不需要在这里重复保存到 SecretStorageService
+			// authService 会根据 rememberMe 标志决定保存位置（MACHINE 或 USER）
+
+			// 清理旧的 SecretStorage 中的密码（向后兼容）
+			await this.secretStorageService.delete(LoginDialog.PASSWORD_KEY);
 
 			// 关闭对话框
 			this.closeDialog();

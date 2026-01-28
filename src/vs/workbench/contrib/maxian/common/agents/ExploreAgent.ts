@@ -80,6 +80,20 @@ export class ExploreAgent {
 		console.log('[ExploreAgent] 开始探索:', task);
 
 		try {
+			// 🎯 第零步：智能判断是否需要探索
+			const needsExploration = this.shouldExplore(task);
+			if (!needsExploration) {
+				console.log('[ExploreAgent] 智能判断：任务无需探索代码库，跳过探索阶段');
+				return {
+					success: true,
+					output: '此任务无需探索代码库，将直接执行。',
+					data: {
+						relevantFiles: [],
+						summary: '根据任务类型判断，无需探索代码库（如：代码片段分析、知识问答等）。'
+					}
+				};
+			}
+
 			// 第一步：使用语义搜索找到相关代码
 			const semanticResults = await this.semanticSearch(task);
 
@@ -104,6 +118,52 @@ export class ExploreAgent {
 				error: error instanceof Error ? error.message : String(error)
 			};
 		}
+	}
+
+	/**
+	 * 智能判断是否需要探索代码库
+	 *
+	 * 参考 task-strategy Skill的判断逻辑：
+	 * - 类型1：代码片段分析 → 无需探索
+	 * - 类型2：项目功能开发 → 需要探索
+	 * - 类型3：知识问答 → 无需探索
+	 * - 类型4：项目分析 → 需要探索
+	 * - 类型5：Bug修复 → 条件探索
+	 */
+	private shouldExplore(task: string): boolean {
+		const taskLower = task.toLowerCase();
+
+		// 🚫 类型1：代码片段分析（包含代码块，无项目上下文）
+		const hasCodeBlock = /```[\s\S]*?```/g.test(task) || /\n\s{2,}[@a-zA-Z]/.test(task);
+		const hasProjectContext = /文件|路径|项目|模块|类名|方法名|function|class\s+\w+/.test(taskLower);
+
+		if (hasCodeBlock && !hasProjectContext) {
+			console.log('[ExploreAgent] 判断：代码片段分析，无需探索');
+			return false;
+		}
+
+		// 🚫 类型3：知识问答（询问概念、最佳实践）
+		const isKnowledgeQuestion =
+			/^(什么是|如何|为什么|有什么|怎么|如何.*最佳实践|.*和.*的区别)/.test(task) ||
+			/(what is|how to|why|best practice|difference between)/i.test(task);
+
+		const hasSpecificCode = /(审查|修改|创建|添加|实现|修复|优化).*代码/.test(task);
+
+		if (isKnowledgeQuestion && !hasSpecificCode) {
+			console.log('[ExploreAgent] 判断：知识问答，无需探索');
+			return false;
+		}
+
+		// 🚫 明确的审查指令（如"审查这段代码"）+ 代码块
+		const isReviewRequest = /(审查|检查|分析|解释)(这段|以下)代码/.test(task);
+		if (isReviewRequest && hasCodeBlock) {
+			console.log('[ExploreAgent] 判断：代码片段审查，无需探索');
+			return false;
+		}
+
+		// ✅ 其他情况：需要探索
+		console.log('[ExploreAgent] 判断：任务需要探索代码库');
+		return true;
 	}
 
 	/**

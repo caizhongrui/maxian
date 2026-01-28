@@ -120,6 +120,14 @@ export class TaskService extends Disposable {
 	}>());
 	readonly onToolInputStreaming = this._onToolInputStreaming.event;
 
+	// 工具完成事件（用于更新工具执行状态）
+	private readonly _onToolCompleted = this._register(new Emitter<{
+		toolId: string;
+		toolName: string;
+		isError: boolean;
+	}>());
+	readonly onToolCompleted = this._onToolCompleted.event;
+
 	// Task metadata
 	readonly taskId: string;
 	readonly metadata: TaskMetadata;
@@ -591,26 +599,13 @@ export class TaskService extends Disposable {
 
 		this.setStatus(TaskStatus.PROCESSING);
 
-		// 初始化步骤追踪（估算总步骤数，后续根据规划结果调整）
-		this.setTotalSteps(5); // 初始估算：分析 -> 规划 -> 执行 -> 验证 -> 完成
+		// 🎯 参考OpenCode设计：简化流程，移除强制explore-planning阶段
+		// AI通过task tool自主决定何时需要探索代码库
+		this.setTotalSteps(3); // 简化流程：分析 -> 执行 -> 完成
 		this.updateStep('正在分析任务...');
 
 		try {
-			// 获取初始任务描述
-			const initialTask = this.getInitialTaskDescription();
-
-			// 对于非简单任务，执行探索-规划阶段
-			if (initialTask && this.shouldPerformExplorationAndPlanning(initialTask)) {
-				this.updateStep('正在探索代码库...');
-				await this.performExplorationAndPlanning(initialTask);
-
-				// 如果有规划结果，更新总步骤数
-				if (this.taskContext?.planResult?.data?.steps) {
-					const planSteps = this.taskContext.planResult.data.steps.length;
-					this.setTotalSteps(planSteps + 2); // 规划步骤 + 验证 + 完成
-					this.currentStepIndex = 2; // 已完成分析和规划
-				}
-			}
+			console.log('[TaskService] 启动任务循环（无强制探索阶段）');
 
 			// 执行主任务循环
 			this.updateStep('正在执行任务...');
@@ -623,69 +618,6 @@ export class TaskService extends Disposable {
 			console.error('[TaskService] 任务执行错误:', error);
 			this.updateStep('任务执行出错', 'error');
 			this.setStatus(TaskStatus.ERROR);
-		}
-	}
-
-	/**
-	 * 获取初始任务描述
-	 */
-	private getInitialTaskDescription(): string | undefined {
-		if (this.apiConversationHistory.length > 0) {
-			const firstMsg = this.apiConversationHistory[0];
-			if (firstMsg.role === 'user') {
-				return typeof firstMsg.content === 'string'
-					? firstMsg.content
-					: undefined;
-			}
-		}
-		return undefined;
-	}
-
-	/**
-	 * 判断是否需要执行探索和规划
-	 * 对于简单任务（问答模式、简短任务）跳过
-	 */
-	private shouldPerformExplorationAndPlanning(task: string): boolean {
-		// 问答模式不需要探索规划
-		if (this.currentMode === 'ask') {
-			return false;
-		}
-
-		// 使用 AgentOrchestrator 的判断逻辑
-		const shouldExplore = this.agentOrchestrator.shouldExplore(task);
-		const shouldPlan = this.agentOrchestrator.shouldPlan(task);
-
-		return shouldExplore || shouldPlan;
-	}
-
-	/**
-	 * 执行探索和规划阶段
-	 * 注意：探索规划信息只输出到console，不显示给用户
-	 */
-	private async performExplorationAndPlanning(task: string): Promise<void> {
-		console.log('[TaskService] 开始探索-规划阶段:', task);
-
-		try {
-			// 执行完整的探索-规划流程（静默执行，不显示给用户）
-			this.taskContext = await this.agentOrchestrator.executeTask(task);
-
-			// 仅输出日志，不显示给用户
-			if (this.taskContext.explorationResult?.data) {
-				const { relevantFiles, summary } = this.taskContext.explorationResult.data;
-				console.log('[TaskService] 探索完成:', summary);
-				console.log('[TaskService] 相关文件:', relevantFiles?.map(f => f.path).slice(0, 5).join(', ') || '无');
-			}
-
-			if (this.taskContext.planResult?.data) {
-				const { steps, taskAnalysis } = this.taskContext.planResult.data;
-				console.log('[TaskService] 规划完成:', taskAnalysis);
-				console.log('[TaskService] 步骤:', steps?.map(s => `${s.id}. ${s.description}`).join(', ') || '无');
-			}
-
-			console.log('[TaskService] 探索-规划阶段完成');
-		} catch (error) {
-			console.error('[TaskService] 探索-规划阶段失败:', error);
-			// 失败不阻断主流程，继续执行
 		}
 	}
 
@@ -706,7 +638,8 @@ export class TaskService extends Disposable {
 				}
 
 				// AI没有使用工具 - 提示继续
-				await this.say('text', formatResponse.noToolsUsed());
+				// 🔧 使用 'system_internal' 类型，不显示在UI上（避免系统提示泄露）
+				await this.say('system_internal', formatResponse.noToolsUsed());
 
 				this.apiConversationHistory.push({
 					role: 'user',
@@ -838,6 +771,7 @@ export class TaskService extends Disposable {
 	 * - 文本实时显示，让用户立即看到AI响应
 	 * - 工具调用前的思考文本也会显示，增强透明度
 	 * - 前端可根据后续是否有工具调用来调整显示样式
+	 * 🔒 XML检测：提前检测XML工具调用，避免`<`字符泄露
 	 */
 	private async processApiStream(stream: AsyncIterable<StreamChunk>): Promise<{
 		assistantMessage: string;
@@ -848,6 +782,7 @@ export class TaskService extends Disposable {
 		const toolUses: Array<{ id: string; name: string; input: any }> = [];
 		let hasError = false;
 		let firstTokenReceived = false;
+		let xmlDetected = false; // XML检测标志
 
 		for await (const chunk of stream) {
 			// 检查是否已中止，如果是则停止处理流
@@ -858,7 +793,7 @@ export class TaskService extends Disposable {
 			}
 
 			if (chunk.type === 'text') {
-				// 🚀 实时流式显示：累积并立即发送文本
+				// 累积文本
 				assistantMessage += chunk.text;
 
 				// 记录首Token时间
@@ -867,8 +802,16 @@ export class TaskService extends Disposable {
 					console.log('[TaskService] 首Token到达');
 				}
 
-				// 🚀 恢复实时流显示，让用户立即看到AI响应
-				this._onStreamChunk.fire({ text: chunk.text, isPartial: true });
+				// 🔒 检测是否可能是XML工具调用
+				if (!xmlDetected && this.mightBeXmlToolCall(assistantMessage)) {
+					xmlDetected = true;
+					console.log('[TaskService] 检测到可能的XML工具调用，停止流式显示');
+				}
+
+				// 只有在未检测到XML时才进行流式显示
+				if (!xmlDetected) {
+					this._onStreamChunk.fire({ text: chunk.text, isPartial: true });
+				}
 			} else if (chunk.type === 'tool_use') {
 				let input: any;
 				try {
@@ -896,12 +839,107 @@ export class TaskService extends Disposable {
 			}
 		}
 
+		// 🔧 支持 XML 格式的工具调用（兼容性增强）
+		// 如果没有通过标准 function calling 获得工具调用，尝试从文本中解析 XML 格式
+		if (toolUses.length === 0 && assistantMessage) {
+			const xmlToolUses = this.parseXmlToolCalls(assistantMessage);
+			if (xmlToolUses.length > 0) {
+				console.log('[TaskService] 从文本中解析到 XML 格式的工具调用:', xmlToolUses.length);
+				toolUses.push(...xmlToolUses);
+				// 清空 assistantMessage，因为这是工具调用，不是普通响应
+				// 前端通过检测hasXmlTag已经阻止了XML文本的显示，这里无需特殊处理
+				assistantMessage = '';
+			}
+		}
+
 		if (!this.abort && (assistantMessage || toolUses.length > 0)) {
 			this._onStreamChunk.fire({ text: undefined, isPartial: false });
 			await this.say('api_req_finished', 'API请求已完成');
 		}
 
 		return { assistantMessage, toolUses, hasError };
+	}
+
+	/**
+	 * 工具名称列表（用于XML检测和解析）
+	 */
+	private readonly TOOL_NAMES = [
+		'read_file', 'write_to_file', 'list_files', 'search_files', 'codebase_search',
+		'glob', 'list_code_definition_names', 'execute_command', 'apply_diff',
+		'edit_file', 'insert_content', 'batch', 'edit', 'multiedit', 'patch',
+		'webfetch', 'lsp_hover', 'lsp_diagnostics', 'task', 'skill',
+		'ask_followup_question', 'attempt_completion', 'switch_mode', 'new_task', 'update_todo_list'
+	];
+
+	/**
+	 * 检测文本是否可能是XML工具调用
+	 * 在流式处理时提前检测，避免XML字符泄露到前端
+	 */
+	private mightBeXmlToolCall(text: string): boolean {
+		// 必须以 < 开头
+		if (!text.startsWith('<')) {
+			return false;
+		}
+
+		// 检查是否匹配任何工具名称的开始标签
+		// 例如: <read_file>, <skill>, <task> 等
+		for (const toolName of this.TOOL_NAMES) {
+			// 匹配 <toolName> 或 <toolName 或 < toolName（考虑不完整的情况）
+			if (text.startsWith(`<${toolName}>`) || text.startsWith(`<${toolName} `)) {
+				return true;
+			}
+			// 如果文本太短，可能还在输入工具名称
+			if (text.length < toolName.length + 2 && toolName.startsWith(text.substring(1))) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * 解析 XML 格式的工具调用
+	 * 支持格式：<tool_name><param1>value1</param1><param2>value2</param2></tool_name>
+	 */
+	private parseXmlToolCalls(text: string): Array<{ id: string; name: string; input: any }> {
+		const toolUses: Array<{ id: string; name: string; input: any }> = [];
+
+		// 使用共享的工具名称列表
+		const toolNames = this.TOOL_NAMES;
+
+		// 尝试匹配每个工具名称的 XML 标签
+		for (const toolName of toolNames) {
+			const regex = new RegExp(`<${toolName}>(.*?)</${toolName}>`, 'gs');
+			const matches = text.matchAll(regex);
+
+			for (const match of matches) {
+				const innerXml = match[1];
+				const params: any = {};
+
+				// 解析参数（查找所有 <param>value</param> 格式）
+				const paramRegex = /<(\w+)>(.*?)<\/\1>/gs;
+				const paramMatches = innerXml.matchAll(paramRegex);
+
+				for (const paramMatch of paramMatches) {
+					const paramName = paramMatch[1];
+					const paramValue = paramMatch[2].trim();
+					params[paramName] = paramValue;
+				}
+
+				// 生成唯一ID
+				const id = `xml_${toolName}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+				toolUses.push({
+					id,
+					name: toolName,
+					input: params
+				});
+
+				console.log(`[TaskService] 解析 XML 工具调用: ${toolName}`, params);
+			}
+		}
+
+		return toolUses;
 	}
 
 	/**
@@ -1085,6 +1123,13 @@ export class TaskService extends Disposable {
 				// 更新工具使用统计
 				this.toolUsage[toolUse.name] = (this.toolUsage[toolUse.name] || 0) + 1;
 
+				// 🔧 触发工具完成事件
+				this._onToolCompleted.fire({
+					toolId: toolUse.id,
+					toolName: toolUse.name,
+					isError: false
+				});
+
 				return {
 					type: 'tool_result' as const,
 					tool_use_id: toolUse.id,
@@ -1094,6 +1139,13 @@ export class TaskService extends Disposable {
 			} catch (error) {
 				const errorMsg = error instanceof Error ? error.message : String(error);
 				console.error('[TaskService] 并行工具执行失败:', toolUse.name, error);
+
+				// 🔧 触发工具完成事件（错误）
+				this._onToolCompleted.fire({
+					toolId: toolUse.id,
+					toolName: toolUse.name,
+					isError: true
+				});
 
 				return {
 					type: 'tool_result' as const,
@@ -1238,6 +1290,13 @@ export class TaskService extends Disposable {
 				console.log('[TaskService] 已触发任务列表更新事件');
 			}
 
+			// 🔧 触发工具完成事件
+			this._onToolCompleted.fire({
+				toolId: toolUse.id,
+				toolName: toolUse.name,
+				isError: false
+			});
+
 			return {
 				shouldContinue: true,
 				shouldEndLoop: false,
@@ -1252,6 +1311,13 @@ export class TaskService extends Disposable {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			console.error('[TaskService] 工具执行失败:', toolUse.name, error);
 			this.consecutiveMistakeCount++;
+
+			// 🔧 触发工具完成事件（错误）
+			this._onToolCompleted.fire({
+				toolId: toolUse.id,
+				toolName: toolUse.name,
+				isError: true
+			});
 
 			return {
 				shouldContinue: true,
@@ -1399,7 +1465,7 @@ export class TaskService extends Disposable {
 				return JSON.stringify({
 					tool: 'newFileCreated',
 					path: params.path,
-					content: params.content?.substring(0, 500) + (params.content?.length > 500 ? '...' : '')
+					content: params.content  // 🔧 不截断，保留完整内容用于文件保存
 				});
 
 			case 'apply_diff':
@@ -1422,7 +1488,7 @@ export class TaskService extends Disposable {
 					tool: 'insertContent',
 					path: params.path,
 					line: params.line,
-					content: params.content?.substring(0, 500) + (params.content?.length > 500 ? '...' : '')
+					content: params.content  // 🔧 不截断，保留完整内容用于文件保存
 				});
 
 			case 'search_and_replace': {
@@ -1464,16 +1530,19 @@ export class TaskService extends Disposable {
 	private formatToolStatusForDisplay(toolUse: { id: string; name: string; input: any }): string {
 		const toolName = toolUse.name;
 		const params = toolUse.input;
+		const toolId = toolUse.id; // 🔧 提取toolId用于前端元素管理
 
 		switch (toolName) {
 			case 'read_file':
 				return JSON.stringify({
+					toolId,
 					tool: 'readFile',
 					path: params.path
 				});
 
 			case 'list_files':
 				return JSON.stringify({
+					toolId,
 					tool: 'listFiles',
 					path: params.path,
 					recursive: params.recursive || false
@@ -1481,6 +1550,7 @@ export class TaskService extends Disposable {
 
 			case 'search_files':
 				return JSON.stringify({
+					toolId,
 					tool: 'searchFiles',
 					path: params.path,
 					regex: params.regex
@@ -1488,30 +1558,35 @@ export class TaskService extends Disposable {
 
 			case 'list_code_definition_names':
 				return JSON.stringify({
+					toolId,
 					tool: 'listCodeDefinitionNames',
 					path: params.path
 				});
 
 			case 'write_to_file':
 				return JSON.stringify({
+					toolId,
 					tool: 'newFileCreated',
 					path: params.path
 				});
 
 			case 'apply_diff':
 				return JSON.stringify({
+					toolId,
 					tool: 'appliedDiff',
 					path: params.path
 				});
 
 			case 'edit_file':
 				return JSON.stringify({
+					toolId,
 					tool: 'editedExistingFile',
 					path: params.target_file
 				});
 
 			case 'insert_content':
 				return JSON.stringify({
+					toolId,
 					tool: 'insertContent',
 					path: params.path,
 					line: params.line
@@ -1519,23 +1594,42 @@ export class TaskService extends Disposable {
 
 			case 'execute_command':
 				return JSON.stringify({
+					toolId,
 					tool: 'executeCommand',
 					command: params.command?.substring(0, 100) + (params.command?.length > 100 ? '...' : '')
 				});
 
 			case 'ask_followup_question':
 				return JSON.stringify({
+					toolId,
 					tool: 'askFollowupQuestion',
 					question: params.question?.substring(0, 100) + (params.question?.length > 100 ? '...' : '')
 				});
 
 			case 'attempt_completion':
 				return JSON.stringify({
+					toolId,
 					tool: 'attemptCompletion'
+				});
+
+			case 'skill':
+				return JSON.stringify({
+					toolId,
+					tool: 'skill',
+					skillName: params.skill_name || params.name || 'unknown'
+				});
+
+			case 'task':
+				return JSON.stringify({
+					toolId,
+					tool: 'task',
+					description: params.description || 'unknown',
+					subagentType: params.subagent_type || 'unknown'
 				});
 
 			default:
 				return JSON.stringify({
+					toolId,
 					tool: toolName,
 					params: Object.keys(params || {})
 				});

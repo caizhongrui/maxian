@@ -148,35 +148,41 @@ class AuthStartupContribution extends Disposable implements IWorkbenchContributi
 			});
 		}
 
-		// 1. 首先尝试使用存储的凭据自动登录（包括 token）
+		// 1. 首先尝试使用存储的凭据自动登录（包括 token 和密码）
+		// authService.autoLogin() 会从 StorageService 读取凭据
 		const autoLoginSuccess = await this.authService.autoLogin();
 		if (autoLoginSuccess) {
 			console.log('[Auth] 自动登录成功');
+			// 清理旧的 SecretStorage 中的密码（向后兼容迁移）
+			await this.secretStorageService.delete(AuthStartupContribution.PASSWORD_KEY);
 			return;
 		}
 
-		// 2. 自动登录失败，尝试使用配置文件中的用户名密码
+		// 2. 向后兼容：尝试从旧的 SecretStorage 读取密码（用于数据迁移）
 		const username = this.configurationService.getValue<string>('zhikai.auth.username');
-		const password = await this.secretStorageService.get(AuthStartupContribution.PASSWORD_KEY);
+		const legacyPassword = await this.secretStorageService.get(AuthStartupContribution.PASSWORD_KEY);
 
-		// 配置不完整，显示登录对话框
-		if (!apiUrl || !username || !password) {
-			await this.showLoginDialog();
-			return;
+		if (apiUrl && username && legacyPassword) {
+			console.log('[Auth] 检测到旧版本的密码存储，尝试迁移...');
+			try {
+				// 使用旧密码登录，登录成功后会自动保存到新位置（StorageService）
+				await this.authService.login({
+					username,
+					password: legacyPassword,
+					rememberMe: true
+				});
+				console.log('[Auth] 旧密码迁移成功');
+				// 清理旧的 SecretStorage
+				await this.secretStorageService.delete(AuthStartupContribution.PASSWORD_KEY);
+				return;
+			} catch (error) {
+				console.warn('[Auth] 旧密码迁移失败，清理旧数据');
+				await this.secretStorageService.delete(AuthStartupContribution.PASSWORD_KEY);
+			}
 		}
 
-		// 尝试使用配置文件登录
-		try {
-			await this.authService.login({
-				username,
-				password,
-				rememberMe: true
-			});
-			console.log('[Auth] 使用配置文件登录成功');
-		} catch (error) {
-			// 登录失败，显示登录对话框
-			await this.showLoginDialog();
-		}
+		// 3. 没有任何保存的凭据，显示登录对话框
+		await this.showLoginDialog();
 	}
 
 	/**

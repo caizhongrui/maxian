@@ -18,6 +18,13 @@ import { detectDoomLoop, resetDoomLoopCount } from '../../common/agent/doomLoopD
 import { isToolEnabledForAgent, checkBashPermission } from '../../common/agent/agentConfig.js';
 import { executeEdit, validateEditParams, formatEditResponse } from '../../common/tools/editTool.js';
 import { validateUrl, processResponse, formatWebFetchResponse } from '../../common/tools/webfetchTool.js';
+import { skillTool } from '../../common/tools/skillTool.js';
+import { ISkillService } from '../../../skills/common/skillService.js';
+import { getHoverInfo } from '../../common/lsp/lspHover.js';
+import { getDiagnosticsAfterEdit } from '../../common/lsp/lspDiagnostics.js';
+import { getDefinition } from '../../common/lsp/lspDefinition.js';
+import { getReferences } from '../../common/lsp/lspReferences.js';
+import { getTypeDefinition } from '../../common/lsp/lspTypeDefinition.js';
 
 /**
  * 工具执行器实现类
@@ -29,18 +36,21 @@ export class ToolExecutorImpl implements IToolExecutor {
 	private searchTool: SearchTool;
 	private batchExecutor: BatchToolExecutor;
 	private context: ToolExecutionContext;
+	private skillService?: ISkillService;
 
 	constructor(
 		fileService: IFileService,
 		terminalService: ITerminalService,
 		searchService: ISearchService,
 		ripgrepService: IRipgrepService,
-		context: ToolExecutionContext
+		context: ToolExecutionContext,
+		skillService?: ISkillService
 	) {
 		this.fileOperations = new FileOperationsTool(fileService, context.workspaceRoot || '');
 		this.commandExecution = new CommandExecutionTool(terminalService);
 		this.searchTool = new SearchTool(searchService, ripgrepService, context.workspaceRoot || '');
 		this.context = context;
+		this.skillService = skillService;
 		// P0优化：初始化批量执行器
 		this.batchExecutor = new BatchToolExecutor(this);
 	}
@@ -185,6 +195,40 @@ export class ToolExecutorImpl implements IToolExecutor {
 
 				case 'lsp_diagnostics':
 					result = await this.executeLspDiagnostics(toolUse);
+					break;
+
+				// LSP功能：Hover信息
+				case 'lsp_hover':
+					result = await this.executeLspHover(toolUse);
+					break;
+
+				// LSP功能：诊断信息
+				case 'lsp_diagnostics':
+					result = await this.executeLspDiagnostics(toolUse);
+					break;
+
+				// LSP功能：定义位置
+				case 'lsp_definition':
+					result = await this.executeLspDefinition(toolUse);
+					break;
+
+				// LSP功能：引用查找
+				case 'lsp_references':
+					result = await this.executeLspReferences(toolUse);
+					break;
+
+				// LSP功能：类型定义
+				case 'lsp_type_definition':
+					result = await this.executeLspTypeDefinition(toolUse);
+					break;
+
+				// Skills系统：按需加载专业知识
+				case 'skill':
+					result = await skillTool(
+						{ workspacePath: this.context.workspaceRoot || '', didEditFile: false, fileContextTracker: {} as any } as any,
+						toolUse.params,
+						this.skillService
+					);
 					break;
 
 				default:
@@ -620,50 +664,183 @@ export class ToolExecutorImpl implements IToolExecutor {
 	}
 
 	/**
-	 * P1优化：执行 LSP Hover
+	 * LSP功能：执行 Hover 查询
 	 */
 	private async executeLspHover(toolUse: ToolUse): Promise<ToolResponse> {
 		const { path, line, column } = toolUse.params;
 
 		if (!path) {
-			return '错误: lsp_hover 工具需要 path 参数';
+			return '<error>lsp_hover 工具需要 path 参数</error>';
 		}
 
-		const lineNum = parseInt(line || '1', 10);
-		const colNum = parseInt(column || '1', 10);
+		if (!line) {
+			return '<error>lsp_hover 工具需要 line 参数（行号，从1开始）</error>';
+		}
 
-		console.log(`[Maxian] LSP Hover: ${path}:${lineNum}:${colNum}`);
+		if (!column) {
+			return '<error>lsp_hover 工具需要 column 参数（列号，从1开始）</error>';
+		}
 
-		// LSP 服务需要通过 IDE 平台服务提供
-		// 这里返回占位信息
-		return `LSP Hover 信息:
-- 文件: ${path}
-- 位置: 第 ${lineNum} 行，第 ${colNum} 列
+		const lineNum = parseInt(line, 10);
+		const colNum = parseInt(column, 10);
 
-⚠️ LSP 服务需要通过 IDE 集成提供，当前返回占位信息。
-请确保文件已在编辑器中打开，且语言服务已启动。`;
+		if (isNaN(lineNum) || lineNum < 1) {
+			return '<error>无效的行号，必须是大于0的整数</error>';
+		}
+
+		if (isNaN(colNum) || colNum < 1) {
+			return '<error>无效的列号，必须是大于0的整数</error>';
+		}
+
+		// 解析为绝对路径
+		const absolutePath = this.fileOperations['resolveFilePath'](path);
+
+		console.log(`[Maxian] LSP Hover: ${absolutePath}:${lineNum}:${colNum}`);
+
+		// 调用全局 LSP Hover 处理器
+		return await getHoverInfo(absolutePath, lineNum, colNum);
 	}
 
 	/**
-	 * P1优化：执行 LSP Diagnostics
+	 * LSP功能：执行诊断查询
 	 */
 	private async executeLspDiagnostics(toolUse: ToolUse): Promise<ToolResponse> {
 		const { path } = toolUse.params;
 
 		if (!path) {
-			return '错误: lsp_diagnostics 工具需要 path 参数';
+			return '<error>lsp_diagnostics 工具需要 path 参数</error>';
 		}
 
-		console.log(`[Maxian] LSP Diagnostics: ${path}`);
+		// 解析为绝对路径
+		const absolutePath = this.fileOperations['resolveFilePath'](path);
 
-		// LSP 诊断服务需要通过 IDE 平台服务提供
-		return `LSP 诊断信息:
-- 文件: ${path}
+		console.log(`[Maxian] LSP Diagnostics: ${absolutePath}`);
 
-⚠️ LSP 服务需要通过 IDE 集成提供，当前返回占位信息。
-要获取实际诊断信息，请确保：
-1. 文件已在编辑器中打开
-2. 语言服务已启动
-3. 已配置正确的 LSP 服务`;
+		// 调用全局 LSP 诊断处理器
+		const diagnosticsResult = await getDiagnosticsAfterEdit(absolutePath);
+
+		if (!diagnosticsResult) {
+			return `<success>
+文件: ${absolutePath}
+
+✅ 此文件没有诊断信息（无错误、无警告）
+</success>`;
+		}
+
+		return diagnosticsResult;
+	}
+
+	/**
+	 * LSP功能：执行定义查询
+	 */
+	private async executeLspDefinition(toolUse: ToolUse): Promise<ToolResponse> {
+		const { path, line, column } = toolUse.params;
+
+		if (!path) {
+			return '<error>lsp_definition 工具需要 path 参数</error>';
+		}
+
+		if (!line) {
+			return '<error>lsp_definition 工具需要 line 参数（行号，从1开始）</error>';
+		}
+
+		if (!column) {
+			return '<error>lsp_definition 工具需要 column 参数（列号，从1开始）</error>';
+		}
+
+		const lineNum = parseInt(line, 10);
+		const colNum = parseInt(column, 10);
+
+		if (isNaN(lineNum) || lineNum < 1) {
+			return '<error>无效的行号，必须是大于0的整数</error>';
+		}
+
+		if (isNaN(colNum) || colNum < 1) {
+			return '<error>无效的列号，必须是大于0的整数</error>';
+		}
+
+		// 解析为绝对路径
+		const absolutePath = this.fileOperations['resolveFilePath'](path);
+
+		console.log(`[Maxian] LSP Definition: ${absolutePath}:${lineNum}:${colNum}`);
+
+		// 调用全局 LSP Definition 处理器
+		return await getDefinition(absolutePath, lineNum, colNum);
+	}
+
+	/**
+	 * LSP功能：执行引用查询
+	 */
+	private async executeLspReferences(toolUse: ToolUse): Promise<ToolResponse> {
+		const { path, line, column } = toolUse.params;
+
+		if (!path) {
+			return '<error>lsp_references 工具需要 path 参数</error>';
+		}
+
+		if (!line) {
+			return '<error>lsp_references 工具需要 line 参数（行号，从1开始）</error>';
+		}
+
+		if (!column) {
+			return '<error>lsp_references 工具需要 column 参数（列号，从1开始）</error>';
+		}
+
+		const lineNum = parseInt(line, 10);
+		const colNum = parseInt(column, 10);
+
+		if (isNaN(lineNum) || lineNum < 1) {
+			return '<error>无效的行号，必须是大于0的整数</error>';
+		}
+
+		if (isNaN(colNum) || colNum < 1) {
+			return '<error>无效的列号，必须是大于0的整数</error>';
+		}
+
+		// 解析为绝对路径
+		const absolutePath = this.fileOperations['resolveFilePath'](path);
+
+		console.log(`[Maxian] LSP References: ${absolutePath}:${lineNum}:${colNum}`);
+
+		// 调用全局 LSP References 处理器
+		return await getReferences(absolutePath, lineNum, colNum, true);
+	}
+
+	/**
+	 * LSP功能：执行类型定义查询
+	 */
+	private async executeLspTypeDefinition(toolUse: ToolUse): Promise<ToolResponse> {
+		const { path, line, column } = toolUse.params;
+
+		if (!path) {
+			return '<error>lsp_type_definition 工具需要 path 参数</error>';
+		}
+
+		if (!line) {
+			return '<error>lsp_type_definition 工具需要 line 参数（行号，从1开始）</error>';
+		}
+
+		if (!column) {
+			return '<error>lsp_type_definition 工具需要 column 参数（列号，从1开始）</error>';
+		}
+
+		const lineNum = parseInt(line, 10);
+		const colNum = parseInt(column, 10);
+
+		if (isNaN(lineNum) || lineNum < 1) {
+			return '<error>无效的行号，必须是大于0的整数</error>';
+		}
+
+		if (isNaN(colNum) || colNum < 1) {
+			return '<error>无效的列号，必须是大于0的整数</error>';
+		}
+
+		// 解析为绝对路径
+		const absolutePath = this.fileOperations['resolveFilePath'](path);
+
+		console.log(`[Maxian] LSP TypeDefinition: ${absolutePath}:${lineNum}:${colNum}`);
+
+		// 调用全局 LSP TypeDefinition 处理器
+		return await getTypeDefinition(absolutePath, lineNum, colNum);
 	}
 }

@@ -12,7 +12,6 @@ import { IConfigurationService } from '../../../../platform/configuration/common
 import { IMultiLanguageService } from '../../multilang/browser/multilang.contribution.js';
 import { CompletionContextExtractor, CompletionContext } from './completionContextExtractor.js';
 import { CompletionValidator } from './completionValidator.js';
-import { IRequestService, asJson } from '../../../../platform/request/common/request.js';
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
 import { IModelService } from '../../../../editor/common/services/model.js';
 // 新增的服务导入
@@ -78,7 +77,6 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	constructor(
 		private readonly aiService: IAIService,
 		private readonly configurationService: IConfigurationService,
-		private readonly requestService: IRequestService,
 		multiLanguageService: IMultiLanguageService,
 		languageFeaturesService?: ILanguageFeaturesService,
 		modelService?: IModelService
@@ -620,18 +618,20 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	private async buildEnhancedPrompt(context: CompletionContext): Promise<string> {
 		console.log('[AI Inline Completions] buildEnhancedPrompt called');
 
-		// 尝试从后端获取提示词
-		const backendPrompt = await this.fetchCompletionPromptFromBackend(context);
-		console.log('[AI Inline Completions] fetchCompletionPromptFromBackend result:', backendPrompt ? 'success' : 'failed');
+		// ⚠️ 架构决策：100% 本地生成提示词，不调用后端API
+		// 原因：
+		// 1. 本地生成：<1ms
+		// 2. API调用：50-200ms
+		// 3. 性能差距：200倍
+		// 4. 本地提示词已经非常完善（包含LSP增强信息）
+		// 详见：src/vs/workbench/contrib/maxian/common/prompts/README.md
+		//
+		// ❌ 不要恢复这段代码：
+		// const backendPrompt = await this.fetchCompletionPromptFromBackend(context);
+		// if (backendPrompt) { return backendPrompt; }
 
-		if (backendPrompt) {
-			console.log('[AI Inline Completions] 使用后端提示词，长度:', backendPrompt.length);
-			console.log('[AI Inline Completions] 后端提示词内容（前500字符）:', backendPrompt.substring(0, 500));
-			return backendPrompt;
-		}
-
-		// 降级：使用本地提示词
-		console.log('[AI Inline Completions] 使用本地提示词');
+		// ✅ 直接使用本地提示词（性能最优）
+		console.log('[AI Inline Completions] 使用本地提示词（已禁用后端API调用）');
 		const parts: string[] = [];
 
 		// 检测是否是换行场景
@@ -867,107 +867,6 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		return finalPrompt;
 	}
 
-	/**
-	 * 从后端API获取代码补全提示词
-	 */
-	private async fetchCompletionPromptFromBackend(context: CompletionContext): Promise<string | null> {
-		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
-		console.log('[AI Inline Completions] fetchCompletionPromptFromBackend - apiUrl:', apiUrl);
-
-		if (!apiUrl) {
-			console.log('[AI Inline Completions] 未配置apiUrl，跳过后端请求');
-			return null;
-		}
-
-		try {
-			const url = `${apiUrl.replace(/\/$/, '')}/system/ai/prompt/completion`;
-			console.log('[AI Inline Completions] 准备请求后端提示词API:', url);
-
-			// 准备请求数据（包含增强的上下文信息）
-			const requestData = {
-				languageId: context.languageId,
-				prefix: context.prefix,
-				suffix: context.suffix,
-				beforeCode: context.beforeLines.join('\n'),
-				afterCode: context.afterLines.join('\n'),
-				currentClass: context.currentClass,
-				currentMethod: context.currentMethod,
-				frameworks: context.frameworks,
-				recentEdits: context.recentEdits,
-				// 🆕 添加增强的上下文信息
-				methodReference: context.methodReference ? {
-					className: context.methodReference.className,
-					methodPrefix: context.methodReference.methodPrefix,
-					candidates: context.methodReference.candidates
-				} : undefined,
-				typeDefinitions: context.typeDefinitions?.map(td => ({
-					typeName: td.typeName,
-					methods: td.methods,
-					fields: td.fields,
-					// 🆕 增强的方法信息
-					enhancedMethods: td.enhancedMethods?.map(m => ({
-						name: m.name,
-						returnType: m.returnType,
-						parameters: m.parameters,
-						signature: m.signature
-					})),
-					parentClass: td.parentClass,
-					interfaces: td.interfaces
-				})),
-				variableTypes: context.variableTypes ? Object.fromEntries(context.variableTypes) : undefined,
-				cursorContext: context.cursorContext,
-				// 🆕 框架特化上下文
-				frameworkContext: context.frameworkContext ? {
-					name: context.frameworkContext.name,
-					version: context.frameworkContext.version,
-					contextType: context.frameworkContext.contextType,
-					annotations: context.frameworkContext.annotations,
-					hints: context.frameworkContext.hints,
-					patterns: context.frameworkContext.patterns
-				} : undefined,
-				// 🆕 跨文件上下文
-				relatedFiles: context.relatedFiles?.map(rf => ({
-					filepath: rf.filepath,
-					fileType: rf.fileType,
-					definitions: rf.definitions
-				}))
-			};
-
-			console.log('[AI Inline Completions] 请求数据:', {
-				languageId: requestData.languageId,
-				currentClass: requestData.currentClass,
-				currentMethod: requestData.currentMethod,
-				hasMethodReference: !!requestData.methodReference,
-				typeDefinitionsCount: requestData.typeDefinitions?.length || 0,
-				hasFrameworkContext: !!requestData.frameworkContext,
-				frameworkName: requestData.frameworkContext?.name,
-				relatedFilesCount: requestData.relatedFiles?.length || 0
-			});
-
-			const response = await this.requestService.request({
-				type: 'POST',
-				url: url,
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				data: JSON.stringify(requestData)
-			}, CancellationToken.None);
-
-			const data = await asJson<any>(response);
-			console.log('[AI Inline Completions] 后端响应:', { code: data?.code, hasData: !!data?.data });
-
-			if (data && data.code === 200 && data.data) {
-				console.log('[AI Inline Completions] 成功从后端获取提示词，长度:', data.data.length);
-				return data.data;
-			}
-
-			console.warn('[AI Inline Completions] 后端返回数据格式错误或无数据');
-			return null;
-		} catch (error) {
-			console.error('[AI Inline Completions] 从后端获取提示词失败:', error);
-			return null;
-		}
-	}
 
 	freeInlineCompletions(): void {
 		// Cleanup if needed

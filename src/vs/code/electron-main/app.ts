@@ -124,6 +124,8 @@ import { IDatabaseMainService } from '../../workbench/contrib/database/electron-
 import { DatabaseServiceImpl } from '../../workbench/contrib/database/node/databaseServiceImpl.js';
 import { IRepoMapService } from '../../workbench/contrib/maxian/common/repomap/repoMapService.js';
 import { RepoMapService } from '../../workbench/contrib/maxian/node/repomap/repoMapServiceImpl.js';
+import { ISkillService } from '../../workbench/contrib/skills/common/skillService.js';
+import { SkillServiceImpl } from '../../workbench/contrib/skills/node/skillServiceImpl.js';
 
 /**
  * The main VS Code application. There will only ever be one instance,
@@ -1130,6 +1132,9 @@ export class CodeApplication extends Disposable {
 		// RepoMap
 		services.set(IRepoMapService, new SyncDescriptor(RepoMapService, undefined, true));
 
+		// Skills System
+		services.set(ISkillService, new SyncDescriptor(SkillServiceImpl, undefined, true));
+
 		// Init services that require it
 		await Promises.settled([
 			backupMainService.initialize(),
@@ -1265,6 +1270,20 @@ export class CodeApplication extends Disposable {
 		// RepoMap
 		const repoMapChannel = ProxyChannel.fromService(accessor.get(IRepoMapService), disposables);
 		mainProcessElectronServer.registerChannel('repoMap', repoMapChannel);
+
+		// Skills System
+		this.logService.info('[App] Getting ISkillService...');
+		const skillService = accessor.get(ISkillService);
+		this.logService.info('[App] ISkillService obtained, initializing...');
+		// 初始化Skills服务（异步，但不阻塞）
+		skillService.initialize().then(() => {
+			this.logService.info('[App] Skills service initialized successfully');
+		}).catch(error => {
+			this.logService.error('[App] Failed to initialize Skills service:', error);
+		});
+		const skillChannel = ProxyChannel.fromService(skillService, disposables);
+		mainProcessElectronServer.registerChannel('skill', skillChannel);
+		this.logService.info('[App] Skills channel registered');
 	}
 
 	private async openFirstWindow(accessor: ServicesAccessor, initialProtocolUrls: IInitialProtocolUrls | undefined): Promise<ICodeWindow[]> {

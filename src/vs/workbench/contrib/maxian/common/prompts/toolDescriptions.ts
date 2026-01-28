@@ -288,19 +288,206 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 
 **参数**：url（网址）、useCache(可选)、format(可选)`,
 
-	// P1优化：LSP悬停
+	// LSP功能：Hover信息
 	lsp_hover: `## lsp_hover
-获取代码位置的LSP悬停信息
+获取代码符号的类型信息和文档
 
-**使用**：获取类型、函数签名、文档等
-**参数**：path（文件路径）、line（行号）、column（列号）`,
+**何时使用**（用户这样说时自动使用）：
+- "这个变量是什么类型？" → 查看变量类型
+- "这个函数的参数是什么？" → 查看函数签名
+- "XXX 是做什么的？" → 查看符号文档
+- "这个函数返回什么？" → 查看返回类型
+- "这个接口有哪些属性？" → 查看接口定义
+- 理解第三方库的API时
+- 查看函数/类的注释文档
 
-	// P1优化：LSP诊断
+**参数**：
+- path: 文件路径（必需）
+- line: 行号，从1开始（必需）
+- column: 列号，从1开始（必需）
+
+**示例**：
+\`\`\`
+lsp_hover(path="src/utils.ts", line=10, column=15)
+\`\`\`
+
+**提示**：
+- 先用 read_file 找到符号的位置
+- 自动触发：无需用户明确说"使用lsp_hover"`,
+
+	// LSP功能：诊断信息
 	lsp_diagnostics: `## lsp_diagnostics
-获取文件的LSP诊断信息（错误、警告）
+获取文件的诊断信息（编译错误、警告）
 
-**使用**：获取编译错误、类型错误、lint警告等
-**参数**：path（文件路径）`
+**何时使用**（用户这样说时自动使用）：
+- "检查这个文件有没有错误" → 检查错误
+- "这段代码有问题吗？" → 诊断问题
+- "为什么报错了？" → 查看错误详情
+- "有什么警告吗？" → 查看警告
+- "代码能通过编译吗？" → 验证编译
+- 修改代码后验证是否引入错误
+- 重构前检查当前错误状态
+- 确保代码质量和类型安全
+
+**参数**：
+- path: 文件路径（必需）
+
+**示例**：
+\`\`\`
+lsp_diagnostics(path="src/example.ts")
+\`\`\`
+
+**提示**：
+- ⚠️ 注意：文件保存后会自动注入诊断到 System Prompt
+- 修改代码后主动调用以确认修复成功
+- 返回所有错误和警告，包括行号和详细信息
+- 自动触发：无需用户明确说"使用lsp_diagnostics"`,
+
+	// LSP功能：定义位置
+	lsp_definition: `## lsp_definition
+跳转到符号的定义位置
+
+**何时使用**（用户这样说时自动使用）：
+- "这个函数在哪定义的？" → 查找函数定义
+- "XXX 是在哪里实现的？" → 查找实现位置
+- "跳转到定义" → 导航到声明
+- "查看这个类的完整代码" → 找到类定义
+- "这个接口在哪？" → 查找接口声明
+- 理解代码结构和跨文件导航
+- 查看导入的模块源代码
+
+**参数**：
+- path: 文件路径（必需）
+- line: 行号，从1开始（必需）
+- column: 列号，从1开始（必需）
+
+**示例**：
+\`\`\`
+lsp_definition(path="src/app.ts", line=15, column=20)
+\`\`\`
+
+**工作流**：
+1. 先用 read_file 找到符号位置
+2. 调用 lsp_definition 获取定义位置
+3. 用 read_file 查看定义的完整代码
+
+**提示**：
+- 自动触发：无需用户明确说"使用lsp_definition"
+- 配合 lsp_references 了解符号的使用情况`,
+
+	// LSP功能：引用查找
+	lsp_references: `## lsp_references
+查找符号的所有使用位置
+
+**何时使用**（用户这样说时自动使用）：
+- "这个函数在哪里被调用？" → 查找调用位置
+- "XXX 被用在哪些地方？" → 查找所有引用
+- "我能删除这个吗？" → 检查是否被使用
+- "这个变量有几处引用？" → 统计使用次数
+- "重命名会影响哪些文件？" → 检查影响范围
+- 重构前评估修改影响
+- 删除代码前确认安全性
+- 理解函数/类的使用模式
+
+**参数**：
+- path: 文件路径（必需）
+- line: 行号，从1开始（必需）
+- column: 列号，从1开始（必需）
+
+**示例**：
+\`\`\`
+lsp_references(path="src/utils.ts", line=10, column=15)
+\`\`\`
+
+**返回格式**：
+- 按文件分组显示所有引用
+- 包含每个引用的精确位置
+- 显示总引用数和文件数
+
+**提示**：
+- 自动触发：无需用户明确说"使用lsp_references"
+- 修改/删除符号前必须检查所有引用
+- 结果包含定义位置和所有使用位置`,
+
+	// LSP功能：类型定义
+	lsp_type_definition: `## lsp_type_definition
+跳转到类型的定义位置
+
+**何时使用**（用户这样说时自动使用）：
+- "这个变量的类型是什么？" → 查看类型定义
+- "User 接口长什么样？" → 查看接口结构
+- "这个类型的完整定义" → 跳转到类型
+- "查看这个接口的所有属性" → 查看类型详情
+- 理解变量的类型结构
+- 查看接口/类型别名的完整定义
+- 理解泛型的具体类型
+
+**参数**：
+- path: 文件路径（必需）
+- line: 行号，从1开始（必需）
+- column: 列号，从1开始（必需）
+
+**示例**：
+\`\`\`
+lsp_type_definition(path="src/app.ts", line=8, column=10)
+\`\`\`
+
+**与 lsp_definition 的关键区别**：
+\`\`\`typescript
+const user: User = {...};
+// lsp_definition(user) → 跳到变量声明（这一行）
+// lsp_type_definition(user) → 跳到 interface User 定义
+\`\`\`
+
+**工作流**：
+1. 用户问"这个变量是什么类型？" → 使用 lsp_type_definition
+2. 找到类型定义位置后 → 使用 read_file 查看完整定义
+3. 如果需要，使用 lsp_references 查看类型的使用情况
+
+**提示**：
+- 自动触发：无需用户明确说"使用lsp_type_definition"
+- TypeScript/JavaScript 中特别有用
+- 配合 read_file 查看完整类型定义`,
+
+	// Skills系统：按需加载专业知识
+	skill: `## skill 【主动使用！】
+按需加载专业领域知识和最佳实践（20个内置Skills）
+
+**重要**：主动使用Skills提升工作质量，而不是等待用户要求！
+
+**通用开发Skills**：
+- 代码审查时 → skill("code-review")
+- 编写测试时 → skill("testing")
+- 性能优化时 → skill("performance")
+- 安全审查时 → skill("security")
+- 重构代码时 → skill("refactoring")
+- 调试问题时 → skill("debugging")
+- 设计API时 → skill("api-design")
+- 架构设计时 → skill("architecture")
+- 编写文档时 → skill("documentation")
+- Git操作时 → skill("git-workflow")
+
+**Java后端开发Skills**：
+- Spring Security时 → skill("spring-security")
+- MyBatis-Plus时 → skill("mybatis-plus")
+- Redis集成时 → skill("redis-integration")
+- Spring Boot时 → skill("spring-boot")
+- JPA/Hibernate时 → skill("jpa-hibernate")
+- Java规范时 → skill("java-best-practices")
+
+**Vue前端开发Skills**：
+- Vue 3开发时 → skill("vue3-composition-api")
+- Pinia状态时 → skill("pinia-state-management")
+- Element Plus时 → skill("element-plus")
+
+**Token优化**：
+- Skills已内置，无需用户配置
+- 完整内容(500-2000 tokens)按需加载
+- 平均节省45% tokens
+
+**参数**：skill_name（Skill的slug名称）
+
+**示例**：<skill><skill_name>spring-security</skill_name></skill>`
 };
 
 /**

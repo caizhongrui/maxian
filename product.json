@@ -652,22 +652,6 @@
         },
         "publisherDisplayName": "Keisuke Kato"
       }
-    },
-    {
-      "name": "lihuiwang.vue-alias-skip",
-      "version": "0.0.25",
-      "sha256": "0fa94ec3ee75ea2b07b64acf88a3a2ef2c7bbde3b95fde38023ce1d3bbd3e611",
-      "repo": "https://github.com/lihuiwang/vue-alias-skip",
-      "metadata": {
-        "id": "lihuiwang.vue-alias-skip",
-        "publisherId": {
-          "publisherId": "",
-          "publisherName": "lihuiwang",
-          "displayName": "Lihui Wang",
-          "flags": "verified"
-        },
-        "publisherDisplayName": "Lihui Wang"
-      }
     }
   ],
   "extensionRecommendations": [

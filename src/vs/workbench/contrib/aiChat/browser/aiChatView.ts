@@ -20,7 +20,7 @@ import { IAIService } from '../../../../platform/ai/common/ai.js';
 import { $, append, clearNode, addDisposableListener } from '../../../../base/browser/dom.js';
 import { MarkdownString } from '../../../../base/common/htmlContent.js';
 import { MarkdownRenderer } from '../../../../editor/browser/widget/markdownRenderer/browser/markdownRenderer.js';
-import { ISecretStorageService } from '../../../../platform/secrets/common/secrets.js';
+import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
 import { IProjectAnalyzerService } from '../../../services/projectAnalyzer/common/projectAnalyzer.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
@@ -70,12 +70,12 @@ export class AIChatView extends ViewPane {
 		@IHoverService hoverService: IHoverService,
 		@IAIChatService private readonly aiChatService: IAIChatService,
 		@IAIService private readonly aiService: IAIService,
-		@ISecretStorageService private readonly secretStorageService: ISecretStorageService,
 		@IProjectAnalyzerService private readonly projectAnalyzer: IProjectAnalyzerService,
 		@IWorkspaceContextService private readonly workspaceService: IWorkspaceContextService,
 		@IFileService private readonly fileService: IFileService,
 		@ITextFileService private readonly textFileService: ITextFileService,
-		@IEditorService private readonly editorService: IEditorService
+		@IEditorService private readonly editorService: IEditorService,
+		@IStorageService private readonly storageService: IStorageService
 	) {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, telemetryService, hoverService);
 
@@ -344,11 +344,20 @@ export class AIChatView extends ViewPane {
 	}
 
 	/**
-	 * 从加密存储获取密码
+	 * 从存储获取密码
+	 * ⚠️ 架构修复：从 StorageService 读取凭据（与 authService 一致）
 	 */
 	private async getPassword(): Promise<string | undefined> {
-		const PASSWORD_KEY = 'zhikai.auth.password';
-		return await this.secretStorageService.get(PASSWORD_KEY);
+		const storedCredentials = this.storageService.get('zhikai.auth.credentials', StorageScope.APPLICATION);
+		if (!storedCredentials) {
+			return undefined;
+		}
+		try {
+			const credentials = JSON.parse(storedCredentials);
+			return credentials.password;
+		} catch {
+			return undefined;
+		}
 	}
 
 	/**

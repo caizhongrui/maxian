@@ -6,7 +6,7 @@
 /**
  * 工具组类型 - 与Kilocode保持一致，扩展支持新工具
  */
-export type ToolGroup = 'read' | 'edit' | 'browser' | 'command' | 'mcp' | 'web' | 'lsp' | 'agent';
+export type ToolGroup = 'read' | 'edit' | 'browser' | 'command' | 'mcp' | 'web' | 'lsp' | 'agent' | 'skills';
 
 /**
  * 组选项配置
@@ -75,6 +75,9 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 	},
 	agent: {
 		tools: ['task']  // P1优化：子Agent委托
+	},
+	skills: {
+		tools: ['skill']  // Skills系统：按需加载专业知识
 	}
 };
 
@@ -156,7 +159,7 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 		roleDefinition: '你是码弦（Maxian），一位高技能的软件工程师，在多种编程语言、框架、设计模式和最佳实践方面拥有丰富的知识。',
 		whenToUse: '当你需要编写、修改或重构代码时使用此模式。适合实现功能、修复bug、创建新文件，或在任何编程语言或框架中进行代码改进。',
 		description: '编写、修改和重构代码',
-		groups: ['read', 'edit', 'command', 'web', 'lsp', 'agent']  // Code模式有完整的读写、命令、网页、LSP和子Agent权限
+		groups: ['read', 'edit', 'command', 'web', 'lsp', 'agent', 'skills']  // Code模式有完整的读写、命令、网页、LSP、子Agent和Skills权限
 	},
 	{
 		slug: 'ask',
@@ -175,7 +178,7 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 		roleDefinition: '你是码弦（Maxian），一位专门从事系统问题诊断和解决的软件调试专家。',
 		whenToUse: '当你在排查问题、调查错误或诊断问题时使用此模式。专门从事系统调试、添加日志、分析堆栈跟踪，以及在应用修复前识别根本原因。',
 		description: '诊断和修复软件问题',
-		groups: ['read', 'edit', 'command', 'web', 'lsp', 'agent'],  // Debug模式有完整权限
+		groups: ['read', 'edit', 'command', 'web', 'lsp', 'agent', 'skills'],  // Debug模式有完整权限
 		customInstructions: '思考5-7个可能导致问题的不同来源，将这些来源精简为1-2个最可能的来源，然后添加日志来验证你的假设。在修复问题之前，明确要求用户确认诊断。'
 	},
 	{

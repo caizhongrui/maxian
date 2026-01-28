@@ -411,4 +411,7 @@ import './contrib/codeGen/browser/codeGen.contribution.js';
 // 码弦 (Maxian) - AI Agent
 import './contrib/maxian/browser/maxian.contribution.js';
 
+// Skills System - Professional Domain Knowledge (按需加载)
+import './contrib/skills/browser/skills.contribution.js';
+
 //#endregion

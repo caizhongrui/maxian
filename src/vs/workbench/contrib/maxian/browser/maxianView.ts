@@ -14,9 +14,9 @@ import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
-import { IMaxianService, type ITokenUsageEvent, type ITaskProgressEvent, type IToolInputStreamingEvent, type ITodoListEvent, type ITodoItem } from './maxianService.js';
+import { IMaxianService, type ITokenUsageEvent, type ITaskProgressEvent, type IToolInputStreamingEvent, type IToolCompletedEvent, type ITodoListEvent, type ITodoItem } from './maxianService.js';
 import { $, append, clearNode } from '../../../../base/browser/dom.js';
-import { ISecretStorageService } from '../../../../platform/secrets/common/secrets.js';
+import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
 import { getAllModes, DEFAULT_MODE, type Mode } from '../common/modes/modeTypes.js';
 import { MarkdownRendererDom } from './markdownRendererDom.js';
 import { FileAccess } from '../../../../base/common/network.js';
@@ -66,6 +66,7 @@ export class MaxianView extends ViewPane {
 	private isModeDropdownOpen: boolean = false; // 模式下拉列表是否打开
 	private awaitingUserResponse: boolean = false; // 是否正在等待用户回答AI的问题
 	private currentToolStatusElement: HTMLElement | null = null; // 当前工具状态元素（更新而非新建）
+	private toolStatusElements: Map<string, HTMLElement> = new Map(); // 工具ID到状态元素的映射（支持并行工具）
 	private cancelButton!: HTMLButtonElement; // 取消任务按钮
 	private clearButton!: HTMLButtonElement; // 清空对话按钮
 	// @ts-ignore used in handleConversationCleared
@@ -113,8 +114,8 @@ export class MaxianView extends ViewPane {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IHoverService hoverService: IHoverService,
 		@IMaxianService private readonly maxianService: IMaxianService,
-		@ISecretStorageService private readonly secretStorageService: ISecretStorageService,
-		@IAuthService private readonly authService: IAuthService
+		@IAuthService private readonly authService: IAuthService,
+		@IStorageService private readonly storageService: IStorageService
 	) {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, telemetryService, hoverService);
 	}
@@ -176,6 +177,11 @@ export class MaxianView extends ViewPane {
 		// 监听工具输入流式事件
 		this._register(this.maxianService.onToolInputStreaming(event => {
 			this.handleToolInputStreaming(event);
+		}));
+
+		// 监听工具完成事件
+		this._register(this.maxianService.onToolCompleted(event => {
+			this.handleToolCompleted(event);
 		}));
 
 		// 监听任务列表更新事件
@@ -1761,58 +1767,9 @@ export class MaxianView extends ViewPane {
 			this.currentAiMessageElement = null;
 			this.currentAiMessageText = '';
 
-			// 解析工具信息（格式：正在执行工具: xxx\n参数: {...}）
-			const lines = event.content.split('\n');
-			const toolNameLine = lines[0] || '';
-			const toolName = toolNameLine.replace('正在执行工具: ', '').trim();
-			const paramsLine = lines.slice(1).join('\n'); // 参数部分（包括"参数: "前缀）
-
-			// ========== kilocode风格的工具显示 ==========
-			// Header区域（类似kilocode的headerStyle）
-			const toolHeader = append(this.messageArea, $('div'));
-			toolHeader.style.display = 'flex';
-			toolHeader.style.alignItems = 'center';
-			toolHeader.style.gap = '10px';
-			toolHeader.style.marginBottom = '10px';
-			toolHeader.style.wordBreak = 'break-word';
-
-			// 工具图标（使用codicon）
-			const toolIcon = append(toolHeader, $('span.codicon.codicon-tools'));
-			toolIcon.style.color = 'var(--vscode-foreground)';
-			toolIcon.style.marginBottom = '-1.5px';
-			toolIcon.style.fontSize = '16px';
-
-			// 工具标题（粗体）
-			const toolTitle = append(toolHeader, $('span'));
-			toolTitle.style.fontWeight = 'bold';
-			toolTitle.textContent = `正在执行工具: ${toolName}`;
-
-			// 内容区域（类似kilocode的pl-6，paddingLeft: 1.5rem = 24px）
-			const toolContentWrapper = append(this.messageArea, $('div'));
-			toolContentWrapper.style.paddingLeft = '24px';
-			toolContentWrapper.style.marginBottom = '10px';
-
-			// ToolUseBlock容器
-			const toolUseBlock = append(toolContentWrapper, $('div'));
-			toolUseBlock.style.overflow = 'hidden';
-			toolUseBlock.style.borderRadius = '6px';
-			toolUseBlock.style.padding = '8px';
-			toolUseBlock.style.cursor = 'pointer';
-			toolUseBlock.style.backgroundColor = 'var(--vscode-editor-background)';
-			toolUseBlock.style.border = '1px solid var(--vscode-widget-border)';
-
-			// ToolUseBlockHeader - 显示参数
-			const toolUseHeader = append(toolUseBlock, $('div'));
-			toolUseHeader.style.display = 'flex';
-			toolUseHeader.style.fontFamily = 'var(--vscode-editor-font-family)'; // 等宽字体
-			toolUseHeader.style.alignItems = 'center';
-			toolUseHeader.style.userSelect = 'text'; // 允许选择
-			toolUseHeader.style.fontSize = '12px';
-			toolUseHeader.style.color = 'var(--vscode-descriptionForeground)';
-			toolUseHeader.style.whiteSpace = 'pre-wrap';
-			toolUseHeader.style.wordBreak = 'break-word';
-			toolUseHeader.style.lineHeight = '1.5';
-			toolUseHeader.textContent = paramsLine;
+			// 🔧 使用统一的renderToolExecutionStatus方法来渲染工具状态
+			// 这样可以保持与历史消息渲染的一致性
+			this.renderToolExecutionStatus(event.content);
 
 			this.messageArea.scrollTop = this.messageArea.scrollHeight;
 		} else if (event.type === 'error') {
@@ -1976,6 +1933,11 @@ export class MaxianView extends ViewPane {
 			case 'condense_context':
 				// 上下文压缩 - 显示压缩状态
 				this.renderCondenseContext(message);
+				break;
+
+			case 'system_internal':
+				// 🔧 系统内部消息 - 静默处理，不显示在UI（避免系统提示泄露）
+				console.log('[MaxianView] 系统内部消息（已过滤）:', message.text?.substring(0, 50));
 				break;
 
 			default:
@@ -2281,6 +2243,7 @@ export class MaxianView extends ViewPane {
 
 	/**
 	 * 渲染完成结果（用于completion_result say消息）
+	 * 🔧 使用Markdown渲染以正确显示格式化内容
 	 */
 	private renderCompletionResult(result: string): void {
 		const resultMsg = append(this.messageArea, $('div'));
@@ -2299,11 +2262,12 @@ export class MaxianView extends ViewPane {
 		resultLabel.textContent = '✅ 任务完成';
 
 		const resultContent = append(resultMsg, $('div'));
-		resultContent.style.whiteSpace = 'pre-wrap';
+		resultContent.style.whiteSpace = 'normal'; // 🔧 改为normal以支持markdown渲染
 		resultContent.style.wordBreak = 'break-word';
 		resultContent.style.color = 'var(--vscode-foreground)';
 		resultContent.style.lineHeight = '1.6';
-		resultContent.textContent = result;
+		// 🔧 使用MarkdownRendererDom渲染markdown内容
+		MarkdownRendererDom.renderMarkdown(result, resultContent);
 
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;
 	}
@@ -2402,6 +2366,7 @@ export class MaxianView extends ViewPane {
 	private renderToolExecutionStatus(toolStatusJson: string): void {
 		try {
 			const toolInfo = JSON.parse(toolStatusJson);
+			const toolId = toolInfo.toolId; // 🔧 获取toolId用于元素管理
 
 			// 获取执行状态（默认为running）
 			const status: ToolStatus = toolInfo.status || 'running';
@@ -2478,6 +2443,14 @@ export class MaxianView extends ViewPane {
 					actionText = '搜索网页';
 					detailText = toolInfo.query || '';
 					break;
+				case 'skill':
+					actionText = '加载技能';
+					detailText = toolInfo.skillName || '';
+					break;
+				case 'task':
+					actionText = '创建子任务';
+					detailText = toolInfo.description || '';
+					break;
 				default:
 					actionText = `执行 ${toolInfo.tool}`;
 					detailText = toolInfo.params ? toolInfo.params.join(', ') : '';
@@ -2486,20 +2459,23 @@ export class MaxianView extends ViewPane {
 			// 组合状态文本
 			const fullStatusText = status === 'running' ? `正在${actionText}` : `${actionText} - ${statusText}`;
 
+			// 🔧 使用toolId管理工具状态元素（支持并行工具）
+			let toolStatusElement = toolId ? this.toolStatusElements.get(toolId) : this.currentToolStatusElement;
+
 			// 如果已有工具状态元素，更新内容而不是创建新的
-			if (this.currentToolStatusElement) {
+			if (toolStatusElement) {
 				// 更新卡片状态类
-				this.currentToolStatusElement.classList.remove('tool-running', 'tool-completed', 'tool-error');
+				toolStatusElement.classList.remove('tool-running', 'tool-completed', 'tool-error');
 				if (status === 'running') {
-					this.currentToolStatusElement.classList.add('tool-running');
+					toolStatusElement.classList.add('tool-running');
 				} else if (status === 'completed') {
-					this.currentToolStatusElement.classList.add('tool-completed');
+					toolStatusElement.classList.add('tool-completed');
 				} else if (status === 'error') {
-					this.currentToolStatusElement.classList.add('tool-error');
+					toolStatusElement.classList.add('tool-error');
 				}
 
 				// 更新图标
-				const iconElement = this.currentToolStatusElement.querySelector('.tool-status-icon') as HTMLElement;
+				const iconElement = toolStatusElement.querySelector('.tool-status-icon') as HTMLElement;
 				if (iconElement) {
 					iconElement.className = `codicon ${toolIconClass} tool-status-icon`;
 					if (status === 'running') {
@@ -2508,13 +2484,13 @@ export class MaxianView extends ViewPane {
 				}
 
 				// 更新状态文本
-				const textElement = this.currentToolStatusElement.querySelector('.tool-status-text') as HTMLElement;
+				const textElement = toolStatusElement.querySelector('.tool-status-text') as HTMLElement;
 				if (textElement) {
 					textElement.textContent = fullStatusText;
 				}
 
 				// 更新状态标签
-				const statusBadge = this.currentToolStatusElement.querySelector('.tool-status-badge') as HTMLElement;
+				const statusBadge = toolStatusElement.querySelector('.tool-status-badge') as HTMLElement;
 				if (statusBadge) {
 					statusBadge.textContent = statusText;
 					statusBadge.className = 'maxian-tool-status-badge tool-status-badge';
@@ -2529,7 +2505,7 @@ export class MaxianView extends ViewPane {
 				}
 
 				// 更新详情
-				const detailElement = this.currentToolStatusElement.querySelector('.tool-status-detail') as HTMLElement;
+				const detailElement = toolStatusElement.querySelector('.tool-status-detail') as HTMLElement;
 				if (detailElement) {
 					detailElement.textContent = detailText;
 					detailElement.title = detailText;
@@ -2537,7 +2513,7 @@ export class MaxianView extends ViewPane {
 				}
 
 				// 更新加载动画
-				const loadingDots = this.currentToolStatusElement.querySelector('.tool-loading-dots') as HTMLElement;
+				const loadingDots = toolStatusElement.querySelector('.tool-loading-dots') as HTMLElement;
 				if (loadingDots) {
 					loadingDots.style.display = status === 'running' ? 'inline' : 'none';
 				}
@@ -2590,7 +2566,12 @@ export class MaxianView extends ViewPane {
 				statusBadge.textContent = statusText;
 				statusBadge.style.display = status !== 'running' ? 'inline-block' : 'none';
 
+				// 🔧 保存元素引用
+				toolStatusElement = toolStatusContainer;
 				this.currentToolStatusElement = toolStatusContainer;
+				if (toolId) {
+					this.toolStatusElements.set(toolId, toolStatusContainer);
+				}
 
 				// 动画样式已在 addStyles 中全局添加，无需重复添加
 				const styleId = 'maxian-tool-status-animation';
@@ -2615,7 +2596,7 @@ export class MaxianView extends ViewPane {
 			}
 
 			// U6: 当工具执行完成且有输出时，解析并显示LSP诊断信息
-			if ((status === 'completed' || status === 'error') && this.currentToolStatusElement) {
+			if ((status === 'completed' || status === 'error') && toolStatusElement) {
 				const output = toolInfo.result || toolInfo.output || '';
 				if (output) {
 					const diagnostics = parseDiagnosticsFromToolResult(output);
@@ -2996,7 +2977,6 @@ export class MaxianView extends ViewPane {
 			this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
 			yesButton.disabled = true;
 			noButton.disabled = true;
-			feedbackButton.disabled = true;
 			yesButton.textContent = '已接受';
 		};
 
@@ -3013,64 +2993,7 @@ export class MaxianView extends ViewPane {
 			this.maxianService.handleAskResponse(message.ts, 'noButtonClicked');
 			yesButton.disabled = true;
 			noButton.disabled = true;
-			feedbackButton.disabled = true;
 			noButton.textContent = '已拒绝';
-		};
-
-		// Feedback按钮
-		const feedbackButton = append(buttonContainer, $('button')) as HTMLButtonElement;
-		feedbackButton.textContent = '💬 提供反馈';
-		feedbackButton.style.padding = '6px 16px';
-		feedbackButton.style.backgroundColor = 'var(--vscode-button-secondaryBackground)';
-		feedbackButton.style.color = 'var(--vscode-button-secondaryForeground)';
-		feedbackButton.style.border = 'none';
-		feedbackButton.style.borderRadius = '4px';
-		feedbackButton.style.cursor = 'pointer';
-		feedbackButton.onclick = () => {
-			// 显示反馈输入框
-			feedbackInput.style.display = 'block';
-			submitFeedbackButton.style.display = 'block';
-			feedbackButton.disabled = true;
-		};
-
-		// 反馈输入框（初始隐藏）
-		const feedbackInput = append(confirmMsg, $('textarea')) as HTMLTextAreaElement;
-		feedbackInput.placeholder = '请输入你的反馈...';
-		feedbackInput.rows = 3;
-		feedbackInput.style.width = '100%';
-		feedbackInput.style.padding = '8px';
-		feedbackInput.style.backgroundColor = 'var(--vscode-input-background)';
-		feedbackInput.style.color = 'var(--vscode-input-foreground)';
-		feedbackInput.style.border = '1px solid var(--vscode-input-border)';
-		feedbackInput.style.borderRadius = '4px';
-		feedbackInput.style.fontFamily = 'var(--vscode-font-family)';
-		feedbackInput.style.fontSize = '13px';
-		feedbackInput.style.marginBottom = '8px';
-		feedbackInput.style.resize = 'vertical';
-		feedbackInput.style.display = 'none';
-
-		// 提交反馈按钮（初始隐藏）
-		const submitFeedbackButton = append(confirmMsg, $('button')) as HTMLButtonElement;
-		submitFeedbackButton.textContent = '提交反馈';
-		submitFeedbackButton.style.padding = '6px 16px';
-		submitFeedbackButton.style.backgroundColor = 'var(--vscode-button-background)';
-		submitFeedbackButton.style.color = 'var(--vscode-button-foreground)';
-		submitFeedbackButton.style.border = 'none';
-		submitFeedbackButton.style.borderRadius = '4px';
-		submitFeedbackButton.style.cursor = 'pointer';
-		submitFeedbackButton.style.fontWeight = '600';
-		submitFeedbackButton.style.display = 'none';
-		submitFeedbackButton.onclick = () => {
-			const feedback = feedbackInput.value.trim();
-			if (feedback) {
-				this.maxianService.handleAskResponse(message.ts, 'messageResponse', feedback);
-				yesButton.disabled = true;
-				noButton.disabled = true;
-				feedbackButton.disabled = true;
-				feedbackInput.disabled = true;
-				submitFeedbackButton.disabled = true;
-				submitFeedbackButton.textContent = '已提交反馈';
-			}
 		};
 
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;
@@ -3706,11 +3629,21 @@ export class MaxianView extends ViewPane {
 		try {
 			// 获取API配置
 			const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
-			const username = this.configurationService.getValue<string>('zhikai.auth.username');
-			// 密码存储在 secretStorageService 中
-			const password = await this.secretStorageService.get('zhikai.auth.password');
 
-			if (!apiUrl || !username || !password) {
+			// ⚠️ 架构修复：从 StorageService 读取凭据（与 authService 一致）
+			const storedCredentials = this.storageService.get('zhikai.auth.credentials', StorageScope.APPLICATION);
+			if (!storedCredentials || !apiUrl) {
+				console.debug('[MaxianView] API credentials not configured, skipping knowledge base loading');
+				this.knowledgeBases = [];
+				this.updateKnowledgeBaseSelector();
+				return;
+			}
+
+			const credentials = JSON.parse(storedCredentials);
+			const username = credentials.username;
+			const password = credentials.password;
+
+			if (!username || !password) {
 				console.debug('[MaxianView] API credentials not configured, skipping knowledge base loading');
 				// 清空知识库列表并更新UI
 				this.knowledgeBases = [];
@@ -3719,14 +3652,14 @@ export class MaxianView extends ViewPane {
 			}
 
 			// 构建认证头（浏览器环境使用btoa）
-			const credentials = btoa(`${username}:${password}`);
+			const authHeader = btoa(`${username}:${password}`);
 
 			// 调用知识库API（POST请求，参数通过URL传递，请求体包含Base64编码的用户名密码）
 			const baseUrl = apiUrl.replace(/\/$/, '');
 			const response = await fetch(`${baseUrl}/knowledge/knowledgeApplication/listByUser?applicationStatus=0`, {
 				method: 'POST',
 				headers: {
-					'Authorization': `Basic ${credentials}`,
+					'Authorization': `Basic ${authHeader}`,
 					'Content-Type': 'application/json'
 				},
 				body: JSON.stringify({
@@ -4109,10 +4042,15 @@ export class MaxianView extends ViewPane {
 		// 创建进度条容器（插入到消息区域之前）
 		this.taskProgressContainer = $('div.task-progress-container');
 		this.container.insertBefore(this.taskProgressContainer, this.messageArea);
-		this.taskProgressContainer.style.padding = '8px 16px';
-		this.taskProgressContainer.style.borderBottom = '1px solid var(--vscode-widget-border)';
-		this.taskProgressContainer.style.backgroundColor = 'var(--vscode-editor-background)';
+		this.taskProgressContainer.style.padding = '12px 16px';
+		this.taskProgressContainer.style.borderBottom = '2px solid var(--vscode-widget-border)';
+		this.taskProgressContainer.style.backgroundColor = 'var(--vscode-sideBar-background)';
 		this.taskProgressContainer.style.display = 'none'; // 默认隐藏
+		// 🔧 固定在顶部，防止被滚动遮挡
+		this.taskProgressContainer.style.position = 'sticky';
+		this.taskProgressContainer.style.top = '0';
+		this.taskProgressContainer.style.zIndex = '100';
+		this.taskProgressContainer.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.15)';
 
 		// 进度条头部（步骤描述 + 进度文字）
 		const progressHeader = append(this.taskProgressContainer, $('div'));
@@ -4360,6 +4298,67 @@ export class MaxianView extends ViewPane {
 			}
 		}
 		this.toolInputStreamingElements.clear();
+	}
+
+	/**
+	 * 处理工具完成事件
+	 * 更新工具执行状态（从运行中到完成/失败）
+	 */
+	private handleToolCompleted(event: IToolCompletedEvent): void {
+		console.log('[MaxianView] 工具完成:', event.toolName, event.isError ? '(失败)' : '(成功)');
+
+		// 通过toolId查找对应的工具状态元素
+		const toolStatusElement = this.toolStatusElements.get(event.toolId);
+		if (!toolStatusElement) {
+			console.warn('[MaxianView] 未找到toolId对应的状态元素:', event.toolId);
+			return;
+		}
+
+		// 🔧 如果是成功完成（非错误），直接移除工具卡片
+		if (!event.isError) {
+			// 添加淡出动画
+			toolStatusElement.style.transition = 'opacity 0.3s ease-out';
+			toolStatusElement.style.opacity = '0';
+
+			// 300ms后移除元素
+			setTimeout(() => {
+				toolStatusElement.remove();
+				this.toolStatusElements.delete(event.toolId);
+				console.log('[MaxianView] 工具卡片已移除:', event.toolId);
+			}, 300);
+			return;
+		}
+
+		// 🔧 如果是错误，保留显示错误状态
+		const finalStatus = 'error';
+		const statusText = '失败';
+
+		// 更新卡片状态类
+		toolStatusElement.classList.remove('tool-running', 'tool-completed', 'tool-error');
+		toolStatusElement.classList.add(`tool-${finalStatus}`);
+
+		// 停止图标旋转动画
+		const iconElement = toolStatusElement.querySelector('.tool-status-icon') as HTMLElement;
+		if (iconElement) {
+			iconElement.classList.remove('codicon-modifier-spin');
+		}
+
+		// 隐藏加载动画
+		const loadingDots = toolStatusElement.querySelector('.tool-loading-dots') as HTMLElement;
+		if (loadingDots) {
+			loadingDots.style.display = 'none';
+		}
+
+		// 显示并更新状态标签
+		const statusBadge = toolStatusElement.querySelector('.tool-status-badge') as HTMLElement;
+		if (statusBadge) {
+			statusBadge.textContent = statusText;
+			statusBadge.style.display = 'inline-block';
+			statusBadge.classList.remove('maxian-tool-status-running', 'maxian-tool-status-completed', 'maxian-tool-status-error');
+			statusBadge.classList.add(`maxian-tool-status-${finalStatus}`);
+		}
+
+		console.log('[MaxianView] 工具错误状态已更新:', event.toolId, finalStatus);
 	}
 
 	// ========== 任务列表（Todo List）相关方法 ==========

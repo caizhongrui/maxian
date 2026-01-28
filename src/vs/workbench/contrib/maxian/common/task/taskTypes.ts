@@ -72,7 +72,8 @@ export type ClineSay =
 	| 'condense_context'
 	| 'condense_context_error'
 	| 'codebase_search_result'
-	| 'user_edit_todos';
+	| 'user_edit_todos'
+	| 'system_internal'; // 🔧 系统内部消息，不显示在UI（避免系统提示泄露）
 
 /**
  * Ask响应类型

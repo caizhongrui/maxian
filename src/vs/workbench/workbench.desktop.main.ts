@@ -212,6 +212,9 @@ import './contrib/database/electron-sandbox/databaseService.js';
 // RepoMap Service (P1优化：PageRank智能排序)
 import './contrib/maxian/electron-sandbox/repoMapService.js';
 
+// Skills System (按需加载专业领域知识)
+import './contrib/skills/electron-sandbox/skills.contribution.js';
+
 //#endregion
 
 

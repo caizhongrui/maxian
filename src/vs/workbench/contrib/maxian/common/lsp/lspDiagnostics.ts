@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
+
 /**
  * LSP 诊断集成
  * 参考 OpenCode tool/write.ts:81-98 实现
@@ -12,6 +14,8 @@
  * - 有错误时提示修复
  * - 将诊断信息格式化返回给 AI
  */
+
+export const ILspDiagnosticsService = createDecorator<ILspDiagnosticsService>('lspDiagnosticsService');
 
 /**
  * 诊断严重程度
@@ -85,6 +89,8 @@ export const LSP_DIAGNOSTICS_CONFIG = {
  * 这个接口需要由具体的 IDE 实现提供
  */
 export interface ILspDiagnosticsService {
+	readonly _serviceBrand: undefined;
+
 	/**
 	 * 触发文件的诊断更新
 	 * @param filePath 文件路径

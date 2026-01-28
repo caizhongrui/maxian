@@ -829,6 +829,79 @@ import { useQuery } from 'react-query';</new_string>
 		],
 		relatedTools: ['ask_followup_question'],
 	},
+
+	// ==================== Skill工具 ====================
+	skill: {
+		name: 'skill',
+		summary: '按需加载专业领域知识',
+		description: `从Skills仓库加载完整的专业领域知识和最佳实践。
+
+**Skills系统优势：**
+- Token优化：System Prompt仅包含Skills目录(<200 tokens)
+- 按需加载：通过tool调用加载完整内容(平均节省45% tokens)
+- 专业性强：涵盖代码质量、测试、安全、性能等多个领域
+
+**使用时机：**
+- 需要专业领域的详细指导时
+- 遵循最佳实践和规范时
+- 解决特定类型问题时(如性能优化、安全审查)
+
+**Available Skills** (check System Prompt for complete list):
+- code-review: 代码审查清单和质量标准
+- git-workflow: Git安全操作和工作流程
+- debugging: 系统化调试方法
+- testing: TDD和测试最佳实践
+- refactoring: 重构模式和代码异味
+- security: OWASP Top 10防护
+- performance: 性能优化策略
+- documentation: 文档编写规范
+- architecture: 架构模式和设计原则
+- api-design: RESTful API设计规范`,
+		parameters: [
+			{
+				name: 'skill_name',
+				type: 'string',
+				required: true,
+				description: 'Skill的slug名称(如 "code-review", "testing")',
+				examples: ['code-review', 'testing', 'security', 'performance'],
+			},
+		],
+		examples: [
+			{
+				title: '加载代码审查Skill',
+				description: '在进行代码审查前加载专业指导',
+				xml: `<skill>
+<skill_name>code-review</skill_name>
+</skill>`,
+			},
+			{
+				title: '加载测试Skill',
+				description: '学习TDD流程和测试最佳实践',
+				xml: `<skill>
+<skill_name>testing</skill_name>
+</skill>`,
+			},
+			{
+				title: '加载安全Skill',
+				description: '审查代码安全问题',
+				xml: `<skill>
+<skill_name>security</skill_name>
+</skill>`,
+			},
+		],
+		tips: [
+			'查看System Prompt中的Skills目录获取完整Skill列表',
+			'每个Skill包含详细的指导、示例和检查清单',
+			'Skill加载后会显示估算的token消耗',
+			'已激活的Skill会被记录并显示统计信息',
+		],
+		performanceTips: [
+			'只加载当前任务需要的Skills',
+			'避免重复加载相同的Skill',
+			'优先选择token消耗较少的Skill',
+		],
+		relatedTools: [],
+	},
 };
 
 /**

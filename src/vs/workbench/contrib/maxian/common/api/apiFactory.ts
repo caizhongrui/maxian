@@ -26,8 +26,11 @@ export class ApiFactory {
 	createHandler(credentials?: { username: string; password: string }, mode?: string): IApiHandler {
 		// 检查是否配置了 AI 代理服务
 		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
-		const username = credentials?.username || this.configurationService.getValue<string>('zhikai.auth.username');
-		const password = credentials?.password || this.configurationService.getValue<string>('zhikai.auth.password');
+
+		// ⚠️ 安全修复：只使用传递的 credentials，不从配置文件读取密码
+		// 原因：密码应该保存在 StorageService 中，不应该存储在明文配置文件中
+		const username = credentials?.username;
+		const password = credentials?.password;
 
 		if (apiUrl && username && password) {
 			// 使用 AI 代理服务（推荐方式）
@@ -96,9 +99,10 @@ export class ApiFactory {
 		// 检查是否配置了 AI 代理服务
 		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
 		const username = this.configurationService.getValue<string>('zhikai.auth.username');
-		const password = this.configurationService.getValue<string>('zhikai.auth.password');
 
-		if (apiUrl && username && password) {
+		// ⚠️ 安全修复：不检查密码，因为密码保存在 StorageService 中
+		// 只要 apiUrl 和 username 存在，就认为配置有效（密码会在登录时验证）
+		if (apiUrl && username) {
 			// 代理服务配置完整
 			return { valid: true };
 		}

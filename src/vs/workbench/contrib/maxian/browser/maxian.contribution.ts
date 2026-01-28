@@ -21,12 +21,29 @@ import { URI } from '../../../../base/common/uri.js';
 import { MAXIAN_DIFF_VIEW_URI_SCHEME } from './diffViewProvider.js';
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { IAIService } from '../../../../platform/ai/common/ai.js';
+import { ILspDiagnosticsService } from '../common/lsp/lspDiagnostics.js';
+import { LspDiagnosticsService } from './lspDiagnosticsService.js';
+import { ILspHoverService } from '../common/lsp/lspHover.js';
+import { LspHoverService } from './lspHoverService.js';
+import { ILspDefinitionService } from '../common/lsp/lspDefinition.js';
+import { LspDefinitionService } from './lspDefinitionService.js';
+import { ILspReferencesService } from '../common/lsp/lspReferences.js';
+import { LspReferencesService } from './lspReferencesService.js';
+import { ILspTypeDefinitionService } from '../common/lsp/lspTypeDefinition.js';
+import { LspTypeDefinitionService } from './lspTypeDefinitionService.js';
 
 // 确保ripgrep服务被注册（导入副作用）
 import '../../../services/ripgrep/browser/ripgrep.contribution.js';
 
 // 注册码弦服务
 registerSingleton(IMaxianService, MaxianService, InstantiationType.Delayed);
+
+// 注册LSP服务
+registerSingleton(ILspDiagnosticsService, LspDiagnosticsService, InstantiationType.Delayed);
+registerSingleton(ILspHoverService, LspHoverService, InstantiationType.Delayed);
+registerSingleton(ILspDefinitionService, LspDefinitionService, InstantiationType.Delayed);
+registerSingleton(ILspReferencesService, LspReferencesService, InstantiationType.Delayed);
+registerSingleton(ILspTypeDefinitionService, LspTypeDefinitionService, InstantiationType.Delayed);
 
 // ====== 注册视图容器和视图 ======
 
@@ -36,7 +53,7 @@ const MAXIAN_VIEW_ID = 'workbench.view.maxian.mainView';
 
 // 注册视图容器到右侧辅助栏（AuxiliaryBar）
 const viewContainerRegistry = Registry.as<IViewContainersRegistry>(ViewExtensions.ViewContainersRegistry);
-const maxianViewContainer = viewContainerRegistry.registerViewContainer({
+export const VIEW_CONTAINER = viewContainerRegistry.registerViewContainer({
 	id: MAXIAN_VIEW_CONTAINER_ID,
 	title: localize2('maxian.viewContainer.title', '码弦 Agent'),
 	icon: Codicon.robot,
@@ -50,7 +67,7 @@ const maxianViewContainer = viewContainerRegistry.registerViewContainer({
 class MaxianViewDescriptor {
 	readonly id = MAXIAN_VIEW_ID;
 	readonly name = localize2('maxian.view.name', '码弦');
-	readonly containerIcon = maxianViewContainer.icon;
+	readonly containerIcon = VIEW_CONTAINER.icon;
 	readonly ctorDescriptor = new SyncDescriptor(MaxianView);
 	readonly order = 1;
 	readonly weight = 100;
@@ -62,7 +79,7 @@ class MaxianViewDescriptor {
 
 // 注册视图
 const viewsRegistry = Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry);
-viewsRegistry.registerViews([new MaxianViewDescriptor()], maxianViewContainer);
+viewsRegistry.registerViews([new MaxianViewDescriptor()], VIEW_CONTAINER);
 
 // ====== 自动打开码弦视图 ======
 

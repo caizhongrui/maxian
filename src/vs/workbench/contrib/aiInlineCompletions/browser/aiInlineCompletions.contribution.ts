@@ -10,7 +10,6 @@ import { IModelService } from '../../../../editor/common/services/model.js';
 import { AIInlineCompletionsProvider } from './aiInlineCompletions.js';
 import { IAIService } from '../../../../platform/ai/common/ai.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
-import { IRequestService } from '../../../../platform/request/common/request.js';
 import { IMultiLanguageService } from '../../multilang/browser/multilang.contribution.js';
 import './aiInlineCompletionsActions.js';  // Register actions
 
@@ -22,7 +21,6 @@ class AIInlineCompletionsContribution extends Disposable implements IWorkbenchCo
 		@IModelService modelService: IModelService,
 		@IAIService aiService: IAIService,
 		@IConfigurationService configurationService: IConfigurationService,
-		@IRequestService requestService: IRequestService,
 		@IMultiLanguageService multiLanguageService: IMultiLanguageService
 	) {
 		super();
@@ -30,7 +28,6 @@ class AIInlineCompletionsContribution extends Disposable implements IWorkbenchCo
 		const provider = new AIInlineCompletionsProvider(
 			aiService,
 			configurationService,
-			requestService,
 			multiLanguageService,
 			languageFeaturesService,
 			modelService

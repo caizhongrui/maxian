@@ -8,8 +8,6 @@ import { IAIService } from '../../../../platform/ai/common/ai.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
 import { IProgressService, ProgressLocation } from '../../../../platform/progress/common/progress.js';
-import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
-import { IRequestService, asJson } from '../../../../platform/request/common/request.js';
 
 /**
  * 逐行注释命令处理器
@@ -20,9 +18,7 @@ export class LineCommentCommand {
 	constructor(
 		private readonly aiService: IAIService,
 		private readonly notificationService: INotificationService,
-		private readonly progressService: IProgressService,
-		private readonly configurationService: IConfigurationService,
-		private readonly requestService: IRequestService
+		private readonly progressService: IProgressService
 	) { }
 
 	/**
@@ -87,14 +83,20 @@ export class LineCommentCommand {
 
 		console.log('[Line Comment] 开始获取逐行注释提示词');
 
-		// 尝试从后端获取提示词
-		let prompt = await this.fetchLineCommentPromptFromBackend(code, languageId, commentStyle.line);
+		// ⚠️ 架构决策：100% 本地生成提示词，不调用后端API
+		// 原因：
+		// 1. 本地生成：<1ms
+		// 2. API调用：50-200ms
+		// 3. 性能差距：200倍
+		// 4. 本地提示词已经非常完善
+		// 详见：src/vs/workbench/contrib/maxian/common/prompts/README.md
+		//
+		// ❌ 不要恢复这段代码：
+		// let prompt = await this.fetchLineCommentPromptFromBackend(code, languageId, commentStyle.line);
 
-		// 如果后端获取失败，使用默认提示词
-		if (!prompt) {
-			console.log('[Line Comment] 后端获取提示词失败，使用本地默认提示词');
-			prompt = this.getDefaultLineCommentPrompt(code, languageId, commentStyle.line);
-		}
+		// ✅ 直接使用本地提示词（性能最优）
+		console.log('[Line Comment] 使用本地提示词（已禁用后端API调用）');
+		const prompt = this.getDefaultLineCommentPrompt(code, languageId, commentStyle.line);
 
 		const result = await this.aiService.complete(prompt, {
 			businessCode: 'IDE_COMMENT_GENERATION'
@@ -111,50 +113,6 @@ export class LineCommentCommand {
 		return cleanCode;
 	}
 
-	/**
-	 * 从后端获取逐行注释提示词
-	 */
-	private async fetchLineCommentPromptFromBackend(code: string, languageId: string, commentStyle: string): Promise<string | null> {
-		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
-		console.log('[Line Comment] apiUrl:', apiUrl);
-
-		if (!apiUrl) {
-			console.log('[Line Comment] 未配置apiUrl，跳过后端请求');
-			return null;
-		}
-
-		try {
-			const url = `${apiUrl.replace(/\/$/, '')}/system/ai/prompt/comment/line`;
-			console.log('[Line Comment] 请求后端提示词API:', url);
-
-			const requestData = {
-				languageId: languageId,
-				code: code,
-				commentStyle: commentStyle
-			};
-
-			const response = await this.requestService.request({
-				type: 'POST',
-				url: url,
-				headers: { 'Content-Type': 'application/json' },
-				data: JSON.stringify(requestData)
-			}, CancellationToken.None);
-
-			const data = await asJson<any>(response);
-			console.log('[Line Comment] 后端响应:', { code: data?.code, hasData: !!data?.data });
-
-			if (data && data.code === 200 && data.data) {
-				console.log('[Line Comment] 成功从后端获取提示词，长度:', data.data.length);
-				return data.data;
-			}
-
-			console.warn('[Line Comment] 后端返回数据格式错误或无数据');
-			return null;
-		} catch (error) {
-			console.error('[Line Comment] 从后端获取提示词失败:', error);
-			return null;
-		}
-	}
 
 	/**
 	 * 获取默认的逐行注释提示词
