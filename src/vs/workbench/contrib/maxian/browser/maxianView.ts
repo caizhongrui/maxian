@@ -67,6 +67,7 @@ export class MaxianView extends ViewPane {
 	private awaitingUserResponse: boolean = false; // 是否正在等待用户回答AI的问题
 	private currentToolStatusElement: HTMLElement | null = null; // 当前工具状态元素（更新而非新建）
 	private toolStatusElements: Map<string, HTMLElement> = new Map(); // 工具ID到状态元素的映射（支持并行工具）
+	private thinkingMessageElement: HTMLElement | null = null; // "正在思考"消息元素（避免重复显示）
 	private cancelButton!: HTMLButtonElement; // 取消任务按钮
 	private clearButton!: HTMLButtonElement; // 清空对话按钮
 	// @ts-ignore used in handleConversationCleared
@@ -1909,12 +1910,20 @@ export class MaxianView extends ViewPane {
 
 			case 'api_req_started':
 				// API请求开始 - 显示思考状态，避免前端卡住的感觉
-				this.renderSystemMessage('🤔 码弦正在思考...');
+				// 如果已有思考消息，先移除旧的
+				if (this.thinkingMessageElement && this.thinkingMessageElement.parentNode) {
+					this.thinkingMessageElement.parentNode.removeChild(this.thinkingMessageElement);
+				}
+				// 显示新的思考消息
+				this.thinkingMessageElement = this.renderSystemMessage('🤔 码弦正在思考...');
 				break;
 
 			case 'api_req_finished':
 				// API请求完成 - 移除思考状态消息
-				// Note: 工具调用会立即显示，所以这里无需额外UI
+				if (this.thinkingMessageElement && this.thinkingMessageElement.parentNode) {
+					this.thinkingMessageElement.parentNode.removeChild(this.thinkingMessageElement);
+					this.thinkingMessageElement = null;
+				}
 				break;
 
 			case 'api_req_retried':
@@ -2317,8 +2326,9 @@ export class MaxianView extends ViewPane {
 
 	/**
 	 * 渲染系统消息
+	 * @returns 创建的消息元素，用于后续移除
 	 */
-	private renderSystemMessage(message: string): void {
+	private renderSystemMessage(message: string): HTMLElement {
 		const sysMsg = append(this.messageArea, $('div'));
 		sysMsg.style.marginBottom = '8px';
 		sysMsg.style.padding = '6px 12px';
@@ -2330,6 +2340,7 @@ export class MaxianView extends ViewPane {
 		sysMsg.textContent = message;
 
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;
+		return sysMsg;
 	}
 
 	/**
