@@ -2621,24 +2621,32 @@ export class MaxianView extends ViewPane {
 					}
 				}
 
-				// 🔥 工具完成后，3秒后自动移除状态卡片
+				// 🔥 工具完成后，1秒后自动移除状态卡片（缩短延迟以便快速看到效果）
+				const elementToRemove = toolStatusElement; // 捕获引用
+				const capturedToolId = toolId; // 捕获 toolId
+				console.log(`[MaxianView] 设置工具状态自动移除: ${toolInfo.tool}, toolId=${capturedToolId}, status=${status}`);
+
 				setTimeout(() => {
-					if (toolStatusElement && toolStatusElement.parentElement) {
+					console.log(`[MaxianView] 开始移除工具状态: ${toolInfo.tool}, 元素存在=${!!elementToRemove}, 有父节点=${!!elementToRemove?.parentElement}`);
+					if (elementToRemove && elementToRemove.parentElement) {
 						// 添加淡出动画
-						toolStatusElement.style.transition = 'opacity 0.5s ease-out';
-						toolStatusElement.style.opacity = '0';
+						elementToRemove.style.transition = 'opacity 0.5s ease-out';
+						elementToRemove.style.opacity = '0';
 						setTimeout(() => {
-							toolStatusElement.remove();
+							console.log(`[MaxianView] 移除工具状态DOM: ${toolInfo.tool}`);
+							elementToRemove.remove();
 							// 清除引用
-							if (this.currentToolStatusElement === toolStatusElement) {
+							if (this.currentToolStatusElement === elementToRemove) {
 								this.currentToolStatusElement = null;
 							}
-							if (toolId && this.toolStatusElements.has(toolId)) {
-								this.toolStatusElements.delete(toolId);
+							if (capturedToolId && this.toolStatusElements.has(capturedToolId)) {
+								this.toolStatusElements.delete(capturedToolId);
 							}
 						}, 500); // 等待动画完成
+					} else {
+						console.warn(`[MaxianView] 无法移除工具状态（元素或父节点不存在）: ${toolInfo.tool}`);
 					}
-				}, 3000); // 3秒后开始淡出
+				}, 1000); // 缩短到1秒以便更快看到效果
 			}
 
 			this.messageArea.scrollTop = this.messageArea.scrollHeight;
@@ -4366,62 +4374,25 @@ export class MaxianView extends ViewPane {
 			return;
 		}
 
-		// 🔧 如果是成功完成（非错误），根据工具类型决定是否自动移除
+		// 🔧 如果是成功完成（非错误），自动移除工具卡片
 		if (!event.isError) {
-			// 对于以下工具类型，成功后自动移除（不需要用户看结果）
-			const autoRemoveTools = new Set([
-				'batch',           // batch工具：子工具结果已在各自卡片显示
-				'skill',           // skill工具：仅加载技能，无需显示
-				'new_task',        // 新建任务：结果在任务列表显示
-				'update_todo_list' // 更新任务列表：结果在任务列表显示
-			]);
-
-			if (autoRemoveTools.has(event.toolName)) {
-				// 短暂显示完成状态，然后自动移除
-				toolStatusElement.classList.remove('tool-running');
-				toolStatusElement.classList.add('tool-completed');
-
-				// 添加淡出动画
-				toolStatusElement.style.transition = 'opacity 0.5s ease-out';
-				setTimeout(() => {
-					toolStatusElement.style.opacity = '0';
-				}, 1000); // 1秒后开始淡出
-
-				// 1.5秒后移除元素
-				setTimeout(() => {
-					toolStatusElement.remove();
-					this.toolStatusElements.delete(event.toolId);
-					console.log('[MaxianView] 工具卡片已自动移除:', event.toolId);
-				}, 1500);
-				return;
-			}
-
-			// 其他工具：更新为完成状态但保留显示（用户可能需要查看结果）
+			// 🔥 所有工具成功后都自动移除（用户反馈不需要保留显示）
+			// 短暂显示完成状态，然后自动移除
 			toolStatusElement.classList.remove('tool-running');
 			toolStatusElement.classList.add('tool-completed');
 
-			// 停止图标旋转动画
-			const iconElement = toolStatusElement.querySelector('.tool-status-icon') as HTMLElement;
-			if (iconElement) {
-				iconElement.classList.remove('codicon-modifier-spin');
-			}
+			// 添加淡出动画
+			toolStatusElement.style.transition = 'opacity 0.5s ease-out';
+			setTimeout(() => {
+				toolStatusElement.style.opacity = '0';
+			}, 1000); // 1秒后开始淡出
 
-			// 隐藏加载动画
-			const loadingDots = toolStatusElement.querySelector('.tool-loading-dots') as HTMLElement;
-			if (loadingDots) {
-				loadingDots.style.display = 'none';
-			}
-
-			// 显示"完成"状态标签
-			const statusBadge = toolStatusElement.querySelector('.tool-status-badge') as HTMLElement;
-			if (statusBadge) {
-				statusBadge.textContent = '完成';
-				statusBadge.style.display = 'inline-block';
-				statusBadge.classList.remove('maxian-tool-status-running', 'maxian-tool-status-error');
-				statusBadge.classList.add('maxian-tool-status-completed');
-			}
-
-			console.log('[MaxianView] 工具完成状态已更新（保留显示）:', event.toolId);
+			// 1.5秒后移除元素
+			setTimeout(() => {
+				toolStatusElement.remove();
+				this.toolStatusElements.delete(event.toolId);
+				console.log('[MaxianView] 工具卡片已自动移除:', event.toolId);
+			}, 1500);
 			return;
 		}
 
