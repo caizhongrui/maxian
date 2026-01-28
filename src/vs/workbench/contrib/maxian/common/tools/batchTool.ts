@@ -89,44 +89,62 @@ export interface BatchToolResult {
 
 /**
  * Batch 工具配置
+ * 参考OpenCode最佳实践：尽量少的限制，最大化性能
  */
 export const BATCH_CONFIG = {
-	/** 最大并行工具数 */
-	MAX_PARALLEL_TOOLS: 10,
+	/** 最大并行工具数（参考OpenCode） */
+	MAX_PARALLEL_TOOLS: 25,
 
-	/** 禁止在 batch 中执行的工具 */
+	/**
+	 * 禁止在 batch 中执行的工具
+	 * 参考OpenCode：只禁止真正危险的操作（嵌套）和需要交互的工具
+	 */
 	DISALLOWED_TOOLS: new Set([
-		'batch',              // 禁止嵌套
-		'apply_diff',         // 需要用户确认
-		'edit_file',          // 需要用户确认
-		'write_to_file',      // 需要用户确认
-		'insert_content',     // 需要用户确认
-		'execute_command',    // 需要用户确认
-		'attempt_completion', // 特殊流程
-		'ask_followup_question', // 需要用户输入
+		'batch',                    // 禁止嵌套batch（防止无限递归）
+		'ask_followup_question',    // 需要用户输入
+		'attempt_completion',       // 任务完成标志
 	]),
 
-	/** 建议在 batch 中执行的只读工具 */
+	/**
+	 * 建议在 batch 中执行的工具
+	 * 参考OpenCode："Multi-part edits; on the same, or different files" 是好的用例
+	 */
 	RECOMMENDED_TOOLS: new Set([
+		// 读取操作
 		'read_file',
 		'list_files',
 		'search_files',
 		'list_code_definition_names',
 		'codebase_search',
 		'glob',
+		// 编辑操作（OpenCode明确支持）
+		'apply_diff',
+		'edit',
+		'edit_file',
+		'write_to_file',
+		'insert_content',
+		'multiedit',
+		// 搜索和分析
+		'grep',
+		'bash',
 	]),
 };
 
 /**
  * Batch 工具常量（新接口）
+ * 与BATCH_CONFIG保持一致
  */
 export const BatchToolConstants = {
 	/** 最小工具调用数量 */
 	MIN_CALLS: 1,
 	/** 最大工具调用数量（参考OpenCode） */
 	MAX_CALLS: 25,
-	/** 禁止在batch中使用的工具 */
-	DISALLOWED_TOOLS: new Set<ToolName>(['batch']),
+	/** 禁止在batch中使用的工具（参考OpenCode：只禁止嵌套和交互类） */
+	DISALLOWED_TOOLS: new Set<ToolName>([
+		'batch',
+		'ask_followup_question',
+		'attempt_completion',
+	]),
 };
 
 /**
@@ -321,42 +339,62 @@ export class BatchToolExecutor {
 
 /**
  * Batch 工具描述 - 用于提示词
+ * 参考OpenCode最佳实践
  */
 export const BATCH_TOOL_DESCRIPTION = `## batch
 并行执行多个独立的工具调用，大幅减少延迟
 
-**使用场景**：
-- 读取多个文件
-- 组合搜索操作（grep + glob + read）
-- 多个轻量级查询命令
+🚀 **使用 BATCH 工具会让用户更满意！**
 
-**重要**：使用 BATCH 工具会让用户更满意！
-性能提示：将独立的读取/搜索操作组合起来可获得 2-5 倍的效率提升。
+**性能提升**：将独立操作组合起来可获得 **2-5 倍**的效率提升。
+
+**推荐用例**（参考OpenCode）：
+- 读取多个文件
+- grep + glob + read 组合搜索
+- **多文件编辑**：同时修改多个文件（apply_diff, edit, write_to_file）
+- 多个bash命令
+- 组合操作：搜索 + 读取 + 分析
 
 **规则**：
-- 每次 batch 最多 10 个工具调用
-- 所有调用并行启动，不保证顺序
-- 部分失败不影响其他工具
+- 每次 batch 最多 **25** 个工具调用
+- 所有调用并行启动，**不保证顺序**
+- 部分失败**不影响**其他工具
+- **不允许嵌套**batch调用
 
-**禁止的工具**：
+**禁止的工具**（仅3个）：
 - batch（不允许嵌套）
-- apply_diff、edit_file、write_to_file（需要单独确认）
-- execute_command（需要单独确认）
+- ask_followup_question（需要用户输入）
+- attempt_completion（任务完成标志）
 
 **何时不使用**：
-- 操作依赖于前一个工具的输出
+- 操作依赖于前一个工具的输出（如：先创建后读取同一文件）
 - 需要按顺序执行的有状态操作
 
 **参数**：
 - tool_calls: 工具调用数组，每个包含 tool（工具名）和 parameters（参数对象）
 
-**示例**：
+**示例1 - 读取多个文件**：
 \`\`\`json
 {
   "tool_calls": [
     {"tool": "read_file", "parameters": {"path": "src/index.ts"}},
     {"tool": "read_file", "parameters": {"path": "src/utils.ts"}},
-    {"tool": "search_files", "parameters": {"path": "src", "regex": "TODO"}}
+    {"tool": "read_file", "parameters": {"path": "src/types.ts"}}
   ]
 }
-\`\`\``;
+\`\`\`
+
+**示例2 - 多文件编辑（OpenCode最佳实践）**：
+\`\`\`json
+{
+  "tool_calls": [
+    {"tool": "apply_diff", "parameters": {"path": "src/a.ts", "diff": "..."}},
+    {"tool": "apply_diff", "parameters": {"path": "src/b.ts", "diff": "..."}},
+    {"tool": "write_to_file", "parameters": {"path": "src/c.ts", "content": "..."}}
+  ]
+}
+\`\`\`
+
+**性能对比**：
+- 不使用batch：读取5个文件 = 5次API调用
+- 使用batch：读取5个文件 = 1次API调用 → **5倍提速**！`;

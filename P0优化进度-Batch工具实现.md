@@ -145,72 +145,111 @@ execute_command: {
 
 ---
 
-## 🚧 进行中的工作 (下一步)
+## ✅ 已完成的集成工作 (发现)
 
-### 1. 集成Batch工具到ToolExecutor
-**文件**: `src/vs/workbench/contrib/maxian/browser/tools/toolExecutorImpl.ts`
+### 1. Batch工具已完全集成 ✅
+**发现**: `toolExecutorImpl.ts` 已于 Dec 17 完成集成
+- ✅ Line 15: BatchToolExecutor 已导入
+- ✅ Line 55: batchExecutor 已初始化
+- ✅ Line 167-169: 'batch' case 分支已添加
+- ✅ Line 337-371: executeBatch() 方法已实现
 
-**需要修改**:
+**现有实现**:
 ```typescript
-// 1. 注入BatchToolExecutor
-constructor(
-  // ... existing
-  @IBatchToolExecutor private readonly batchExecutor: IBatchToolExecutor
-) {}
+// Line 337-371
+private async executeBatch(toolUse: ToolUse): Promise<ToolResponse> {
+  const toolCallsParam = toolUse.params.tool_calls;
+  let toolCalls: BatchToolCall[];
 
-// 2. 在executeTool中添加batch分支
-async executeTool(toolName: ToolName, params: any): Promise<ToolResult> {
-  if (toolName === 'batch') {
-    return this.batchExecutor.executeBatch(params as IBatchToolParams);
-  }
-  // ... existing code
+  // Parse and validate
+  toolCalls = typeof toolCallsParam === 'string'
+    ? JSON.parse(toolCallsParam)
+    : toolCallsParam;
+
+  // Execute batch
+  const { results, summary, metadata } = await this.batchExecutor.executeBatch(toolCalls);
+
+  // Format output
+  const output = this.batchExecutor.formatBatchResponse(results);
+  return `${summary}\n\n${output}`;
 }
 ```
 
-**预计时间**: 30分钟
-
 ---
 
-### 2. 注册Batch工具到工具系统
-**文件需要修改**:
-1. `toolDescriptions.ts` - 添加batch工具描述
-2. `toolTypes.ts` - 已包含'batch'，✅完成
-3. `maxian.contribution.ts` - 注册BatchToolExecutor服务
+### 2. 工具描述已完整 ✅
+**文件**: `common/prompts/toolDescriptions.ts` (Line 176-204)
+- ✅ Batch工具描述完整
+- ✅ 强调性能优势
+- ✅ 使用示例完整
 
-**预计时间**: 30分钟
+**现有描述亮点**:
+```
+## batch 【最重要的工具 - 必须优先使用！】
+并行执行多个独立的读取/搜索工具调用
 
----
-
-### 3. 更新System Prompt
-**文件**: `src/vs/workbench/contrib/maxian/common/prompts/sections/toolUseGuidelines.ts`
-
-**需要添加**:
-```typescript
-1. **批量操作优先（最重要！）**
-   2+ 独立操作 → batch工具
-   🚀 2-5倍性能提升！
-
-   示例:
-   ✅ batch([
-     {tool: "read_file", parameters: {path: "a.ts"}},
-     {tool: "read_file", parameters: {path: "b.ts"}}
-   ])
-
-   ❌ read_file({path: "a.ts"})  // 单独调用
-      read_file({path: "b.ts"})  // 又一次调用
+⚠️ **强制规则**：当你需要执行2个或更多以下操作时，**必须**使用batch工具
+**性能提升**：使用batch可获得2-5倍效率提升！
 ```
 
-**预计时间**: 15分钟
+---
+
+### 3. System Prompt已更新 ✅
+**文件**: `toolUseGuidelines.ts` (Line 18-22, 93-111)
+- ✅ 批量操作优先原则已添加
+- ✅ Batch工具使用示例完整
+- ✅ 强调2-5倍性能提升
+
+**现有指导**:
+```typescript
+1. **批量操作优先（最重要！）**
+   - 需要执行 2+ 个独立读取/搜索操作时 → **必须使用 batch 工具**
+   - 🚀 **使用 batch 可获得 2-5 倍性能提升！**
+```
 
 ---
 
-### 4. 编译测试
-**步骤**:
-1. ✅ 编译检查（已后台运行）
-2. 修复类型错误
-3. 端到端测试
+### 4. 新接口定义已添加 ✅
+**文件**: `common/tools/batchTool.ts`
+- ✅ `IBatchToolParams` 接口
+- ✅ `IBatchToolResult` 接口
+- ✅ `IBatchToolExecutor` 服务接口
+- ✅ `validateBatchParams()` 验证函数
+- ✅ `formatBatchResult()` 格式化函数
+- ✅ `BatchToolConstants` 常量（MAX_CALLS: 25）
 
-**预计时间**: 30-60分钟
+---
+
+## 🔧 待优化项目
+
+### 1. 提升MAX并行数量
+**当前状态**: MAX_PARALLEL_TOOLS = 10
+**目标**: MAX_CALLS = 25 (参考OpenCode)
+
+**需要修改**:
+- `BATCH_CONFIG.MAX_PARALLEL_TOOLS` 从 10 改为 25
+- 更新相关日志和错误消息
+
+**预计时间**: 10分钟
+
+---
+
+### 2. 使用新接口（可选）
+**当前状态**: 使用旧的 BatchToolCall 接口
+**新接口**: IBatchToolParams, IBatchToolResult
+
+**说明**: 新接口已定义但未使用，保持向后兼容。
+可在未来迁移到新接口以获得更好的类型安全。
+
+---
+
+### 3. 编译验证
+**步骤**:
+1. 🚧 全量编译测试进行中
+2. 修复任何类型错误
+3. 功能测试
+
+**预计时间**: 20-30分钟
 
 ---
 

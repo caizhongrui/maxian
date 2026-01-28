@@ -172,21 +172,25 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 - 同时只有一个任务为 in_progress
 - 完成任务后立即标记为 completed`,
 
-	// P0优化：批量执行工具
+	// P0优化：批量执行工具（参考OpenCode最佳实践）
 	batch: `## batch 【最重要的工具 - 必须优先使用！】
-并行执行多个独立的读取/搜索工具调用
+并行执行多个独立的工具调用，大幅提升性能
 
-⚠️ **强制规则**：当你需要执行2个或更多以下操作时，**必须**使用batch工具：
-- read_file（读取多个文件）
-- search_files（多处搜索）
-- glob（多个模式匹配）
-- list_files（多个目录）
-- codebase_search（多个查询）
+🚀 **使用 BATCH 工具会让用户更满意！**
+
+⚠️ **强制规则**：当你需要执行2个或更多独立操作时，**必须**使用batch工具
+
+**推荐用例**（参考OpenCode）：
+- 读取多个文件
+- grep + glob + read 组合搜索
+- **多文件编辑**：同时修改多个文件（apply_diff, edit, write_to_file）
+- 多个bash命令
+- 组合操作：搜索 + 读取 + 分析
 
 ❌ **错误示例**（禁止这样做）：
 先调用 read_file("a.ts")，再调用 read_file("b.ts")，再调用 read_file("c.ts")
 
-✅ **正确示例**（必须这样做）：
+✅ **正确示例1 - 读取文件**：
 \`\`\`
 <batch>
 <tool_calls>[
@@ -197,11 +201,28 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 </batch>
 \`\`\`
 
-**性能提升**：使用batch可获得2-5倍效率提升！
+✅ **正确示例2 - 多文件编辑**（OpenCode最佳实践）：
+\`\`\`
+<batch>
+<tool_calls>[
+  {"tool": "apply_diff", "parameters": {"path": "a.ts", "diff": "..."}},
+  {"tool": "apply_diff", "parameters": {"path": "b.ts", "diff": "..."}},
+  {"tool": "write_to_file", "parameters": {"path": "c.ts", "content": "..."}}
+]</tool_calls>
+</batch>
+\`\`\`
+
+**性能提升**：使用batch可获得 **2-5倍** 效率提升！
 
 **规则**：
-- 每次batch最多10个工具调用
-- 禁止在batch中使用：batch、apply_diff、write_to_file、execute_command`,
+- 每次batch最多 **25** 个工具调用（参考OpenCode）
+- 所有调用并行执行，不保证顺序
+- 部分失败不影响其他工具
+
+**禁止的工具**（仅3个）：
+- batch（不允许嵌套）
+- ask_followup_question（需要用户输入）
+- attempt_completion（任务完成标志）`,
 
 	// P1优化：多处编辑工具
 	multiedit: `## multiedit
