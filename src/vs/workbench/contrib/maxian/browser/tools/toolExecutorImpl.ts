@@ -337,28 +337,45 @@ export class ToolExecutorImpl implements IToolExecutor {
 	private async executeBatch(toolUse: ToolUse): Promise<ToolResponse> {
 		const toolCallsParam = toolUse.params.tool_calls;
 
+		console.log('[Maxian] executeBatch 开始');
+		console.log('[Maxian] toolUse.params:', toolUse.params);
+		console.log('[Maxian] toolCallsParam 类型:', typeof toolCallsParam);
+		console.log('[Maxian] toolCallsParam 长度:', typeof toolCallsParam === 'string' ? toolCallsParam.length : 'N/A');
+
 		if (!toolCallsParam) {
+			console.error('[Maxian] ❌ 错误: tool_calls 参数为空');
 			return '错误: batch 工具需要 tool_calls 参数';
 		}
 
 		let toolCalls: BatchToolCall[];
 		try {
-			toolCalls = typeof toolCallsParam === 'string'
-				? JSON.parse(toolCallsParam)
-				: toolCallsParam;
+			console.log('[Maxian] 尝试解析 tool_calls...');
+			if (typeof toolCallsParam === 'string') {
+				console.log('[Maxian] tool_calls 是字符串，长度:', toolCallsParam.length);
+				console.log('[Maxian] 前200字符:', toolCallsParam.substring(0, 200));
+				toolCalls = JSON.parse(toolCallsParam);
+				console.log('[Maxian] ✅ JSON解析成功，数组长度:', toolCalls.length);
+			} else {
+				console.log('[Maxian] tool_calls 已是对象/数组');
+				toolCalls = toolCallsParam;
+			}
 
 			if (!Array.isArray(toolCalls)) {
+				console.error('[Maxian] ❌ tool_calls 不是数组，类型:', typeof toolCalls);
 				return '错误: tool_calls 必须是数组';
 			}
 		} catch (e) {
+			console.error('[Maxian] ❌ tool_calls 解析失败:', e);
 			return `错误: tool_calls 参数解析失败: ${e}`;
 		}
 
 		if (toolCalls.length === 0) {
+			console.error('[Maxian] ❌ tool_calls 数组为空');
 			return '错误: tool_calls 不能为空';
 		}
 
-		console.log(`[Maxian] 批量执行 ${toolCalls.length} 个工具`);
+		console.log(`[Maxian] ✅ 批量执行 ${toolCalls.length} 个工具`);
+		console.log('[Maxian] 工具列表:', toolCalls.map(t => t.tool).join(', '));
 
 		const { results, summary, metadata } = await this.batchExecutor.executeBatch(toolCalls);
 
