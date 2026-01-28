@@ -684,8 +684,14 @@ ${assertResult.message}
 				return formattedError;
 			}
 
-			// Diff应用成功，写入文件
+			// Diff应用成功，检查是否有实际变化
 			const newContent = diffResult.content!;
+
+			// 🔥 防止重复修改：如果内容没有变化，说明修改已经存在
+			if (newContent === originalContent) {
+				return `⚠️ 文件内容未发生变化: ${absolutePath}\n\n这通常意味着：\n1. 修改已经存在于文件中\n2. 或者SEARCH块没有匹配到任何内容\n\n💡 建议：\n- 使用 read_file 查看当前文件状态\n- 如果问题已解决，使用 attempt_completion 完成任务\n- 如果问题未解决，使用不同的SEARCH内容重新尝试\n\n⚠️ 请不要重复应用相同的diff，这会浪费时间和资源！`;
+			}
+
 			const buffer = VSBuffer.fromString(newContent);
 			await this.fileService.writeFile(uri, buffer);
 
