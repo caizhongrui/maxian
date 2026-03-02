@@ -109,17 +109,22 @@ export function listBackgroundTasks(): { id: string; command: string; running: b
 }
 
 /**
- * 终止后台任务
+ * 终止后台任务（Windows 下使用 taskkill）
  */
 export function killBackgroundTask(taskId: string): boolean {
 	const task = backgroundTasks.get(taskId);
 	if (task && !task.completed) {
-		task.process.kill('SIGTERM');
-		setTimeout(() => {
-			if (!task.completed) {
-				task.process.kill('SIGKILL');
-			}
-		}, 5000);
+		if (IS_WINDOWS && task.process.pid) {
+			const { exec } = require('child_process');
+			exec(`taskkill /PID ${task.process.pid} /T /F`, () => { });
+		} else {
+			task.process.kill('SIGTERM');
+			setTimeout(() => {
+				if (!task.completed) {
+					task.process.kill('SIGKILL');
+				}
+			}, 5000);
+		}
 		return true;
 	}
 	return false;
@@ -218,37 +223,180 @@ function getCommandProgram(command: string): string {
 }
 
 /**
+ * 检测当前是否为 Windows 系统
+ */
+const IS_WINDOWS = process.platform === 'win32';
+
+/**
+ * Windows 下常见的命令不存在错误（中英文系统均覆盖）
+ */
+const WINDOWS_COMMAND_NOT_FOUND_PATTERNS = [
+	// 英文系统
+	'is not recognized as an internal or external command',
+	'is not recognized as the name of a cmdlet',
+	'command not found',
+	'The term',
+	'cannot be loaded because running scripts is disabled',
+	// 中文系统
+	'不是内部或外部命令',
+	'无法识别',
+	'不是命令、opcode 或脚本',
+	'找不到',
+];
+
+/**
+ * Windows 下常见的权限/访问拒绝错误
+ */
+const WINDOWS_PERMISSION_DENIED_PATTERNS = [
+	'Access is denied',
+	'access denied',
+	'拒绝访问',
+	'不允许',
+	'permission denied',
+];
+
+/**
+ * Windows 下常见的文件/目录不存在错误
+ */
+const WINDOWS_FILE_NOT_FOUND_PATTERNS = [
+	'The system cannot find',
+	'系统找不到',
+	'找不到指定的路径',
+	'找不到指定的文件',
+	'ENOENT',
+];
+
+/**
+ * 检测输出中是否包含 Windows 错误关键词（即使 exit code 为 0）
+ * 某些 Windows 命令失败时仍返回 exit code 0，需要通过输出检测
+ */
+function detectWindowsErrorInOutput(stdout: string, stderr: string): { hasError: boolean; errorType: string } {
+	if (!IS_WINDOWS) return { hasError: false, errorType: '' };
+
+	const combined = (stderr + '\n' + stdout).toLowerCase();
+
+	// Unix 命令在 Windows 上被误用（最常见场景）
+	const unixCommandsOnWindows = [
+		{ pattern: "'ls' is not recognized", msg: 'unix-command' },
+		{ pattern: "'cat' is not recognized", msg: 'unix-command' },
+		{ pattern: "'rm' is not recognized", msg: 'unix-command' },
+		{ pattern: "'grep' is not recognized", msg: 'unix-command' },
+		{ pattern: "'find' is not recognized", msg: 'unix-command' },
+		{ pattern: "'touch' is not recognized", msg: 'unix-command' },
+		{ pattern: "'chmod' is not recognized", msg: 'unix-command' },
+		{ pattern: "'mv' is not recognized", msg: 'unix-command' },
+		{ pattern: "'cp' is not recognized", msg: 'unix-command' },
+		{ pattern: "'which' is not recognized", msg: 'unix-command' },
+		{ pattern: "'clear' is not recognized", msg: 'unix-command' },
+		// 中文系统
+		{ pattern: "'ls' 不是内部或外部命令", msg: 'unix-command' },
+		{ pattern: "'cat' 不是内部或外部命令", msg: 'unix-command' },
+		{ pattern: "'rm' 不是内部或外部命令", msg: 'unix-command' },
+		{ pattern: "'grep' 不是内部或外部命令", msg: 'unix-command' },
+	];
+
+	for (const { pattern, msg } of unixCommandsOnWindows) {
+		if (combined.includes(pattern.toLowerCase())) {
+			return { hasError: true, errorType: msg };
+		}
+	}
+
+	for (const pattern of WINDOWS_COMMAND_NOT_FOUND_PATTERNS) {
+		if (combined.includes(pattern.toLowerCase())) {
+			return { hasError: true, errorType: 'command-not-found' };
+		}
+	}
+
+	for (const pattern of WINDOWS_PERMISSION_DENIED_PATTERNS) {
+		if (combined.includes(pattern.toLowerCase())) {
+			return { hasError: true, errorType: 'permission-denied' };
+		}
+	}
+
+	for (const pattern of WINDOWS_FILE_NOT_FOUND_PATTERNS) {
+		if (combined.includes(pattern.toLowerCase())) {
+			return { hasError: true, errorType: 'file-not-found' };
+		}
+	}
+
+	return { hasError: false, errorType: '' };
+}
+
+/**
  * 获取命令建议
  */
-function getCommandSuggestions(command: string, error: string): string[] {
+function getCommandSuggestions(command: string, error: string, stdout: string = ''): string[] {
 	const suggestions: string[] = [];
 	const program = getCommandProgram(command);
+	const combined = error + '\n' + stdout;
 
-	// 常见错误处理
-	if (error.includes('command not found') || error.includes('not recognized')) {
-		if (program === 'node' || program === 'npm') {
-			suggestions.push('请确保已安装 Node.js');
-		} else if (program === 'python' || program === 'python3') {
-			suggestions.push('请确保已安装 Python');
-		} else if (program === 'git') {
-			suggestions.push('请确保已安装 Git');
-		} else {
-			suggestions.push(`请确保 ${program} 已安装并在 PATH 中`);
+	// Windows：Unix 命令被误用
+	if (IS_WINDOWS) {
+		const unixToWindowsMap: Record<string, string> = {
+			'ls': 'dir 或 Get-ChildItem（PowerShell）',
+			'cat': 'type（CMD）或 Get-Content（PowerShell）',
+			'rm': 'del（文件）或 rmdir /s /q（目录）',
+			'grep': 'findstr（CMD）或 Select-String（PowerShell）',
+			'find': 'dir /s /b（CMD）或 Get-ChildItem -Recurse（PowerShell）',
+			'touch': 'type nul > file.txt（CMD）或 New-Item（PowerShell）',
+			'mv': 'move（CMD）或 Move-Item（PowerShell）',
+			'cp': 'copy（CMD）或 Copy-Item（PowerShell）',
+			'chmod': 'Windows 不支持 chmod，可使用 icacls',
+			'which': 'where（CMD）或 Get-Command（PowerShell）',
+			'clear': 'cls（CMD）或 Clear-Host（PowerShell）',
+			'export': 'set VAR=value（CMD）或 $env:VAR="value"（PowerShell）',
+			'echo': '语法正确，但变量引用用 %VAR%（CMD）或 $env:VAR（PowerShell）',
+		};
+
+		if (unixToWindowsMap[program]) {
+			suggestions.push(`Windows 不支持 "${program}" 命令，请改用: ${unixToWindowsMap[program]}`);
+		}
+
+		// 检测常见 Windows 错误文本
+		if (
+			WINDOWS_COMMAND_NOT_FOUND_PATTERNS.some(p => combined.toLowerCase().includes(p.toLowerCase())) ||
+			combined.includes('not recognized')
+		) {
+			if (!unixToWindowsMap[program]) {
+				suggestions.push(`请确保 "${program}" 已安装并在系统 PATH 中`);
+				suggestions.push('在 PowerShell 中运行 where <命令名> 检查是否可用');
+			}
+		}
+
+		if (WINDOWS_PERMISSION_DENIED_PATTERNS.some(p => combined.toLowerCase().includes(p.toLowerCase()))) {
+			suggestions.push('请以管理员权限运行（右键 → 以管理员身份运行）');
+		}
+
+		if (WINDOWS_FILE_NOT_FOUND_PATTERNS.some(p => combined.toLowerCase().includes(p.toLowerCase()))) {
+			suggestions.push('请检查文件路径是否正确，注意 Windows 路径使用反斜杠 \\');
+		}
+	} else {
+		// Unix/macOS 错误处理
+		if (combined.includes('command not found') || combined.includes('not recognized')) {
+			if (program === 'node' || program === 'npm') {
+				suggestions.push('请确保已安装 Node.js');
+			} else if (program === 'python' || program === 'python3') {
+				suggestions.push('请确保已安装 Python');
+			} else if (program === 'git') {
+				suggestions.push('请确保已安装 Git');
+			} else {
+				suggestions.push(`请确保 ${program} 已安装并在 PATH 中`);
+			}
+		}
+
+		if (combined.includes('permission denied')) {
+			suggestions.push('尝试添加执行权限: chmod +x <file>');
+			if (!command.startsWith('sudo')) {
+				suggestions.push('或使用 sudo 提升权限');
+			}
 		}
 	}
 
-	if (error.includes('permission denied')) {
-		suggestions.push('尝试添加执行权限: chmod +x <file>');
-		if (!command.startsWith('sudo')) {
-			suggestions.push('或使用 sudo 提升权限');
-		}
-	}
-
-	if (error.includes('ENOENT')) {
+	if (combined.includes('ENOENT')) {
 		suggestions.push('请检查文件或目录路径是否正确');
 	}
 
-	if (error.includes('ETIMEDOUT') || error.includes('timeout')) {
+	if (combined.includes('ETIMEDOUT') || combined.includes('timeout')) {
 		suggestions.push('命令执行超时，尝试增加超时时间或检查网络连接');
 	}
 
@@ -311,7 +459,7 @@ export async function executeCommandTool(
 
 	} catch (error: any) {
 		const errorMessage = error.message || String(error);
-		const suggestions = getCommandSuggestions(command, errorMessage);
+		const suggestions = getCommandSuggestions(command, errorMessage, '');
 
 		const output = [
 			`❌ 命令执行失败`,
@@ -363,15 +511,21 @@ async function executeForegroundCommand(
 
 		let completed = false;
 
-		// 超时处理
+		// 超时处理（Windows 下 SIGTERM/SIGKILL 无效，需要用 taskkill）
 		const timeoutId = setTimeout(() => {
 			if (!completed) {
-				childProcess.kill('SIGTERM');
-				setTimeout(() => {
-					if (!completed) {
-						childProcess.kill('SIGKILL');
-					}
-				}, 5000);
+				if (IS_WINDOWS && childProcess.pid) {
+					// Windows：强制杀死进程树
+					const { exec } = require('child_process');
+					exec(`taskkill /PID ${childProcess.pid} /T /F`, () => { });
+				} else {
+					childProcess.kill('SIGTERM');
+					setTimeout(() => {
+						if (!completed) {
+							childProcess.kill('SIGKILL');
+						}
+					}, 5000);
+				}
 			}
 		}, timeout);
 
@@ -509,11 +663,20 @@ function formatCommandResult(
 	elapsed: number,
 	timeout: number
 ): string {
-	const isSuccess = exitCode === 0;
+	// Windows 下即使 exit code 为 0，也可能通过输出内容检测到错误
+	const windowsOutputError = detectWindowsErrorInOutput(stdout.content, stderr.content);
+	const isSuccess = exitCode === 0 && !windowsOutputError.hasError;
 	const isTimeout = elapsed >= timeout - 1000; // 接近超时
 
+	let failReason = '';
+	if (exitCode !== 0) {
+		failReason = ` (退出码: ${exitCode})`;
+	} else if (windowsOutputError.hasError) {
+		failReason = ` (Windows 指令错误，退出码为 0 但输出含错误信息)`;
+	}
+
 	const header = [
-		isSuccess ? `✅ 命令执行成功` : `❌ 命令执行失败 (退出码: ${exitCode})`,
+		isSuccess ? `✅ 命令执行成功` : `❌ 命令执行失败${failReason}`,
 		'',
 		`命令: ${command}`,
 		`工作目录: ${workingDir}`,
@@ -563,12 +726,20 @@ function formatCommandResult(
 
 	// 如果失败，添加建议
 	if (!isSuccess) {
-		const errorContent = stderr.content || stdout.content;
-		const suggestions = getCommandSuggestions(command, errorContent);
+		const suggestions = getCommandSuggestions(command, stderr.content, stdout.content);
 		if (suggestions.length > 0) {
 			output.push('');
 			output.push('💡 建议:');
 			suggestions.forEach(s => output.push(`  - ${s}`));
+		}
+
+		// Windows 下如果 exit code 为 0 但检测到错误，额外提示
+		if (windowsOutputError.hasError && exitCode === 0) {
+			output.push('');
+			output.push('⚠️ 注意: 此命令返回了退出码 0，但输出中包含错误信息，任务实际上未成功执行。');
+			if (windowsOutputError.errorType === 'unix-command') {
+				output.push('   → 当前系统为 Windows，请使用对应的 Windows/PowerShell 命令替代。');
+			}
 		}
 	}
 
