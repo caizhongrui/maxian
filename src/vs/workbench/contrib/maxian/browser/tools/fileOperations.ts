@@ -75,7 +75,7 @@ export class FileOperationsTool {
 	 * @param inputPath 输入的路径（可能是相对路径或绝对路径）
 	 * @returns 绝对路径
 	 */
-	private resolveFilePath(inputPath: string): string {
+	public resolveFilePath(inputPath: string): string {
 		if (!inputPath) {
 			return this.workspaceRoot;
 		}

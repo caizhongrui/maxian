@@ -710,7 +710,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 		}
 
 		// 解析为绝对路径
-		const absolutePath = this.fileOperations['resolveFilePath'](path);
+		const absolutePath = this.fileOperations.resolveFilePath(path);
 
 		console.log(`[Maxian] LSP Hover: ${absolutePath}:${lineNum}:${colNum}`);
 
@@ -729,7 +729,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 		}
 
 		// 解析为绝对路径
-		const absolutePath = this.fileOperations['resolveFilePath'](path);
+		const absolutePath = this.fileOperations.resolveFilePath(path);
 
 		console.log(`[Maxian] LSP Diagnostics: ${absolutePath}`);
 
@@ -777,7 +777,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 		}
 
 		// 解析为绝对路径
-		const absolutePath = this.fileOperations['resolveFilePath'](path);
+		const absolutePath = this.fileOperations.resolveFilePath(path);
 
 		console.log(`[Maxian] LSP Definition: ${absolutePath}:${lineNum}:${colNum}`);
 
@@ -815,7 +815,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 		}
 
 		// 解析为绝对路径
-		const absolutePath = this.fileOperations['resolveFilePath'](path);
+		const absolutePath = this.fileOperations.resolveFilePath(path);
 
 		console.log(`[Maxian] LSP References: ${absolutePath}:${lineNum}:${colNum}`);
 
@@ -853,7 +853,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 		}
 
 		// 解析为绝对路径
-		const absolutePath = this.fileOperations['resolveFilePath'](path);
+		const absolutePath = this.fileOperations.resolveFilePath(path);
 
 		console.log(`[Maxian] LSP TypeDefinition: ${absolutePath}:${lineNum}:${colNum}`);
 
