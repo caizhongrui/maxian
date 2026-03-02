@@ -8,6 +8,7 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { ITerminalService } from '../../terminal/browser/terminal.js';
+import { ITerminalProfileService } from '../../terminal/common/terminal.js';
 import { ISearchService } from '../../../services/search/common/search.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
@@ -429,7 +430,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 		@ILspDefinitionService private readonly lspDefinitionService: ILspDefinitionService,
 		@ILspReferencesService private readonly lspReferencesService: ILspReferencesService,
 		@ILspTypeDefinitionService private readonly lspTypeDefinitionService: ILspTypeDefinitionService,
-		@ITextFileService private readonly textFileService: ITextFileService
+		@ITextFileService private readonly textFileService: ITextFileService,
+		@ITerminalProfileService private readonly terminalProfileService: ITerminalProfileService
 	) {
 		super();
 		this.apiFactory = new ApiFactory(this.configurationService);
@@ -1183,24 +1185,42 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private getSystemInfo(): SystemInfo {
 		// 获取平台信息
 		let platform = 'unknown';
-		let shell = 'bash';
+		let shell: string;
 
 		if (isWindows) {
 			platform = 'win32';
-			shell = 'cmd.exe或PowerShell';
 		} else if (isMacintosh) {
 			platform = 'darwin';
-			shell = 'zsh或bash';
 		} else if (isLinux) {
 			platform = 'linux';
-			shell = 'bash';
 		}
 
-		// 架构信息（浏览器环境中无法直接获取，使用默认值）
-		const arch = 'x64'; // 默认值，实际可以从navigator.userAgent推断
+		// 读取用户实际配置的 Shell（与 Cline/Roo-Code 一致）
+		// 优先从 ITerminalProfileService 获取默认 profile 名称
+		try {
+			const defaultProfileName = this.terminalProfileService.getDefaultProfileName();
+			const defaultProfile = this.terminalProfileService.getDefaultProfile();
 
-		// Node版本（浏览器环境中无法获取，使用占位符）
-		const nodeVersion = 'v18.x'; // VSCode内置的Node版本
+			if (defaultProfile?.path) {
+				// 取路径最后一个文件名，如 powershell.exe → powershell, /bin/zsh → zsh
+				const shellPath = defaultProfile.path;
+				const shellName = shellPath.split(/[\\/]/).pop()?.replace(/\.exe$/i, '') || shellPath;
+				shell = shellName;
+			} else if (defaultProfileName) {
+				shell = defaultProfileName;
+			} else {
+				// fallback：根据平台给出默认值
+				shell = isWindows ? 'PowerShell' : isMacintosh ? 'zsh' : 'bash';
+			}
+		} catch {
+			shell = isWindows ? 'PowerShell' : isMacintosh ? 'zsh' : 'bash';
+		}
+
+		// 架构信息（从 navigator.userAgent 推断）
+		const arch = (typeof navigator !== 'undefined' && navigator.userAgent.includes('arm')) ? 'arm64' : 'x64';
+
+		// Node版本（VSCode内置的Node版本）
+		const nodeVersion = (typeof process !== 'undefined' && process.version) ? process.version : 'v18.x';
 
 		return {
 			platform,
