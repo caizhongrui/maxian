@@ -3974,7 +3974,8 @@ export class MaxianView extends ViewPane {
 			'architect': '🏗️',
 			'ask': '❓',
 			'debug': '🔧',
-			'orchestrator': '🎯'
+			'orchestrator': '🎯',
+			'spec': '📋'
 		};
 
 		// 添加模式列表项

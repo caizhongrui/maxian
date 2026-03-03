@@ -4,7 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken, CancellationTokenSource } from '../../../../base/common/cancellation.js';
+import { IDisposable } from '../../../../base/common/lifecycle.js';
 import { Position } from '../../../../editor/common/core/position.js';
+import { Range } from '../../../../editor/common/core/range.js';
 import { ITextModel } from '../../../../editor/common/model.js';
 import { InlineCompletion, InlineCompletionContext, InlineCompletions, InlineCompletionsProvider } from '../../../../editor/common/languages.js';
 import { IAIService } from '../../../../platform/ai/common/ai.js';
@@ -73,6 +75,12 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		score: number;
 		responseTime: number;
 	};
+
+	// 🆕 编辑历史追踪（参考 Copilot NES edit_diff_history）
+	// 记录每个模型最近的代码修改，帮助 AI 理解用户的修改意图
+	private recentEditsMap: Map<string, Array<{ timestamp: number; range: Range; text: string }>> = new Map();
+	private trackedModels: Map<string, IDisposable> = new Map();
+	private readonly maxEditHistoryPerModel = 10;
 
 	constructor(
 		private readonly aiService: IAIService,
@@ -324,6 +332,19 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			typeDefinitionsCount: enhancedContext.typeDefinitions?.length || 0,
 			variableTypesCount: enhancedContext.variableTypes?.size || 0
 		});
+
+		// 🆕 追踪模型编辑历史，并注入到 context（参考 Copilot NES edit_diff_history）
+		this.ensureModelTracked(model);
+		const modelKey = model.uri.toString();
+		const recentEditsRaw = this.recentEditsMap.get(modelKey);
+		if (recentEditsRaw && recentEditsRaw.length > 0) {
+			// 取最近5次编辑，过滤掉当前补全触发前1秒内的（避免噪音）
+			const now = Date.now();
+			enhancedContext.recentEdits = recentEditsRaw
+				.filter(edit => (now - edit.timestamp) > 100)
+				.slice(-5)
+				.map(edit => ({ range: edit.range, text: edit.text }));
+		}
 
 		// Build enhanced prompt with structural information
 		const prompt = await this.buildEnhancedPrompt(enhancedContext);
@@ -872,6 +893,26 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			}
 		}
 
+		// 🆕 最近编辑历史（参考 Copilot NES edit_diff_history）
+		// 让 AI 理解用户最近的修改意图，生成更一致的补全
+		if (context.recentEdits && context.recentEdits.length > 0) {
+			parts.push('【最近编辑历史（用于推断修改意图）】');
+			for (const edit of context.recentEdits) {
+				const lineInfo = edit.range.startLineNumber === edit.range.endLineNumber
+					? `行${edit.range.startLineNumber}`
+					: `行${edit.range.startLineNumber}-${edit.range.endLineNumber}`;
+				if (edit.text.trim()) {
+					const previewText = edit.text.length > 100
+						? edit.text.substring(0, 100) + '...'
+						: edit.text;
+					parts.push(`  ${lineInfo}: 添加 \`${previewText.replace(/\n/g, '↵')}\``);
+				} else {
+					parts.push(`  ${lineInfo}: 删除代码`);
+				}
+			}
+			parts.push('');
+		}
+
 		// 代码上下文 - FIM 风格：用统一代码块 + <CURSOR> 标记精确插入位置
 		// 这样 AI 能清晰识别光标位置，不会误以为需要修改周围代码
 		const beforeCode = context.beforeLines.join('\n');
@@ -931,6 +972,52 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 
 	freeInlineCompletions(): void {
 		// Cleanup if needed
+	}
+
+	/**
+	 * 🆕 编辑历史追踪 - 确保模型已被订阅（参考 Copilot NES edit_diff_history）
+	 * 订阅模型的内容变更事件，记录最近的代码修改历史
+	 */
+	private ensureModelTracked(model: ITextModel): void {
+		const modelKey = model.uri.toString();
+		if (this.trackedModels.has(modelKey)) {
+			return;
+		}
+
+		// 订阅模型内容变更事件
+		const changeDisposable = model.onDidChangeContent(event => {
+			const edits = this.recentEditsMap.get(modelKey) || [];
+
+			for (const change of event.changes) {
+				edits.push({
+					timestamp: Date.now(),
+					range: new Range(
+						change.range.startLineNumber,
+						change.range.startColumn,
+						change.range.endLineNumber,
+						change.range.endColumn
+					),
+					text: change.text
+				});
+			}
+
+			// 保留最近 N 次编辑，避免内存泄漏
+			while (edits.length > this.maxEditHistoryPerModel) {
+				edits.shift();
+			}
+
+			this.recentEditsMap.set(modelKey, edits);
+		});
+
+		this.trackedModels.set(modelKey, changeDisposable);
+
+		// 模型销毁时清理资源
+		const disposeListener = model.onWillDispose(() => {
+			changeDisposable.dispose();
+			disposeListener.dispose();
+			this.trackedModels.delete(modelKey);
+			this.recentEditsMap.delete(modelKey);
+		});
 	}
 
 	/**

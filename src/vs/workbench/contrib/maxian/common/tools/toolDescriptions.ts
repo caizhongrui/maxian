@@ -153,15 +153,20 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
 	// ==================== 文件写入工具 ====================
 	write_to_file: {
 		name: 'write_to_file',
-		summary: '写入文件内容',
+		summary: '写入文件内容（仅限新建或完全重写）',
 		description: `将内容写入指定文件。如果文件不存在会自动创建（包括必要的目录）。
 
-**警告：** 此工具会完全覆盖文件内容！在使用前，你必须先使用 read_file 读取文件当前内容。
+**⚠️ 严格限制：**
+- **仅用于创建新文件**，或确实需要完全重写的场景
+- **绝对禁止用于修改已有文件的部分内容**——必须使用 edit 或 apply_diff
+- 对已有文件使用此工具会丢失所有未包含的内容！
 
-**推荐用法：**
-- 创建新文件
-- 完全重写小文件
-- 对于部分修改，请优先使用 edit 或 apply_diff 工具`,
+**正确用法：**
+- ✅ 创建全新文件（文件不存在）
+- ✅ 对文件进行彻底重构（超过80%内容需要改变）
+- ❌ 修改函数实现 → 使用 edit
+- ❌ 添加新方法 → 使用 edit 或 apply_diff
+- ❌ 修改配置项 → 使用 edit`,
 		parameters: [
 			{
 				name: 'path',
@@ -678,9 +683,14 @@ import { useQuery } from 'react-query';</new_string>
 		summary: '执行终端命令',
 		description: `在终端中执行命令。
 
+**⚠️ requires_approval 参数（重要！参考Cline）：**
+- 当命令会产生副作用或影响系统状态时，必须设置 \`requires_approval: true\`
+- \`true\`（需要用户确认）：安装/卸载依赖、删除文件、写入磁盘、网络请求、修改系统配置
+- \`false\`（可直接执行）：读取文件、查看状态(git status)、运行测试、构建、grep/find等只读操作
+
 **安全限制：**
-- 某些危险命令可能被拒绝
-- 长时间运行的命令会有超时限制
+- 危险命令可能被直接拒绝（rm -rf、mkfs等）
+- 长时间运行的命令有超时限制
 - 交互式命令不支持
 
 **支持的命令类型：**
@@ -696,6 +706,13 @@ import { useQuery } from 'react-query';</new_string>
 				description: '要执行的命令',
 			},
 			{
+				name: 'requires_approval',
+				type: 'boolean',
+				required: true,
+				description: '命令是否需要用户确认才能执行。有副作用的操作设 true（安装包、删除文件、网络操作等），只读操作设 false（git status、读取文件、运行测试等）',
+				examples: ['true', 'false'],
+			},
+			{
 				name: 'cwd',
 				type: 'string',
 				required: false,
@@ -705,30 +722,42 @@ import { useQuery } from 'react-query';</new_string>
 		],
 		examples: [
 			{
-				title: '运行测试',
-				description: '',
+				title: '运行测试（不需要确认）',
+				description: '只读操作，直接执行',
 				xml: `<execute_command>
 <command>npm test</command>
+<requires_approval>false</requires_approval>
 </execute_command>`,
 			},
 			{
-				title: '检查 Git 状态',
-				description: '',
+				title: '安装依赖（需要确认）',
+				description: '会修改 node_modules 和 package-lock.json，需要用户同意',
+				xml: `<execute_command>
+<command>npm install lodash</command>
+<requires_approval>true</requires_approval>
+</execute_command>`,
+			},
+			{
+				title: '检查 Git 状态（不需要确认）',
+				description: '只读操作',
 				xml: `<execute_command>
 <command>git status</command>
+<requires_approval>false</requires_approval>
 </execute_command>`,
 			},
 			{
-				title: '安装依赖',
-				description: '',
+				title: '删除文件（需要确认）',
+				description: '破坏性操作，必须用户确认',
 				xml: `<execute_command>
-<command>npm install</command>
+<command>rm -rf dist/</command>
+<requires_approval>true</requires_approval>
 </execute_command>`,
 			},
 		],
 		tips: [
-			'命令会在工作区根目录执行',
-			'可以使用 cwd 参数更改工作目录',
+			'requires_approval 是必填参数，每次调用都必须明确声明',
+			'疑惑时设为 true，宁可多问也不要执行用户不知情的危险操作',
+			'命令会在工作区根目录执行，可用 cwd 参数更改',
 			'命令输出会自动截断过长内容',
 		],
 		commonErrors: [
@@ -797,29 +826,53 @@ import { useQuery } from 'react-query';</new_string>
 	// ==================== 提问工具 ====================
 	ask_followup_question: {
 		name: 'ask_followup_question',
-		summary: '向用户提问',
+		summary: '向用户提问（含备选答案）',
 		description: `当需要用户提供更多信息时使用此工具。
 
 **使用时机：**
-- 需求不明确
-- 有多个可选方案需要用户选择
-- 需要确认重要操作`,
+- 需求不明确，有多种实现方案
+- 需要用户做出选择
+- 需要确认重要/破坏性操作
+
+**重要：** 必须提供 options 参数，给出 2-4 个建议答案，方便用户快速选择。
+能用工具解决的问题不要问用户，只在真正需要人工决策时使用。`,
 		parameters: [
 			{
 				name: 'question',
 				type: 'string',
 				required: true,
-				description: '要向用户提出的问题',
+				description: '要向用户提出的问题，表述清晰完整',
+			},
+			{
+				name: 'options',
+				type: 'array (JSON)',
+				required: true,
+				description: '建议答案数组（2-4个选项），JSON 格式。帮助用户快速选择而无需手动输入',
+				examples: ['["选项A", "选项B", "选项C"]', '["是，继续", "否，取消"]'],
 			},
 		],
 		examples: [
 			{
-				title: '确认操作',
-				description: '',
+				title: '询问技术方案',
+				description: '提供具体的选项让用户快速选择',
 				xml: `<ask_followup_question>
-<question>是否要删除这个文件？这个操作不可逆。</question>
+<question>这个 API 需要身份验证，请选择认证方式：</question>
+<options>["JWT Token（推荐，无状态）", "Session Cookie（传统方式）", "API Key（简单直接）", "OAuth2（第三方登录）"]</options>
 </ask_followup_question>`,
 			},
+			{
+				title: '确认破坏性操作',
+				description: '删除操作前必须用户确认',
+				xml: `<ask_followup_question>
+<question>确认删除 dist/ 目录？该目录包含构建产物，可以重新构建。</question>
+<options>["确认删除", "取消操作"]</options>
+</ask_followup_question>`,
+			},
+		],
+		tips: [
+			'options 必须是 JSON 数组格式',
+			'选项应该具体、可操作，不要模糊',
+			'危险操作的选项应包含"取消"选项',
 		],
 		relatedTools: ['attempt_completion'],
 	},
@@ -830,9 +883,15 @@ import { useQuery } from 'react-query';</new_string>
 		summary: '完成当前任务',
 		description: `当任务完成时调用此工具，提供任务结果摘要。
 
-**调用时机：**
-- 所有要求的工作都已完成
-- 需要向用户报告最终结果`,
+**调用前必须确认（参考Cursor/Gemini CLI）：**
+1. ✅ 所有工具调用已成功完成，无失败或挂起的操作
+2. ✅ 代码修改已通过 lsp_diagnostics 验证，无编译错误
+3. ✅ 如果任务涉及功能实现，尽可能运行了相关测试
+4. ✅ 结果描述准确反映了完成的工作
+
+**禁止：**
+- ❌ result 末尾不能以问题结尾（"...对吗？"、"...需要调整吗？"）
+- ❌ 不确认代码无误就报告完成`,
 		parameters: [
 			{
 				name: 'result',

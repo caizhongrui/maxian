@@ -46,6 +46,7 @@ import { ILspReferencesService, globalLspReferencesHandler } from '../common/lsp
 import { ILspTypeDefinitionService, globalLspTypeDefinitionHandler } from '../common/lsp/lspTypeDefinition.js';
 import { ITextFileService } from '../../../services/textfile/common/textfiles.js';
 import { AutoDiagnosticInjector, IDiagnosticInjectionEvent } from './lspIntegration/AutoDiagnosticInjector.js';
+import { SteeringService } from '../common/steering/SteeringService.js';
 
 export const IMaxianService = createDecorator<IMaxianService>('maxianService');
 
@@ -409,6 +410,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private autoDiagnosticInjector: AutoDiagnosticInjector | null = null;
 	private currentDiagnosticText: string | null = null;
 
+	// 📋 Steering 服务（P1优化 - 项目/团队级别规范注入）
+	private steeringService: SteeringService | null = null;
+
 	constructor(
 		@IFileService private readonly fileService: IFileService,
 		@ITerminalService private readonly terminalService: ITerminalService,
@@ -566,6 +570,13 @@ export class MaxianService extends Disposable implements IMaxianService {
 			this.repoMapService = this._repoMapService;
 			await this.repoMapService.initialize(workspaceRoot);
 			console.log('[Maxian] RepoMapService已初始化');
+		}
+
+		// P1优化：初始化 SteeringService（加载 .maxian/steering/*.md）
+		if (workspaceRoot) {
+			this.steeringService = new SteeringService(workspaceRoot);
+			await this.steeringService.initialize();
+			console.log('[Maxian] SteeringService已初始化');
 		}
 
 		// 从StorageService读取认证凭据（与authService使用相同的key）
@@ -1258,8 +1269,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
 		const availableTools = this.getAvailableTools();
 
-		// 生成缓存键
-		const cacheKey = `${workspaceRoot}:${this.currentMode}:${availableTools.length}`;
+		// 生成缓存键（包含 steering 版本，确保 steering 变更时缓存失效）
+		const steeringVersion = this.steeringService ? this.steeringService.getLoadVersion() : 0;
+		const cacheKey = `${workspaceRoot}:${this.currentMode}:${availableTools.length}:sv${steeringVersion}`;
 		const now = Date.now();
 
 		// 检查缓存是否有效
@@ -1293,6 +1305,14 @@ export class MaxianService extends Disposable implements IMaxianService {
 		const preloadedSkills = await Promise.resolve(this.skillService.search({}));
 		const skillsArray = Array.isArray(preloadedSkills) ? preloadedSkills : [];
 
+		// 获取 Steering 内容（来自 .maxian/steering/*.md）
+		const steeringContent = this.steeringService
+			? this.steeringService.getActiveContent()
+			: null;
+		if (steeringContent) {
+			console.log('[Maxian] Steering内容已加载，长度:', steeringContent.length);
+		}
+
 		let prompt = SystemPromptGenerator.generate(
 			workspaceRoot,
 			availableTools,
@@ -1306,7 +1326,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 				// 传入预加载的 Skills 列表
 				preloadedSkills: skillsArray,
 				// 🔧 自动诊断信息注入（Task #18）
-				diagnosticText: this.currentDiagnosticText
+				diagnosticText: this.currentDiagnosticText,
+				// 📋 Steering内容注入（P1优化 - .maxian/steering/*.md）
+				steeringContent: steeringContent
 			}
 		);
 
@@ -2693,6 +2715,11 @@ ${preloadedCode}
 
 	override dispose(): void {
 		console.log('[Maxian] 码弦服务正在销毁');
+		// 释放 SteeringService 资源
+		if (this.steeringService) {
+			this.steeringService.dispose();
+			this.steeringService = null;
+		}
 		super.dispose();
 	}
 }

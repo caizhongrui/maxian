@@ -71,6 +71,8 @@ export const toolParamNames = [
 	'useCache',       // webfetch 缓存参数
 	'format',         // webfetch 输出格式参数
 	'skill_name',     // skill 工具参数
+	'requires_approval', // execute_command: 是否需要用户确认（参考Cline）
+	'options',        // ask_followup_question: 备选答案数组（参考Cline）
 ] as const;
 
 export type ToolParamName = (typeof toolParamNames)[number];
@@ -128,7 +130,7 @@ export interface ToolUse {
 // 具体工具类型定义
 export interface ExecuteCommandToolUse extends ToolUse {
 	name: 'execute_command';
-	params: Partial<Pick<Record<ToolParamName, string>, 'command' | 'cwd'>>;
+	params: Partial<Pick<Record<ToolParamName, string>, 'command' | 'cwd' | 'requires_approval'>>;
 }
 
 export interface ReadFileToolUse extends ToolUse {
@@ -168,7 +170,7 @@ export interface ListCodeDefinitionNamesToolUse extends ToolUse {
 
 export interface AskFollowupQuestionToolUse extends ToolUse {
 	name: 'ask_followup_question';
-	params: Partial<Pick<Record<ToolParamName, string>, 'question' | 'follow_up'>>;
+	params: Partial<Pick<Record<ToolParamName, string>, 'question' | 'follow_up' | 'options'>>;
 }
 
 export interface AttemptCompletionToolUse extends ToolUse {

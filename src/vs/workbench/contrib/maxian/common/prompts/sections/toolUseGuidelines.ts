@@ -37,25 +37,34 @@ TOOL USE GUIDELINES
    - **多条件搜索 → 用 batch 并行执行多个搜索**
 
 4. **文件修改**
-   - 修改前必须 read_file
-   - 局部修改 → apply_diff（首选）
+   - 修改前必须 read_file（距上次读取超过5轮对话也需重新读取）
+   - 局部修改 → **edit 或 apply_diff**（首选，安全精确）
    - 多处修改同一文件 → multiedit
-   - 多文件批量操作 → patch 或 **batch + apply_diff**
-   - 创建/完全重写 → write_to_file（必须完整内容，禁止占位符）
+   - 多文件批量操作 → patch 或 **batch + edit/apply_diff**
+   - **write_to_file 仅用于创建新文件或完全重写（>80%内容变化）**
    - **创建多个新文件 → batch + write_to_file（并行创建）**
-   - **编辑多个文件 → batch + apply_diff（并行修改）**
+   - **编辑多个文件 → batch + edit（并行修改）**
+   - **修改代码后 → lsp_diagnostics 验证，有错误则修复（最多3次循环）**
 
 5. **命令执行**
-   - 危险命令先询问用户
+   - 每次调用必须声明 requires_approval（true=有副作用，false=只读）
+   - requires_approval: true 时，系统会请求用户确认后才执行
+   - 危险命令被系统自动阻止
    - 失败时分析错误并修复
 
 6. **任务管理**
    - 复杂任务用 update_todo_list 跟踪
-   - 完成时用 attempt_completion
+   - 完成一个任务立即标记 completed，再设置下一个为 in_progress
+   - 全部完成且无诊断错误后才调用 attempt_completion
 
 7. **用户交互**
    - 仅在必要时 ask_followup_question
    - 能用工具解决的不问用户
+
+8.5 **进度叙述（每次工具调用前必须执行）**
+   - 每次工具调用批次前给出 1-2 句叙述式进度说明
+   - 说了"我要做X"就必须立即执行对应工具，不能只说不做
+   - 不要在工具调用之间重复已完成的内容
 
 8. **LSP 工具（代码智能分析）**
    - **⚡ 重要：自动识别用户意图，无需用户明确说"使用lsp_xxx"**

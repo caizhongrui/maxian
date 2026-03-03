@@ -29,7 +29,7 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 	write_to_file: `## write_to_file
 创建新文件或完全覆盖现有文件
 
-**使用**：创建新文件、完全重写（变化>50%）
+**使用**：创建新文件、完全重写（变化>80%）
 **不使用**：小改动→apply_diff，局部修改→apply_diff，插入内容→insert_content
 
 **要点**：
@@ -121,8 +121,16 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 **使用**：构建、测试、安装依赖、Git操作
 **不使用**：读文件→read_file，搜索→search_files，编辑→apply_diff
 
+**requires_approval 参数（必填）**：
+- true：有副作用（安装/卸载包、删除文件、网络请求、系统配置变更）
+- false：只读操作（git status、运行测试、构建、grep 等）
+
+**包管理规范**（参考Augment）：
+- 安装依赖必须用包管理器命令：npm install、pip install 等
+- 禁止直接编辑 package.json 等包文件来添加/删除依赖
+
 **安全**：
-- 危险命令(rm -rf, git push --force等)先询问用户
+- 危险命令(rm -rf, git push --force等)先询问用户（requires_approval: true）
 - 永远不要 git push --force 到 main/master`,
 
 	// ==================== 交互工具 ====================
@@ -136,12 +144,20 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 **要点**：问题要具体，提供2-4个选项`,
 
 	attempt_completion: `## attempt_completion
-完成任务并报告结果
+任务完全完成后向用户报告结果
 
-**使用**：任务真正完成时
-**不使用**：任务未完成、有错误待解决
+**使用前必须确认（参考Cursor completion_spec）**：
+- ✅ 所有修改的文件已通过 lsp_diagnostics 验证，无编译/类型错误
+- ✅ 用户要求的所有功能已实现
+- ✅ 没有遗留的未解决错误或半成品代码
 
-**要点**：清晰描述完成了什么，不要以问题结尾`,
+**result 内容格式**：
+- 简洁概括做了哪些改动及其影响（高信噪比，用户会读）
+- 引用关键代码用 \`[\`function()\`](path:line)\` 格式
+- 使用 markdown，适当使用列表和代码块
+- **禁止**：重复计划列表、过长解释、以问题结尾、套话（"希望这对你有帮助"等）
+
+**不使用**：任务未完成、有错误待解决、用户问题还没解答`,
 
 	new_task: `## new_task
 创建新的子任务

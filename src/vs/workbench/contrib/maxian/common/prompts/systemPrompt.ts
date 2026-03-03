@@ -61,7 +61,9 @@ export class SystemPromptGenerator {
 	 * 10. 系统信息 → 环境上下文
 	 * 11. 目标 → 最终目的
 	 * 12. 自定义指令 → 模式特定指令
-	 * 13. Skills提示 → （未来）按需加载的专业知识
+	 * 13. Steering内容 → 团队/项目级别规范（.maxian/steering/*.md）
+	 * 14. 诊断信息 → LSP自动注入
+	 * 15. Skills提示 → 按需加载的专业知识
 	 *
 	 * @param workspaceRoot 工作区根目录
 	 * @param availableTools 可用工具列表
@@ -85,6 +87,8 @@ export class SystemPromptGenerator {
 			preloadedSkills?: ISkill[];
 			/** 自动注入的诊断信息（来自LSP） */
 			diagnosticText?: string | null;
+			/** Steering 文件内容（来自 .maxian/steering/*.md） */
+			steeringContent?: string | null;
 		}
 	): string {
 		const sections: string[] = [];
@@ -128,12 +132,23 @@ export class SystemPromptGenerator {
 			sections.push(customInstructions);
 		}
 
-		// 13. 自动诊断信息（来自LSP - 自动注入）
+		// 13. Steering 内容（来自 .maxian/steering/*.md - 自动注入）
+		if (options?.steeringContent) {
+			sections.push(`====
+
+STEERING
+
+以下是团队/项目级别的规范和约定（来自 .maxian/steering/ 配置文件）。这些规范必须优先遵守，如与通用指南冲突，以此为准。
+
+${options.steeringContent}`);
+		}
+
+		// 14. 自动诊断信息（来自LSP - 自动注入）
 		if (options?.diagnosticText) {
 			sections.push(options.diagnosticText);
 		}
 
-		// 14. Skills系统提示（动态生成）
+		// 15. Skills系统提示（动态生成）
 		if (options?.reserveForSkills && options?.preloadedSkills && options.preloadedSkills.length > 0) {
 			sections.push(this.getSkillsDirectory(options.preloadedSkills));
 		}

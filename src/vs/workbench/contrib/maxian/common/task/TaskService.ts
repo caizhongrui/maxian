@@ -1299,6 +1299,49 @@ export class TaskService extends Disposable {
 				}
 			}
 
+			// 处理 execute_command requires_approval 用户确认（参考Cline）
+			if (typeof result === 'string' && result.startsWith('__APPROVAL_REQUIRED__:')) {
+				const payload = result.substring('__APPROVAL_REQUIRED__:'.length);
+				const { command, cwd } = JSON.parse(payload);
+
+				const approvalQuestion = `AI 请求执行以下命令，该命令可能产生副作用，请确认是否允许：\n\n\`\`\`\n${command}\n\`\`\`\n${cwd ? `工作目录：${cwd}` : ''}`;
+				const { response, text } = await this.ask('followup', approvalQuestion);
+
+				if (response === 'messageResponse' && text && (text.trim() === '是' || text.trim().toLowerCase() === 'yes' || text.trim() === '确认' || text.trim() === '允许')) {
+					// 用户确认，执行命令
+					const execResult = await this.toolExecutor.executeTool({
+						type: 'tool_use',
+						name: 'execute_command',
+						params: { command, cwd, requires_approval: 'false' },
+						partial: false,
+						toolUseId: toolUse.id
+					});
+					const execContent = typeof execResult === 'string' ? execResult : JSON.stringify(execResult);
+					return {
+						shouldContinue: true,
+						shouldEndLoop: false,
+						toolResult: {
+							type: 'tool_result',
+							tool_use_id: toolUse.id,
+							content: execContent,
+							is_error: false
+						}
+					};
+				} else {
+					// 用户拒绝
+					return {
+						shouldContinue: true,
+						shouldEndLoop: false,
+						toolResult: {
+							type: 'tool_result',
+							tool_use_id: toolUse.id,
+							content: `用户拒绝执行命令：${command}。请尝试其他方案或告知用户需要手动执行此命令。`,
+							is_error: false
+						}
+					};
+				}
+			}
+
 			// 截断大工具结果
 			const resultContent = typeof result === 'string' ? result : JSON.stringify(result);
 			const truncatedContent = this.truncateToolResult(resultContent);

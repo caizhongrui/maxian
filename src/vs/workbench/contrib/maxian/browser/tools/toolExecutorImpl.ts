@@ -112,10 +112,22 @@ export class ToolExecutorImpl implements IToolExecutor {
 					result = await this.fileOperations.glob(toolUse as any);
 					break;
 
-				// 命令执行工具
-				case 'execute_command':
-					result = await this.commandExecution.executeCommand(toolUse as any);
+				// 命令执行工具（requires_approval机制参考Cline）
+				case 'execute_command': {
+					// AI自声明命令是否需要用户确认：true=有副作用，false=只读操作
+					const requiresApproval = toolUse.params.requires_approval;
+					if (requiresApproval === 'true') {
+						// 返回特殊前缀，TaskService检测后弹出用户确认
+						result = '__APPROVAL_REQUIRED__:' + JSON.stringify({
+							command: toolUse.params.command || '',
+							cwd: toolUse.params.cwd || '',
+							toolUseId: toolUse.toolUseId
+						});
+					} else {
+						result = await this.commandExecution.executeCommand(toolUse as any);
+					}
 					break;
+				}
 
 				// 搜索工具
 				case 'search_files':
