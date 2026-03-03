@@ -356,7 +356,7 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			const aiResponse = await this.aiService.complete(prompt, {
 				temperature: 0.05,  // 极低温度，确保输出确定性（从0.1降低到0.05）
 				maxTokens: 1200,   // 支持较长的代码补全
-				systemMessage: 'You are a code completion engine. Output ONLY code, NO explanations, NO markdown, NO conversational text. NEVER generate methods or fields that do not exist in the provided type definitions.',
+				systemMessage: 'You are a Fill-in-the-Middle (FIM) code completion engine. The user prompt contains a <CURSOR> marker indicating the exact insertion point. Output ONLY the code to insert at <CURSOR>. Do NOT output any code that already exists before or after <CURSOR>. NO explanations, NO markdown, NO conversational text. NEVER generate methods or fields that do not exist in the provided type definitions.',
 				businessCode: 'IDE_CODE_COMPLETION'  // 代码补全业务场景
 			});
 
@@ -698,10 +698,10 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		parts.push(`你是一个专业的${context.languageId}代码补全引擎。`);
 		parts.push('你的任务是预测并生成用户接下来要写的代码。');
 		parts.push('');
-		parts.push('⚠️ 【核心工作原理 - 必须理解】');
-		parts.push('你的输出将被【直接插入】到光标位置（光标前代码末尾）。');
-		parts.push('光标后已存在的代码会【自动保留】，不受影响。');
-		parts.push('因此：你只需生成从光标位置开始的新代码，绝对不能输出光标后已经存在的代码！');
+		parts.push('⚠️ 【工作模式：Fill-in-the-Middle（填充模式）】');
+		parts.push('下面的代码中有一个 <CURSOR> 标记，表示用户光标的精确位置。');
+		parts.push('你的任务：只输出应该插入到 <CURSOR> 处的代码。');
+		parts.push('<CURSOR> 左边和右边的代码均已存在，你的输出不能包含这些已有代码！');
 		parts.push('');
 
 		// 添加结构化上下文
@@ -872,49 +872,42 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			}
 		}
 
-		// 代码上下文
+		// 代码上下文 - FIM 风格：用统一代码块 + <CURSOR> 标记精确插入位置
+		// 这样 AI 能清晰识别光标位置，不会误以为需要修改周围代码
 		const beforeCode = context.beforeLines.join('\n');
 		const afterCode = context.afterLines.join('\n');
 
-		parts.push('【光标前的代码】');
+		// 构造光标所在行：prefix + <CURSOR> + suffix
+		const cursorLine = (context.prefix || '') + '<CURSOR>' + (context.suffix || '');
+
+		parts.push('【当前文件代码（<CURSOR> 标记为光标精确位置，你需要生成插入到此处的代码）】');
 		parts.push('```' + context.languageId);
-		parts.push(beforeCode);
-		if (context.prefix) {
-			parts.push(context.prefix);
+		if (beforeCode) {
+			parts.push(beforeCode);
+		}
+		parts.push(cursorLine);
+		if (afterCode) {
+			parts.push(afterCode);
 		}
 		parts.push('```');
 		parts.push('');
 
-		if (afterCode.trim()) {
-			parts.push('【光标后的代码】');
-			parts.push('```' + context.languageId);
-			if (context.suffix) {
-				parts.push(context.suffix);
-			}
-			parts.push(afterCode);
-			parts.push('```');
-			parts.push('');
-		}
-
 		// 输出要求
-		parts.push('【要求】');
+		parts.push('【任务】');
 		if (context.methodReference) {
 			// Java 方法引用场景的特殊要求
-			parts.push(`用户正在输入 ${context.methodReference.className}:: 方法引用。`);
-			parts.push('请补全方法名，必须使用上面列出的可用方法之一。');
+			parts.push(`用户正在输入 ${context.methodReference.className}:: 方法引用，请补全方法名。`);
+			parts.push('必须使用上面列出的可用方法之一，直接输出方法名即可。');
 		} else if (isNewLine) {
-			parts.push('用户刚按下回车，请预测下一行代码。');
-			parts.push('你的输出将被插入到新行（光标位置），光标后已有的代码不变。');
+			parts.push('用户刚按下回车，光标在 <CURSOR> 处（空行）。请预测并输出这里应该写的下一行代码。');
 		} else {
-			parts.push('用户正在输入代码，请补全从光标位置开始的代码。');
-			if (context.suffix && context.suffix.trim().length > 0) {
-				parts.push(`注意：光标后当前行已有内容：${JSON.stringify(context.suffix)}，你的输出不能包含这部分已存在的内容！`);
-			}
+			parts.push('请输出应该插入到 <CURSOR> 位置的代码。');
+			parts.push('<CURSOR> 左边是用户已输入的内容，右边是已存在的代码，你的输出会被插入到 <CURSOR> 处，左右内容保持不变。');
 		}
 		parts.push('');
 		parts.push('【🔒 关键规则 - 必须严格遵守】');
 		parts.push('');
-		parts.push('1. 【插入语义】你的输出会被直接插入到光标位置，光标后的代码自动保留。只生成光标位置需要补充的新代码，禁止重复输出光标后已存在的任何代码！');
+		parts.push('1. 【仅插入】只输出需要插入到 <CURSOR> 位置的新代码，<CURSOR> 两侧已有的代码绝对不能出现在你的输出中');
 		parts.push('2. 【代码风格】仔细分析上下文代码的模式和风格，生成一致的代码');
 		parts.push('3. 【变量使用】只使用上下文中已出现或明确定义的变量名、方法名和类名');
 		parts.push('4. 【类型约束】如果提供了类型定义信息，必须只使用该类型实际存在的字段和方法');
@@ -923,12 +916,12 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		parts.push('7. 【缩进格式】保持与上下文一致的缩进');
 		parts.push('');
 		parts.push('⚠️ 违规示例（禁止）：');
-		parts.push('  - 输出中包含光标后已存在的代码（如已有的方法体、括号、语句）');
+		parts.push('  - 输出中包含 <CURSOR> 右边已有的代码（如已有的括号、方法体、语句）');
 		parts.push('  - 生成类型中不存在的 getXxx() 方法');
 		parts.push('  - 访问类型中不存在的字段');
 		parts.push('  - 调用未导入或未定义的方法');
 		parts.push('');
-		parts.push('直接输出代码（无解释）：');
+		parts.push('直接输出插入 <CURSOR> 处的代码（无解释）：');
 
 		const finalPrompt = parts.join('\n');
 		console.log('[AI Inline Completions] 本地提示词内容（前500字符）:', finalPrompt.substring(0, 500));
