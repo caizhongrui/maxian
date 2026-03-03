@@ -26,6 +26,10 @@ export class MarkdownRendererDom {
 
 		// 按行分割文本
 		const lines = text.split('\n');
+		// 移除尾部空行（避免LLM响应末尾的\n\n被渲染为多余的<br>元素，在编码模式下尤为明显）
+		while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+			lines.pop();
+		}
 		let i = 0;
 
 		while (i < lines.length) {

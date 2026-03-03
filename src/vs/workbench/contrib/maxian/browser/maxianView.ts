@@ -57,6 +57,7 @@ export class MaxianView extends ViewPane {
 	private sendButton!: HTMLButtonElement;
 	private currentAiMessageElement: HTMLElement | null = null;
 	private currentAiMessageText: string = ''; // 累积的原始文本
+	private currentStreamingMessageElement: HTMLElement | null = null; // 流式消息的外层容器（用于complete时替换）
 	private currentMode: Mode = DEFAULT_MODE;
 	private modeSelector!: HTMLDivElement; // 模式选择器显示框
 	private modeDropdown!: HTMLDivElement; // 模式下拉列表
@@ -68,6 +69,7 @@ export class MaxianView extends ViewPane {
 	private currentToolStatusElement: HTMLElement | null = null; // 当前工具状态元素（更新而非新建）
 	private toolStatusElements: Map<string, HTMLElement> = new Map(); // 工具ID到状态元素的映射（支持并行工具）
 	private thinkingMessageElement: HTMLElement | null = null; // "正在思考"消息元素（避免重复显示）
+	private tokenStatsElement: HTMLElement | null = null; // token统计元素（唯一，更新而非累加）
 	private cancelButton!: HTMLButtonElement; // 取消任务按钮
 	private clearButton!: HTMLButtonElement; // 清空对话按钮
 	// @ts-ignore used in handleConversationCleared
@@ -88,6 +90,7 @@ export class MaxianView extends ViewPane {
 	private isContinuousConversation: boolean = false; // 是否启用连续对话（ask模式专用）
 	private continuousConversationCheckbox!: HTMLInputElement; // 连续对话复选框
 	private continuousConversationWrapper!: HTMLLabelElement; // 连续对话复选框容器
+	private knowledgeBaseSelectorWrapper!: HTMLDivElement; // 知识库选择器包装容器（仅ask模式显示）
 	// Reasoning 思考过程相关
 	private currentReasoningElement: HTMLElement | null = null; // 当前思考过程元素
 	private currentReasoningText: string = ''; // 累积的思考文本
@@ -548,15 +551,15 @@ export class MaxianView extends ViewPane {
 		// 模式列表将在 updateAvailableModes 方法中填充
 
 		// 自定义知识库选择器
-		const knowledgeBaseSelectorWrapper = append(leftControls, $('div'));
-		knowledgeBaseSelectorWrapper.style.flexShrink = '1';
-		knowledgeBaseSelectorWrapper.style.minWidth = '160px';
-		knowledgeBaseSelectorWrapper.style.maxWidth = '220px';
-		knowledgeBaseSelectorWrapper.style.position = 'relative';
-		knowledgeBaseSelectorWrapper.style.zIndex = '100'; // 确保高于其他元素
+		this.knowledgeBaseSelectorWrapper = append(leftControls, $('div')) as HTMLDivElement;
+		this.knowledgeBaseSelectorWrapper.style.flexShrink = '1';
+		this.knowledgeBaseSelectorWrapper.style.minWidth = '160px';
+		this.knowledgeBaseSelectorWrapper.style.maxWidth = '220px';
+		this.knowledgeBaseSelectorWrapper.style.position = 'relative';
+		this.knowledgeBaseSelectorWrapper.style.zIndex = '100'; // 确保高于其他元素
 
 		// 知识库选择器显示框
-		this.knowledgeBaseSelector = append(knowledgeBaseSelectorWrapper, $('div')) as HTMLDivElement;
+		this.knowledgeBaseSelector = append(this.knowledgeBaseSelectorWrapper, $('div')) as HTMLDivElement;
 		this.knowledgeBaseSelector.style.position = 'relative';
 		this.knowledgeBaseSelector.style.display = 'flex';
 		this.knowledgeBaseSelector.style.alignItems = 'center';
@@ -601,7 +604,7 @@ export class MaxianView extends ViewPane {
 		this.knowledgeBaseSelectorArrow.style.transition = 'transform 0.2s ease';
 
 		// 下拉列表容器（使用fixed定位，脱离文档流，不受父容器限制）
-		this.knowledgeBaseDropdown = append(knowledgeBaseSelectorWrapper, $('div')) as HTMLDivElement;
+		this.knowledgeBaseDropdown = append(this.knowledgeBaseSelectorWrapper, $('div')) as HTMLDivElement;
 		this.knowledgeBaseDropdown.style.position = 'fixed'; // 改为fixed定位
 		// 注意：不在这里设置top/bottom/left/right，在点击时动态计算绝对位置
 		this.knowledgeBaseDropdown.style.maxHeight = '280px';
@@ -717,7 +720,7 @@ export class MaxianView extends ViewPane {
 
 		// 点击外部关闭下拉列表
 		document.addEventListener('click', (e) => {
-			if (this.isKnowledgeBaseDropdownOpen && !knowledgeBaseSelectorWrapper.contains(e.target as Node)) {
+			if (this.isKnowledgeBaseDropdownOpen && !this.knowledgeBaseSelectorWrapper.contains(e.target as Node)) {
 				this.isKnowledgeBaseDropdownOpen = false;
 				this.closeKnowledgeBaseDropdown();
 			}
@@ -834,6 +837,8 @@ export class MaxianView extends ViewPane {
 		if (this.currentMode === 'ask') {
 			this.continuousConversationWrapper.style.display = 'flex';
 		}
+		// 知识库选择器仅在ask模式下显示
+		this.knowledgeBaseSelectorWrapper.style.display = this.currentMode === 'ask' ? '' : 'none';
 
 		// 右侧：取消、清空、发送按钮
 		const rightControls = append(bottomControls, $('div'));
@@ -1661,6 +1666,7 @@ export class MaxianView extends ViewPane {
 			// 用户发送新消息时，重置AI消息元素（开始新一轮对话）
 			this.currentAiMessageElement = null;
 			this.currentAiMessageText = '';
+			this.currentStreamingMessageElement = null;
 			this.currentToolStatusElement = null;
 
 			// 显示用户消息 - 使用优化后的样式
@@ -1709,33 +1715,34 @@ export class MaxianView extends ViewPane {
 			// 如果是流式消息
 			if (event.isPartial) {
 				if (!this.currentAiMessageElement) {
+					// 移除旧的流式气泡（如果存在），避免孤立气泡残留
+					// 场景：上一轮API调用包含工具使用，say('text')未被调用，streaming bubble未被清理
+					if (this.currentStreamingMessageElement) {
+						this.currentStreamingMessageElement.remove();
+						this.currentStreamingMessageElement = null;
+					}
 
-					// 创建新的AI消息元素
-					const aiMsg = append(this.messageArea, $('div'));
-					aiMsg.style.marginBottom = '10px';
-					aiMsg.style.padding = '10px 15px';
-					aiMsg.style.backgroundColor = 'var(--vscode-editor-inactiveSelectionBackground)';
-					aiMsg.style.borderRadius = '6px';
-					aiMsg.style.borderLeft = '3px solid var(--vscode-charts-blue)';
+					// 创建新的AI消息元素（与renderTextMessage使用一致的CSS类样式，避免视觉差异）
+					const aiMsg = append(this.messageArea, $('div.maxian-message.maxian-message-ai'));
 
-					const aiLabel = append(aiMsg, $('div'));
-					aiLabel.style.fontWeight = '600';
-					aiLabel.style.marginBottom = '6px';
-					aiLabel.style.fontSize = '13px';
-					aiLabel.style.color = 'var(--vscode-charts-blue)';
-					aiLabel.style.display = 'flex';
-					aiLabel.style.alignItems = 'center';
-					aiLabel.style.gap = '6px';
+					// 消息头部
+					const aiHeader = append(aiMsg, $('div.maxian-message-header'));
 
-					const aiIcon = append(aiLabel, $('img')) as HTMLImageElement;
+					// 头像
+					const aiIcon = append(aiHeader, $('img.maxian-message-avatar')) as HTMLImageElement;
 					aiIcon.src = FileAccess.asBrowserUri('vs/workbench/contrib/maxian/browser/media/icons/maxian-avatar.png').toString(true);
-					aiIcon.style.width = '18px';
-					aiIcon.style.height = '18px';
-					aiIcon.style.objectFit = 'contain'; // 防止拉伸
-					aiIcon.style.borderRadius = '3px';
 
-					const aiText = append(aiLabel, $('span'));
-					aiText.textContent = '码弦';
+					// 发送者名称
+					const aiSender = append(aiHeader, $('span.maxian-message-sender'));
+					aiSender.style.color = 'var(--vscode-charts-blue)';
+					aiSender.textContent = '码弦';
+
+					// 时间戳
+					const aiTime = append(aiHeader, $('span.maxian-message-time'));
+					aiTime.textContent = formatTime(Date.now());
+
+					// 操作按钮区域（流式阶段不加复制按钮，等完整消息到达后添加）
+					append(aiHeader, $('div.maxian-message-actions'));
 
 					const aiContent = append(aiMsg, $('div'));
 					aiContent.style.color = 'var(--vscode-foreground)';
@@ -1749,6 +1756,8 @@ export class MaxianView extends ViewPane {
 					MarkdownRendererDom.renderMarkdown(this.currentAiMessageText, aiContent);
 
 					this.currentAiMessageElement = aiContent;
+					// 记录外层容器，供renderTextMessage在完整消息到达时移除旧的流式气泡
+					this.currentStreamingMessageElement = aiMsg;
 				} else {
 					// 累积内容
 					this.currentAiMessageText += event.content;
@@ -1757,7 +1766,7 @@ export class MaxianView extends ViewPane {
 					MarkdownRendererDom.renderMarkdown(this.currentAiMessageText, this.currentAiMessageElement);
 				}
 			} else {
-				// 流式结束，重置
+				// 流式结束，重置内容引用（保留currentStreamingMessageElement供renderTextMessage移除旧气泡）
 				this.currentAiMessageElement = null;
 				this.currentAiMessageText = '';
 			}
@@ -1899,11 +1908,22 @@ export class MaxianView extends ViewPane {
 				break;
 
 			case 'completion_result':
+				// 任务完成时，移除最后一轮API调用的流式气泡（与case 'tool'相同）
+				// attempt_completion不调用say('tool')，所以流式气泡未被case 'tool'清理
+				if (this.currentStreamingMessageElement) {
+					this.currentStreamingMessageElement.remove();
+					this.currentStreamingMessageElement = null;
+				}
 				// 完成结果 - 显示给用户查看
 				this.renderCompletionResult(message.text || '');
 				break;
 
 			case 'error':
+				// 错误时也清理流式气泡
+				if (this.currentStreamingMessageElement) {
+					this.currentStreamingMessageElement.remove();
+					this.currentStreamingMessageElement = null;
+				}
 				// 错误消息
 				this.renderErrorMessage(message.text || '未知错误');
 				break;
@@ -1937,6 +1957,11 @@ export class MaxianView extends ViewPane {
 				break;
 
 			case 'tool':
+				// 工具执行时，立即移除上一轮API调用的流式气泡（AI的思考文本不应保留）
+				if (this.currentStreamingMessageElement) {
+					this.currentStreamingMessageElement.remove();
+					this.currentStreamingMessageElement = null;
+				}
 				// 工具执行状态 - 显示正在执行什么工具
 				this.renderToolExecutionStatus(message.text || '');
 				break;
@@ -2016,6 +2041,7 @@ export class MaxianView extends ViewPane {
 			}
 			this.currentAiMessageElement = null;
 			this.currentAiMessageText = '';
+			this.currentStreamingMessageElement = null;
 			return;
 		}
 
@@ -2025,6 +2051,11 @@ export class MaxianView extends ViewPane {
 		}
 
 		if (!this.currentAiMessageElement) {
+			// 移除旧的流式气泡（如果存在），避免与完整消息气泡重叠
+			if (this.currentStreamingMessageElement) {
+				this.currentStreamingMessageElement.remove();
+				this.currentStreamingMessageElement = null;
+			}
 			// 创建新的AI消息元素 - 使用优化后的样式
 			const aiMsg = append(this.messageArea, $('div.maxian-message.maxian-message-ai'));
 
@@ -2056,6 +2087,16 @@ export class MaxianView extends ViewPane {
 			this.currentAiMessageText = text;
 			MarkdownRendererDom.renderMarkdown(this.currentAiMessageText, aiContent);
 			this.currentAiMessageElement = aiContent;
+			// 如果不是partial消息，直接添加复制按钮（complete消息不会再收到stream-end信号）
+			if (!partial) {
+				const actionsArea = aiHeader.querySelector('.maxian-message-actions') as HTMLElement | null;
+				if (actionsArea) {
+					const capturedText = text;
+					createCopyButton(actionsArea, () => capturedText);
+				}
+				this.currentAiMessageElement = null;
+				this.currentAiMessageText = '';
+			}
 		} else {
 			// 累积内容
 			this.currentAiMessageText += text;
@@ -2678,7 +2719,9 @@ export class MaxianView extends ViewPane {
 		// 重置当前AI消息状态
 		this.currentAiMessageElement = null;
 		this.currentAiMessageText = '';
+		this.currentStreamingMessageElement = null;
 		this.currentToolStatusElement = null;
+		this.tokenStatsElement = null;
 
 		// 重置等待状态
 		this.awaitingUserResponse = false;
@@ -2749,7 +2792,13 @@ export class MaxianView extends ViewPane {
 	 * 在消息区域显示token统计
 	 */
 	private handleTokenUsage(event: ITokenUsageEvent): void {
-		// 创建token统计显示
+		// 移除旧的token统计元素（避免每次API调用都累加一行）
+		if (this.tokenStatsElement && this.tokenStatsElement.parentElement) {
+			this.tokenStatsElement.remove();
+			this.tokenStatsElement = null;
+		}
+
+		// 创建token统计显示（唯一元素，每次更新时替换旧的）
 		const tokenStatsContainer = append(this.messageArea, $('div'));
 		tokenStatsContainer.style.marginBottom = '10px';
 		tokenStatsContainer.style.padding = '8px 12px';
@@ -2781,6 +2830,8 @@ export class MaxianView extends ViewPane {
 			cost: undefined // 如果需要成本计算，可以调用 calculateCost
 		});
 
+		// 保存引用，供下次更新时移除
+		this.tokenStatsElement = tokenStatsContainer;
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;
 	}
 
@@ -2791,7 +2842,9 @@ export class MaxianView extends ViewPane {
 		// 重置所有状态
 		this.currentAiMessageElement = null;
 		this.currentAiMessageText = '';
+		this.currentStreamingMessageElement = null;
 		this.currentToolStatusElement = null;
+		this.tokenStatsElement = null;
 		this.awaitingUserResponse = false;
 		this.inputBox.placeholder = '输入消息... (Enter 发送, Shift+Enter 换行)';
 
@@ -4051,6 +4104,8 @@ export class MaxianView extends ViewPane {
 				} else {
 					this.continuousConversationWrapper.style.display = 'none';
 				}
+				// 控制知识库选择器的显示（仅ask模式显示）
+				this.knowledgeBaseSelectorWrapper.style.display = this.currentMode === 'ask' ? '' : 'none';
 
 				// 更新所有列表项的选中状态
 				Array.from(this.modeDropdownList.children).forEach((item, idx) => {
@@ -4091,6 +4146,9 @@ export class MaxianView extends ViewPane {
 				textSpan.textContent = `${icon} ${currentModeInfo.name}`;
 			}
 		}
+
+		// 根据当前模式更新知识库选择器显示状态
+		this.knowledgeBaseSelectorWrapper.style.display = this.currentMode === 'ask' ? '' : 'none';
 
 		console.log('[MaxianView] Updated available modes:', availableModes.map(m => m.slug), 'Current mode:', this.currentMode);
 	}
