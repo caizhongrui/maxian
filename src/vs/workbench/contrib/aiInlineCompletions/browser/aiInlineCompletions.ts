@@ -366,7 +366,7 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			console.log('[AI Inline Completions] AI response time:', responseTime + 'ms, length:', aiResponse.length);
 
 			// Extract and clean the completion
-			let completions = this.extractCompletions(aiResponse, prefix);
+			let completions = this.extractCompletions(aiResponse, prefix, enhancedContext.suffix, enhancedContext.afterLines);
 			console.log('[AI Inline Completions] Extracted completions:', completions.length);
 
 			// 验证补全内容
@@ -458,9 +458,9 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	}
 
 	/**
-	 * 提取 AI 返回的代码补全（强化过滤 + 前缀去重）
+	 * 提取 AI 返回的代码补全（强化过滤 + 前缀/后缀去重）
 	 */
-	private extractCompletions(aiResponse: string, prefix: string): string[] {
+	private extractCompletions(aiResponse: string, prefix: string, suffix: string = '', afterLines: string[] = []): string[] {
 		const results: string[] = [];
 
 		// 步骤 1: 清理 markdown 代码块
@@ -509,6 +509,10 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		// 如果 AI 返回的内容以用户已输入的前缀开头，需要移除
 		cleanedResponse = this.removePrefixDuplication(cleanedResponse, prefix);
 
+		// 🆕 步骤 3.6: 移除后缀重叠 - 防止AI生成光标后已存在的代码
+		// AI 可能会在输出末尾附带光标后的代码，需要截断
+		cleanedResponse = this.removeSuffixOverlap(cleanedResponse, suffix, afterLines);
+
 		// 步骤 4: 分割为行并处理
 		const allLines = cleanedResponse.split('\n');
 
@@ -547,6 +551,59 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		});
 
 		return results;
+	}
+
+	/**
+	 * 移除 AI 返回内容末尾与光标后代码重叠的部分
+	 * 解决 AI 生成的代码末尾包含光标后已存在代码的问题
+	 * 例如：光标后已有 ")" , AI 返回 "value)" -> 应截断为 "value"
+	 */
+	private removeSuffixOverlap(response: string, suffix: string, afterLines: string[]): string {
+		// 构建光标后的完整文本（suffix 是当前行光标后内容，afterLines 是后续行）
+		const afterText = suffix + (afterLines.length > 0 ? '\n' + afterLines.join('\n') : '');
+		if (!afterText.trim()) {
+			return response;
+		}
+
+		// 从最长匹配开始尝试（最多比较 200 字符）
+		const maxOverlapLen = Math.min(afterText.length, 200);
+		for (let i = maxOverlapLen; i >= 3; i--) {
+			const afterStart = afterText.substring(0, i);
+			// 检查 response 末尾是否包含 afterStart
+			if (response.endsWith(afterStart)) {
+				const truncated = response.substring(0, response.length - i);
+				// 确保截断后不为空
+				if (truncated.trim().length > 0) {
+					console.log('[AI Inline Completions] 🔧 Removed suffix overlap:', JSON.stringify(afterStart.substring(0, 40)));
+					return truncated;
+				}
+			}
+		}
+
+		// 还需检查响应是否包含了 afterLines 的第一行（AI生成了不该生成的后续行代码）
+		if (afterLines.length > 0) {
+			const firstAfterLine = afterLines[0].trim();
+			if (firstAfterLine.length > 5) {
+				const responseLines = response.split('\n');
+				// 从后向前找到最后一个与 afterLines[0] 匹配的行，并截断
+				let lastMatchIdx = -1;
+				for (let i = responseLines.length - 1; i >= 1; i--) {
+					if (responseLines[i].trim() === firstAfterLine) {
+						lastMatchIdx = i;
+						break;
+					}
+				}
+				if (lastMatchIdx > 0) {
+					const truncated = responseLines.slice(0, lastMatchIdx).join('\n');
+					if (truncated.trim().length > 0) {
+						console.log('[AI Inline Completions] 🔧 Removed suffix line overlap at line:', lastMatchIdx);
+						return truncated;
+					}
+				}
+			}
+		}
+
+		return response;
 	}
 
 	/**
@@ -640,6 +697,11 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 		// 系统角色定义
 		parts.push(`你是一个专业的${context.languageId}代码补全引擎。`);
 		parts.push('你的任务是预测并生成用户接下来要写的代码。');
+		parts.push('');
+		parts.push('⚠️ 【核心工作原理 - 必须理解】');
+		parts.push('你的输出将被【直接插入】到光标位置（光标前代码末尾）。');
+		parts.push('光标后已存在的代码会【自动保留】，不受影响。');
+		parts.push('因此：你只需生成从光标位置开始的新代码，绝对不能输出光标后已经存在的代码！');
 		parts.push('');
 
 		// 添加结构化上下文
@@ -842,20 +904,26 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			parts.push('请补全方法名，必须使用上面列出的可用方法之一。');
 		} else if (isNewLine) {
 			parts.push('用户刚按下回车，请预测下一行代码。');
+			parts.push('你的输出将被插入到新行（光标位置），光标后已有的代码不变。');
 		} else {
-			parts.push('用户正在输入代码，请补全当前行。');
+			parts.push('用户正在输入代码，请补全从光标位置开始的代码。');
+			if (context.suffix && context.suffix.trim().length > 0) {
+				parts.push(`注意：光标后当前行已有内容：${JSON.stringify(context.suffix)}，你的输出不能包含这部分已存在的内容！`);
+			}
 		}
 		parts.push('');
 		parts.push('【🔒 关键规则 - 必须严格遵守】');
 		parts.push('');
-		parts.push('1. 【代码风格】仔细分析上下文代码的模式和风格，生成一致的代码');
-		parts.push('2. 【变量使用】只使用上下文中已出现或明确定义的变量名、方法名和类名');
-		parts.push('3. 【类型约束】如果提供了类型定义信息，必须只使用该类型实际存在的字段和方法');
-		parts.push('4. 【禁止猜测】禁止生成任何未在上下文中出现的方法名或字段名');
-		parts.push('5. 【输出格式】只输出代码，不要任何解释、注释或markdown标记');
-		parts.push('6. 【缩进格式】保持与上下文一致的缩进');
+		parts.push('1. 【插入语义】你的输出会被直接插入到光标位置，光标后的代码自动保留。只生成光标位置需要补充的新代码，禁止重复输出光标后已存在的任何代码！');
+		parts.push('2. 【代码风格】仔细分析上下文代码的模式和风格，生成一致的代码');
+		parts.push('3. 【变量使用】只使用上下文中已出现或明确定义的变量名、方法名和类名');
+		parts.push('4. 【类型约束】如果提供了类型定义信息，必须只使用该类型实际存在的字段和方法');
+		parts.push('5. 【禁止猜测】禁止生成任何未在上下文中出现的方法名或字段名');
+		parts.push('6. 【输出格式】只输出代码，不要任何解释、注释或markdown标记');
+		parts.push('7. 【缩进格式】保持与上下文一致的缩进');
 		parts.push('');
 		parts.push('⚠️ 违规示例（禁止）：');
+		parts.push('  - 输出中包含光标后已存在的代码（如已有的方法体、括号、语句）');
 		parts.push('  - 生成类型中不存在的 getXxx() 方法');
 		parts.push('  - 访问类型中不存在的字段');
 		parts.push('  - 调用未导入或未定义的方法');

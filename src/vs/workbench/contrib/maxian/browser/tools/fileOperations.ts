@@ -306,12 +306,29 @@ ${assertResult.message}
 			const buffer = VSBuffer.fromString(processedContent);
 
 			return await withFileLock(absolutePath, async () => {
-				if (exists) {
-					// 文件存在，更新内容
-					await this.fileService.writeFile(uri, buffer);
-				} else {
-					// 文件不存在，创建新文件（包括目录）
-					await this.fileService.createFile(uri, buffer, { overwrite: false });
+				try {
+					if (exists) {
+						// 文件存在，更新内容
+						await this.fileService.writeFile(uri, buffer);
+					} else {
+						// 文件不存在，创建新文件（包括目录）
+						await this.fileService.createFile(uri, buffer, { overwrite: false });
+					}
+				} catch (writeError) {
+					const writeMsg = writeError instanceof Error ? writeError.message : String(writeError);
+					const writeCode = (writeError as any)?.code || '';
+					const isPermErr =
+						writeCode === 'EPERM' || writeCode === 'EACCES' || writeCode === 'EROFS' ||
+						writeMsg.toLowerCase().includes('permission denied') ||
+						writeMsg.toLowerCase().includes('access denied') ||
+						writeMsg.toLowerCase().includes('operation not permitted') ||
+						writeMsg.toLowerCase().includes('拒绝访问') ||
+						writeMsg.toLowerCase().includes('access is denied');
+
+					if (isPermErr) {
+						throw Object.assign(new Error(writeMsg), { code: writeCode, isPermissionError: true });
+					}
+					throw writeError;
 				}
 
 				// P1-8: 写入后更新时间戳记录
@@ -324,8 +341,13 @@ ${assertResult.message}
 					console.warn(`[FileOperations] 更新时间戳记录失败: ${absolutePath}`, e);
 				}
 
-				// P2-12: 获取 LSP 诊断
-				const diagnosticsAppendix = await getDiagnosticsAfterEdit(absolutePath);
+				// P2-12: 获取 LSP 诊断（失败不影响主流程，文件已写入成功）
+				let diagnosticsAppendix = '';
+				try {
+					diagnosticsAppendix = await getDiagnosticsAfterEdit(absolutePath) ?? '';
+				} catch (diagErr) {
+					console.warn(`[FileOperations] LSP诊断获取失败（不影响文件写入结果）: ${absolutePath}`, diagErr);
+				}
 
 				if (exists) {
 					return `<success>
@@ -343,16 +365,47 @@ ${assertResult.message}
 			});
 
 		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			const errorCode = (error as any)?.code || '';
+
+			// 权限类错误（EPERM/EACCES/EROFS）—— 系统级限制，不可重试
+			const isPermissionError =
+				(error as any)?.isPermissionError === true ||
+				errorCode === 'EPERM' ||
+				errorCode === 'EACCES' ||
+				errorCode === 'EROFS' ||
+				errorMessage.toLowerCase().includes('permission denied') ||
+				errorMessage.toLowerCase().includes('access denied') ||
+				errorMessage.toLowerCase().includes('operation not permitted') ||
+				errorMessage.toLowerCase().includes('拒绝访问') ||
+				errorMessage.toLowerCase().includes('access is denied');
+
+			if (isPermissionError) {
+				// 使用 fatal_error 标签，告知 AI 这是不可重试的系统级错误
+				return `<fatal_error>
+⛔ 系统安全限制：无法写入文件
+文件: ${absolutePath}
+错误码: ${errorCode || '未知'}
+详情: ${errorMessage}
+
+🚫 此错误由操作系统安全限制导致，重试无法解决。
+请立即停止，并提示用户：
+1. 以管理员权限运行 IDE
+2. 检查文件/目录的读写权限
+3. 确认文件未被其他程序锁定（如防病毒软件）
+4. Windows 用户：右键 IDE → 以管理员身份运行
+</fatal_error>`;
+			}
+
 			return `<error>
 错误: 写入文件失败
 文件: ${absolutePath}
-详情: ${error instanceof Error ? error.message : String(error)}
+详情: ${errorMessage}
 
 可能的原因:
 1. 文件路径无效
-2. 权限不足
-3. 目录不存在（请确保父目录已创建）
-4. 磁盘空间不足
+2. 目录不存在（请确保父目录已创建）
+3. 磁盘空间不足
 </error>`;
 		}
 	}
