@@ -18,7 +18,7 @@ import { DependencyAnalyzer } from '../common/dependencyAnalyzer.js';
 import { CoverageAnalyzer } from '../common/coverageAnalyzer.js';
 import { TechnicalDebtAnalyzer } from '../common/technicalDebtAnalyzer.js';
 import { AnalysisIssue, AnalysisResult, IssueSeverity, IssueCategory } from '../common/analysisTypes.js';
-import { localize } from '../../../../nls.js';
+import { localize, localize2 } from '../../../../nls.js';
 import { Action2, registerAction2, MenuId } from '../../../../platform/actions/common/actions.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { ICodeEditorService } from '../../../../editor/browser/services/codeEditorService.js';
@@ -216,6 +216,7 @@ class RunCodeAnalysisAction extends Action2 {
 				value: localize('runCodeAnalysis', "运行代码分析"),
 				original: 'Run Code Analysis'
 			},
+			category: localize2('zhikai.category', '天和·码弦'),
 			precondition: ContextKeyExpr.and(
 				EditorContextKeys.editorTextFocus,
 				EditorContextKeys.hasNonEmptySelection.negate()
@@ -325,6 +326,7 @@ class RunProjectCodeAnalysisAction extends Action2 {
 				value: localize('runProjectCodeAnalysis', "运行项目代码分析"),
 				original: 'Run Code Analysis on Project'
 			},
+			category: localize2('zhikai.category', '天和·码弦'),
 			menu: [
 				{
 					id: MenuId.CommandPalette
@@ -514,6 +516,7 @@ class RunFolderCodeAnalysisAction extends Action2 {
 				value: localize('runFolderCodeAnalysis', "运行文件夹代码分析"),
 				original: 'Run Code Analysis on Folder'
 			},
+			category: localize2('zhikai.category', '天和·码弦'),
 			menu: [
 				{
 					id: MenuId.ExplorerContext,

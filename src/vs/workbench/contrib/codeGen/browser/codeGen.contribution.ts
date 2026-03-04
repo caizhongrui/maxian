@@ -4,9 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ICodeEditor } from '../../../../editor/browser/editorBrowser.js';
-import { EditorAction, registerEditorAction, ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
+import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
 import { EditorContextKeys } from '../../../../editor/common/editorContextKeys.js';
 import * as nls from '../../../../nls.js';
+import { localize2 } from '../../../../nls.js';
 import { IAIService } from '../../../../platform/ai/common/ai.js';
 import { IQuickInputService } from '../../../../platform/quickinput/common/quickInput.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
@@ -29,32 +30,46 @@ import { ILanguageService } from '../../../../editor/common/languages/language.j
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions } from '../../../common/contributions.js';
 import { LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
+import { Action2, registerAction2, MenuId } from '../../../../platform/actions/common/actions.js';
+import { ICodeEditorService } from '../../../../editor/browser/services/codeEditorService.js';
+
+const ZHIKAI_CATEGORY = localize2('zhikai.category', '天和·码弦');
 
 /**
  * 生成单元测试（Alt+T）
  */
-registerEditorAction(class GenerateTestAction extends EditorAction {
+registerAction2(class GenerateTestAction extends Action2 {
 
 	constructor() {
 		super({
 			id: 'zhikai.generateTest',
-			label: nls.localize('generateTest.label', "生成单元测试"),
-			alias: 'Generate Unit Test',
+			title: {
+				value: nls.localize('generateTest.label', "生成单元测试"),
+				original: 'Generate Unit Test'
+			},
+			category: ZHIKAI_CATEGORY,
+			f1: true,
 			precondition: EditorContextKeys.writable,
-			kbOpts: {
-				kbExpr: EditorContextKeys.textInputFocus,
+			keybinding: {
 				primary: KeyMod.Alt | KeyCode.KeyT,
+				when: EditorContextKeys.textInputFocus,
 				weight: 100
 			},
-			contextMenuOpts: {
-				group: '1_modification',
-				order: 2
-			}
+			menu: [
+				{
+					id: MenuId.EditorContext,
+					group: '1_modification',
+					order: 2
+				}
+			]
 		});
 	}
 
-	async run(accessor: ServicesAccessor, editor: ICodeEditor): Promise<void> {
-		if (!editor.hasModel()) {
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const codeEditorService = accessor.get(ICodeEditorService);
+		const editor = codeEditorService.getActiveCodeEditor() as ICodeEditor | null;
+
+		if (!editor || !editor.hasModel()) {
 			return;
 		}
 
@@ -78,28 +93,38 @@ registerEditorAction(class GenerateTestAction extends EditorAction {
 /**
  * 生成方法注释（Alt+C）
  */
-registerEditorAction(class GenerateMethodCommentAction extends EditorAction {
+registerAction2(class GenerateMethodCommentAction extends Action2 {
 
 	constructor() {
 		super({
 			id: 'zhikai.generateMethodComment',
-			label: nls.localize('generateMethodComment.label', "生成方法注释"),
-			alias: 'Generate Method Comment',
+			title: {
+				value: nls.localize('generateMethodComment.label', "生成方法注释"),
+				original: 'Generate Method Comment'
+			},
+			category: ZHIKAI_CATEGORY,
+			f1: true,
 			precondition: EditorContextKeys.writable,
-			kbOpts: {
-				kbExpr: EditorContextKeys.textInputFocus,
+			keybinding: {
 				primary: KeyMod.Alt | KeyCode.KeyC,
+				when: EditorContextKeys.textInputFocus,
 				weight: 100
 			},
-			contextMenuOpts: {
-				group: '1_modification',
-				order: 3
-			}
+			menu: [
+				{
+					id: MenuId.EditorContext,
+					group: '1_modification',
+					order: 3
+				}
+			]
 		});
 	}
 
-	async run(accessor: ServicesAccessor, editor: ICodeEditor): Promise<void> {
-		if (!editor.hasModel()) {
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const codeEditorService = accessor.get(ICodeEditorService);
+		const editor = codeEditorService.getActiveCodeEditor() as ICodeEditor | null;
+
+		if (!editor || !editor.hasModel()) {
 			return;
 		}
 
@@ -122,28 +147,38 @@ registerEditorAction(class GenerateMethodCommentAction extends EditorAction {
 /**
  * 生成类注释（Alt+Shift+C）
  */
-registerEditorAction(class GenerateClassCommentAction extends EditorAction {
+registerAction2(class GenerateClassCommentAction extends Action2 {
 
 	constructor() {
 		super({
 			id: 'zhikai.generateClassComment',
-			label: nls.localize('generateClassComment.label', "生成类注释"),
-			alias: 'Generate Class Comment',
+			title: {
+				value: nls.localize('generateClassComment.label', "生成类注释"),
+				original: 'Generate Class Comment'
+			},
+			category: ZHIKAI_CATEGORY,
+			f1: true,
 			precondition: EditorContextKeys.writable,
-			kbOpts: {
-				kbExpr: EditorContextKeys.textInputFocus,
+			keybinding: {
 				primary: KeyMod.Alt | KeyMod.Shift | KeyCode.KeyC,
+				when: EditorContextKeys.textInputFocus,
 				weight: 100
 			},
-			contextMenuOpts: {
-				group: '1_modification',
-				order: 4
-			}
+			menu: [
+				{
+					id: MenuId.EditorContext,
+					group: '1_modification',
+					order: 4
+				}
+			]
 		});
 	}
 
-	async run(accessor: ServicesAccessor, editor: ICodeEditor): Promise<void> {
-		if (!editor.hasModel()) {
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const codeEditorService = accessor.get(ICodeEditorService);
+		const editor = codeEditorService.getActiveCodeEditor() as ICodeEditor | null;
+
+		if (!editor || !editor.hasModel()) {
 			return;
 		}
 
@@ -166,28 +201,38 @@ registerEditorAction(class GenerateClassCommentAction extends EditorAction {
 /**
  * 生成业务代码（Alt+G）
  */
-registerEditorAction(class GenerateCodeAction extends EditorAction {
+registerAction2(class GenerateCodeAction extends Action2 {
 
 	constructor() {
 		super({
 			id: 'zhikai.generateCode',
-			label: nls.localize('generateCode.label', "生成业务代码"),
-			alias: 'Generate Code from Description',
+			title: {
+				value: nls.localize('generateCode.label', "生成业务代码"),
+				original: 'Generate Code from Description'
+			},
+			category: ZHIKAI_CATEGORY,
+			f1: true,
 			precondition: EditorContextKeys.writable,
-			kbOpts: {
-				kbExpr: EditorContextKeys.textInputFocus,
+			keybinding: {
 				primary: KeyMod.Alt | KeyCode.KeyG,
+				when: EditorContextKeys.textInputFocus,
 				weight: 100
 			},
-			contextMenuOpts: {
-				group: '1_modification',
-				order: 5
-			}
+			menu: [
+				{
+					id: MenuId.EditorContext,
+					group: '1_modification',
+					order: 5
+				}
+			]
 		});
 	}
 
-	async run(accessor: ServicesAccessor, editor: ICodeEditor): Promise<void> {
-		if (!editor.hasModel()) {
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const codeEditorService = accessor.get(ICodeEditorService);
+		const editor = codeEditorService.getActiveCodeEditor() as ICodeEditor | null;
+
+		if (!editor || !editor.hasModel()) {
 			return;
 		}
 
@@ -213,28 +258,38 @@ registerEditorAction(class GenerateCodeAction extends EditorAction {
 /**
  * 修改代码（Alt+M）
  */
-registerEditorAction(class ModifyCodeAction extends EditorAction {
+registerAction2(class ModifyCodeAction extends Action2 {
 
 	constructor() {
 		super({
 			id: 'zhikai.modifyCode',
-			label: nls.localize('modifyCode.label', "AI 修改代码"),
-			alias: 'Modify Code with AI',
+			title: {
+				value: nls.localize('modifyCode.label', "AI 修改代码"),
+				original: 'Modify Code with AI'
+			},
+			category: ZHIKAI_CATEGORY,
+			f1: true,
 			precondition: EditorContextKeys.writable,
-			kbOpts: {
-				kbExpr: EditorContextKeys.textInputFocus,
+			keybinding: {
 				primary: KeyMod.Alt | KeyCode.KeyM,
+				when: EditorContextKeys.textInputFocus,
 				weight: 100
 			},
-			contextMenuOpts: {
-				group: '1_modification',
-				order: 6
-			}
+			menu: [
+				{
+					id: MenuId.EditorContext,
+					group: '1_modification',
+					order: 6
+				}
+			]
 		});
 	}
 
-	async run(accessor: ServicesAccessor, editor: ICodeEditor): Promise<void> {
-		if (!editor.hasModel()) {
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const codeEditorService = accessor.get(ICodeEditorService);
+		const editor = codeEditorService.getActiveCodeEditor() as ICodeEditor | null;
+
+		if (!editor || !editor.hasModel()) {
 			return;
 		}
 
@@ -260,28 +315,38 @@ registerEditorAction(class ModifyCodeAction extends EditorAction {
 /**
  * 逐行注释（Alt+L）
  */
-registerEditorAction(class LineCommentAction extends EditorAction {
+registerAction2(class LineCommentAction extends Action2 {
 
 	constructor() {
 		super({
 			id: 'zhikai.lineComment',
-			label: nls.localize('lineComment.label', "AI 逐行注释"),
-			alias: 'AI Line-by-Line Comment',
+			title: {
+				value: nls.localize('lineComment.label', "AI 逐行注释"),
+				original: 'AI Line-by-Line Comment'
+			},
+			category: ZHIKAI_CATEGORY,
+			f1: true,
 			precondition: EditorContextKeys.writable,
-			kbOpts: {
-				kbExpr: EditorContextKeys.textInputFocus,
+			keybinding: {
 				primary: KeyMod.Alt | KeyCode.KeyL,
+				when: EditorContextKeys.textInputFocus,
 				weight: 100
 			},
-			contextMenuOpts: {
-				group: '1_modification',
-				order: 7
-			}
+			menu: [
+				{
+					id: MenuId.EditorContext,
+					group: '1_modification',
+					order: 7
+				}
+			]
 		});
 	}
 
-	async run(accessor: ServicesAccessor, editor: ICodeEditor): Promise<void> {
-		if (!editor.hasModel()) {
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const codeEditorService = accessor.get(ICodeEditorService);
+		const editor = codeEditorService.getActiveCodeEditor() as ICodeEditor | null;
+
+		if (!editor || !editor.hasModel()) {
 			return;
 		}
 
@@ -305,28 +370,38 @@ registerEditorAction(class LineCommentAction extends EditorAction {
 /**
  * AI 优化代码（带 Diff 对比）（Alt+O）
  */
-registerEditorAction(class OptimizeCodeWithDiffAction extends EditorAction {
+registerAction2(class OptimizeCodeWithDiffAction extends Action2 {
 
 	constructor() {
 		super({
 			id: 'zhikai.optimizeCodeWithDiff',
-			label: nls.localize('optimizeCodeWithDiff.label', "AI 优化代码"),
-			alias: 'Optimize Code with AI (Show Diff)',
+			title: {
+				value: nls.localize('optimizeCodeWithDiff.label', "AI 优化代码"),
+				original: 'Optimize Code with AI (Show Diff)'
+			},
+			category: ZHIKAI_CATEGORY,
+			f1: true,
 			precondition: EditorContextKeys.writable,
-			kbOpts: {
-				kbExpr: EditorContextKeys.textInputFocus,
+			keybinding: {
 				primary: KeyMod.Alt | KeyCode.KeyO,
+				when: EditorContextKeys.textInputFocus,
 				weight: 100
 			},
-			contextMenuOpts: {
-				group: '1_modification',
-				order: 8
-			}
+			menu: [
+				{
+					id: MenuId.EditorContext,
+					group: '1_modification',
+					order: 8
+				}
+			]
 		});
 	}
 
-	async run(accessor: ServicesAccessor, editor: ICodeEditor): Promise<void> {
-		if (!editor.hasModel()) {
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const codeEditorService = accessor.get(ICodeEditorService);
+		const editor = codeEditorService.getActiveCodeEditor() as ICodeEditor | null;
+
+		if (!editor || !editor.hasModel()) {
 			return;
 		}
 

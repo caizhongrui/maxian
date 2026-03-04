@@ -31,6 +31,12 @@ import { ILspReferencesService } from '../common/lsp/lspReferences.js';
 import { LspReferencesService } from './lspReferencesService.js';
 import { ILspTypeDefinitionService } from '../common/lsp/lspTypeDefinition.js';
 import { LspTypeDefinitionService } from './lspTypeDefinitionService.js';
+import { registerAction2, Action2 } from '../../../../platform/actions/common/actions.js';
+import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
+import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
+import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
+import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
+import { MAXIAN_INPUT_FOCUSED, MAXIAN_MENTION_DROPDOWN_VISIBLE } from './maxianContextKeys.js';
 
 // 确保ripgrep服务被注册（导入副作用）
 import '../../../services/ripgrep/browser/ripgrep.contribution.js';
@@ -207,5 +213,116 @@ CommandsRegistry.registerCommand('zhikai.ai.generateCommitMessage', async (acces
 		});
 		// 失败时返回空字符串,让 Git 扩展使用简单版本的生成
 		return '';
+	}
+});
+
+// ====== 码弦快捷键命令注册（支持用户自定义） ======
+// 用户可通过 "首选项 > 键盘快捷方式" 搜索 "码弦" 来自定义这些快捷键
+
+const MAXIAN_CATEGORY = { value: '码弦', original: 'Maxian' };
+
+/**
+ * 发送消息
+ * 默认快捷键：Enter（仅在码弦输入框聚焦且 @mention 下拉列表未显示时生效）
+ */
+registerAction2(class SendMessageAction extends Action2 {
+	constructor() {
+		super({
+			id: 'maxian.sendMessage',
+			title: { value: '发送消息', original: 'Send Message' },
+			category: MAXIAN_CATEGORY,
+			f1: true,
+			keybinding: {
+				primary: KeyCode.Enter,
+				when: ContextKeyExpr.and(
+					MAXIAN_INPUT_FOCUSED,
+					MAXIAN_MENTION_DROPDOWN_VISIBLE.negate()
+				),
+				weight: KeybindingWeight.WorkbenchContrib + 10
+			}
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		accessor.get(IMaxianService).triggerSend();
+	}
+});
+
+/**
+ * 输入框换行
+ * 默认快捷键：Shift+Enter（仅在码弦输入框聚焦且 @mention 下拉列表未显示时生效）
+ */
+registerAction2(class NewLineAction extends Action2 {
+	constructor() {
+		super({
+			id: 'maxian.newLine',
+			title: { value: '在输入框换行', original: 'New Line in Input' },
+			category: MAXIAN_CATEGORY,
+			f1: true,
+			keybinding: {
+				primary: KeyMod.Shift | KeyCode.Enter,
+				when: ContextKeyExpr.and(
+					MAXIAN_INPUT_FOCUSED,
+					MAXIAN_MENTION_DROPDOWN_VISIBLE.negate()
+				),
+				weight: KeybindingWeight.WorkbenchContrib + 10
+			}
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		accessor.get(IMaxianService).triggerNewLine();
+	}
+});
+
+/**
+ * 打开/聚焦码弦面板
+ * 默认无快捷键，用户可自行绑定
+ */
+registerAction2(class OpenViewAction extends Action2 {
+	constructor() {
+		super({
+			id: 'maxian.openView',
+			title: { value: '打开码弦面板', original: 'Open Maxian Panel' },
+			category: MAXIAN_CATEGORY,
+			f1: true
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		accessor.get(IMaxianService).triggerOpenView();
+	}
+});
+
+/**
+ * 停止当前 AI 生成
+ * 默认无快捷键，用户可自行绑定（例如 Escape）
+ */
+registerAction2(class StopGenerationAction extends Action2 {
+	constructor() {
+		super({
+			id: 'maxian.stopGeneration',
+			title: { value: '停止 AI 生成', original: 'Stop AI Generation' },
+			category: MAXIAN_CATEGORY,
+			f1: true
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		accessor.get(IMaxianService).triggerStopGeneration();
+	}
+});
+
+/**
+ * 清空对话历史
+ * 默认无快捷键，用户可自行绑定
+ */
+registerAction2(class ClearConversationAction extends Action2 {
+	constructor() {
+		super({
+			id: 'maxian.clearConversation',
+			title: { value: '清空对话历史', original: 'Clear Conversation' },
+			category: MAXIAN_CATEGORY,
+			f1: true
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		accessor.get(IMaxianService).triggerClearConversation();
 	}
 });

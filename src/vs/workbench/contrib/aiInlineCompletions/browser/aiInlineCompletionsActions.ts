@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { localize } from '../../../../nls.js';
+import { localize, localize2 } from '../../../../nls.js';
 import { Action2, registerAction2, MenuId } from '../../../../platform/actions/common/actions.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { ICodeEditorService } from '../../../../editor/browser/services/codeEditorService.js';
@@ -22,6 +22,7 @@ class TriggerAIInlineCompletionsAction extends Action2 {
 				mnemonicTitle: localize({ key: 'miTriggerAIInlineCompletions', comment: ['&& denotes a mnemonic'] }, "AI代码&&补全"),
 				original: 'AI Code Completion'
 			},
+			category: localize2('zhikai.category', '天和·码弦'),
 			precondition: ContextKeyExpr.and(
 				EditorContextKeys.editorTextFocus,
 				EditorContextKeys.writable

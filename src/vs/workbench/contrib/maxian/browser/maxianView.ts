@@ -7,7 +7,8 @@ import { IViewPaneOptions, ViewPane } from '../../../browser/parts/views/viewPan
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
-import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
+import { IContextKeyService, IContextKey } from '../../../../platform/contextkey/common/contextkey.js';
+import { MAXIAN_INPUT_FOCUSED, MAXIAN_MENTION_DROPDOWN_VISIBLE } from './maxianContextKeys.js';
 import { IViewDescriptorService } from '../../../common/views.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
@@ -23,6 +24,7 @@ import { FileAccess } from '../../../../base/common/network.js';
 import { ClineMessage } from '../common/task/taskTypes.js';
 import { IAuthService } from '../../auth/common/authService.js';
 import { IQuickInputService, IQuickPickItem } from '../../../../platform/quickinput/common/quickInput.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import {
 	renderDiffStats,
 	calculateSearchReplaceDiffStats,
@@ -111,6 +113,9 @@ export class MaxianView extends ViewPane {
 	private mentionDropdownIndex: number = -1; // 当前高亮项索引
 	private mentionAtPos: number = -1; // @ 符号在输入框中的位置
 	private mentionQuickPickOpen: boolean = false; // QuickPick 文件选择器是否已打开
+	// 快捷键上下文键
+	private maxianInputFocusedCtx!: IContextKey<boolean>;
+	private maxianMentionDropdownVisibleCtx!: IContextKey<boolean>;
 
 	constructor(
 		options: IViewPaneOptions,
@@ -127,7 +132,8 @@ export class MaxianView extends ViewPane {
 		@IMaxianService private readonly maxianService: IMaxianService,
 		@IAuthService private readonly authService: IAuthService,
 		@IStorageService private readonly storageService: IStorageService,
-		@IQuickInputService private readonly quickInputService: IQuickInputService
+		@IQuickInputService private readonly quickInputService: IQuickInputService,
+		@ICommandService private readonly commandService: ICommandService
 	) {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, telemetryService, hoverService);
 	}
@@ -144,6 +150,33 @@ export class MaxianView extends ViewPane {
 
 		// 添加样式
 		this.addStyles();
+
+		// 初始化快捷键上下文键
+		this.maxianInputFocusedCtx = MAXIAN_INPUT_FOCUSED.bindTo(this.contextKeyService);
+		this.maxianMentionDropdownVisibleCtx = MAXIAN_MENTION_DROPDOWN_VISIBLE.bindTo(this.contextKeyService);
+
+		// 订阅快捷键触发事件
+		this._register(this.maxianService.onTriggerSend(() => {
+			this.sendButton.click();
+		}));
+		this._register(this.maxianService.onTriggerNewLine(() => {
+			this.handleNewLineInInput();
+		}));
+		this._register(this.maxianService.onTriggerOpenView(() => {
+			// 聚焦输入框即可
+			this.inputBox?.focus();
+		}));
+		this._register(this.maxianService.onTriggerStopGeneration(() => {
+			this.cancelButton?.click();
+		}));
+		this._register(this.maxianService.onTriggerClearConversation(() => {
+			this.clearButton?.click();
+		}));
+
+		// 当快捷键绑定发生变化时，更新输入框 placeholder
+		this._register(this.keybindingService.onDidUpdateKeybindings(() => {
+			this.updateInputPlaceholder();
+		}));
 
 		// 监听旧版消息事件（向后兼容）
 		this._register(this.maxianService.onMessage(event => {
@@ -358,7 +391,7 @@ export class MaxianView extends ViewPane {
 
 		// 输入框（底部留出空间给控制区）
 		this.inputBox = append(textAreaWrapper, $('textarea')) as HTMLTextAreaElement;
-		this.inputBox.placeholder = '输入消息... (Enter 发送, Shift+Enter 换行, @文件名 引用文件)';
+		this.inputBox.placeholder = this.getInputPlaceholder('normal');
 		this.inputBox.rows = 3;
 		this.inputBox.style.width = '100%';
 		this.inputBox.style.minHeight = '90px';
@@ -382,10 +415,14 @@ export class MaxianView extends ViewPane {
 		this.inputBox.onfocus = () => {
 			this.inputBox.style.borderColor = 'var(--vscode-focusBorder)';
 			this.inputBox.style.outline = '1px solid var(--vscode-focusBorder)';
+			// 设置上下文键：输入框已聚焦
+			this.maxianInputFocusedCtx?.set(true);
 		};
 		this.inputBox.onblur = (e) => {
 			this.inputBox.style.borderColor = 'var(--vscode-input-border)';
 			this.inputBox.style.outline = 'none';
+			// 清除上下文键：输入框失焦
+			this.maxianInputFocusedCtx?.set(false);
 			// 点击下拉列表项时不隐藏（relatedTarget 是 dropdown 内部元素时不隐藏）
 			const related = (e as FocusEvent).relatedTarget as HTMLElement | null;
 			if (!related || !this.mentionDropdown?.contains(related)) {
@@ -943,6 +980,39 @@ export class MaxianView extends ViewPane {
 			this.maxianService.clearConversation();
 		};
 
+		// 快捷键配置按钮：点击打开 VSCode 键盘快捷方式编辑器并过滤到码弦命令
+		const keybindingButton = append(rightControls, $('button.codicon.codicon-keyboard')) as HTMLButtonElement;
+		keybindingButton.title = '配置码弦快捷键（打开键盘快捷方式编辑器）';
+		keybindingButton.style.padding = '6px';
+		keybindingButton.style.minWidth = '28px';
+		keybindingButton.style.minHeight = '28px';
+		keybindingButton.style.backgroundColor = 'transparent';
+		keybindingButton.style.color = 'var(--vscode-descriptionForeground)';
+		keybindingButton.style.border = 'none';
+		keybindingButton.style.borderRadius = '4px';
+		keybindingButton.style.cursor = 'pointer';
+		keybindingButton.style.fontSize = '16px';
+		keybindingButton.style.display = 'inline-flex';
+		keybindingButton.style.alignItems = 'center';
+		keybindingButton.style.justifyContent = 'center';
+		keybindingButton.style.transition = 'all 0.15s';
+		keybindingButton.style.opacity = '0.6';
+
+		keybindingButton.onmouseenter = () => {
+			keybindingButton.style.opacity = '1';
+			keybindingButton.style.color = 'var(--vscode-foreground)';
+			keybindingButton.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+		};
+		keybindingButton.onmouseleave = () => {
+			keybindingButton.style.opacity = '0.6';
+			keybindingButton.style.color = 'var(--vscode-descriptionForeground)';
+			keybindingButton.style.backgroundColor = 'transparent';
+		};
+		keybindingButton.onclick = () => {
+			// 打开 VSCode 键盘快捷方式编辑器，并预先过滤到天和·码弦命令
+			this.commandService.executeCommand('workbench.action.openGlobalKeybindings', '天和·码弦');
+		};
+
 		this.sendButton = append(rightControls, $('button.codicon.codicon-send')) as HTMLButtonElement;
 		this.sendButton.title = '发送消息';
 		this.sendButton.style.padding = '6px';
@@ -1013,7 +1083,7 @@ export class MaxianView extends ViewPane {
 
 					// 恢复正常状态
 					this.awaitingUserResponse = false;
-					this.inputBox.placeholder = '输入消息... (Enter 发送, Shift+Enter 换行, @文件名 引用文件)';
+					this.inputBox.placeholder = this.getInputPlaceholder('normal');
 				} else {
 					// 正常发送消息
 					this.sendMessage(message);
@@ -1024,24 +1094,29 @@ export class MaxianView extends ViewPane {
 			}
 		};
 
-		// 输入框回车事件（Shift+Enter换行，Enter发送；下拉列表打开时支持方向键导航）
+		// 输入框按键事件：
+		// - @mention 下拉列表导航键（硬编码，不可自定义，属于 UI 内部导航）
+		// - 发送消息和换行由 VSCode 快捷键系统（maxian.sendMessage / maxian.newLine 命令）处理
 		this.inputBox.onkeydown = (e) => {
-			// 如果 @mention 下拉列表已打开，拦截导航键
+			// 如果 @mention 下拉列表已打开，拦截导航键（优先于快捷键命令）
 			if (this.mentionDropdown && this.mentionDropdown.style.display !== 'none') {
 				if (e.key === 'ArrowDown') {
 					e.preventDefault();
+					e.stopPropagation();
 					this.mentionDropdownIndex = Math.min(this.mentionDropdownIndex + 1, this.mentionDropdownItems.length - 1);
 					this.updateMentionDropdownHighlight();
 					return;
 				}
 				if (e.key === 'ArrowUp') {
 					e.preventDefault();
+					e.stopPropagation();
 					this.mentionDropdownIndex = Math.max(this.mentionDropdownIndex - 1, 0);
 					this.updateMentionDropdownHighlight();
 					return;
 				}
 				if (e.key === 'Enter' || e.key === 'Tab') {
 					e.preventDefault();
+					e.stopPropagation();
 					if (this.mentionDropdownIndex >= 0 && this.mentionDropdownIndex < this.mentionDropdownItems.length) {
 						this.insertMentionFile(this.mentionDropdownItems[this.mentionDropdownIndex]);
 					}
@@ -1049,15 +1124,14 @@ export class MaxianView extends ViewPane {
 				}
 				if (e.key === 'Escape') {
 					e.preventDefault();
+					e.stopPropagation();
 					this.hideMentionDropdown();
 					return;
 				}
 			}
-
-			if (e.key === 'Enter' && !e.shiftKey) {
-				e.preventDefault();
-				this.sendButton.click();
-			}
+			// 注意：发送消息（Enter）和换行（Shift+Enter）由 VSCode 快捷键命令系统处理：
+			// maxian.sendMessage（默认 Enter）和 maxian.newLine（默认 Shift+Enter）
+			// 用户可在 "首选项 > 键盘快捷方式" 中自定义这些快捷键
 		};
 
 		// 自动调整输入框高度 + @mention 检测
@@ -1908,6 +1982,8 @@ export class MaxianView extends ViewPane {
 		});
 
 		this.mentionDropdown.style.display = 'block';
+		// 设置上下文键：下拉列表可见（防止 Enter 快捷键误触发发送）
+		this.maxianMentionDropdownVisibleCtx?.set(true);
 	}
 
 	/**
@@ -1920,6 +1996,8 @@ export class MaxianView extends ViewPane {
 		this.mentionDropdownItems = [];
 		this.mentionDropdownIndex = -1;
 		this.mentionAtPos = -1;
+		// 清除上下文键：下拉列表隐藏
+		this.maxianMentionDropdownVisibleCtx?.set(false);
 	}
 
 	/**
@@ -1951,6 +2029,48 @@ export class MaxianView extends ViewPane {
 			return;
 		}
 		this.insertMentionFileAtPos(file, atPos);
+	}
+
+	// ========== 快捷键辅助方法 ==========
+
+	/**
+	 * 在输入框光标位置插入换行（由 maxian.newLine 命令触发）
+	 */
+	private handleNewLineInInput(): void {
+		if (!this.inputBox) return;
+		const start = this.inputBox.selectionStart ?? this.inputBox.value.length;
+		const end = this.inputBox.selectionEnd ?? start;
+		const value = this.inputBox.value;
+		this.inputBox.value = value.slice(0, start) + '\n' + value.slice(end);
+		this.inputBox.selectionStart = this.inputBox.selectionEnd = start + 1;
+		// 触发高度自适应
+		this.inputBox.style.height = 'auto';
+		this.inputBox.style.height = this.inputBox.scrollHeight + 'px';
+	}
+
+	/**
+	 * 根据当前快捷键绑定动态生成输入框 placeholder
+	 * 让用户看到自定义后的快捷键提示
+	 */
+	private getInputPlaceholder(mode: 'normal' | 'awaiting' = 'normal'): string {
+		if (mode === 'awaiting') {
+			return '💬 正在回答码弦的问题... (Enter 发送, Shift+Enter 换行)';
+		}
+		const sendBinding = this.keybindingService.lookupKeybinding('maxian.sendMessage');
+		const newLineBinding = this.keybindingService.lookupKeybinding('maxian.newLine');
+		const sendLabel = sendBinding?.getLabel() ?? 'Enter';
+		const newLineLabel = newLineBinding?.getLabel() ?? 'Shift+Enter';
+		return `输入消息... (${sendLabel} 发送, ${newLineLabel} 换行, @文件名 引用文件)`;
+	}
+
+	/**
+	 * 更新输入框 placeholder（在快捷键变化时调用）
+	 */
+	private updateInputPlaceholder(): void {
+		if (!this.inputBox) return;
+		// 如果当前是等待用户回答状态，不更新 placeholder
+		if (this.awaitingUserResponse) return;
+		this.inputBox.placeholder = this.getInputPlaceholder('normal');
 	}
 
 	// ========== 消息发送 ==========
@@ -2199,7 +2319,7 @@ export class MaxianView extends ViewPane {
 		this.awaitingUserResponse = true;
 
 		// 更新输入框placeholder
-		this.inputBox.placeholder = '💬 正在回答码弦的问题... (Enter 发送, Shift+Enter 换行)';
+		this.inputBox.placeholder = this.getInputPlaceholder('awaiting');
 		this.inputBox.focus();
 	}
 
@@ -3051,7 +3171,7 @@ export class MaxianView extends ViewPane {
 
 		// 重置等待状态
 		this.awaitingUserResponse = false;
-		this.inputBox.placeholder = '输入消息... (Enter 发送, Shift+Enter 换行, @文件名 引用文件)';
+		this.inputBox.placeholder = this.getInputPlaceholder('normal');
 
 		// 清理所有pending的工具确认UI
 		// 查找所有带有确认按钮的工具消息并移除或标记为已取消
@@ -3172,7 +3292,7 @@ export class MaxianView extends ViewPane {
 		this.currentToolStatusElement = null;
 		this.tokenStatsElement = null;
 		this.awaitingUserResponse = false;
-		this.inputBox.placeholder = '输入消息... (Enter 发送, Shift+Enter 换行, @文件名 引用文件)';
+		this.inputBox.placeholder = this.getInputPlaceholder('normal');
 
 		// 清空消息区域 - 使用DOM API而非innerHTML（避免TrustedHTML问题）
 		while (this.messageArea.firstChild) {

@@ -337,6 +337,25 @@ export interface IMaxianService {
 	 * @returns 匹配的相对文件路径列表
 	 */
 	getWorkspaceFiles(query: string): Promise<string[]>;
+
+	// ====== 快捷键触发事件（由 VSCode 命令系统触发，视图响应） ======
+
+	/** 触发发送消息（由 maxian.sendMessage 命令触发） */
+	readonly onTriggerSend: Event<void>;
+	/** 触发换行（由 maxian.newLine 命令触发） */
+	readonly onTriggerNewLine: Event<void>;
+	/** 触发打开码弦面板（由 maxian.openView 命令触发） */
+	readonly onTriggerOpenView: Event<void>;
+	/** 触发停止生成（由 maxian.stopGeneration 命令触发） */
+	readonly onTriggerStopGeneration: Event<void>;
+	/** 触发清空对话（由 maxian.clearConversation 命令触发） */
+	readonly onTriggerClearConversation: Event<void>;
+
+	triggerSend(): void;
+	triggerNewLine(): void;
+	triggerOpenView(): void;
+	triggerStopGeneration(): void;
+	triggerClearConversation(): void;
 }
 
 /**
@@ -374,6 +393,21 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	private readonly _onTodoListUpdate = this._register(new Emitter<ITodoListEvent>());
 	readonly onTodoListUpdate: Event<ITodoListEvent> = this._onTodoListUpdate.event;
+
+	private readonly _onTriggerSend = this._register(new Emitter<void>());
+	readonly onTriggerSend: Event<void> = this._onTriggerSend.event;
+
+	private readonly _onTriggerNewLine = this._register(new Emitter<void>());
+	readonly onTriggerNewLine: Event<void> = this._onTriggerNewLine.event;
+
+	private readonly _onTriggerOpenView = this._register(new Emitter<void>());
+	readonly onTriggerOpenView: Event<void> = this._onTriggerOpenView.event;
+
+	private readonly _onTriggerStopGeneration = this._register(new Emitter<void>());
+	readonly onTriggerStopGeneration: Event<void> = this._onTriggerStopGeneration.event;
+
+	private readonly _onTriggerClearConversation = this._register(new Emitter<void>());
+	readonly onTriggerClearConversation: Event<void> = this._onTriggerClearConversation.event;
 
 	private _initialized = false;
 	private toolExecutor: IToolExecutor | null = null;
@@ -2391,6 +2425,14 @@ export class MaxianService extends Disposable implements IMaxianService {
 		this.autoApprovedCommands.clear();
 		console.log('[Maxian] 所有自动批准规则已清除');
 	}
+
+	// ====== 快捷键触发方法 ======
+
+	triggerSend(): void { this._onTriggerSend.fire(); }
+	triggerNewLine(): void { this._onTriggerNewLine.fire(); }
+	triggerOpenView(): void { this._onTriggerOpenView.fire(); }
+	triggerStopGeneration(): void { this._onTriggerStopGeneration.fire(); }
+	triggerClearConversation(): void { this._onTriggerClearConversation.fire(); }
 
 	/**
 	 * 启用自动诊断注入
