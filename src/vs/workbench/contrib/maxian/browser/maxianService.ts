@@ -648,7 +648,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	/**
 	 * 解析消息中的 @文件引用，读取文件内容并注入到消息中
-	 * 支持格式：@相对路径 或 @绝对路径
+	 * 使用 IFileService（兼容渲染进程，无需 Node.js fs 模块）
 	 */
 	private async resolveAtMentionedFiles(message: string, workspaceRoot: string): Promise<string> {
 		// 匹配 @filepath 模式（不含空格，允许路径分隔符和文件扩展名）
@@ -657,42 +657,46 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		if (matches.length === 0) return message;
 
-		try {
-			const fsModule = await import('fs');
-			const pathModule = await import('path');
+		const workspaceRootUri = URI.file(workspaceRoot);
+		let fileContentsBlock = '';
+		const processedUris = new Set<string>();
 
-			let fileContentsBlock = '';
-			const processedPaths = new Set<string>();
+		for (const match of matches) {
+			const mentionedPath = match[1];
 
-			for (const match of matches) {
-				const mentionedPath = match[1];
-				// 尝试作为相对路径（从工作区根目录）或绝对路径
-				const absolutePath = pathModule.default.isAbsolute(mentionedPath)
-					? mentionedPath
-					: pathModule.default.join(workspaceRoot, mentionedPath);
+			// 构建文件 URI（支持绝对路径或相对于工作区的路径）
+			let fileUri: URI;
+			let relativePath: string;
 
-				if (processedPaths.has(absolutePath)) continue;
-				processedPaths.add(absolutePath);
-
-				try {
-					const stat = await fsModule.promises.stat(absolutePath);
-					if (!stat.isFile()) continue;
-
-					const content = await fsModule.promises.readFile(absolutePath, 'utf-8');
-					const ext = pathModule.default.extname(absolutePath).slice(1) || 'txt';
-					const relativePath = pathModule.default.relative(workspaceRoot, absolutePath);
-					fileContentsBlock += `\n<file_content path="${relativePath}">\n\`\`\`${ext}\n${content}\n\`\`\`\n</file_content>\n`;
-					console.log('[Maxian] @mention 文件已读取:', relativePath, '大小:', content.length);
-				} catch (e) {
-					console.warn('[Maxian] @mention 文件读取失败:', absolutePath, e);
-				}
+			if (mentionedPath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(mentionedPath)) {
+				fileUri = URI.file(mentionedPath);
+				const uriPathStr = fileUri.path;
+				const rootPathStr = workspaceRootUri.path;
+				relativePath = uriPathStr.startsWith(rootPathStr)
+					? uriPathStr.slice(rootPathStr.length + 1)
+					: mentionedPath;
+			} else {
+				relativePath = mentionedPath;
+				fileUri = URI.joinPath(workspaceRootUri, mentionedPath);
 			}
 
-			if (fileContentsBlock) {
-				return message + '\n\n以下是你引用的文件内容：' + fileContentsBlock;
+			const uriKey = fileUri.toString();
+			if (processedUris.has(uriKey)) continue;
+			processedUris.add(uriKey);
+
+			try {
+				const content = await this.fileService.readFile(fileUri);
+				const text = content.value.toString();
+				const ext = basename(relativePath).split('.').pop() || 'txt';
+				fileContentsBlock += `\n<file_content path="${relativePath}">\n\`\`\`${ext}\n${text}\n\`\`\`\n</file_content>\n`;
+				console.log('[Maxian] @mention 文件已读取:', relativePath, '大小:', text.length);
+			} catch (e) {
+				console.warn('[Maxian] @mention 文件读取失败:', fileUri.toString(), e);
 			}
-		} catch (e) {
-			console.warn('[Maxian] resolveAtMentionedFiles 出错:', e);
+		}
+
+		if (fileContentsBlock) {
+			return message + '\n\n以下是你引用的文件内容：' + fileContentsBlock;
 		}
 
 		return message;
@@ -700,70 +704,64 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	/**
 	 * 获取工作区文件列表（用于@mention自动完成）
+	 * 使用 IFileService.resolve() 递归扫描，兼容渲染进程（无需 Node.js fs 模块）
 	 * @param query 搜索关键词
 	 */
 	async getWorkspaceFiles(query: string): Promise<string[]> {
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
 		if (workspaceFolders.length === 0) return [];
-		const workspaceRoot = workspaceFolders[0].uri.fsPath;
+		const workspaceRootUri = workspaceFolders[0].uri;
+		// URI.path 始终使用正斜杠，与平台无关
+		const workspaceRootPath = workspaceRootUri.path;
 
-		try {
-			const fsModule = await import('fs');
-			const pathModule = await import('path');
-			const results: string[] = [];
-			const IGNORE_DIRS = new Set([
-				'node_modules', '.git', 'dist', 'out', 'build', '.next',
-				'__pycache__', '.venv', 'venv', '.idea', '.vscode', 'coverage'
-			]);
+		const results: string[] = [];
+		const lowerQuery = query.toLowerCase();
+		const IGNORE_DIRS = new Set([
+			'node_modules', '.git', 'dist', 'out', 'build', '.next',
+			'__pycache__', '.venv', 'venv', '.idea', '.vscode', 'coverage'
+		]);
 
-			const scanDir = async (dir: string, depth: number = 0): Promise<void> => {
-				if (depth > 8) return;
-				let entries: import('fs').Dirent[];
-				try {
-					entries = await fsModule.promises.readdir(dir, { withFileTypes: true });
-				} catch {
-					return;
-				}
+		const scanDir = async (dirUri: URI, depth: number = 0): Promise<void> => {
+			if (depth > 8 || results.length >= 100) return;
+			try {
+				const stat = await this.fileService.resolve(dirUri);
+				if (!stat.children) return;
 
-				for (const entry of entries) {
-					if (entry.name.startsWith('.') || IGNORE_DIRS.has(entry.name)) continue;
-					const fullPath = pathModule.default.join(dir, entry.name);
-					const relativePath = pathModule.default.relative(workspaceRoot, fullPath);
+				for (const child of stat.children) {
+					if (results.length >= 100) return;
+					const name = basename(child.resource.path);
+					if (name.startsWith('.') || IGNORE_DIRS.has(name)) continue;
 
-					if (entry.isDirectory()) {
-						await scanDir(fullPath, depth + 1);
+					// 相对路径：去掉工作区根路径前缀
+					const relativePath = child.resource.path.slice(workspaceRootPath.length + 1);
+
+					if (child.isDirectory) {
+						await scanDir(child.resource, depth + 1);
 					} else {
-						// 按文件名或路径匹配
-						const lowerName = entry.name.toLowerCase();
+						const lowerName = name.toLowerCase();
 						const lowerRelPath = relativePath.toLowerCase();
-						const lowerQuery = query.toLowerCase();
 						if (!query || lowerName.includes(lowerQuery) || lowerRelPath.includes(lowerQuery)) {
 							results.push(relativePath);
 						}
 					}
-
-					// 限制总结果数（提前退出）
-					if (results.length >= 100) return;
 				}
-			};
-
-			await scanDir(workspaceRoot);
-
-			// 按相关性排序：文件名匹配优先于路径匹配
-			if (query) {
-				const lowerQuery = query.toLowerCase();
-				results.sort((a, b) => {
-					const aNameMatch = pathModule.default.basename(a).toLowerCase().startsWith(lowerQuery) ? 0 : 1;
-					const bNameMatch = pathModule.default.basename(b).toLowerCase().startsWith(lowerQuery) ? 0 : 1;
-					return aNameMatch - bNameMatch;
-				});
+			} catch {
+				return;
 			}
+		};
 
-			return results.slice(0, 50);
-		} catch (e) {
-			console.warn('[Maxian] getWorkspaceFiles 出错:', e);
-			return [];
+		await scanDir(workspaceRootUri);
+
+		// 按相关性排序：文件名前缀匹配优先
+		if (query) {
+			results.sort((a, b) => {
+				const aMatch = basename(a).toLowerCase().startsWith(lowerQuery) ? 0 : 1;
+				const bMatch = basename(b).toLowerCase().startsWith(lowerQuery) ? 0 : 1;
+				return aMatch - bMatch;
+			});
 		}
+
+		return results.slice(0, 50);
 	}
 
 	/**
