@@ -20,6 +20,31 @@ import { isAbsolute, join } from '../../../../base/common/path.js';
 export const MAXIAN_DIFF_VIEW_URI_SCHEME = 'maxian-diff';
 
 /**
+ * 模块级 Map：存储 maxian-diff URI -> 原始文件内容
+ *
+ * 用途：避免将大文件内容编码到 URI query 参数中（会导致模型 URI 不稳定，
+ * 进而导致模型无法被正确找到和销毁，引发 "Model already exists" 崩溃）。
+ *
+ * key: originalUri.toString()（不含 query）
+ * value: 原始文件内容
+ */
+const _originalContentStore = new Map<string, string>();
+
+/**
+ * 供 MaxianDiffContentProvider 查询 maxian-diff URI 对应的原始内容
+ */
+export function getStoredOriginalContent(uriKey: string): string {
+	return _originalContentStore.get(uriKey) ?? '';
+}
+
+/**
+ * 清理 Map 中的条目（在 saveAndClose / closeWithoutSave 时调用）
+ */
+export function clearStoredOriginalContent(uriKey: string): void {
+	_originalContentStore.delete(uriKey);
+}
+
+/**
  * DiffViewProvider - 管理文件差异视图
  * 参考Kilocode的DiffViewProvider实现，使用VSCode内置Diff Editor
  */
@@ -126,18 +151,18 @@ export class DiffViewProvider extends Disposable {
 		const fileName = basename(fileUri);
 		console.log('[Maxian] openDiffEditor 开始, fileName:', fileName);
 
-		// 创建临时URI用于显示原始内容
-		// 使用encodeURIComponent编码原始内容作为query参数（浏览器环境兼容）
-		const originalUri = URI.parse(`${MAXIAN_DIFF_VIEW_URI_SCHEME}:${fileName}`).with({
-			query: encodeURIComponent(this.originalContent)
-		});
+		// 创建稳定的 originalUri（不含 query，避免 URI 因内容不同而变化导致模型无法复用/销毁）
+		// 原始内容存储在模块级 Map 中，由 MaxianDiffContentProvider 通过 getStoredOriginalContent 查询
+		const originalUri = URI.parse(`${MAXIAN_DIFF_VIEW_URI_SCHEME}:${fileName}`);
+		_originalContentStore.set(originalUri.toString(), this.originalContent);
 		console.log('[Maxian] originalUri:', originalUri.toString());
 
-		// 创建临时模型用于修改后的内容
-		const modifiedUri = fileUri.with({ scheme: 'maxian-modified', query: Date.now().toString() });
+		// 创建稳定的 modifiedUri（不含 timestamp query）
+		// 与 saveAndClose/closeWithoutSave 中使用相同的 URI，确保模型可被正确找到和销毁
+		const modifiedUri = fileUri.with({ scheme: 'maxian-modified' });
 		console.log('[Maxian] modifiedUri:', modifiedUri.toString());
 
-		// 在模型服务中注册修改后的内容
+		// 在模型服务中注册修改后的内容（先查再建，避免重复创建）
 		let modifiedModel: ITextModel | null = this.modelService.getModel(modifiedUri);
 		if (!modifiedModel) {
 			console.log('[Maxian] 创建新的modifiedModel');
@@ -420,6 +445,9 @@ export class DiffViewProvider extends Disposable {
 			const originalUri = URI.parse(`${MAXIAN_DIFF_VIEW_URI_SCHEME}:${fileName}`);
 			const modifiedUri = fileUri.with({ scheme: 'maxian-modified' });
 
+			// 清理 Map 中的原始内容条目
+			clearStoredOriginalContent(originalUri.toString());
+
 			const originalModel = this.modelService.getModel(originalUri);
 			if (originalModel) {
 				originalModel.dispose();
@@ -484,6 +512,9 @@ export class DiffViewProvider extends Disposable {
 			// 2. 清理 diff 相关的模型
 			const originalUri = URI.parse(`${MAXIAN_DIFF_VIEW_URI_SCHEME}:${fileName}`);
 			const modifiedUri = fileUri.with({ scheme: 'maxian-modified' });
+
+			// 清理 Map 中的原始内容条目
+			clearStoredOriginalContent(originalUri.toString());
 
 			const originalModel = this.modelService.getModel(originalUri);
 			if (originalModel) {

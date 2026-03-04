@@ -18,7 +18,7 @@ import { ITextModelService, ITextModelContentProvider } from '../../../../editor
 import { IModelService } from '../../../../editor/common/services/model.js';
 import { ITextModel } from '../../../../editor/common/model.js';
 import { URI } from '../../../../base/common/uri.js';
-import { MAXIAN_DIFF_VIEW_URI_SCHEME } from './diffViewProvider.js';
+import { MAXIAN_DIFF_VIEW_URI_SCHEME, getStoredOriginalContent } from './diffViewProvider.js';
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { IAIService } from '../../../../platform/ai/common/ai.js';
 import { ILspDiagnosticsService } from '../common/lsp/lspDiagnostics.js';
@@ -125,17 +125,22 @@ class MaxianDiffContentProvider implements IWorkbenchContribution, ITextModelCon
 
 	provideTextContent(resource: URI): Promise<ITextModel> | null {
 		if (resource.scheme === MAXIAN_DIFF_VIEW_URI_SCHEME) {
-			// 从query参数中解码原始内容（使用decodeURIComponent，浏览器环境兼容）
-			const content = resource.query ? decodeURIComponent(resource.query) : '';
+			// 先检查是否已有模型（避免重复创建引发 "Model already exists" 错误）
+			const existing = this.modelService.getModel(resource);
+			if (existing) {
+				return Promise.resolve(existing);
+			}
+			// 从模块级 Map 中获取原始内容（DiffViewProvider 在打开 diff 时写入）
+			const content = getStoredOriginalContent(resource.toString());
 			const model = this.modelService.createModel(content, null, resource);
 			return Promise.resolve(model);
 		} else if (resource.scheme === 'maxian-modified') {
-			// 修改后的内容模型应该已经在DiffViewProvider中创建
+			// 修改后的内容模型已在 DiffViewProvider.openDiffEditor 中创建
 			const existingModel = this.modelService.getModel(resource);
 			if (existingModel) {
 				return Promise.resolve(existingModel);
 			}
-			// 如果没有找到，创建一个空模型
+			// 如果没有找到，创建一个空模型（不应发生，仅作保底）
 			const model = this.modelService.createModel('', null, resource);
 			return Promise.resolve(model);
 		}
