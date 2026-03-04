@@ -22,6 +22,7 @@ import { MarkdownRendererDom } from './markdownRendererDom.js';
 import { FileAccess } from '../../../../base/common/network.js';
 import { ClineMessage } from '../common/task/taskTypes.js';
 import { IAuthService } from '../../auth/common/authService.js';
+import { IQuickInputService, IQuickPickItem } from '../../../../platform/quickinput/common/quickInput.js';
 import {
 	renderDiffStats,
 	calculateSearchReplaceDiffStats,
@@ -105,10 +106,11 @@ export class MaxianView extends ViewPane {
 	private todoListContainer: HTMLElement | null = null; // 任务列表容器
 	private todoListContent: HTMLElement | null = null; // 任务列表内容区域
 	// @文件引用 自动完成相关
-	private mentionDropdown: HTMLElement | null = null; // @mention 下拉列表容器
+	private mentionDropdown: HTMLElement | null = null; // @mention 下拉列表容器（用于部分输入时的过滤）
 	private mentionDropdownItems: string[] = []; // 当前下拉列表中的文件路径
 	private mentionDropdownIndex: number = -1; // 当前高亮项索引
 	private mentionAtPos: number = -1; // @ 符号在输入框中的位置
+	private mentionQuickPickOpen: boolean = false; // QuickPick 文件选择器是否已打开
 
 	constructor(
 		options: IViewPaneOptions,
@@ -124,7 +126,8 @@ export class MaxianView extends ViewPane {
 		@IHoverService hoverService: IHoverService,
 		@IMaxianService private readonly maxianService: IMaxianService,
 		@IAuthService private readonly authService: IAuthService,
-		@IStorageService private readonly storageService: IStorageService
+		@IStorageService private readonly storageService: IStorageService,
+		@IQuickInputService private readonly quickInputService: IQuickInputService
 	) {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, telemetryService, hoverService);
 	}
@@ -1705,7 +1708,9 @@ export class MaxianView extends ViewPane {
 	// ========== @mention 文件引用自动完成 ==========
 
 	/**
-	 * 检测输入框中光标位置前是否有 @mention 触发词，并更新下拉列表
+	 * 检测输入框中光标位置前是否有 @mention 触发词
+	 * - 刚输入 @ 时（query 为空）：立即打开 VSCode QuickPick 文件选择器
+	 * - 已输入 @部分路径 时：显示 inline 过滤下拉列表
 	 */
 	private handleMentionInput(): void {
 		const value = this.inputBox.value;
@@ -1726,13 +1731,11 @@ export class MaxianView extends ViewPane {
 		}
 
 		if (atPos === -1) {
-			// 没有活跃的 @mention
 			this.hideMentionDropdown();
 			return;
 		}
 
 		const query = value.slice(atPos + 1, cursorPos);
-		// 如果查询词包含空格，不触发
 		if (query.includes(' ') || query.includes('\n')) {
 			this.hideMentionDropdown();
 			return;
@@ -1740,16 +1743,106 @@ export class MaxianView extends ViewPane {
 
 		this.mentionAtPos = atPos;
 
-		// 异步获取文件列表并展示
-		this.maxianService.getWorkspaceFiles(query).then(files => {
-			if (files.length === 0) {
+		// 刚输入 @ 且 QuickPick 未打开：立即弹出文件选择器
+		if (query === '' && !this.mentionQuickPickOpen) {
+			this.openFileMentionQuickPick(atPos);
+			return;
+		}
+
+		// 已输入部分路径：用 inline 下拉列表过滤
+		if (query !== '') {
+			this.maxianService.getWorkspaceFiles(query).then(files => {
+				if (files.length === 0) {
+					this.hideMentionDropdown();
+					return;
+				}
+				this.showMentionDropdown(files);
+			}).catch(() => {
 				this.hideMentionDropdown();
-				return;
+			});
+		}
+	}
+
+	/**
+	 * 打开 VSCode 原生 QuickPick 让用户直接选择文件
+	 * 选择后将 @filepath 插入输入框；取消则移除 @ 符号
+	 */
+	private async openFileMentionQuickPick(atPos: number): Promise<void> {
+		if (this.mentionQuickPickOpen) return;
+		this.mentionQuickPickOpen = true;
+
+		try {
+			const files = await this.maxianService.getWorkspaceFiles('');
+
+			const picks: IQuickPickItem[] = files.map(f => {
+				// 取文件名作为 label，完整相对路径作为 description
+				const parts = f.replace(/\\/g, '/').split('/');
+				const fileName = parts[parts.length - 1];
+				const dir = parts.slice(0, -1).join('/');
+				return {
+					label: fileName,
+					description: dir || undefined,
+					detail: f
+				};
+			});
+
+			const selected = await this.quickInputService.pick(picks, {
+				placeHolder: '选择要引用的文件（可输入关键字搜索）',
+				matchOnDescription: true,
+				matchOnDetail: true,
+			});
+
+			// 获取选中时输入框中 @ 的真实位置（可能因为用户编辑而变化）
+			const currentAtPos = this.mentionAtPos;
+
+			if (selected && selected.detail) {
+				// 插入 @filepath（替换输入框里的 @ 符号）
+				this.insertMentionFileAtPos(selected.detail, currentAtPos);
+			} else {
+				// 用户取消：移除 @ 符号，光标归位
+				const v = this.inputBox.value;
+				if (currentAtPos >= 0 && v[currentAtPos] === '@') {
+					this.inputBox.value = v.slice(0, currentAtPos) + v.slice(currentAtPos + 1);
+					this.inputBox.setSelectionRange(currentAtPos, currentAtPos);
+				}
 			}
-			this.showMentionDropdown(files);
-		}).catch(() => {
-			this.hideMentionDropdown();
-		});
+		} catch (e) {
+			console.warn('[MaxianView] openFileMentionQuickPick 出错:', e);
+		} finally {
+			this.mentionQuickPickOpen = false;
+			this.mentionAtPos = -1;
+			// 聚焦回输入框
+			this.inputBox.focus();
+		}
+	}
+
+	/**
+	 * 在指定 @ 位置插入文件路径（供 QuickPick 和 inline 下拉列表共用）
+	 */
+	private insertMentionFileAtPos(file: string, atPos: number): void {
+		const value = this.inputBox.value;
+		const cursorPos = this.inputBox.selectionStart ?? value.length;
+
+		if (atPos < 0 || atPos >= value.length || value[atPos] !== '@') {
+			// @ 已经不在了，直接追加
+			this.inputBox.value = value + '@' + file + ' ';
+			const newPos = this.inputBox.value.length;
+			this.inputBox.setSelectionRange(newPos, newPos);
+		} else {
+			// 替换从 @ 到当前光标的内容（包含已输入的部分 query）
+			const before = value.slice(0, atPos);
+			const after = value.slice(cursorPos);
+			const newValue = before + '@' + file + ' ' + after;
+			this.inputBox.value = newValue;
+			const newCursorPos = atPos + 1 + file.length + 1;
+			this.inputBox.setSelectionRange(newCursorPos, newCursorPos);
+		}
+
+		this.inputBox.focus();
+		this.hideMentionDropdown();
+		// 触发高度自适应
+		this.inputBox.style.height = 'auto';
+		this.inputBox.style.height = this.inputBox.scrollHeight + 'px';
 	}
 
 	/**
@@ -1849,34 +1942,15 @@ export class MaxianView extends ViewPane {
 	}
 
 	/**
-	 * 将选中的文件路径插入到输入框中，替换 @ 触发词
+	 * 将选中的文件路径插入到输入框中，替换 @ 触发词（inline 下拉列表使用）
 	 */
 	private insertMentionFile(file: string): void {
-		const value = this.inputBox.value;
-		const cursorPos = this.inputBox.selectionStart ?? value.length;
 		const atPos = this.mentionAtPos;
-
 		if (atPos === -1) {
 			this.hideMentionDropdown();
 			return;
 		}
-
-		// 替换 @query 为 @filepath（加空格分隔后续输入）
-		const before = value.slice(0, atPos);
-		const after = value.slice(cursorPos);
-		const newValue = before + '@' + file + ' ' + after;
-		this.inputBox.value = newValue;
-
-		// 移动光标到插入内容之后
-		const newCursorPos = atPos + 1 + file.length + 1;
-		this.inputBox.setSelectionRange(newCursorPos, newCursorPos);
-		this.inputBox.focus();
-
-		this.hideMentionDropdown();
-
-		// 触发高度自适应
-		this.inputBox.style.height = 'auto';
-		this.inputBox.style.height = this.inputBox.scrollHeight + 'px';
+		this.insertMentionFileAtPos(file, atPos);
 	}
 
 	// ========== 消息发送 ==========
