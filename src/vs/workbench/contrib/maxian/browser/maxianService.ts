@@ -330,6 +330,13 @@ export interface IMaxianService {
 	 * 清除所有自动批准规则
 	 */
 	clearAutoApproveRules(): void;
+
+	/**
+	 * 获取工作区文件列表（用于@mention自动完成）
+	 * @param query 搜索关键词（过滤文件名/路径）
+	 * @returns 匹配的相对文件路径列表
+	 */
+	getWorkspaceFiles(query: string): Promise<string[]>;
 }
 
 /**
@@ -615,19 +622,147 @@ export class MaxianService extends Disposable implements IMaxianService {
 			await this.initialize();
 		}
 
-		// 触发用户消息事件
+		// 触发用户消息事件（显示原始消息，含@mention标记）
 		this._onMessage.fire({
 			type: 'user',
 			content: message
 		});
 
+		// 解析 @文件引用，将文件内容注入到发给AI的消息中
+		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
+		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
+		const resolvedMessage = workspaceRoot ? await this.resolveAtMentionedFiles(message, workspaceRoot) : message;
+		if (resolvedMessage !== message) {
+			console.log('[Maxian] @mention 文件已注入，原始长度:', message.length, '注入后长度:', resolvedMessage.length);
+		}
+
 		// 根据模式选择不同的处理方式
 		if (mode === 'ask') {
 			// ask 模式：使用 DifyHandler 调用知识库接口
-			await this.sendDifyMessage(message, knowledgeBaseConfig);
+			await this.sendDifyMessage(resolvedMessage, knowledgeBaseConfig);
 		} else {
 			// 其他模式：使用 TaskService 进行完整的任务处理
-			await this.sendTaskMessage(message);
+			await this.sendTaskMessage(resolvedMessage);
+		}
+	}
+
+	/**
+	 * 解析消息中的 @文件引用，读取文件内容并注入到消息中
+	 * 支持格式：@相对路径 或 @绝对路径
+	 */
+	private async resolveAtMentionedFiles(message: string, workspaceRoot: string): Promise<string> {
+		// 匹配 @filepath 模式（不含空格，允许路径分隔符和文件扩展名）
+		const atMentionRegex = /@([^\s@，。？！]+)/g;
+		const matches = [...message.matchAll(atMentionRegex)];
+
+		if (matches.length === 0) return message;
+
+		try {
+			const fsModule = await import('fs');
+			const pathModule = await import('path');
+
+			let fileContentsBlock = '';
+			const processedPaths = new Set<string>();
+
+			for (const match of matches) {
+				const mentionedPath = match[1];
+				// 尝试作为相对路径（从工作区根目录）或绝对路径
+				const absolutePath = pathModule.default.isAbsolute(mentionedPath)
+					? mentionedPath
+					: pathModule.default.join(workspaceRoot, mentionedPath);
+
+				if (processedPaths.has(absolutePath)) continue;
+				processedPaths.add(absolutePath);
+
+				try {
+					const stat = await fsModule.promises.stat(absolutePath);
+					if (!stat.isFile()) continue;
+
+					const content = await fsModule.promises.readFile(absolutePath, 'utf-8');
+					const ext = pathModule.default.extname(absolutePath).slice(1) || 'txt';
+					const relativePath = pathModule.default.relative(workspaceRoot, absolutePath);
+					fileContentsBlock += `\n<file_content path="${relativePath}">\n\`\`\`${ext}\n${content}\n\`\`\`\n</file_content>\n`;
+					console.log('[Maxian] @mention 文件已读取:', relativePath, '大小:', content.length);
+				} catch (e) {
+					console.warn('[Maxian] @mention 文件读取失败:', absolutePath, e);
+				}
+			}
+
+			if (fileContentsBlock) {
+				return message + '\n\n以下是你引用的文件内容：' + fileContentsBlock;
+			}
+		} catch (e) {
+			console.warn('[Maxian] resolveAtMentionedFiles 出错:', e);
+		}
+
+		return message;
+	}
+
+	/**
+	 * 获取工作区文件列表（用于@mention自动完成）
+	 * @param query 搜索关键词
+	 */
+	async getWorkspaceFiles(query: string): Promise<string[]> {
+		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
+		if (workspaceFolders.length === 0) return [];
+		const workspaceRoot = workspaceFolders[0].uri.fsPath;
+
+		try {
+			const fsModule = await import('fs');
+			const pathModule = await import('path');
+			const results: string[] = [];
+			const IGNORE_DIRS = new Set([
+				'node_modules', '.git', 'dist', 'out', 'build', '.next',
+				'__pycache__', '.venv', 'venv', '.idea', '.vscode', 'coverage'
+			]);
+
+			const scanDir = async (dir: string, depth: number = 0): Promise<void> => {
+				if (depth > 8) return;
+				let entries: import('fs').Dirent[];
+				try {
+					entries = await fsModule.promises.readdir(dir, { withFileTypes: true });
+				} catch {
+					return;
+				}
+
+				for (const entry of entries) {
+					if (entry.name.startsWith('.') || IGNORE_DIRS.has(entry.name)) continue;
+					const fullPath = pathModule.default.join(dir, entry.name);
+					const relativePath = pathModule.default.relative(workspaceRoot, fullPath);
+
+					if (entry.isDirectory()) {
+						await scanDir(fullPath, depth + 1);
+					} else {
+						// 按文件名或路径匹配
+						const lowerName = entry.name.toLowerCase();
+						const lowerRelPath = relativePath.toLowerCase();
+						const lowerQuery = query.toLowerCase();
+						if (!query || lowerName.includes(lowerQuery) || lowerRelPath.includes(lowerQuery)) {
+							results.push(relativePath);
+						}
+					}
+
+					// 限制总结果数（提前退出）
+					if (results.length >= 100) return;
+				}
+			};
+
+			await scanDir(workspaceRoot);
+
+			// 按相关性排序：文件名匹配优先于路径匹配
+			if (query) {
+				const lowerQuery = query.toLowerCase();
+				results.sort((a, b) => {
+					const aNameMatch = pathModule.default.basename(a).toLowerCase().startsWith(lowerQuery) ? 0 : 1;
+					const bNameMatch = pathModule.default.basename(b).toLowerCase().startsWith(lowerQuery) ? 0 : 1;
+					return aNameMatch - bNameMatch;
+				});
+			}
+
+			return results.slice(0, 50);
+		} catch (e) {
+			console.warn('[Maxian] getWorkspaceFiles 出错:', e);
+			return [];
 		}
 	}
 
@@ -1625,24 +1760,26 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 			// ==================== P0/P1 优化工具 ====================
 
-			// 16. batch - 批量并行执行工具【重要：优先使用！】
+			// 16. batch - 批量并行执行只读工具【重要：优先使用！】
 			{
 				name: 'batch',
-				description: '【优先使用】批量并行执行多个独立的读取/搜索工具。当需要执行2个或更多read_file、search_files、glob、list_files、codebase_search操作时，必须使用batch而非逐个调用。性能提升2-5倍。示例：读取3个文件→使用batch一次完成，而非调用3次read_file。',
+				description: '【必须优先使用】并行执行多个独立的只读/搜索工具，减少API往返次数。当需要执行2个或更多 read_file、search_files、glob、list_files、codebase_search、lsp_* 操作时，必须合并到一次batch调用，严禁逐个单独调用。性能提升2-5倍。示例：需要读取3个文件 → 1次batch调用，而非3次read_file。注意：write_to_file、apply_diff、edit、execute_command等写操作禁止放入batch，需单独调用。',
 				parameters: {
 					type: 'object',
 					properties: {
 						tool_calls: {
 							type: 'array',
-							description: '工具调用数组。格式：[{"tool":"read_file","parameters":{"path":"a.ts"}},{"tool":"read_file","parameters":{"path":"b.ts"}}]。最多10个。禁止：batch、apply_diff、write_to_file、execute_command',
+							description: '只读工具调用数组，最多25个。格式：[{"tool":"read_file","parameters":{"path":"a.ts"}},{"tool":"read_file","parameters":{"path":"b.ts"}}]。禁止的工具：batch、write_to_file、apply_diff、edit、edit_file、insert_content、multiedit、patch、execute_command、ask_followup_question、attempt_completion',
 							items: {
 								type: 'object',
 								properties: {
-									tool: { type: 'string', description: '工具名称' },
-									parameters: { type: 'object', description: '工具参数' }
+									tool: { type: 'string', description: '只读工具名称（read_file/search_files/glob/list_files/codebase_search/lsp_*等）' },
+									parameters: { type: 'object', description: '工具参数对象' }
 								},
 								required: ['tool', 'parameters']
-							}
+							},
+							minItems: 1,
+							maxItems: 25
 						}
 					},
 					required: ['tool_calls']

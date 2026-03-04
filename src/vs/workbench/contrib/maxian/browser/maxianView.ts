@@ -104,6 +104,11 @@ export class MaxianView extends ViewPane {
 	// 任务列表相关
 	private todoListContainer: HTMLElement | null = null; // 任务列表容器
 	private todoListContent: HTMLElement | null = null; // 任务列表内容区域
+	// @文件引用 自动完成相关
+	private mentionDropdown: HTMLElement | null = null; // @mention 下拉列表容器
+	private mentionDropdownItems: string[] = []; // 当前下拉列表中的文件路径
+	private mentionDropdownIndex: number = -1; // 当前高亮项索引
+	private mentionAtPos: number = -1; // @ 符号在输入框中的位置
 
 	constructor(
 		options: IViewPaneOptions,
@@ -323,6 +328,22 @@ export class MaxianView extends ViewPane {
 		inputContainer.style.padding = '8px 12px';
 		inputContainer.style.position = 'relative';
 
+		// ========== @mention 文件引用下拉列表（定位在输入框上方） ==========
+		this.mentionDropdown = append(inputContainer, $('div.maxian-mention-dropdown'));
+		this.mentionDropdown.style.display = 'none';
+		this.mentionDropdown.style.position = 'absolute';
+		this.mentionDropdown.style.bottom = '100%';
+		this.mentionDropdown.style.left = '12px';
+		this.mentionDropdown.style.right = '12px';
+		this.mentionDropdown.style.maxHeight = '240px';
+		this.mentionDropdown.style.overflowY = 'auto';
+		this.mentionDropdown.style.backgroundColor = 'var(--vscode-editorWidget-background)';
+		this.mentionDropdown.style.border = '1px solid var(--vscode-editorWidget-border)';
+		this.mentionDropdown.style.borderRadius = '4px';
+		this.mentionDropdown.style.boxShadow = '0 -4px 12px rgba(0, 0, 0, 0.3)';
+		this.mentionDropdown.style.zIndex = '1000';
+		this.mentionDropdown.style.marginBottom = '4px';
+
 		// 输入框容器（相对定位，为负边距控制区提供基准）
 		const textAreaWrapper = append(inputContainer, $('div'));
 		textAreaWrapper.style.position = 'relative';
@@ -334,7 +355,7 @@ export class MaxianView extends ViewPane {
 
 		// 输入框（底部留出空间给控制区）
 		this.inputBox = append(textAreaWrapper, $('textarea')) as HTMLTextAreaElement;
-		this.inputBox.placeholder = '输入消息... (Enter 发送, Shift+Enter 换行)';
+		this.inputBox.placeholder = '输入消息... (Enter 发送, Shift+Enter 换行, @文件名 引用文件)';
 		this.inputBox.rows = 3;
 		this.inputBox.style.width = '100%';
 		this.inputBox.style.minHeight = '90px';
@@ -359,9 +380,15 @@ export class MaxianView extends ViewPane {
 			this.inputBox.style.borderColor = 'var(--vscode-focusBorder)';
 			this.inputBox.style.outline = '1px solid var(--vscode-focusBorder)';
 		};
-		this.inputBox.onblur = () => {
+		this.inputBox.onblur = (e) => {
 			this.inputBox.style.borderColor = 'var(--vscode-input-border)';
 			this.inputBox.style.outline = 'none';
+			// 点击下拉列表项时不隐藏（relatedTarget 是 dropdown 内部元素时不隐藏）
+			const related = (e as FocusEvent).relatedTarget as HTMLElement | null;
+			if (!related || !this.mentionDropdown?.contains(related)) {
+				// 延迟隐藏，允许 click 事件先触发
+				setTimeout(() => this.hideMentionDropdown(), 150);
+			}
 		};
 
 		// 透明渐变遮罩（避免文本与底部控制区重叠）
@@ -983,7 +1010,7 @@ export class MaxianView extends ViewPane {
 
 					// 恢复正常状态
 					this.awaitingUserResponse = false;
-					this.inputBox.placeholder = '输入消息... (Enter 发送, Shift+Enter 换行)';
+					this.inputBox.placeholder = '输入消息... (Enter 发送, Shift+Enter 换行, @文件名 引用文件)';
 				} else {
 					// 正常发送消息
 					this.sendMessage(message);
@@ -994,19 +1021,50 @@ export class MaxianView extends ViewPane {
 			}
 		};
 
-		// 输入框回车事件（Shift+Enter换行，Enter发送）
+		// 输入框回车事件（Shift+Enter换行，Enter发送；下拉列表打开时支持方向键导航）
 		this.inputBox.onkeydown = (e) => {
+			// 如果 @mention 下拉列表已打开，拦截导航键
+			if (this.mentionDropdown && this.mentionDropdown.style.display !== 'none') {
+				if (e.key === 'ArrowDown') {
+					e.preventDefault();
+					this.mentionDropdownIndex = Math.min(this.mentionDropdownIndex + 1, this.mentionDropdownItems.length - 1);
+					this.updateMentionDropdownHighlight();
+					return;
+				}
+				if (e.key === 'ArrowUp') {
+					e.preventDefault();
+					this.mentionDropdownIndex = Math.max(this.mentionDropdownIndex - 1, 0);
+					this.updateMentionDropdownHighlight();
+					return;
+				}
+				if (e.key === 'Enter' || e.key === 'Tab') {
+					e.preventDefault();
+					if (this.mentionDropdownIndex >= 0 && this.mentionDropdownIndex < this.mentionDropdownItems.length) {
+						this.insertMentionFile(this.mentionDropdownItems[this.mentionDropdownIndex]);
+					}
+					return;
+				}
+				if (e.key === 'Escape') {
+					e.preventDefault();
+					this.hideMentionDropdown();
+					return;
+				}
+			}
+
 			if (e.key === 'Enter' && !e.shiftKey) {
 				e.preventDefault();
 				this.sendButton.click();
 			}
 		};
 
-		// 自动调整输入框高度
+		// 自动调整输入框高度 + @mention 检测
 		this.inputBox.oninput = () => {
 			this.inputBox.style.height = 'auto';
 			const newHeight = this.inputBox.scrollHeight;
 			this.inputBox.style.height = newHeight + 'px';
+
+			// 检测光标位置前的 @mention
+			this.handleMentionInput();
 		};
 	}
 
@@ -1625,9 +1683,203 @@ export class MaxianView extends ViewPane {
 			.maxian-messages::-webkit-scrollbar-thumb:hover {
 				background: var(--vscode-scrollbarSlider-hoverBackground);
 			}
+
+			/* ========== @mention 文件引用下拉列表 ========== */
+			.maxian-mention-dropdown {
+				font-family: var(--vscode-font-family);
+				font-size: 13px;
+			}
+
+			.maxian-mention-item {
+				transition: background-color 0.1s;
+			}
+
+			.maxian-mention-item:hover {
+				background-color: var(--vscode-list-hoverBackground) !important;
+				color: var(--vscode-list-hoverForeground, var(--vscode-foreground)) !important;
+			}
 		`;
 		this.container.appendChild(style);
 	}
+
+	// ========== @mention 文件引用自动完成 ==========
+
+	/**
+	 * 检测输入框中光标位置前是否有 @mention 触发词，并更新下拉列表
+	 */
+	private handleMentionInput(): void {
+		const value = this.inputBox.value;
+		const cursorPos = this.inputBox.selectionStart ?? value.length;
+
+		// 向前查找最近的 @ 符号（同一行内）
+		let atPos = -1;
+		for (let i = cursorPos - 1; i >= 0; i--) {
+			const ch = value[i];
+			if (ch === '@') {
+				atPos = i;
+				break;
+			}
+			// 遇到换行或空格则停止（@ 必须在当前词的开头）
+			if (ch === '\n' || ch === ' ') {
+				break;
+			}
+		}
+
+		if (atPos === -1) {
+			// 没有活跃的 @mention
+			this.hideMentionDropdown();
+			return;
+		}
+
+		const query = value.slice(atPos + 1, cursorPos);
+		// 如果查询词包含空格，不触发
+		if (query.includes(' ') || query.includes('\n')) {
+			this.hideMentionDropdown();
+			return;
+		}
+
+		this.mentionAtPos = atPos;
+
+		// 异步获取文件列表并展示
+		this.maxianService.getWorkspaceFiles(query).then(files => {
+			if (files.length === 0) {
+				this.hideMentionDropdown();
+				return;
+			}
+			this.showMentionDropdown(files);
+		}).catch(() => {
+			this.hideMentionDropdown();
+		});
+	}
+
+	/**
+	 * 显示 @mention 下拉列表，填充文件条目
+	 */
+	private showMentionDropdown(files: string[]): void {
+		if (!this.mentionDropdown) return;
+
+		this.mentionDropdownItems = files;
+		this.mentionDropdownIndex = files.length > 0 ? 0 : -1;
+
+		// 清空并重新渲染列表项
+		this.mentionDropdown.innerHTML = '';
+
+		// 标题提示
+		const header = append(this.mentionDropdown, $('div'));
+		header.style.padding = '6px 10px 4px 10px';
+		header.style.fontSize = '11px';
+		header.style.color = 'var(--vscode-descriptionForeground)';
+		header.style.borderBottom = '1px solid var(--vscode-widget-border)';
+		header.textContent = '选择文件（↑↓ 导航，Enter 选择，Esc 关闭）';
+
+		files.forEach((file, index) => {
+			const item = append(this.mentionDropdown!, $('div.maxian-mention-item'));
+			item.style.padding = '6px 10px';
+			item.style.cursor = 'pointer';
+			item.style.display = 'flex';
+			item.style.alignItems = 'center';
+			item.style.gap = '6px';
+			item.style.fontSize = '13px';
+			item.style.color = 'var(--vscode-foreground)';
+			item.style.borderRadius = '2px';
+			item.dataset['index'] = String(index);
+
+			// 文件图标
+			const icon = append(item, $('span.codicon.codicon-file'));
+			icon.style.fontSize = '14px';
+			icon.style.color = 'var(--vscode-symbolIcon-fileForeground, var(--vscode-descriptionForeground))';
+			icon.style.flexShrink = '0';
+
+			// 文件路径文本
+			const label = append(item, $('span'));
+			label.style.flex = '1';
+			label.style.overflow = 'hidden';
+			label.style.textOverflow = 'ellipsis';
+			label.style.whiteSpace = 'nowrap';
+			label.textContent = file;
+
+			// 高亮当前选中项
+			if (index === 0) {
+				item.style.backgroundColor = 'var(--vscode-list-activeSelectionBackground)';
+				item.style.color = 'var(--vscode-list-activeSelectionForeground)';
+			}
+
+			item.onmouseenter = () => {
+				this.mentionDropdownIndex = index;
+				this.updateMentionDropdownHighlight();
+			};
+
+			item.onclick = () => {
+				this.insertMentionFile(file);
+			};
+		});
+
+		this.mentionDropdown.style.display = 'block';
+	}
+
+	/**
+	 * 隐藏 @mention 下拉列表
+	 */
+	private hideMentionDropdown(): void {
+		if (this.mentionDropdown) {
+			this.mentionDropdown.style.display = 'none';
+		}
+		this.mentionDropdownItems = [];
+		this.mentionDropdownIndex = -1;
+		this.mentionAtPos = -1;
+	}
+
+	/**
+	 * 更新下拉列表中的高亮选中项
+	 */
+	private updateMentionDropdownHighlight(): void {
+		if (!this.mentionDropdown) return;
+		const items = this.mentionDropdown.querySelectorAll<HTMLElement>('.maxian-mention-item');
+		items.forEach((item, idx) => {
+			if (idx === this.mentionDropdownIndex) {
+				item.style.backgroundColor = 'var(--vscode-list-activeSelectionBackground)';
+				item.style.color = 'var(--vscode-list-activeSelectionForeground)';
+				// 确保选中项可见
+				item.scrollIntoView({ block: 'nearest' });
+			} else {
+				item.style.backgroundColor = '';
+				item.style.color = 'var(--vscode-foreground)';
+			}
+		});
+	}
+
+	/**
+	 * 将选中的文件路径插入到输入框中，替换 @ 触发词
+	 */
+	private insertMentionFile(file: string): void {
+		const value = this.inputBox.value;
+		const cursorPos = this.inputBox.selectionStart ?? value.length;
+		const atPos = this.mentionAtPos;
+
+		if (atPos === -1) {
+			this.hideMentionDropdown();
+			return;
+		}
+
+		// 替换 @query 为 @filepath（加空格分隔后续输入）
+		const before = value.slice(0, atPos);
+		const after = value.slice(cursorPos);
+		const newValue = before + '@' + file + ' ' + after;
+		this.inputBox.value = newValue;
+
+		// 移动光标到插入内容之后
+		const newCursorPos = atPos + 1 + file.length + 1;
+		this.inputBox.setSelectionRange(newCursorPos, newCursorPos);
+		this.inputBox.focus();
+
+		this.hideMentionDropdown();
+
+		// 触发高度自适应
+		this.inputBox.style.height = 'auto';
+		this.inputBox.style.height = this.inputBox.scrollHeight + 'px';
+	}
+
+	// ========== 消息发送 ==========
 
 	private async sendMessage(message: string): Promise<void> {
 		// 调用maxianService发送消息，传递当前模式
@@ -2725,7 +2977,7 @@ export class MaxianView extends ViewPane {
 
 		// 重置等待状态
 		this.awaitingUserResponse = false;
-		this.inputBox.placeholder = '输入消息... (Enter 发送, Shift+Enter 换行)';
+		this.inputBox.placeholder = '输入消息... (Enter 发送, Shift+Enter 换行, @文件名 引用文件)';
 
 		// 清理所有pending的工具确认UI
 		// 查找所有带有确认按钮的工具消息并移除或标记为已取消
@@ -2846,7 +3098,7 @@ export class MaxianView extends ViewPane {
 		this.currentToolStatusElement = null;
 		this.tokenStatsElement = null;
 		this.awaitingUserResponse = false;
-		this.inputBox.placeholder = '输入消息... (Enter 发送, Shift+Enter 换行)';
+		this.inputBox.placeholder = '输入消息... (Enter 发送, Shift+Enter 换行, @文件名 引用文件)';
 
 		// 清空消息区域 - 使用DOM API而非innerHTML（避免TrustedHTML问题）
 		while (this.messageArea.firstChild) {
