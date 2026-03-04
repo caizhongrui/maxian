@@ -3983,7 +3983,7 @@ export class MaxianView extends ViewPane {
 	 * 更新可用模式 - 根据用户权限动态调整
 	 */
 	private updateAvailableModes(): void {
-		if (!this.modeSelector || !this.modeDropdownList) {
+		if (!this.modeSelector || !this.modeDropdownList || !this.knowledgeBaseSelectorWrapper) {
 			return; // 如果选择器还未创建,跳过
 		}
 

@@ -574,7 +574,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		// P1优化：初始化 SteeringService（加载 .maxian/steering/*.md）
 		if (workspaceRoot) {
-			this.steeringService = new SteeringService(workspaceRoot);
+			this.steeringService = new SteeringService(workspaceRoot, this.fileService);
 			await this.steeringService.initialize();
 			console.log('[Maxian] SteeringService已初始化');
 		}
@@ -1045,22 +1045,18 @@ export class MaxianService extends Disposable implements IMaxianService {
 				// 发送完整的ClineMessage（新版本）
 				this._onClineMessage.fire({ message: clineMessage });
 
-				// 🔧 同时将ClineMessage转换为IMessageEvent（向后兼容）
-				// 注意：completion_result 不转换，避免重复渲染（已由新版路径处理）
+				// 🔧 仅转发 error 类型到旧版IMessageEvent（向后兼容）
+				// say='text' 不再重复发送：流式内容已经通过 onStreamChunk -> _onMessage 实时渲染
+				// 完整消息通过 _onClineMessage -> renderTextMessage 处理（会自动替换流式气泡）
+				// 重复发送会导致 renderTextMessage 累积已有内容导致内容翻倍，以及多余气泡出现
 				if (clineMessage.type === 'say') {
-					if (clineMessage.say === 'text') {
-						this._onMessage.fire({
-							type: 'assistant',
-							content: clineMessage.text || '',
-							isPartial: true
-						});
-					} else if (clineMessage.say === 'error') {
+					if (clineMessage.say === 'error') {
 						this._onMessage.fire({
 							type: 'error',
 							content: clineMessage.text || '未知错误'
 						});
 					}
-					// completion_result 只通过新版 ClineMessage 路径处理，避免重复渲染
+					// text/completion_result 只通过新版 ClineMessage 路径处理，避免重复渲染
 				}
 			});
 			this._register(messageAddedDisposable);

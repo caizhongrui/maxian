@@ -580,6 +580,17 @@ ${assertResult.message}
 
 		try {
 			const uri = URI.file(absolutePath);
+
+			// 验证 path 参数必须是目录而非文件
+			try {
+				const rootStat = await this.fileService.resolve(uri);
+				if (!rootStat.isDirectory) {
+					return `错误: glob 的 path 参数必须是目录，"${dirPath}" 是一个文件\n提示: 请传入目录路径，并在 file_pattern 中使用匹配模式\n示例: path="${dirPath.substring(0, dirPath.lastIndexOf('/'))}", file_pattern="**/${dirPath.substring(dirPath.lastIndexOf('/') + 1)}"`;
+				}
+			} catch {
+				return `错误: 路径不存在 "${absolutePath}"\n请检查 path 参数是否正确`;
+			}
+
 			const matchedFiles: string[] = [];
 			const limit = 200; // 匹配文件限制
 			let scannedCount = 0;

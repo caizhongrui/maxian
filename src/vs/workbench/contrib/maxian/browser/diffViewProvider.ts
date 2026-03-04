@@ -228,7 +228,10 @@ export class DiffViewProvider extends Disposable {
 	 */
 	private applySearchReplace(originalContent: string, diff: string): string | null | undefined {
 		// 解析SEARCH/REPLACE块
-		const searchReplaceRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
+		// 兼容AI生成的两种格式：
+		// 标准格式: <<<<<<< SEARCH\n内容\n=======\n替换内容\n>>>>>>> REPLACE
+		// 无换行格式: <<<<<<< SEARCH\n内容}=======\n替换内容}>>>>>>> REPLACE（=======和>>>>>>> REPLACE前无换行）
+		const searchReplaceRegex = /<<<<<<< SEARCH\r?\n([\s\S]*?)\r?\n?=======\r?\n([\s\S]*?)\r?\n?>>>>>>> REPLACE/g;
 
 		let result = originalContent;
 		let match;
@@ -239,21 +242,34 @@ export class DiffViewProvider extends Disposable {
 			const searchText = match[1];
 			const replaceText = match[2];
 
-			// 查找并替换
+			// 策略1: 精确匹配
 			const searchIndex = result.indexOf(searchText);
-			if (searchIndex === -1) {
-				console.warn('[Maxian] 未找到SEARCH文本:', searchText.substring(0, 50) + '...');
-				// 尝试模糊匹配（忽略空白差异）
-				const normalizedSearch = searchText.replace(/\s+/g, ' ').trim();
-				const normalizedResult = result.replace(/\s+/g, ' ');
-				const fuzzyIndex = normalizedResult.indexOf(normalizedSearch);
-
-				if (fuzzyIndex === -1) {
-					return null;
-				}
-			} else {
+			if (searchIndex !== -1) {
 				result = result.substring(0, searchIndex) + replaceText + result.substring(searchIndex + searchText.length);
+				continue;
 			}
+
+			console.warn('[Maxian] 未找到SEARCH文本（尝试回退策略）:', searchText.substring(0, 50) + '...');
+
+			// 策略2: 标准化行尾后匹配（CRLF -> LF），并在标准化后的内容上执行替换
+			const normalizedResult = result.replace(/\r\n/g, '\n');
+			const normalizedSearch = searchText.replace(/\r\n/g, '\n');
+			const normalizedIndex = normalizedResult.indexOf(normalizedSearch);
+			if (normalizedIndex !== -1) {
+				result = normalizedResult.substring(0, normalizedIndex) + replaceText + normalizedResult.substring(normalizedIndex + normalizedSearch.length);
+				continue;
+			}
+
+			// 策略3: 逐行匹配（忽略每行行尾空白）
+			const lineRange = this.findByLines(result, searchText);
+			if (lineRange !== null) {
+				result = result.substring(0, lineRange.start) + replaceText + result.substring(lineRange.end);
+				continue;
+			}
+
+			// 所有策略均失败
+			console.warn('[Maxian] 未找到SEARCH文本（精确/CRLF/逐行均失败）:', searchText.substring(0, 50) + '...');
+			return null;
 		}
 
 		if (!hasMatch) {
@@ -263,6 +279,39 @@ export class DiffViewProvider extends Disposable {
 		}
 
 		return result;
+	}
+
+	/**
+	 * 通过逐行比较（忽略行尾空白）在 content 中定位 searchText 对应的字符范围
+	 */
+	private findByLines(content: string, searchText: string): { start: number; end: number } | null {
+		const searchLines = searchText.split('\n').map(l => l.trimEnd());
+		const contentLines = content.split('\n');
+
+		for (let i = 0; i <= contentLines.length - searchLines.length; i++) {
+			let allMatch = true;
+			for (let j = 0; j < searchLines.length; j++) {
+				if (contentLines[i + j].trimEnd() !== searchLines[j]) {
+					allMatch = false;
+					break;
+				}
+			}
+			if (allMatch) {
+				// 计算 start：前 i 行的总字符数（含换行符）
+				let start = 0;
+				for (let k = 0; k < i; k++) {
+					start += contentLines[k].length + 1; // +1 for '\n'
+				}
+				// 计算 end：start + 匹配行的总字符数（行间含换行符，最后一行不含）
+				let end = start;
+				for (let k = i; k < i + searchLines.length - 1; k++) {
+					end += contentLines[k].length + 1;
+				}
+				end += contentLines[i + searchLines.length - 1].length;
+				return { start, end };
+			}
+		}
+		return null;
 	}
 
 	/**

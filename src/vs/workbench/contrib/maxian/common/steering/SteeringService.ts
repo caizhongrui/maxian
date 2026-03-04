@@ -6,10 +6,10 @@
 // Inspired by Kiro's steering system (.kiro/steering/*.md)
 // Adapted for tianhe-zhikai-ide: uses .maxian/steering/*.md
 
-import * as path from 'path';
-import * as fs from 'fs/promises';
-import * as vscode from 'vscode';
-import { fileExistsAtPath } from '../utils/fsUtils.js';
+import { join, basename, relative } from '../../../../../base/common/path.js';
+import { URI } from '../../../../../base/common/uri.js';
+import { IFileService } from '../../../../../platform/files/common/files.js';
+import { IDisposable } from '../../../../../base/common/lifecycle.js';
 
 /**
  * Steering 文件的包含模式
@@ -150,13 +150,16 @@ function matchesGlob(filePath: string, pattern: string): boolean {
 export class SteeringService {
 	private readonly steeringDir: string;
 	private steeringFiles: SteeringFile[] = [];
-	private disposables: vscode.Disposable[] = [];
+	private disposables: IDisposable[] = [];
 	private initialized = false;
 	/** 每次加载或重新加载文件时递增，用于系统提示词缓存失效 */
 	private loadVersion = 0;
 
-	constructor(private readonly cwd: string) {
-		this.steeringDir = path.join(cwd, '.maxian', 'steering');
+	constructor(
+		private readonly cwd: string,
+		private readonly fileService: IFileService
+	) {
+		this.steeringDir = join(cwd, '.maxian', 'steering');
 		this.setupFileWatcher();
 	}
 
@@ -174,24 +177,14 @@ export class SteeringService {
 	 * 监听 .maxian/steering/*.md 的创建、修改、删除事件，自动重新加载
 	 */
 	private setupFileWatcher(): void {
-		const steeringPattern = new vscode.RelativePattern(this.cwd, '.maxian/steering/*.md');
-		const watcher = vscode.workspace.createFileSystemWatcher(steeringPattern);
-
-		this.disposables.push(
-			watcher.onDidChange(() => {
-				console.log('[SteeringService] steering 文件已修改，重新加载');
+		const steeringDirUri = URI.file(this.steeringDir);
+		const listener = this.fileService.onDidFilesChange(event => {
+			if (event.affects(steeringDirUri)) {
+				console.log('[SteeringService] steering 目录发生变化，重新加载');
 				this.loadAllSteeringFiles();
-			}),
-			watcher.onDidCreate(() => {
-				console.log('[SteeringService] 新 steering 文件已创建，重新加载');
-				this.loadAllSteeringFiles();
-			}),
-			watcher.onDidDelete(() => {
-				console.log('[SteeringService] steering 文件已删除，重新加载');
-				this.loadAllSteeringFiles();
-			}),
-			watcher
-		);
+			}
+		});
+		this.disposables.push(listener);
 	}
 
 	/**
@@ -201,32 +194,39 @@ export class SteeringService {
 		const loadedFiles: SteeringFile[] = [];
 
 		try {
-			if (!await fileExistsAtPath(this.steeringDir)) {
+			const steeringDirUri = URI.file(this.steeringDir);
+			if (!await this.fileService.exists(steeringDirUri)) {
 				this.steeringFiles = [];
 				return;
 			}
 
-			const dirEntries = await fs.readdir(this.steeringDir, { withFileTypes: true });
-			const mdFiles = dirEntries.filter(entry => entry.isFile() && entry.name.endsWith('.md'));
+			const stat = await this.fileService.resolve(steeringDirUri);
+			if (!stat.children) {
+				this.steeringFiles = [];
+				return;
+			}
 
-			for (const entry of mdFiles) {
-				const filepath = path.join(this.steeringDir, entry.name);
+			const mdChildren = stat.children.filter(child => !child.isDirectory && child.name.endsWith('.md'));
+
+			for (const child of mdChildren) {
+				const filepath = child.resource.fsPath;
 				try {
-					const rawContent = await fs.readFile(filepath, 'utf8');
+					const fileContent = await this.fileService.readFile(child.resource);
+					const rawContent = fileContent.value.toString();
 					const { meta, body } = parseFrontMatter(rawContent);
 
 					const inclusion = (meta['inclusion'] as SteeringInclusion | undefined) ?? 'always';
 					const fileMatchPattern = meta['fileMatchPattern'];
 
 					loadedFiles.push({
-						filename: entry.name,
+						filename: child.name,
 						filepath,
 						inclusion,
 						fileMatchPattern,
 						content: body.trim()
 					});
 				} catch (error) {
-					console.error(`[SteeringService] 无法读取 steering 文件 ${entry.name}:`, error);
+					console.error(`[SteeringService] 无法读取 steering 文件 ${child.name}:`, error);
 				}
 			}
 		} catch (error) {
@@ -282,10 +282,10 @@ export class SteeringService {
 				case 'fileMatch':
 					if (steeringFile.fileMatchPattern && contextFiles && contextFiles.length > 0) {
 						shouldInclude = contextFiles.some(contextFile => {
-							const relativePath = path.relative(this.cwd, contextFile).replace(/\\/g, '/');
-							const basename = path.basename(contextFile);
+							const relativePath = relative(this.cwd, contextFile).replace(/\\/g, '/');
+							const fileBasename = basename(contextFile);
 							return matchesGlob(relativePath, steeringFile.fileMatchPattern!) ||
-								matchesGlob(basename, steeringFile.fileMatchPattern!);
+								matchesGlob(fileBasename, steeringFile.fileMatchPattern!);
 						});
 					}
 					break;

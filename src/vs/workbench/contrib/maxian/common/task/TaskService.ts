@@ -1115,6 +1115,8 @@ export class TaskService extends Disposable {
 				// P0优化：检查重复文件读取
 				const duplicateNotice = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
 				if (duplicateNotice) {
+					// 触发工具完成事件（即使是重复检测，也需要通知UI移除工具卡片）
+					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: false });
 					return {
 						type: 'tool_result' as const,
 						tool_use_id: toolUse.id,
@@ -1127,6 +1129,8 @@ export class TaskService extends Disposable {
 				const cachedResult = this.toolCache.get(toolUse.name, toolUse.input);
 				if (cachedResult !== null) {
 					console.log(`[TaskService] 使用缓存结果: ${toolUse.name}`);
+					// 触发工具完成事件（缓存命中也需要通知UI移除工具卡片）
+					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: false });
 					return {
 						type: 'tool_result' as const,
 						tool_use_id: toolUse.id,
