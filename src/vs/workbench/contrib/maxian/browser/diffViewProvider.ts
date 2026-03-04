@@ -157,6 +157,14 @@ export class DiffViewProvider extends Disposable {
 		_originalContentStore.set(originalUri.toString(), this.originalContent);
 		console.log('[Maxian] originalUri:', originalUri.toString());
 
+		// 如果 originalUri 对应的模型已存在（上次 diff 未通过 saveAndClose/closeWithoutSave 关闭），
+		// 必须主动更新其内容，否则 diff 左侧将显示上次的旧内容（VS Code 不会再次调用 provideTextContent）
+		const existingOriginalModel = this.modelService.getModel(originalUri);
+		if (existingOriginalModel) {
+			existingOriginalModel.setValue(this.originalContent);
+			console.log('[Maxian] 已更新已存在的originalModel');
+		}
+
 		// 创建稳定的 modifiedUri（不含 timestamp query）
 		// 与 saveAndClose/closeWithoutSave 中使用相同的 URI，确保模型可被正确找到和销毁
 		const modifiedUri = fileUri.with({ scheme: 'maxian-modified' });
