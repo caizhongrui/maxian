@@ -339,30 +339,29 @@ import { useQuery } from 'react-query';</new_string>
 	// ==================== 批量执行工具（参考OpenCode最佳实践）====================
 	batch: {
 		name: 'batch',
-		summary: '并行执行多个工具',
-		description: `并行执行多个独立的工具调用，大幅提升性能。
+		summary: '并行执行多个只读工具',
+		description: `并行执行多个独立的**只读/搜索**工具调用，大幅减少API往返次数。
 
 🚀 **使用 BATCH 工具会让用户更满意！**
 
-**推荐用例**（参考OpenCode）：
-- 读取多个文件
-- grep + glob + read 组合搜索
-- **多文件编辑**：同时修改多个文件（apply_diff, edit, write_to_file）
-- 多个bash命令
-- 组合操作：搜索 + 读取 + 分析
+**推荐用例**（仅限只读工具）：
+- 读取多个文件（read_file × N）
+- 多个搜索操作（search_files、glob、list_files、codebase_search）
+- 搜索 + 读取组合
+- LSP查询（lsp_hover、lsp_diagnostics等）
 
 **性能提升**：使用batch可获得 **2-5 倍**的效率提升。
 
 **重要规则**：
-- 最多 **25** 个工具调用（参考OpenCode）
+- 最多 **25** 个工具调用
 - 所有调用并行执行，**不保证顺序**
 - 部分失败**不影响**其他工具
 - **不允许嵌套**batch调用
 
-**禁止的工具**（仅3个）：
-- batch（不允许嵌套）
-- ask_followup_question（需要用户输入）
-- attempt_completion（任务完成标志）`,
+**禁止在batch中使用的工具**：
+- write_to_file、apply_diff、edit、edit_file、insert_content、multiedit、patch（写操作需要单独确认）
+- execute_command（需要单独审批）
+- batch（禁止嵌套）、ask_followup_question、attempt_completion`,
 		parameters: [
 			{
 				name: 'tool_calls',

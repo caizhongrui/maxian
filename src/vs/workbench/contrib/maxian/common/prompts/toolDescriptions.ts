@@ -192,41 +192,29 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 - 完成任务后立即标记为 completed`,
 
 	// P0优化：批量执行工具（参考OpenCode最佳实践）
-	batch: `## batch 【最重要的工具 - 必须优先使用！】
-并行执行多个独立的工具调用，大幅提升性能
+	batch: `## batch 【必须优先使用 - 并行只读工具！】
+并行执行多个独立的**只读/搜索**工具调用，大幅减少API往返次数
 
 🚀 **使用 BATCH 工具会让用户更满意！**
 
-⚠️ **强制规则**：当你需要执行2个或更多独立操作时，**必须**使用batch工具
+⚠️ **强制规则**：当你需要执行2个或更多只读操作时，**必须**使用batch工具，严禁逐个单独调用
 
-**推荐用例**（参考OpenCode）：
-- 读取多个文件
-- grep + glob + read 组合搜索
-- **多文件编辑**：同时修改多个文件（apply_diff, edit, write_to_file）
-- 多个bash命令
-- 组合操作：搜索 + 读取 + 分析
+**推荐用例**（仅限只读工具）：
+- 读取多个文件（read_file × N）
+- 多个搜索操作（search_files、glob、list_files、codebase_search）
+- 搜索 + 读取组合
+- LSP查询（lsp_hover、lsp_diagnostics、lsp_definition等）
 
 ❌ **错误示例**（禁止这样做）：
 先调用 read_file("a.ts")，再调用 read_file("b.ts")，再调用 read_file("c.ts")
 
-✅ **正确示例1 - 读取文件**：
+✅ **正确示例 - 批量读取文件**：
 \`\`\`
 <batch>
 <tool_calls>[
   {"tool": "read_file", "parameters": {"path": "a.ts"}},
   {"tool": "read_file", "parameters": {"path": "b.ts"}},
-  {"tool": "read_file", "parameters": {"path": "c.ts"}}
-]</tool_calls>
-</batch>
-\`\`\`
-
-✅ **正确示例2 - 多文件编辑**（OpenCode最佳实践）：
-\`\`\`
-<batch>
-<tool_calls>[
-  {"tool": "apply_diff", "parameters": {"path": "a.ts", "diff": "..."}},
-  {"tool": "apply_diff", "parameters": {"path": "b.ts", "diff": "..."}},
-  {"tool": "write_to_file", "parameters": {"path": "c.ts", "content": "..."}}
+  {"tool": "search_files", "parameters": {"path": "src", "regex": "interface"}}
 ]</tool_calls>
 </batch>
 \`\`\`
@@ -234,14 +222,14 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 **性能提升**：使用batch可获得 **2-5倍** 效率提升！
 
 **规则**：
-- 每次batch最多 **25** 个工具调用（参考OpenCode）
+- 每次batch最多 **25** 个工具调用
 - 所有调用并行执行，不保证顺序
 - 部分失败不影响其他工具
 
-**禁止的工具**（仅3个）：
-- batch（不允许嵌套）
-- ask_followup_question（需要用户输入）
-- attempt_completion（任务完成标志）`,
+**禁止在batch中使用的工具**：
+- write_to_file、apply_diff、edit、edit_file、insert_content、multiedit、patch（写操作需要单独用户确认）
+- execute_command（命令执行需要单独审批）
+- batch（禁止嵌套）、ask_followup_question、attempt_completion`,
 
 	// P1优化：多处编辑工具
 	multiedit: `## multiedit

@@ -386,15 +386,16 @@ export class ToolExecutorImpl implements IToolExecutor {
 			return '错误: tool_calls 不能为空';
 		}
 
-		console.log(`[Maxian] ✅ 批量执行 ${toolCalls.length} 个工具`);
-		console.log('[Maxian] 工具列表:', toolCalls.map(t => t.tool).join(', '));
+		console.log(`[Batch Monitor] 🚀 开始并行执行 ${toolCalls.length} 个工具: [${toolCalls.map(t => t.tool).join(', ')}]`);
+		const batchStartTime = Date.now();
 
 		const { results, summary, metadata } = await this.batchExecutor.executeBatch(toolCalls);
 
+		const batchElapsed = Date.now() - batchStartTime;
+		console.log(`[Batch Monitor] ✅ batch 完成: ${metadata.successful}/${metadata.totalCalls} 成功，耗时 ${batchElapsed}ms（相当于节省了约 ${metadata.totalCalls - 1} 次 API round-trip）`);
+
 		// 格式化输出
 		const output = this.batchExecutor.formatBatchResponse(results);
-
-		console.log(`[Maxian] 批量执行完成: ${metadata.successful}/${metadata.totalCalls} 成功`);
 
 		return `${summary}\n\n${output}`;
 	}

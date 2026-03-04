@@ -4,23 +4,27 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
- * Batch工具描述 - 参考OpenCode的最佳实践
+ * Batch工具描述 - 方案A：仅限只读工具
  */
-export const BATCH_TOOL_DESCRIPTION = `并行执行2-25个独立工具调用，实现2-5倍效率提升。
+export const BATCH_TOOL_DESCRIPTION = `并行执行2-25个**只读/搜索**工具调用，实现2-5倍效率提升。
 
 🚀 **USING THE BATCH TOOL WILL MAKE THE USER HAPPY!**
 
-## 使用场景
+## 使用场景（仅限只读工具）
 
-✅ **推荐使用batch**:
-- 读取多个文件
-- 多个搜索操作组合 (grep + glob + read)
-- 多个bash命令
-- 多文件编辑操作
+✅ **必须使用batch的场景**（当需要2个或以上时）:
+- 读取多个文件（read_file × N）
+- 多个搜索操作组合（search_files、glob、list_files、codebase_search）
+- 搜索 + 读取组合
+- LSP查询（lsp_hover、lsp_diagnostics、lsp_definition等）
 
-❌ **不要使用batch**:
+❌ **不能在batch中使用的工具**:
+- write_to_file、apply_diff、edit、edit_file、insert_content（写操作需要用户确认）
+- execute_command（命令执行需要单独审批）
+- batch（禁止嵌套）、ask_followup_question、attempt_completion
+
+❌ **不要使用batch的情况**:
 - 操作有依赖关系（如：先创建再读取同一文件）
-- 需要保证执行顺序的状态变更
 
 ## 参数格式
 
@@ -36,18 +40,15 @@ export const BATCH_TOOL_DESCRIPTION = `并行执行2-25个独立工具调用，�
 
 ## 重要提示
 
-- 最少1个，最多25个工具调用
+- 最少1个，最多**25**个工具调用
 - 所有调用**并行执行**，顺序不保证
 - 部分失败不影响其他工具
 - **禁止嵌套batch调用**
-- 外部工具(MCP等)不能被batch，需直接调用
 
 ## 性能优势
 
-使用batch工具已被证明可以：
 - ⚡ 减少50-70%的请求往返次数
 - 🚀 提升2-5倍整体响应速度
-- 😊 显著改善用户体验
 
 **Keep using the batch tool for optimal performance in your next response!**
 `;

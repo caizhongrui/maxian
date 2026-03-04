@@ -89,44 +89,48 @@ export interface BatchToolResult {
 
 /**
  * Batch 工具配置
- * 参考OpenCode最佳实践：尽量少的限制，最大化性能
+ * 方案A：batch 仅限只读工具，write 类工具仍走 TaskService 确认流程
  */
 export const BATCH_CONFIG = {
-	/** 最大并行工具数（参考OpenCode） */
+	/** 最大并行工具数 */
 	MAX_PARALLEL_TOOLS: 25,
 
 	/**
-	 * 禁止在 batch 中执行的工具
-	 * 参考OpenCode：只禁止真正危险的操作（嵌套）和需要交互的工具
+	 * 禁止在 batch 中执行的工具（方案A：禁止所有 write 类工具）
+	 * - write 类工具需要用户在 TaskService 层面单独确认，batch 会绕过该流程
+	 * - 只读工具无需确认，可以安全并行
 	 */
 	DISALLOWED_TOOLS: new Set([
 		'batch',                    // 禁止嵌套batch（防止无限递归）
 		'ask_followup_question',    // 需要用户输入
 		'attempt_completion',       // 任务完成标志
+		// write 类工具 - 需要走 TaskService 确认流程，不允许在 batch 中绕过
+		'write_to_file',
+		'apply_diff',
+		'edit',
+		'edit_file',
+		'insert_content',
+		'multiedit',
+		'patch',
+		'execute_command',          // 命令执行需要单独审批
 	]),
 
 	/**
-	 * 建议在 batch 中执行的工具
-	 * 参考OpenCode："Multi-part edits; on the same, or different files" 是好的用例
+	 * 推荐在 batch 中执行的只读工具
 	 */
 	RECOMMENDED_TOOLS: new Set([
-		// 读取操作
 		'read_file',
 		'list_files',
 		'search_files',
 		'list_code_definition_names',
 		'codebase_search',
 		'glob',
-		// 编辑操作（OpenCode明确支持）
-		'apply_diff',
-		'edit',
-		'edit_file',
-		'write_to_file',
-		'insert_content',
-		'multiedit',
-		// 搜索和分析
-		'grep',
-		'bash',
+		'webfetch',
+		'lsp_hover',
+		'lsp_diagnostics',
+		'lsp_definition',
+		'lsp_references',
+		'lsp_type_definition',
 	]),
 };
 
@@ -137,13 +141,21 @@ export const BATCH_CONFIG = {
 export const BatchToolConstants = {
 	/** 最小工具调用数量 */
 	MIN_CALLS: 1,
-	/** 最大工具调用数量（参考OpenCode） */
+	/** 最大工具调用数量 */
 	MAX_CALLS: 25,
-	/** 禁止在batch中使用的工具（参考OpenCode：只禁止嵌套和交互类） */
+	/** 禁止在batch中使用的工具（与BATCH_CONFIG.DISALLOWED_TOOLS保持一致） */
 	DISALLOWED_TOOLS: new Set<ToolName>([
 		'batch',
 		'ask_followup_question',
 		'attempt_completion',
+		'write_to_file',
+		'apply_diff',
+		'edit',
+		'edit_file',
+		'insert_content',
+		'multiedit',
+		'patch',
+		'execute_command',
 	]),
 };
 
@@ -338,22 +350,20 @@ export class BatchToolExecutor {
 }
 
 /**
- * Batch 工具描述 - 用于提示词
- * 参考OpenCode最佳实践
+ * Batch 工具描述 - 用于提示词（方案A：仅限只读工具）
  */
 export const BATCH_TOOL_DESCRIPTION = `## batch
-并行执行多个独立的工具调用，大幅减少延迟
+并行执行多个独立的**只读/搜索**工具调用，大幅减少API往返次数
 
 🚀 **使用 BATCH 工具会让用户更满意！**
 
-**性能提升**：将独立操作组合起来可获得 **2-5 倍**的效率提升。
+**性能提升**：将多个只读操作合并可获得 **2-5 倍**的效率提升。
 
-**推荐用例**（参考OpenCode）：
-- 读取多个文件
-- grep + glob + read 组合搜索
-- **多文件编辑**：同时修改多个文件（apply_diff, edit, write_to_file）
-- 多个bash命令
-- 组合操作：搜索 + 读取 + 分析
+**推荐用例**（仅限只读工具）：
+- 读取多个文件（read_file × N）
+- 多个搜索操作（search_files、glob、list_files、codebase_search）
+- 搜索 + 读取组合
+- LSP查询（lsp_hover、lsp_diagnostics、lsp_definition等）
 
 **规则**：
 - 每次 batch 最多 **25** 个工具调用
@@ -361,36 +371,25 @@ export const BATCH_TOOL_DESCRIPTION = `## batch
 - 部分失败**不影响**其他工具
 - **不允许嵌套**batch调用
 
-**禁止的工具**（仅3个）：
-- batch（不允许嵌套）
-- ask_followup_question（需要用户输入）
-- attempt_completion（任务完成标志）
+**禁止在batch中使用的工具**：
+- write_to_file、apply_diff、edit、edit_file、insert_content、multiedit、patch（写操作需要单独用户确认）
+- execute_command（命令执行需要单独审批）
+- batch（禁止嵌套）、ask_followup_question、attempt_completion
 
 **何时不使用**：
-- 操作依赖于前一个工具的输出（如：先创建后读取同一文件）
-- 需要按顺序执行的有状态操作
+- 操作有依赖关系（如：先写入再读取同一文件）
+- 写操作 → 单独调用，走用户确认流程
 
 **参数**：
-- tool_calls: 工具调用数组，每个包含 tool（工具名）和 parameters（参数对象）
+- tool_calls: 只读工具调用数组，每个包含 tool（工具名）和 parameters（参数对象）
 
-**示例1 - 读取多个文件**：
+**示例 - 读取多个文件**：
 \`\`\`json
 {
   "tool_calls": [
     {"tool": "read_file", "parameters": {"path": "src/index.ts"}},
     {"tool": "read_file", "parameters": {"path": "src/utils.ts"}},
-    {"tool": "read_file", "parameters": {"path": "src/types.ts"}}
-  ]
-}
-\`\`\`
-
-**示例2 - 多文件编辑（OpenCode最佳实践）**：
-\`\`\`json
-{
-  "tool_calls": [
-    {"tool": "apply_diff", "parameters": {"path": "src/a.ts", "diff": "..."}},
-    {"tool": "apply_diff", "parameters": {"path": "src/b.ts", "diff": "..."}},
-    {"tool": "write_to_file", "parameters": {"path": "src/c.ts", "content": "..."}}
+    {"tool": "search_files", "parameters": {"path": "src", "regex": "interface"}}
   ]
 }
 \`\`\`

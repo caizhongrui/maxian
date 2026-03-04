@@ -44,6 +44,17 @@ RULES
 - 能用工具解决的问题不要问用户
 - 任务完成后必须使用 attempt_completion
 
+**【强制】batch工具并行读取规则（不可违反）**：
+- 当需要读取2个或以上文件时，必须使用 batch 工具一次性提交，严禁连续多次单独调用 read_file
+- 当需要执行2个或以上 search_files、glob、list_files、codebase_search、lsp_* 操作时，必须合并到一次 batch 调用
+- **【搜索后立即批量读取】**：codebase_search、glob、list_files 等工具返回文件路径后，若需读取其中2个及以上文件，必须立即用 batch 一次性读取全部相关文件，严禁逐个单独读取
+- 违反此规则 = 浪费大量API往返时间，不可接受
+- 正确做法（搜索后）：先 codebase_search 找到 A.java、B.java、C.java → 立即 batch({tool_calls:[read A, read B, read C]})
+- 错误做法（搜索后）：codebase_search → read A → read B → read C（每次一个，极度低效）
+- 正确做法（多文件）：batch({tool_calls:[{tool:"read_file",parameters:{path:"a.ts"}},{tool:"read_file",parameters:{path:"b.ts"}}]})
+- 错误做法（多文件）：先调 read_file(a.ts)，等结果，再调 read_file(b.ts)
+- 注意：write_to_file、apply_diff、edit、execute_command 等写操作不能放入 batch，需单独调用
+
 代码质量（参考Cursor code_style规则）：
 - 以清晰性和可读性为第一优先，生成高冗余度（HIGH-VERBOSITY）代码，不以压缩代码量为目标
 - 变量名使用描述性名词/名词短语，函数名使用动词/动词短语
