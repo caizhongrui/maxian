@@ -57,18 +57,57 @@ export class SearchTool {
 
 		try {
 			// 如果没有提供path,使用workspaceRoot作为默认搜索路径
-			const searchPath = path || this.workspaceRoot;
-			const folderUri = URI.file(searchPath);
-			const includePattern = file_pattern || '**/*';
+			// 将相对路径解析为绝对路径（避免使用 Node.js path 模块，兼容 browser/extension 环境）
+			const rawPath = path || this.workspaceRoot;
+			const searchPath = rawPath.startsWith('/')
+				? rawPath
+				: `${this.workspaceRoot.replace(/\/$/, '')}/${rawPath}`;
 
-			console.log('[SearchTool] searchFiles 开始，路径:', searchPath, '模式:', includePattern);
+			// 判断 path 是否指向文件（最后一段包含 '.' 且不以 '/' 结尾视为文件路径）
+			// 当 path 指向文件时，用其父目录作为 folderUri，文件名作为额外的 includePattern
+			const lastSegment = searchPath.split('/').pop() || '';
+			const isFilePath = lastSegment.includes('.') && !rawPath.endsWith('/');
+			const folderPath = isFilePath
+				? searchPath.substring(0, searchPath.lastIndexOf('/'))
+				: searchPath;
+			const fileNameFilter = isFilePath ? lastSegment : undefined;
+			const folderUri = URI.file(folderPath);
 
 			// 创建可取消的 token（5秒超时）
 			const cts = new CancellationTokenSource();
 			const timeoutId = setTimeout(() => cts.cancel(), 5000);
 
 			try {
-				// 使用文件搜索（由 Extension Host ripgrep 实现）
+				// 如果提供了 regex，执行内容搜索（QueryType.Text，底层使用 ripgrep 搜索文件内容）
+				if (regex) {
+					console.log('[SearchTool] searchFiles 内容搜索，路径:', searchPath, 'regex:', regex, 'file_pattern:', file_pattern, 'isFilePath:', isFilePath);
+
+					// 合并文件过滤：若path指向文件则用文件名，否则用file_pattern参数
+					const effectiveFilePattern = fileNameFilter || file_pattern;
+					const includePattern: glob.IExpression | undefined = effectiveFilePattern
+						? { [effectiveFilePattern]: true }
+						: undefined;
+
+					const results = await this.performTextSearchDirect(folderUri, regex, includePattern, true, cts.token);
+
+					clearTimeout(timeoutId);
+					const elapsed = Date.now() - startTime;
+					console.log('[SearchTool] searchFiles 内容搜索完成，耗时:', elapsed, 'ms，匹配文件数:', new Set(Array.from(results.values()).map(r => r.filePath)).size);
+
+					if (results.size === 0) {
+						return `❌ 未找到匹配正则表达式 "${regex}" 的内容\n\n📁 搜索路径: "${searchPath}"${file_pattern ? '\n📄 文件模式: ' + file_pattern : ''}\n\n💡 建议：\n1. 检查正则表达式语法是否正确\n2. 或使用 codebase_search 进行关键词搜索\n3. 或使用 glob 工具按文件名搜索`;
+					}
+
+					// 返回按 mtime 排序的唯一文件路径列表（最近修改的在前，参考 OpenCode grep.ts）
+					const uniqueFiles = [...new Set(Array.from(results.values()).map(r => r.filePath))];
+					const sortedFiles = await this.sortFilesByMtime(uniqueFiles);
+					return sortedFiles.join('\n');
+				}
+
+				// 只有 file_pattern，执行文件名搜索（QueryType.File）
+				const includePattern = file_pattern || '**/*';
+				console.log('[SearchTool] searchFiles 文件名搜索，路径:', folderPath, '模式:', includePattern);
+
 				const result = await this.searchService.fileSearch({
 					type: QueryType.File,
 					filePattern: includePattern,
@@ -78,7 +117,7 @@ export class SearchTool {
 
 				clearTimeout(timeoutId);
 				const elapsed = Date.now() - startTime;
-				console.log('[SearchTool] searchFiles 完成，耗时:', elapsed, 'ms，结果数:', result?.results?.length || 0);
+				console.log('[SearchTool] searchFiles 文件名搜索完成，耗时:', elapsed, 'ms，结果数:', result?.results?.length || 0);
 
 				if (!result || !result.results || result.results.length === 0) {
 					// 🔥 优化：当搜索返回0结果时，给AI明确的指导，防止重复搜索
@@ -127,7 +166,11 @@ export class SearchTool {
 		}
 
 		const startTime = Date.now();
-		const searchPath = path || this.workspaceRoot;
+		// 将相对路径解析为绝对路径（避免使用 Node.js path 模块，兼容 browser/extension 环境）
+		const rawPath = path || this.workspaceRoot;
+		const searchPath = rawPath.startsWith('/')
+			? rawPath
+			: `${this.workspaceRoot.replace(/\/$/, '')}/${rawPath}`;
 
 		// P1优化：检查缓存
 		const cacheKey = this.getCacheKey(query, searchPath, file_pattern);
@@ -162,7 +205,7 @@ export class SearchTool {
 				// 如果直接搜索有结果，直接返回
 				if (results.size > 0) {
 					clearTimeout(timeoutId);
-					const result = this.formatSearchResults(query, results, startTime);
+					const result = await this.formatSearchResults(query, results, startTime);
 					this.setCache(cacheKey, result);
 					return result;
 				}
@@ -186,7 +229,7 @@ export class SearchTool {
 				}
 
 				clearTimeout(timeoutId);
-				const result = this.formatSearchResults(query, results, startTime);
+				const result = await this.formatSearchResults(query, results, startTime);
 				this.setCache(cacheKey, result);
 				return result;
 			} finally {
@@ -203,11 +246,11 @@ export class SearchTool {
 	/**
 	 * 格式化搜索结果
 	 */
-	private formatSearchResults(
+	private async formatSearchResults(
 		query: string,
 		results: Map<string, { filePath: string; lineNumber: number; line: string }>,
 		startTime: number
-	): string {
+	): Promise<string> {
 		const elapsed = Date.now() - startTime;
 		console.log('[SearchTool] codebaseSearch 完成，总耗时:', elapsed, 'ms，最终结果:', results.size);
 
@@ -215,11 +258,56 @@ export class SearchTool {
 			return `未找到与 "${query}" 相关的结果。\n\n建议：\n- 尝试使用 glob 工具按文件名搜索\n- 尝试 search_files 进行正则表达式搜索`;
 		}
 
-		const sortedResults = Array.from(results.values())
-			.slice(0, 50)
-			.map(r => `${r.filePath}:${r.lineNumber}: ${r.line.trim()}`);
+		// 按文件分组结果
+		const resultsByFile = new Map<string, { lineNumber: number; line: string }[]>();
+		for (const { filePath, lineNumber, line } of results.values()) {
+			if (!resultsByFile.has(filePath)) {
+				resultsByFile.set(filePath, []);
+			}
+			resultsByFile.get(filePath)!.push({ lineNumber, line });
+		}
 
-		return `找到 ${results.size} 个匹配 (显示前${sortedResults.length}个，耗时${elapsed}ms):\n\n${sortedResults.join('\n')}`;
+		// 按 mtime 排序文件（最近修改的在前，参考 OpenCode grep.ts）
+		const sortedFiles = await this.sortFilesByMtime([...resultsByFile.keys()]);
+
+		// 按文件 mtime 顺序展开结果
+		const allResults: string[] = [];
+		for (const filePath of sortedFiles) {
+			const fileResults = resultsByFile.get(filePath)!;
+			for (const { lineNumber, line } of fileResults) {
+				allResults.push(`${filePath}:${lineNumber}: ${line.trim()}`);
+				if (allResults.length >= 50) break;
+			}
+			if (allResults.length >= 50) break;
+		}
+
+		return `找到 ${results.size} 个匹配 (显示前${allResults.length}个，耗时${elapsed}ms):\n\n${allResults.join('\n')}`;
+	}
+
+	/**
+	 * 按文件修改时间排序（最近修改的在前）
+	 * 参考 OpenCode grep.ts / glob.ts 实现：files.sort((a, b) => b.mtime - a.mtime)
+	 */
+	private async sortFilesByMtime(filePaths: string[]): Promise<string[]> {
+		try {
+			const fsModule = await import('fs');
+			const pathsWithMtime = await Promise.all(
+				filePaths.map(async (filePath) => {
+					try {
+						const stat = await fsModule.promises.stat(filePath);
+						return { path: filePath, mtime: stat.mtimeMs };
+					} catch {
+						return { path: filePath, mtime: 0 };
+					}
+				})
+			);
+			// mtime 降序：最近修改的文件优先（最相关）
+			pathsWithMtime.sort((a, b) => b.mtime - a.mtime);
+			return pathsWithMtime.map(p => p.path);
+		} catch {
+			// fs 不可用时（如纯浏览器环境）返回原始顺序
+			return filePaths;
+		}
 	}
 
 	/**

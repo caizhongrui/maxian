@@ -8,7 +8,7 @@
 
 import { Emitter, Event } from '../../../../../base/common/event.js';
 import { Disposable } from '../../../../../base/common/lifecycle.js';
-import { IApiHandler, MessageParam, ToolDefinition, ContentBlock, StreamChunk } from '../api/types.js';
+import { IApiHandler, MessageParam, ToolDefinition, ContentBlock, ToolResultContentBlock, StreamChunk } from '../api/types.js';
 import { IToolExecutor } from '../tools/toolExecutor.js';
 import { ToolName } from '../tools/toolTypes.js';
 import { ToolRepetitionDetector } from '../tools/ToolRepetitionDetector.js';
@@ -40,6 +40,7 @@ import { ModelContextTracker } from '../context-tracking/ModelContextTracker.js'
 import { ContextManager } from '../context/ContextManager.js';
 import { StateMutex } from '../utils/StateMutex.js';
 import { CheckpointManager } from '../checkpoints/CheckpointManager.js';
+import { getDiagnosticsAfterEdit } from '../lsp/lspDiagnostics.js';
 
 const MAX_CONSECUTIVE_MISTAKES = 3; // 最大连续错误次数
 
@@ -740,11 +741,25 @@ export class TaskService extends Disposable {
 			systemPrompt = this.agentOrchestrator.generateEnhancedPrompt(systemPrompt, this.taskContext);
 		}
 
-		// P0优化：附加 FocusChain 提示词（如果需要）
+		// P0优化：FocusChain 提示词注入为用户消息，保持 system prompt 稳定（有利于服务端提示词缓存）
 		const focusChainPrompt = this.focusChainManager.getPromptForCurrentState();
+		let conversationHistoryForRequest = this.apiConversationHistory;
 		if (focusChainPrompt) {
-			systemPrompt += `\n\n${focusChainPrompt}`;
-			console.log('[TaskService] 已附加 FocusChain 提示词');
+			// 创建副本，避免修改原始历史
+			const history = [...this.apiConversationHistory];
+			const lastIdx = history.length - 1;
+			if (lastIdx >= 0 && history[lastIdx].role === 'user') {
+				const lastMsg = history[lastIdx];
+				const existingContent = typeof lastMsg.content === 'string'
+					? lastMsg.content
+					: lastMsg.content.map(b => ('text' in b ? b.text : '')).join('');
+				history[lastIdx] = {
+					...lastMsg,
+					content: `${focusChainPrompt}\n\n${existingContent}`
+				};
+				conversationHistoryForRequest = history;
+				console.log('[TaskService] FocusChain 提示词注入为用户消息（system prompt 保持稳定）');
+			}
 		}
 
 		const toolDefinitions = this.getToolDefinitions();
@@ -762,7 +777,7 @@ export class TaskService extends Disposable {
 		// P0优化：增加 API 调用计数（用于FocusChain提醒）
 		this.focusChainManager.incrementApiCallCount();
 
-		return this.apiHandler.createMessage(systemPrompt, this.apiConversationHistory, toolDefinitions);
+		return this.apiHandler.createMessage(systemPrompt, conversationHistoryForRequest, toolDefinitions);
 	}
 
 	/**
@@ -1046,6 +1061,34 @@ export class TaskService extends Disposable {
 			}
 		}
 
+		// ====== [Batch Monitor] 工具调用情况日志 ======
+		const toolNames = toolUses.map(t => t.name);
+		const hasBatch = toolNames.includes('batch');
+		const readOnlyToolNames = ['read_file', 'search_files', 'glob', 'list_files', 'codebase_search', 'list_code_definition_names', 'lsp_hover', 'lsp_diagnostics', 'lsp_definition', 'lsp_references', 'lsp_type_definition', 'webfetch'];
+		const standaloneReadCalls = toolUses.filter(t => readOnlyToolNames.includes(t.name));
+
+		if (hasBatch) {
+			// 找出 batch 内包含的子工具数量
+			const batchTool = toolUses.find(t => t.name === 'batch');
+			let batchSubTools: string[] = [];
+			try {
+				const toolCallsParam = batchTool?.input?.tool_calls;
+				const toolCallsArr = typeof toolCallsParam === 'string' ? JSON.parse(toolCallsParam) : toolCallsParam;
+				if (Array.isArray(toolCallsArr)) {
+					batchSubTools = toolCallsArr.map((c: any) => c.tool);
+				}
+			} catch (_) { /* ignore */ }
+			console.log(`[Batch Monitor] ✅ 使用了 batch 工具，包含 ${batchSubTools.length} 个子调用: [${batchSubTools.join(', ')}]`);
+		} else if (standaloneReadCalls.length >= 2) {
+			// 有2个以上只读工具被单独调用 - 这是可以优化的情况
+			console.warn(`[Batch Monitor] ⚠️ 未使用 batch！本次AI响应包含 ${standaloneReadCalls.length} 个独立只读调用: [${standaloneReadCalls.map(t => t.name).join(', ')}]，应合并为1次 batch 调用`);
+		} else if (standaloneReadCalls.length === 1 && toolUses.length === 1) {
+			console.log(`[Batch Monitor] ℹ️ 单次只读调用: ${toolUses[0].name}（仅1个，无需batch）`);
+		} else {
+			console.log(`[Batch Monitor] 工具调用: [${toolNames.join(', ')}]`);
+		}
+		// ====== [Batch Monitor] end ======
+
 		// 1. 并行执行只读工具
 		if (readOnlyTools.length > 0) {
 			console.log(`[TaskService] 并行执行 ${readOnlyTools.length} 个只读工具`);
@@ -1112,7 +1155,26 @@ export class TaskService extends Disposable {
 				const toolStatusText = this.formatToolStatusForDisplay(toolUse);
 				await this.say('tool', toolStatusText);
 
-				// P0优化：检查重复文件读取
+				// 优先检查缓存（缓存命中直接返回内容，避免重复检测误拦截导致AI拿不到内容）
+				const cachedResult = this.toolCache.get(toolUse.name, toolUse.input);
+				if (cachedResult !== null) {
+					console.log(`[TaskService] 使用缓存结果: ${toolUse.name}`);
+					// 缓存命中时也检查重复读取，给AI添加警告，防止AI陷入无限重复读取同一文件的死循环
+					const duplicateNoticeOnCacheHit = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
+					const cachedContent = duplicateNoticeOnCacheHit
+						? `${duplicateNoticeOnCacheHit}\n\n⚠️ 注意：此文件已在本次会话中读取过，请勿再次请求读取同一文件。以下是缓存内容：\n\n${cachedResult}`
+						: cachedResult;
+					// 触发工具完成事件（缓存命中也需要通知UI移除工具卡片）
+					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: false });
+					return {
+						type: 'tool_result' as const,
+						tool_use_id: toolUse.id,
+						content: cachedContent,
+						is_error: false
+					};
+				}
+
+				// 检查重复文件读取（缓存未命中时检查并记录首次读取）
 				const duplicateNotice = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
 				if (duplicateNotice) {
 					// 触发工具完成事件（即使是重复检测，也需要通知UI移除工具卡片）
@@ -1121,20 +1183,6 @@ export class TaskService extends Disposable {
 						type: 'tool_result' as const,
 						tool_use_id: toolUse.id,
 						content: duplicateNotice,
-						is_error: false
-					};
-				}
-
-				// 检查缓存
-				const cachedResult = this.toolCache.get(toolUse.name, toolUse.input);
-				if (cachedResult !== null) {
-					console.log(`[TaskService] 使用缓存结果: ${toolUse.name}`);
-					// 触发工具完成事件（缓存命中也需要通知UI移除工具卡片）
-					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: false });
-					return {
-						type: 'tool_result' as const,
-						tool_use_id: toolUse.id,
-						content: cachedResult,
 						is_error: false
 					};
 				}
@@ -1247,6 +1295,28 @@ export class TaskService extends Disposable {
 			};
 		}
 
+		// 特殊处理 batch 工具：通过 executeToolsInParallel 执行子工具（享受完整缓存，避免重复读取）
+		if (toolUse.name === 'batch') {
+			return await this.executeBatchViaCachedParallel(toolUse);
+		}
+
+		// P0优化：对只读工具检查缓存（与 executeToolsInParallel 保持一致）
+		const cachedResult = this.toolCache.get(toolUse.name, toolUse.input);
+		if (cachedResult !== null) {
+			console.log(`[TaskService] executeSingleTool 缓存命中: ${toolUse.name}`);
+			this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: false });
+			return {
+				shouldContinue: true,
+				shouldEndLoop: false,
+				toolResult: {
+					type: 'tool_result',
+					tool_use_id: toolUse.id,
+					content: cachedResult,
+					is_error: false
+				}
+			};
+		}
+
 		// 检查是否需要用户确认
 		const needsApproval = this.toolNeedsApproval(toolUse.name);
 
@@ -1348,10 +1418,28 @@ export class TaskService extends Disposable {
 
 			// 截断大工具结果
 			const resultContent = typeof result === 'string' ? result : JSON.stringify(result);
-			const truncatedContent = this.truncateToolResult(resultContent);
+			let truncatedContent = this.truncateToolResult(resultContent);
 
 			// 写入工具执行成功后，使相关缓存失效
 			this.invalidateCacheForWriteTool(toolUse);
+
+			// LSP 诊断注入（参考 OpenCode tool/write.ts）
+			// 写入类工具执行后自动获取 LSP 诊断，AI 强制感知类型/语法错误，形成自我修正回路
+			if (TaskService.WRITE_TOOLS.has(toolUse.name)) {
+				try {
+					const filePaths = this.extractWriteToolFilePaths(toolUse);
+					if (filePaths.length > 0) {
+						const diagnosticsTexts = await Promise.all(filePaths.map(fp => getDiagnosticsAfterEdit(fp)));
+						const diagnosticsAppendix = diagnosticsTexts.filter(d => d.length > 0).join('\n');
+						if (diagnosticsAppendix) {
+							truncatedContent = truncatedContent + '\n' + diagnosticsAppendix;
+							console.log('[TaskService] LSP 诊断已注入工具结果:', toolUse.name, filePaths);
+						}
+					}
+				} catch (diagError) {
+					console.warn('[TaskService] LSP 诊断注入失败:', diagError);
+				}
+			}
 
 			// 更新工具使用统计
 			this.toolUsage[toolUse.name] = (this.toolUsage[toolUse.name] || 0) + 1;
@@ -1410,8 +1498,161 @@ export class TaskService extends Disposable {
 	}
 
 	/**
+	 * 通过 executeToolsInParallel 执行 batch 子工具（享受完整缓存）
+	 * batch 子工具结果会写入 ToolResultCache，后续重复读取直接命中缓存
+	 */
+	private async executeBatchViaCachedParallel(toolUse: { id: string; name: string; input: any }): Promise<{
+		shouldContinue: boolean;
+		shouldEndLoop: boolean;
+		toolResult?: ContentBlock;
+	}> {
+		const toolStatusText = this.formatToolStatusForDisplay(toolUse);
+		await this.say('tool', toolStatusText);
+
+		// 解析 batch 参数
+		let toolCalls: Array<{ tool: string; parameters: any }> = [];
+		try {
+			const rawCalls = toolUse.input?.tool_calls;
+			if (typeof rawCalls === 'string') {
+				toolCalls = JSON.parse(rawCalls);
+			} else if (Array.isArray(rawCalls)) {
+				toolCalls = rawCalls;
+			}
+		} catch (e) {
+			console.error('[TaskService] batch 参数解析失败:', e);
+		}
+
+		if (toolCalls.length === 0) {
+			this._onToolCompleted.fire({ toolId: toolUse.id, toolName: 'batch', isError: true });
+			return {
+				shouldContinue: true,
+				shouldEndLoop: false,
+				toolResult: {
+					type: 'tool_result',
+					tool_use_id: toolUse.id,
+					content: 'batch: tool_calls 为空或格式无效',
+					is_error: true
+				}
+			};
+		}
+
+		// 过滤不允许在 batch 中的工具，并限制最大并行数
+		const { BatchToolConstants } = await import('../tools/batchTool.js');
+		const validCalls = toolCalls
+			.filter(call => !BatchToolConstants.DISALLOWED_TOOLS.has(call.tool as any))
+			.slice(0, BatchToolConstants.MAX_CALLS);
+		const invalidCalls = toolCalls.filter(call => BatchToolConstants.DISALLOWED_TOOLS.has(call.tool as any));
+
+		// 转换为 executeToolsInParallel 期望的格式
+		const subToolUses = validCalls.map((call, idx) => ({
+			id: `${toolUse.id}_sub_${idx}`,
+			name: call.tool,
+			input: call.parameters ?? {}
+		}));
+
+		console.log(`[Batch Monitor] 🚀 batch(cached) 并行执行 ${subToolUses.length} 个工具: [${subToolUses.map(t => t.name).join(', ')}]`);
+		const batchStart = Date.now();
+
+		const subResults = await this.executeToolsInParallel(subToolUses) as ToolResultContentBlock[];
+
+		const batchElapsed = Date.now() - batchStart;
+
+		// 格式化批量结果（与原 BatchToolExecutor.formatBatchResponse 保持一致）
+		const parts: string[] = [];
+		let successful = 0;
+		let failed = 0;
+
+		for (let i = 0; i < subResults.length; i++) {
+			const subResult = subResults[i];
+			const callName = validCalls[i]?.tool ?? 'unknown';
+			if (subResult.is_error) {
+				parts.push(`[${callName}] 失败: ${subResult.content}`);
+				failed++;
+			} else {
+				parts.push(`[${callName}] 成功:\n${subResult.content}`);
+				successful++;
+			}
+		}
+
+		// 添加被过滤的禁止工具的错误提示
+		for (const invalidCall of invalidCalls) {
+			parts.push(`[${invalidCall.tool}] 失败: 该工具不允许在 batch 中使用`);
+			failed++;
+		}
+
+		const summary = failed === 0
+			? `✅ All ${successful} tools executed successfully.\n\nKeep using the batch tool for optimal performance!`
+			: `⚠️ Partially successful: ${successful}/${subResults.length + invalidCalls.length} succeeded, ${failed} failed.`;
+
+		const combinedContent = parts.join('\n\n---\n\n') + `\n\n${summary}`;
+
+		console.log(`[Batch Monitor] ✅ batch(cached) 完成: ${successful}/${validCalls.length} 成功，耗时 ${batchElapsed}ms（节省约 ${validCalls.length - 1} 次 API round-trip，结果已写入缓存）`);
+		this.toolUsage['batch'] = (this.toolUsage['batch'] || 0) + 1;
+		this.consecutiveMistakeCount = 0;
+		this._onToolCompleted.fire({ toolId: toolUse.id, toolName: 'batch', isError: false });
+
+		return {
+			shouldContinue: true,
+			shouldEndLoop: false,
+			toolResult: {
+				type: 'tool_result',
+				tool_use_id: toolUse.id,
+				content: combinedContent,
+				is_error: false
+			}
+		};
+	}
+
+	/**
 	 * 写入工具执行后使相关缓存失效
 	 */
+	/**
+	 * 会修改文件的工具集合（用于 LSP 诊断注入）
+	 * 参考 OpenCode tool/write.ts：写入后自动查询 LSP 诊断
+	 */
+	private static readonly WRITE_TOOLS = new Set([
+		'write_to_file', 'apply_diff', 'edit', 'edit_file', 'insert_content', 'multiedit', 'patch',
+	]);
+
+	/**
+	 * 提取写入工具影响的文件绝对路径列表
+	 */
+	private extractWriteToolFilePaths(toolUse: { name: string; input: any }): string[] {
+		const params = toolUse.input;
+		const resolve = (p: string) => {
+			if (!p) { return ''; }
+			if (p.startsWith('/')) { return p; }
+			return `${this.workspaceRoot.replace(/\/$/, '')}/${p}`;
+		};
+
+		switch (toolUse.name) {
+			case 'write_to_file':
+			case 'apply_diff':
+			case 'edit':
+			case 'multiedit':
+			case 'insert_content': {
+				const p = resolve(params.path);
+				return p ? [p] : [];
+			}
+			case 'edit_file': {
+				const p = resolve(params.target_file);
+				return p ? [p] : [];
+			}
+			case 'patch': {
+				try {
+					const patches: Array<{ path: string }> = typeof params.patches === 'string'
+						? JSON.parse(params.patches)
+						: (params.patches || []);
+					return patches.map(p => resolve(p.path)).filter(Boolean);
+				} catch {
+					return [];
+				}
+			}
+			default:
+				return [];
+		}
+	}
+
 	private invalidateCacheForWriteTool(toolUse: { id: string; name: string; input: any }): void {
 		const params = toolUse.input;
 		const filePath = params.path || params.target_file;

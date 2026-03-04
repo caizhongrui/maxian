@@ -42,6 +42,9 @@ const READ_FILE_CONFIG = {
 
 	/** 行号显示宽度 */
 	LINE_NUMBER_WIDTH: 4,
+
+	/** 每行最大字符数（超出截断，参考 OpenCode read.ts MAX_LINE_LENGTH = 2000） */
+	MAX_LINE_LENGTH: 2000,
 };
 
 // ========== 文件缓存 ==========
@@ -535,6 +538,27 @@ export async function readFileTool(
 
 		// 检查文件是否存在
 		if (!fs.existsSync(absolutePath)) {
+			// "Did you mean?" 模糊匹配（参考 OpenCode read.ts）
+			const parentDir = path.dirname(absolutePath);
+			const targetName = path.basename(absolutePath).toLowerCase();
+			if (fs.existsSync(parentDir)) {
+				try {
+					const dirContents = fs.readdirSync(parentDir);
+					const minMatchLen = Math.max(3, Math.floor(targetName.length * 0.6));
+					const suggestions = dirContents
+						.filter(f => {
+							const lf = f.toLowerCase();
+							return lf.includes(targetName.substring(0, minMatchLen)) ||
+								targetName.includes(lf.substring(0, Math.max(3, Math.floor(lf.length * 0.6))));
+						})
+						.slice(0, 5);
+					if (suggestions.length > 0) {
+						const parentDir2 = path.dirname(filePath);
+						const suggestionPaths = suggestions.map(f => path.join(parentDir2, f));
+						return `Error: File not found: ${filePath}\n\nDid you mean one of these?\n${suggestionPaths.map(p => `  - ${p}`).join('\n')}`;
+					}
+				} catch { /* ignore */ }
+			}
 			return `Error: File not found: ${filePath}`;
 		}
 
@@ -644,10 +668,13 @@ function formatFileContent(
 		resultLines = lines;
 	}
 
-	// 添加行号
+	// 添加行号（超长行截断，参考 OpenCode read.ts MAX_LINE_LENGTH）
 	const numberedLines = resultLines.map((line, idx) => {
 		const lineNum = actualStart + idx;
-		return `${lineNum.toString().padStart(READ_FILE_CONFIG.LINE_NUMBER_WIDTH, ' ')} | ${line}`;
+		const truncatedLine = line.length > READ_FILE_CONFIG.MAX_LINE_LENGTH
+			? line.substring(0, READ_FILE_CONFIG.MAX_LINE_LENGTH) + ` ... [line truncated, ${line.length - READ_FILE_CONFIG.MAX_LINE_LENGTH} chars omitted]`
+			: line;
+		return `${lineNum.toString().padStart(READ_FILE_CONFIG.LINE_NUMBER_WIDTH, ' ')} | ${truncatedLine}`;
 	});
 
 	// 构建输出
