@@ -53,11 +53,11 @@ echo   构建完成！
 echo ==========================================
 echo.
 echo 安装包位置：
-echo   .build\win32-x64\system-setup\VSCodeSetup.exe
+echo   .build\win32-x64\system-setup\MaxianSetup.exe
 echo.
 
-if exist ".build\win32-x64\system-setup\VSCodeSetup.exe" (
-    dir ".build\win32-x64\system-setup\VSCodeSetup.exe"
+if exist ".build\win32-x64\system-setup\MaxianSetup.exe" (
+    dir ".build\win32-x64\system-setup\MaxianSetup.exe"
 ) else (
     echo [警告] 未找到安装包文件
 )

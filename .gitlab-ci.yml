@@ -55,8 +55,8 @@ package-windows-x64:
   artifacts:
     name: "tianhe-zhikai-windows-installer-$CI_COMMIT_SHORT_SHA"
     paths:
-      - .build/win32-x64/system-setup/VSCodeSetup.exe
-      - .build/win32-x64/user-setup/VSCodeSetup.exe
+      - .build/win32-x64/system-setup/MaxianSetup.exe
+      - .build/win32-x64/user-setup/MaxianSetup.exe
     expire_in: 7 days
 
 # 仅在特定分支触发

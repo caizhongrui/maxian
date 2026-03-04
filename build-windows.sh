@@ -33,12 +33,12 @@ docker run --rm \
 # 检查输出
 echo ""
 echo "[3/3] 检查构建结果..."
-if [ -f ".build/win32-x64/system-setup/VSCodeSetup.exe" ]; then
+if [ -f ".build/win32-x64/system-setup/MaxianSetup.exe" ]; then
     echo "✅ 构建成功！"
     echo ""
     echo "安装包位置:"
-    echo "  .build/win32-x64/system-setup/VSCodeSetup.exe"
-    ls -lh .build/win32-x64/system-setup/VSCodeSetup.exe
+    echo "  .build/win32-x64/system-setup/MaxianSetup.exe"
+    ls -lh .build/win32-x64/system-setup/MaxianSetup.exe
 else
     echo "❌ 构建失败，未找到安装包"
     exit 1

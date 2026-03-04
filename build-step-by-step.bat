@@ -133,9 +133,9 @@ echo.
 echo === 完整打包完成！===
 echo.
 echo 输出位置:
-if exist ".build\win32-x64\system-setup\VSCodeSetup.exe" (
-    echo   .build\win32-x64\system-setup\VSCodeSetup.exe
-    dir ".build\win32-x64\system-setup\VSCodeSetup.exe"
+if exist ".build\win32-x64\system-setup\MaxianSetup.exe" (
+    echo   .build\win32-x64\system-setup\MaxianSetup.exe
+    dir ".build\win32-x64\system-setup\MaxianSetup.exe"
 ) else (
     echo [警告] 未找到安装包
 )

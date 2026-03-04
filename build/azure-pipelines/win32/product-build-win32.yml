@@ -272,8 +272,8 @@ steps:
           $env:ESRPAADUsername = "$(esrp-aad-username)"
           $env:ESRPAADPassword = "$(esrp-aad-password)"
           exec { npm run -- gulp "vscode-win32-$(VSCODE_ARCH)-system-setup" --sign }
-          $SetupPath = ".build\win32-$(VSCODE_ARCH)\system-setup\VSCodeSetup-$(VSCODE_ARCH)-$(VSCODE_VERSION).exe"
-          mv .build\win32-$(VSCODE_ARCH)\system-setup\VSCodeSetup.exe $SetupPath
+          $SetupPath = ".build\win32-$(VSCODE_ARCH)\system-setup\MaxianSetup-$(VSCODE_ARCH)-$(VSCODE_VERSION).exe"
+          mv .build\win32-$(VSCODE_ARCH)\system-setup\MaxianSetup.exe $SetupPath
           echo "##vso[task.setvariable variable=SYSTEM_SETUP_PATH]$SetupPath"
         displayName: Build system setup
 
@@ -285,7 +285,7 @@ steps:
           $env:ESRPAADPassword = "$(esrp-aad-password)"
           exec { npm run -- gulp "vscode-win32-$(VSCODE_ARCH)-user-setup" --sign }
           $SetupPath = ".build\win32-$(VSCODE_ARCH)\user-setup\VSCodeUserSetup-$(VSCODE_ARCH)-$(VSCODE_VERSION).exe"
-          mv .build\win32-$(VSCODE_ARCH)\user-setup\VSCodeSetup.exe $SetupPath
+          mv .build\win32-$(VSCODE_ARCH)\user-setup\MaxianSetup.exe $SetupPath
           echo "##vso[task.setvariable variable=USER_SETUP_PATH]$SetupPath"
         displayName: Build user setup
 

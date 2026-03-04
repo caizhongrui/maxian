@@ -73,14 +73,14 @@ if (Test-Path ".build") {
     $systemSetupPath = ".build\win32-x64\system-setup"
     if (Test-Path $systemSetupPath) {
         Write-Host "  ✓ system-setup 目录存在" -ForegroundColor Green
-        $setupExe = Join-Path $systemSetupPath "VSCodeSetup.exe"
+        $setupExe = Join-Path $systemSetupPath "MaxianSetup.exe"
         if (Test-Path $setupExe) {
             $setupInfo = Get-Item $setupExe
-            Write-Host "  ✓ VSCodeSetup.exe 存在" -ForegroundColor Green
+            Write-Host "  ✓ MaxianSetup.exe 存在" -ForegroundColor Green
             Write-Host "    大小: $([math]::Round($setupInfo.Length / 1MB, 2)) MB"
             Write-Host "    修改时间: $($setupInfo.LastWriteTime)"
         } else {
-            Write-Host "  ✗ VSCodeSetup.exe 不存在" -ForegroundColor Yellow
+            Write-Host "  ✗ MaxianSetup.exe 不存在" -ForegroundColor Yellow
         }
     } else {
         Write-Host "  ✗ system-setup 目录不存在" -ForegroundColor Yellow

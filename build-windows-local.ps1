@@ -53,7 +53,7 @@ Write-Host "  构建完成！" -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
 
-$setupPath = ".build\win32-x64\system-setup\VSCodeSetup.exe"
+$setupPath = ".build\win32-x64\system-setup\MaxianSetup.exe"
 if (Test-Path $setupPath) {
     Write-Host "安装包位置：" -ForegroundColor Green
     Write-Host "  $setupPath" -ForegroundColor Yellow
