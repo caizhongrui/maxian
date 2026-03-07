@@ -67,6 +67,7 @@ export const toolParamNames = [
 	'create_if_missing', // edit 创建文件参数
 	'patches',        // patch 多文件补丁参数
 	'subagent_type',  // task 子Agent类型参数
+	'task_id',        // task resume 参数（恢复已有子Agent会话）
 	'column',         // LSP 列号参数
 	'useCache',       // webfetch 缓存参数
 	'format',         // webfetch 输出格式参数

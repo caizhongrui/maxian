@@ -406,22 +406,40 @@ export interface CompactionEvent {
 
 /**
  * 生成 AI 摘要的提示词
- * 参考 OpenCode compaction.ts:summarizePrompt
+ * 对齐 Kilocode compaction.ts 的结构化5段模板，确保下一个 Agent 能精确继续工作
  */
 export function generateSummarizePrompt(conversationHistory: string): string {
-	return `请为以下对话历史生成一个详细的摘要，以便在新的对话会话中继续。
-
-重点关注：
-1. 已完成的任务和操作
-2. 当前正在进行的工作
-3. 涉及的文件和代码修改
-4. 遇到的问题和解决方案
-5. 下一步计划
-
-对话历史：
+	return `对话历史：
 ${conversationHistory}
 
-请用简洁清晰的中文生成摘要，保留所有关键技术细节。`;
+---
+
+请为以上对话生成详细的延续性摘要，供下一个 Agent 继续工作。严格按照以下模板输出：
+
+## Goal
+
+[用户要完成的目标是什么？]
+
+## Instructions
+
+- [用户给出的重要指令和约束]
+- [如有计划或规范文件，在此说明以便下一个 Agent 继续遵循]
+
+## Discoveries
+
+[在本次对话中发现的关键信息：架构细节、代码规律、重要结论等，对继续工作有价值的发现]
+
+## Accomplished
+
+[已完成的工作；正在进行中的工作；尚未开始的工作]
+
+## Relevant files / directories
+
+[列出所有相关的文件和目录路径，包括已读取、已编辑、已创建的文件]
+
+---
+
+要求：保留所有关键技术细节，确保下一个 Agent 无需重新探索就能继续工作。`;
 }
 
 /**

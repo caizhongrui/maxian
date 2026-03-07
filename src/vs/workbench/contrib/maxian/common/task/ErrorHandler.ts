@@ -186,13 +186,61 @@ export class ErrorHandler {
 	}
 
 	/**
-	 * 计算重试延迟（指数退避 + 抖动）
+	 * 从 API 响应中提取 retry-after 头（毫秒）
+	 * 优先使用服务器指定的等待时间（对齐 Kilocode SessionRetry）
 	 */
-	calculateRetryDelay(attempt: number): number {
-		// 指数退避
-		const exponentialDelay = this.retryConfig.baseDelayMs * Math.pow(2, attempt);
+	extractRetryAfterMs(error: unknown): number | undefined {
+		if (!error || typeof error !== 'object') return undefined;
 
-		// 限制最大延迟
+		// 尝试从错误对象中找 response headers
+		const err = error as any;
+		const headers: Record<string, string> | undefined =
+			err.response?.headers ||
+			err.headers ||
+			err.responseHeaders;
+
+		if (!headers) return undefined;
+
+		// 优先：retry-after-ms（毫秒精度）
+		const retryAfterMs = headers['retry-after-ms'];
+		if (retryAfterMs) {
+			const ms = parseFloat(retryAfterMs);
+			if (!isNaN(ms) && ms > 0) return ms;
+		}
+
+		// 次选：retry-after（秒 或 HTTP日期）
+		const retryAfter = headers['retry-after'];
+		if (retryAfter) {
+			const seconds = parseFloat(retryAfter);
+			if (!isNaN(seconds) && seconds > 0) return Math.ceil(seconds * 1000);
+
+			// HTTP 日期格式
+			const date = Date.parse(retryAfter);
+			if (!isNaN(date)) {
+				const ms = date - Date.now();
+				if (ms > 0) return Math.ceil(ms);
+			}
+		}
+
+		return undefined;
+	}
+
+	/**
+	 * 计算重试延迟（Header感知 + 指数退避 + 抖动）
+	 * 如果服务器返回了 retry-after 头，优先使用服务器指定的等待时间
+	 */
+	calculateRetryDelay(attempt: number, error?: unknown): number {
+		// 优先使用服务器指定的等待时间
+		if (error !== undefined) {
+			const serverDelay = this.extractRetryAfterMs(error);
+			if (serverDelay !== undefined) {
+				console.log(`[ErrorHandler] 使用服务器指定等待时间: ${serverDelay}ms`);
+				return Math.min(serverDelay, this.retryConfig.maxDelayMs);
+			}
+		}
+
+		// 指数退避（无服务器 header 时使用）
+		const exponentialDelay = this.retryConfig.baseDelayMs * Math.pow(2, attempt);
 		const cappedDelay = Math.min(exponentialDelay, this.retryConfig.maxDelayMs);
 
 		// 添加抖动
@@ -246,7 +294,7 @@ export class ErrorHandler {
 					throw error;
 				}
 
-				const delay = this.calculateRetryDelay(attempt);
+				const delay = this.calculateRetryDelay(attempt, error);
 				console.log(`[ErrorHandler] 重试 ${attempt + 1}/${this.retryConfig.maxRetries}，延迟 ${delay}ms`);
 
 				if (onRetry) {

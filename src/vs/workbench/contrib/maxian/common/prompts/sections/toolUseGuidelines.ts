@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
- * 获取工具使用指南section - 精简版
- * 合并了原来的决策树、探索策略和工具指南
- * P0优化：添加batch工具使用指导
+ * 工具使用指南 - 合并版
+ * 包含：效率规则、batch使用、工具选择、文件修改规则、命令执行、
+ *       attempt_completion验证要求、skill工具使用
  */
 export function getToolUseGuidelinesSection(): string {
 	return `====
@@ -15,36 +15,29 @@ TOOL USE GUIDELINES
 
 ## ⚡ 效率规则（最高优先级）
 
-1. **每次响应尽可能多做事** — 不要一次只调用一个搜索或读取工具。把你能预见的所有独立操作合并到一次batch调用中。
-2. **探索阶段最多3轮** — 用1次batch(glob+codebase_search+search_files)定位文件，用1次batch(read_file x N)读取关键文件，然后立即开始修改。不要反复用glob搜索同一类文件。
-3. **搜索失败立即换策略** — glob找不到就用codebase_search，codebase_search找不到就用search_files。绝不重复同类搜索超过2次。
-4. **skill工具限制** — 每个任务最多调用1次skill。如果已经调用过skill，不要再调用。
+1. **每次响应尽可能多做事** — 把所有独立操作合并到一次batch调用中。
+2. **探索阶段最多3轮** — 用1次batch(glob+codebase_search+search_files)定位，用1次batch(read_file x N)读取，然后立即开始修改。
+3. **搜索失败立即换策略** — glob找不到就用codebase_search，绝不重复同类搜索超过2次。
+4. **skill工具限制** — 每个任务最多调用1次skill，已调用过的不再重复。
 
 ## batch工具（必须掌握）
 
-需要执行2+个独立操作时，**必须**使用batch工具并行执行：
+**⚠️ 强制规则**：需要执行2+个独立操作时，**必须**使用batch并行执行，严禁逐个单独调用。
+
+多文件读取：
 \`\`\`json
 {"tool_calls": [
-  {"tool": "glob", "parameters": {"pattern": "**/*Controller*.java"}},
-  {"tool": "codebase_search", "parameters": {"query": "登录认证", "path": "src"}},
-  {"tool": "search_files", "parameters": {"path": "src", "regex": "login|auth"}}
+  {"tool": "read_file", "parameters": {"path": "src/a.ts"}},
+  {"tool": "read_file", "parameters": {"path": "src/b.ts"}},
+  {"tool": "glob", "parameters": {"pattern": "**/*.ts"}}
 ]}
 \`\`\`
 
-读取多个文件 → batch：
-\`\`\`json
-{"tool_calls": [
-  {"tool": "read_file", "parameters": {"path": "src/service.ts"}},
-  {"tool": "read_file", "parameters": {"path": "src/types.ts"}},
-  {"tool": "read_file", "parameters": {"path": "src/utils.ts"}}
-]}
-\`\`\`
-
-编辑多个文件 → batch：
+多文件写/改：
 \`\`\`json
 {"tool_calls": [
   {"tool": "apply_diff", "parameters": {"path": "src/api.ts", "diff": "..."}},
-  {"tool": "apply_diff", "parameters": {"path": "src/utils.ts", "diff": "..."}}
+  {"tool": "apply_diff", "parameters": {"path": "src/types.ts", "diff": "..."}}
 ]}
 \`\`\`
 
@@ -63,15 +56,37 @@ TOOL USE GUIDELINES
 
 ## 文件修改规则
 
-- 修改前必须read_file了解当前内容
+- 修改前必须 read_file 了解当前内容
 - 局部修改 → edit/apply_diff（首选，安全精确）
-- write_to_file仅用于创建新文件或完全重写（>80%变化）
-- 修改后用lsp_diagnostics验证（最多3次循环）
+- write_to_file 仅用于创建新文件或完全重写（>80%变化）
+- 修改后用 lsp_diagnostics 验证（最多3次循环）
 
 ## 命令执行
 
-- 每次调用必须声明requires_approval（true=有副作用，false=只读）
+- 每次调用必须声明 requires_approval（true=有副作用，false=只读）
 - 危险命令被系统自动阻止
+
+## attempt_completion 使用要求
+
+**必须在以下条件全部满足后才能调用**：
+- ✅ 所有修改的文件已通过 lsp_diagnostics 验证，无编译/类型错误
+- ✅ 用户要求的所有功能已实现，没有遗留半成品代码
+- ✅ result 内容：简洁概括改动及影响，引用代码用 \`[\`fn()\`](path:line)\` 格式
+- ❌ 禁止：重复计划列表、套话（"希望这对你有帮助"）、以问题结尾
+
+## skill工具使用
+
+根据任务类型主动调用对应skill（不要等用户要求）：
+
+- 代码审查 → skill("code-review")
+- 调试问题 → skill("debugging")
+- 编写测试 → skill("testing")
+- 重构代码 → skill("refactoring")
+- 安全审查 → skill("security")
+- 性能优化 → skill("performance")
+- Spring Boot → skill("spring-boot")、skill("spring-security")
+- Java规范 → skill("java-best-practices")、skill("mybatis-plus")、skill("jpa-hibernate")
+- Vue前端 → skill("vue3-composition-api")、skill("pinia-state-management")
 
 ## 进度叙述
 

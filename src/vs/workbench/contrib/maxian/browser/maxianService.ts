@@ -51,6 +51,7 @@ import { ICommandExecutionService } from '../common/services/commandExecutionSer
 import { FilteredToolExecutor } from '../common/tools/filteredToolExecutor.js';
 import { ITodoItem as ITodoStoreItem } from '../common/tools/todoStore.js';
 import { EXPLORE_AGENT_TOOLS, PLAN_AGENT_TOOLS, EXECUTE_AGENT_TOOLS } from '../common/agents/AgentTypes.js';
+import { initOutputTruncation } from '../common/utils/outputTruncation.js';
 
 export const IMaxianService = createDecorator<IMaxianService>('maxianService');
 
@@ -656,6 +657,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 		this.apiHandler = this.apiFactory.createHandler(credentials, this.currentMode);
 		const modelInfo = this.apiHandler.getModel();
 		console.log('[Maxian] API Handler已初始化，模型:', modelInfo.name, '模式:', this.currentMode);
+
+		// 启动截断文件定期清理（7天保留期，每小时清理一次）
+		initOutputTruncation();
 
 		this._initialized = true;
 		console.log('[Maxian] 码弦服务初始化完成');
@@ -1895,6 +1899,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 						description: {
 							type: 'string',
 							description: '5-10字的任务描述（用于 UI 显示），如"分析登录模块"'
+						},
+						task_id: {
+							type: 'string',
+							description: '（可选）恢复之前子 Agent 会话的 ID。传入后子 Agent 将继续上次的对话上下文，不需要重新开始。ID 来自上次 task 工具调用结果的第一行。'
 						}
 					},
 					required: ['subagent_type', 'prompt']

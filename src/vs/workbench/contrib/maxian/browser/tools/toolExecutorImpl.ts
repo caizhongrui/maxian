@@ -408,7 +408,7 @@ ${formatTodoList(todos)}`;
 	 * 参考 OpenCode sub-agent 系统设计
 	 */
 	private async executeTask(toolUse: ToolUse): Promise<ToolResponse> {
-		const { subagent_type, prompt, task: taskParam } = toolUse.params;
+		const { subagent_type, prompt, task: taskParam, task_id } = toolUse.params;
 		const agentType = subagent_type || 'execute';
 		const taskPrompt = prompt || taskParam || '';
 
@@ -418,19 +418,30 @@ ${formatTodoList(todos)}`;
 
 		const validTypes = ['explore', 'plan', 'execute', 'build'];
 		if (!validTypes.includes(agentType)) {
-			return `错误: 无效的 subagent_type ""。有效类型: ${validTypes.join(', ')}`;
+			return `错误: 无效的 subagent_type "${agentType}"。有效类型: ${validTypes.join(', ')}`;
 		}
 
 		if (!this.subAgentRunner) {
 			return '错误: 子 Agent 运行器未初始化。请确保在 maxianService 中调用了 setSubAgentRunner()。';
 		}
 
-		console.log(`[Maxian] 启动子 Agent: type=${agentType}, prompt=${taskPrompt.substring(0, 80)}...`);
+		const resumeInfo = task_id ? `（恢复 task_id: ${task_id}）` : '（新建）';
+		console.log(`[Maxian] 启动子 Agent: type=${agentType}${resumeInfo}, prompt=${taskPrompt.substring(0, 80)}...`);
 
 		try {
-			const result = await this.subAgentRunner(agentType, taskPrompt);
+			// 传入 task_id 支持 session resume（恢复已有子 Agent 上下文）
+			const result = await this.subAgentRunner(agentType, taskPrompt, task_id);
 			console.log(`[Maxian] 子 Agent 完成: type=${agentType}`);
-			return result;
+
+			// 在结果中包含 task_id，供主 Agent 后续恢复使用
+			const sessionId = task_id || `task_${Date.now()}_${agentType}`;
+			return [
+				`task_id: ${sessionId} (可用此 ID 通过 task_id 参数恢复本次子 Agent 会话)`,
+				'',
+				'<task_result>',
+				result,
+				'</task_result>'
+			].join('\n');
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			console.error(`[Maxian] 子 Agent 失败: ${errorMsg}`);
