@@ -44,6 +44,66 @@ function isBinaryFileByExtension(filePath: string): boolean {
 }
 
 /**
+ * 解析并应用 git unified diff 格式
+ * 支持 @@ -X,Y +X,Y @@ hunk 格式
+ * @returns 应用后的新内容，如果不是git diff格式则返回 null
+ */
+function applyGitUnifiedDiff(originalContent: string, diff: string): string | null {
+	// 检测是否为git unified diff格式（含有 @@ -数字 ... @@ 的hunk头）
+	if (!/^@@[ \t]+-\d+/m.test(diff)) {
+		return null;
+	}
+
+	const resultLines = originalContent.split('\n');
+	const diffLines = diff.split('\n');
+	let i = 0;
+	let lineOffset = 0; // 累积行偏移（前面hunk的增删差值）
+
+	// 跳过文件头行（--- a/...  +++ b/...  diff --git ...  index ...）
+	while (i < diffLines.length &&
+		(diffLines[i].startsWith('--- ') || diffLines[i].startsWith('+++ ') ||
+		diffLines[i].startsWith('diff ') || diffLines[i].startsWith('index '))) {
+		i++;
+	}
+
+	while (i < diffLines.length) {
+		// 解析 hunk 头：@@ -origStart,origCount +newStart,newCount @@
+		const hunkMatch = diffLines[i].match(/^@@[ \t]+-([\d]+)(?:,([\d]+))?[ \t]\+([\d]+)(?:,([\d]+))?[ \t]@@/);
+		if (!hunkMatch) {
+			i++;
+			continue;
+		}
+
+		const origStart = parseInt(hunkMatch[1]) - 1; // 转为 0-based 索引
+		const origCount = hunkMatch[2] !== undefined ? parseInt(hunkMatch[2]) : 1;
+		i++; // 跳过 hunk 头
+
+		// 从 hunk 行中提取新内容（context 行 + added 行）
+		const insertLines: string[] = [];
+		while (i < diffLines.length && !diffLines[i].match(/^@@[ \t]+-\d+/)) {
+			const line = diffLines[i];
+			if (line.startsWith('+')) {
+				insertLines.push(line.substring(1));
+			} else if (line.startsWith('-')) {
+				// 删除的行，不加入 insertLines
+			} else if (line.startsWith(' ')) {
+				insertLines.push(line.substring(1)); // 上下文行
+			} else if (line.startsWith('\\\\')) {
+				// \\ No newline at end of file，忽略
+			}
+			i++;
+		}
+
+		// 将 resultLines 中从 startInResult 开始的 origCount 行替换为 insertLines
+		const startInResult = origStart + lineOffset;
+		resultLines.splice(startInResult, origCount, ...insertLines);
+		lineOffset += insertLines.length - origCount;
+	}
+
+	return resultLines.join('\n');
+}
+
+/**
  * 文件操作工具类
  * 实现文件读取、写入、列表等功能
  */
@@ -874,6 +934,23 @@ ${assertResult.message}
 			);
 
 			if (!diffResult.success) {
+				// SEARCH/REPLACE失败，尝试解析 git unified diff 格式
+				const gitResult = applyGitUnifiedDiff(originalContent, diffContent);
+				if (gitResult !== null) {
+					const gitBuffer = VSBuffer.fromString(gitResult);
+					return await withFileLock(absolutePath, async () => {
+						await this.fileService.writeFile(uri, gitBuffer);
+						try {
+							const newStat = await this.fileService.resolve(uri);
+							updateFileAfterWrite(this.sessionId, absolutePath, newStat.mtime ?? Date.now(), newStat.size ?? gitResult.length);
+						} catch (e) {
+							console.warn(`[FileOperations] 更新时间戳记录失败: ${absolutePath}`, e);
+						}
+						const diagnosticsAppendix = await getDiagnosticsAfterEdit(absolutePath);
+						return `成功应用git diff到文件: ${absolutePath}${diagnosticsAppendix}`;
+					});
+				}
+
 				// Diff应用失败
 				let formattedError = '';
 

@@ -239,10 +239,16 @@ export class DiffViewProvider extends Disposable {
 				return false;
 			}
 
-			// 如果返回undefined，说明没有SEARCH/REPLACE块，将diff内容视为新文件内容
+			// 如果返回undefined，说明没有SEARCH/REPLACE块，尝试解析git unified diff格式
 			if (newContent === undefined) {
-				console.log('[Maxian] 没有SEARCH/REPLACE块，将diff内容视为新文件内容');
-				return await this.openDiff(resolvedPath, diff);
+				const gitDiffResult = this.applyGitUnifiedDiff(originalContent, diff);
+				if (gitDiffResult !== null) {
+					console.log('[Maxian] 检测到git unified diff格式，已成功应用');
+					return await this.openDiff(resolvedPath, gitDiffResult);
+				}
+				// 既不是SEARCH/REPLACE也不是git diff，返回错误
+				console.error('[Maxian] diff格式不识别，既无SEARCH/REPLACE块也不是git unified diff格式');
+				return false;
 			}
 
 			// 打开diff视图（注意：这里传递已解析的路径）
@@ -312,6 +318,67 @@ export class DiffViewProvider extends Disposable {
 		}
 
 		return result;
+	}
+
+	/**
+	 * 解析并应用 git unified diff 格式
+	 * 支持 @@ -X,Y +X,Y @@ hunk 格式
+	 * @returns 应用后的新内容，如果不是git diff格式则返回 null
+	 */
+	private applyGitUnifiedDiff(originalContent: string, diff: string): string | null {
+		// 检测是否为git unified diff格式（含有 @@ -数字 ... @@ 的hunk头）
+		if (!/^@@[ 	]+-\d+/m.test(diff)) {
+			return null;
+		}
+
+		const resultLines = originalContent.split('\n');
+		const diffLines = diff.split('\n');
+		let i = 0;
+		let lineOffset = 0; // 累积行偏移（前面hunk的增删差值）
+
+		// 跳过文件头行（--- a/...  +++ b/...  diff --git ...  index ...）
+		while (i < diffLines.length &&
+			(diffLines[i].startsWith('--- ') || diffLines[i].startsWith('+++ ') ||
+			diffLines[i].startsWith('diff ') || diffLines[i].startsWith('index '))) {
+			i++;
+		}
+
+		while (i < diffLines.length) {
+			// 解析 hunk 头：@@ -origStart,origCount +newStart,newCount @@
+			const hunkMatch = diffLines[i].match(/^@@[ 	]+-(\d+)(?:,(\d+))?[ 	]\+(\d+)(?:,(\d+))?[ 	]@@/);
+			if (!hunkMatch) {
+				i++;
+				continue;
+			}
+
+			const origStart = parseInt(hunkMatch[1]) - 1; // 转为 0-based 索引
+			const origCount = hunkMatch[2] !== undefined ? parseInt(hunkMatch[2]) : 1;
+			i++; // 跳过 hunk 头
+
+			// 从 hunk 行中提取新内容（context 行 + added 行）
+			const insertLines: string[] = [];
+			while (i < diffLines.length && !diffLines[i].match(/^@@[ 	]+-\d+/)) {
+				const line = diffLines[i];
+				if (line.startsWith('+')) {
+					insertLines.push(line.substring(1));
+				} else if (line.startsWith('-')) {
+					// 删除的行，不加入 insertLines
+				} else if (line.startsWith(' ')) {
+					insertLines.push(line.substring(1)); // 上下文行
+				} else if (line.startsWith('\\')) {
+					// \ No newline at end of file，忽略
+				}
+				// 其他行（空行、文件头残留等）忽略
+				i++;
+			}
+
+			// 将 resultLines 中从 startInResult 开始的 origCount 行替换为 insertLines
+			const startInResult = origStart + lineOffset;
+			resultLines.splice(startInResult, origCount, ...insertLines);
+			lineOffset += insertLines.length - origCount;
+		}
+
+		return resultLines.join('\n');
 	}
 
 	/**
