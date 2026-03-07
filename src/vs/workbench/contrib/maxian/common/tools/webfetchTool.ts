@@ -70,8 +70,8 @@ export const WEBFETCH_CONFIG = {
 	/** 缓存时间（毫秒） */
 	CACHE_TTL_MS: 15 * 60 * 1000, // 15分钟
 
-	/** 最大内容长度（字符） */
-	MAX_CONTENT_LENGTH: 100000, // 100KB
+	/** 最大内容长度（字符）- 对齐 OpenCode：5MB */
+	MAX_CONTENT_LENGTH: 5 * 1024 * 1024, // 5MB
 
 	/** 请求超时（毫秒） */
 	TIMEOUT_MS: 30000, // 30秒

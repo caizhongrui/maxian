@@ -217,6 +217,15 @@ export const DEFAULT_PERMISSION_RULES: Record<ToolName, Record<string, Permissio
 	patch: {
 		'*.env': 'deny',
 		'*': 'allow'
+	},
+
+	// P2优化：待办列表工具（始终允许）
+	todowrite: {
+		'*': 'allow'
+	},
+
+	todoread: {
+		'*': 'allow'
 	}
 };
 

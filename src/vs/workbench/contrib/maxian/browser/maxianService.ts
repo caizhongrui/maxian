@@ -48,6 +48,9 @@ import { ITextFileService } from '../../../services/textfile/common/textfiles.js
 import { AutoDiagnosticInjector, IDiagnosticInjectionEvent } from './lspIntegration/AutoDiagnosticInjector.js';
 import { SteeringService } from '../common/steering/SteeringService.js';
 import { ICommandExecutionService } from '../common/services/commandExecutionService.js';
+import { FilteredToolExecutor } from '../common/tools/filteredToolExecutor.js';
+import { ITodoItem as ITodoStoreItem } from '../common/tools/todoStore.js';
+import { EXPLORE_AGENT_TOOLS, PLAN_AGENT_TOOLS, EXECUTE_AGENT_TOOLS } from '../common/agents/AgentTypes.js';
 
 export const IMaxianService = createDecorator<IMaxianService>('maxianService');
 
@@ -602,10 +605,27 @@ export class MaxianService extends Disposable implements IMaxianService {
 			this.ripgrepService,
 			{
 				cwd: workspaceRoot,
-				workspaceRoot: workspaceRoot
+				workspaceRoot: workspaceRoot,
+				// P2优化：注入 todo 更新回调，将 toolExecutor 的 todo 更新转发到 UI
+				onTodoListUpdate: (todos: ITodoStoreItem[]) => {
+					// 将 todoStore.ITodoItem 转换为 maxianService.ITodoItem（UI 格式）
+					const uiTodos: ITodoItem[] = todos.map(t => ({
+						content: t.content,
+						status: t.status,
+						activeForm: t.status === 'in_progress' ? t.content : ''
+					}));
+					this._onTodoListUpdate.fire({ todos: uiTodos });
+				}
 			},
 			this.skillService,
 			this.commandExecutionService
+		);
+
+		// P2优化：注入子 Agent 工厂（支持 task 工具）
+		(this.toolExecutor as ToolExecutorImpl).setSubAgentRunner(
+			async (agentType: string, prompt: string): Promise<string> => {
+				return this.runSubAgent(agentType, prompt, workspaceRoot);
+			}
 		);
 
 		console.log('[Maxian] 工具执行器已初始化，工作区:', workspaceRoot);
@@ -1602,12 +1622,14 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 4. execute_command - 执行命令
 			{
 				name: 'execute_command',
-				description: '在终端执行命令。危险命令执行前应询问用户。',
+				description: '在终端执行 shell 命令并捕获输出。\n\n**最佳实践**：\n- 使用 cwd 参数指定工作目录，避免 cd && command 模式\n- 提供 description 参数（5-10字描述），如"安装依赖"、"运行测试"\n- 危险命令（删除、覆盖等）应设置 requires_approval=true\n- 长输出命令考虑添加 | head -100 或 | grep 过滤',
 				parameters: {
 					type: 'object',
 					properties: {
 						command: { type: 'string', description: '要执行的命令' },
-						cwd: { type: 'string', description: '工作目录（可选）' }
+						cwd: { type: 'string', description: '工作目录（建议使用此参数替代 cd && command）' },
+						description: { type: 'string', description: '5-10字的命令描述（用于日志和 UI 显示），如"安装依赖"、"运行测试"' },
+						requires_approval: { type: 'boolean', description: '是否需要用户确认才能执行（默认 false）。有副作用的命令设为 true' }
 					},
 					required: ['command']
 				}
@@ -1852,6 +1874,74 @@ export class MaxianService extends Disposable implements IMaxianService {
 					},
 					required: ['skill_name']
 				}
+			},
+
+			// 25. task - 子 Agent 委托
+			{
+				name: 'task',
+				description: '将复杂子任务委托给专门的子 Agent 独立执行。子 Agent 拥有独立的对话历史和受限工具集，适合并行执行独立任务。\n\n子 Agent 类型（subagent_type）：\n- explore：只读探索专家，适合代码库分析、文件搜索\n- plan：规划专家，适合任务分解、风险评估\n- execute/build：全功能执行专家，适合代码实现\n\n何时使用：\n- 任务可以独立完成，不依赖主 Agent 的中间结果\n- 需要并行分析多个模块\n- 主 Agent 需要专注于整体协调',
+				parameters: {
+					type: 'object',
+					properties: {
+						subagent_type: {
+							type: 'string',
+							enum: ['explore', 'plan', 'execute', 'build'],
+							description: '子 Agent 类型。explore=只读探索; plan=规划分析; execute/build=完整实现'
+						},
+						prompt: {
+							type: 'string',
+							description: '给子 Agent 的详细任务说明，应包含足够的上下文使子 Agent 能够独立完成任务'
+						},
+						description: {
+							type: 'string',
+							description: '5-10字的任务描述（用于 UI 显示），如"分析登录模块"'
+						}
+					},
+					required: ['subagent_type', 'prompt']
+				}
+			},
+
+			// 26. update_todo_list - 更新待办列表
+			{
+				name: 'update_todo_list',
+				description: '更新当前任务的待办列表。用于跟踪任务进度，在 UI 中可视化显示。\n\n**重要：进行复杂多步任务时必须使用此工具创建任务清单。**\n\n每次开始任务时创建完整列表，随着任务推进更新每项的状态。',
+				parameters: {
+					type: 'object',
+					properties: {
+						todos: {
+							type: 'string',
+							description: 'JSON 格式的待办事项数组。每项包含：content（任务内容）、status（pending/in_progress/completed）、priority（high/medium/low）'
+						}
+					},
+					required: ['todos']
+				}
+			},
+
+			// 27. todowrite - 写入待办列表（增强版）
+			{
+				name: 'todowrite',
+				description: '创建或更新任务待办列表。参考 OpenCode 最佳实践：\n\n**何时使用**：\n1. 收到复杂任务（3步以上）时，立即创建待办列表\n2. 开始每个子任务前，将其标记为 in_progress\n3. 完成每个子任务后，将其标记为 completed\n\n这能让用户清楚了解任务进度，也帮助你追踪已完成的工作。',
+				parameters: {
+					type: 'object',
+					properties: {
+						todos: {
+							type: 'string',
+							description: 'JSON 格式的待办事项数组。格式：[{"content":"任务内容","status":"pending","priority":"high"}]。status: pending|in_progress|completed; priority: high|medium|low'
+						}
+					},
+					required: ['todos']
+				}
+			},
+
+			// 28. todoread - 读取待办列表
+			{
+				name: 'todoread',
+				description: '读取当前 Session 的待办列表。用于在长对话中重新了解任务进度。',
+				parameters: {
+					type: 'object',
+					properties: {},
+					required: []
+				}
 			}
 		];
 	}
@@ -1878,6 +1968,100 @@ export class MaxianService extends Disposable implements IMaxianService {
 		console.log(`[Maxian] 模式 ${this.currentMode} 实际提供的工具数量: ${filteredTools.length}/${allTools.length}`);
 
 		return filteredTools;
+	}
+
+	/**
+	 * P2优化：运行子 Agent
+	 * 创建 FilteredToolExecutor + 独立 TaskService 实例，运行至 attempt_completion
+	 */
+	private async runSubAgent(agentType: string, prompt: string, workspaceRoot: string): Promise<string> {
+		if (!this.toolExecutor || !this.apiHandler) {
+			return '子 Agent 启动失败：主服务未初始化';
+		}
+
+		// 根据 agentType 确定允许的工具集
+		let allowedToolsArray: readonly string[];
+		switch (agentType) {
+			case 'explore':
+				allowedToolsArray = EXPLORE_AGENT_TOOLS;
+				break;
+			case 'plan':
+				allowedToolsArray = PLAN_AGENT_TOOLS;
+				break;
+			case 'execute':
+			case 'build':
+			default:
+				allowedToolsArray = EXECUTE_AGENT_TOOLS;
+				break;
+		}
+
+		const allowedTools = new Set<string>(allowedToolsArray);
+		// 始终允许 attempt_completion 和 ask_followup_question
+		allowedTools.add('attempt_completion');
+		allowedTools.add('ask_followup_question');
+
+		// 创建过滤工具执行器（共享底层 toolExecutor，读操作安全并发）
+		const filteredExecutor = new FilteredToolExecutor(this.toolExecutor, allowedTools);
+
+		// 过滤工具定义
+		const allToolDefs = this.getAllToolDefinitions();
+		const subAgentToolDefs = allToolDefs.filter(t => allowedTools.has(t.name));
+
+		// 构建子 Agent 系统提示词
+		const subAgentSystemPrompt = async (): Promise<string> => {
+			const basePrompt = await this.getSystemPrompt();
+			const agentRoleDesc = this.getAgentRoleDescription(agentType);
+			return `${basePrompt}\n\n# 子 Agent 角色\n${agentRoleDesc}\n\n# 重要提示\n- 你是一个专门的子 Agent，任务完成后必须调用 attempt_completion 工具\n- 你的工具集已受限，只能使用当前角色对应的工具\n- 不要调用 task 工具派发更多子 Agent`;
+		};
+
+		// 创建独立的 TaskService 实例（独立消息历史）
+		const subTask = new TaskService({
+			task: prompt,
+			apiHandler: this.apiHandler,
+			toolExecutor: filteredExecutor,
+			getSystemPrompt: subAgentSystemPrompt,
+			getToolDefinitions: () => subAgentToolDefs,
+			workspaceRoot,
+			consecutiveMistakeLimit: 3,
+			currentMode: 'ask'  // ask 模式：attempt_completion 时自动完成，不需用户确认
+		});
+
+		// 捕获 completion_result
+		let completionResult = '';
+		const disposable = subTask.onMessageAdded((msg) => {
+			if (msg.type === 'say' && msg.say === 'completion_result' && msg.text) {
+				completionResult = msg.text;
+			}
+		});
+
+		console.log(`[Maxian] 子 Agent 启动: type=${agentType}, tools=${subAgentToolDefs.length}`);
+
+		try {
+			await subTask.start();
+		} catch (error) {
+			console.error(`[Maxian] 子 Agent 异常: ${error}`);
+		} finally {
+			disposable.dispose();
+			subTask.dispose();
+		}
+
+		return completionResult || `子 Agent (${agentType}) 已完成执行，但未提供结果摘要。`;
+	}
+
+	/**
+	 * 根据 agentType 返回角色描述
+	 */
+	private getAgentRoleDescription(agentType: string): string {
+		switch (agentType) {
+			case 'explore':
+				return '你是代码库探索专家。你的任务是深入分析代码库结构、找到相关文件、理解架构设计。只使用只读工具（read_file, search_files, glob, list_files, codebase_search）。';
+			case 'plan':
+				return '你是任务规划专家。你的任务是分析需求、制定详细的实施计划、识别关键文件和风险。只使用只读工具进行分析。';
+			case 'execute':
+			case 'build':
+			default:
+				return '你是代码实现专家。你的任务是根据要求完整实现功能，包括代码编写、测试和验证。使用所有必要的工具来完成任务。';
+		}
 	}
 
 	async executeTool(toolUse: ToolUse): Promise<ToolResponse> {

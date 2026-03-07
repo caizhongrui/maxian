@@ -978,6 +978,165 @@ import { useQuery } from 'react-query';</new_string>
 		],
 		relatedTools: [],
 	},
+
+	// ==================== 子 Agent 工具 ====================
+	task: {
+		name: 'task',
+		summary: '将子任务委托给专门的子 Agent 执行',
+		description: `将复杂子任务委托给专门的子 Agent 独立执行。子 Agent 拥有：
+- 独立的对话历史（不污染主 Agent 上下文）
+- 受限的工具集（根据类型限定）
+- 自动完成机制（无需用户干预）
+
+子 Agent 类型：
+- explore：只读代码库探索专家（适合分析架构、查找文件）
+- plan：只读规划分析专家（适合任务分解、制定步骤）
+- execute/build：完整权限实现专家（适合代码编写、测试）
+
+何时使用：
+1. 需要并行分析多个独立模块
+2. 有可以独立完成的子任务（不依赖主 Agent 中间结果）
+3. 想节省主 Agent 上下文窗口（探索性工作外包）
+
+重要限制：
+- 子 Agent 不能再调用 task 工具（防止无限递归）
+- 子 Agent 结果通过 attempt_completion 返回给主 Agent`,
+		parameters: [
+			{
+				name: 'subagent_type',
+				type: 'string',
+				required: true,
+				description: '子 Agent 类型：explore | plan | execute | build'
+			},
+			{
+				name: 'prompt',
+				type: 'string',
+				required: true,
+				description: '给子 Agent 的完整任务说明，需包含足够的上下文'
+			},
+			{
+				name: 'description',
+				type: 'string',
+				required: false,
+				description: '5-10字的任务摘要，用于 UI 显示'
+			}
+		],
+		examples: [
+			{
+				title: '探索代码库架构',
+				description: '让 explore Agent 分析项目结构',
+				xml: `<task>
+<subagent_type>explore</subagent_type>
+<description>分析工具系统架构</description>
+<prompt>分析 src/vs/workbench/contrib/maxian 目录的整体架构。
+找出：1) 核心文件列表及其职责; 2) 工具执行流程; 3) 关键接口定义。
+请提供完整的架构摘要。</prompt>
+</task>`
+			},
+			{
+				title: '并行探索两个模块',
+				description: '使用 batch 并行启动两个探索 Agent',
+				xml: `<batch>
+<tool_calls>[
+  {"tool":"task","params":{"subagent_type":"explore","prompt":"分析 tools 目录的工具注册机制"}},
+  {"tool":"task","params":{"subagent_type":"explore","prompt":"分析 task 目录的 Agent 主循环"}}
+]</tool_calls>
+</batch>`
+			}
+		],
+		tips: [
+			'用 batch 工具并行启动多个 task，实现真正的并行执行',
+			'explore Agent 最适合代码库探索，只读操作更安全',
+			'给子 Agent 的 prompt 要详细，包含足够上下文',
+			'子 Agent 的对话历史独立，不会污染主 Agent 上下文'
+		],
+		relatedTools: ['batch'],
+	},
+
+	// ==================== 待办列表工具 ====================
+	todowrite: {
+		name: 'todowrite',
+		summary: '创建或更新任务待办列表',
+		description: `管理当前任务的待办列表。这是复杂任务的**必要工具**。
+
+**何时必须使用**：
+1. 接收到包含 3 个以上步骤的复杂任务时 → 立即创建待办列表
+2. 开始执行某个子任务前 → 将其状态改为 in_progress
+3. 完成某个子任务后 → 将其状态改为 completed
+4. 发现新的子任务时 → 添加到列表
+
+**最佳实践**（参考 OpenCode）：
+- 每次更新都要发送完整列表（不只是变更项）
+- status 字段必须实时更新，反映真实进度
+- priority 帮助用户理解任务重要性
+- 完成所有任务前不要调用 attempt_completion`,
+		parameters: [
+			{
+				name: 'todos',
+				type: 'string (JSON array)',
+				required: true,
+				description: 'JSON 格式的待办事项数组。每项：{"content":"任务内容","status":"pending|in_progress|completed","priority":"high|medium|low"}'
+			}
+		],
+		examples: [
+			{
+				title: '创建初始任务列表',
+				description: '接收复杂任务后立即创建列表',
+				xml: `<todowrite>
+<todos>[
+  {"content":"分析现有代码架构","status":"in_progress","priority":"high"},
+  {"content":"设计新功能接口","status":"pending","priority":"high"},
+  {"content":"实现核心逻辑","status":"pending","priority":"high"},
+  {"content":"编写单元测试","status":"pending","priority":"medium"},
+  {"content":"更新文档","status":"pending","priority":"low"}
+]</todos>
+</todowrite>`
+			},
+			{
+				title: '更新任务进度',
+				description: '完成第一项后推进下一项',
+				xml: `<todowrite>
+<todos>[
+  {"content":"分析现有代码架构","status":"completed","priority":"high"},
+  {"content":"设计新功能接口","status":"in_progress","priority":"high"},
+  {"content":"实现核心逻辑","status":"pending","priority":"high"},
+  {"content":"编写单元测试","status":"pending","priority":"medium"},
+  {"content":"更新文档","status":"pending","priority":"low"}
+]</todos>
+</todowrite>`
+			}
+		],
+		tips: [
+			'每次更新都发送完整列表，确保 UI 显示准确',
+			'同时只将一项设为 in_progress（避免并行混乱）',
+			'用 todoread 检查当前进度'
+		],
+		relatedTools: ['todoread', 'update_todo_list'],
+	},
+
+	todoread: {
+		name: 'todoread',
+		summary: '读取当前 Session 的待办列表',
+		description: `读取并显示当前 Session 的完整待办列表。
+
+使用场景：
+- 长对话中忘记了任务进度
+- 在继续工作前确认剩余任务
+- 向用户展示整体进度
+
+如果列表为空，返回提示信息。`,
+		parameters: [],
+		examples: [
+			{
+				title: '查看当前进度',
+				description: '读取当前 Session 的待办列表',
+				xml: `<todoread>
+</todoread>`
+			}
+		],
+		tips: ['先用 todowrite 创建列表，再用 todoread 读取'],
+		relatedTools: ['todowrite'],
+	},
 };
 
 /**

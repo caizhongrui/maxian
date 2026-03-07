@@ -71,7 +71,7 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 		]
 	},
 	agent: {
-		tools: []  // 子Agent委托（暂未实现）
+		tools: ['task']  // P2优化：子Agent委托
 	},
 	skills: {
 		tools: ['skill']  // Skills系统：按需加载专业知识
@@ -85,7 +85,10 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 export const ALWAYS_AVAILABLE_TOOLS = [
 	'ask_followup_question',
 	'attempt_completion',
-	'switch_mode'
+	'switch_mode',
+	'update_todo_list',  // P2优化：待办列表始终可用
+	'todowrite',
+	'todoread'
 ] as const;
 
 /**

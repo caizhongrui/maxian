@@ -8,6 +8,7 @@ import { ToolUse, ToolResponse, ToolName, ALWAYS_AVAILABLE_TOOLS, TOOL_GROUPS } 
 import { FileOperationsTool } from './fileOperations.js';
 import { CommandExecutionTool } from './commandExecution.js';
 import { SearchTool } from './searchTools.js';
+import { TodoStore, parseTodos, formatTodoList, IRawTodoInput } from '../../common/tools/todoStore.js';
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { ITerminalService } from '../../../terminal/browser/terminal.js';
 import { ISearchService } from '../../../../services/search/common/search.js';
@@ -38,6 +39,12 @@ export class ToolExecutorImpl implements IToolExecutor {
 	private batchExecutor: BatchToolExecutor;
 	private context: ToolExecutionContext;
 	private skillService?: ISkillService;
+
+	/**
+	 * 子 Agent 运行器（由 maxianService 注入）
+	 * 接受 agentType 和 prompt，返回子 Agent 的完成结果
+	 */
+	private subAgentRunner?: (agentType: string, prompt: string, taskId?: string) => Promise<string>;
 
 	constructor(
 		fileService: IFileService,
@@ -162,6 +169,20 @@ export class ToolExecutorImpl implements IToolExecutor {
 
 				case 'update_todo_list':
 					result = this.handleUpdateTodoList(toolUse);
+					break;
+
+				// P2优化：todowrite / todoread
+				case 'todowrite':
+					result = this.handleUpdateTodoList(toolUse);
+					break;
+
+				case 'todoread':
+					result = this.handleTodoRead();
+					break;
+
+				// P2优化：task 子 Agent 委托
+				case 'task':
+					result = await this.executeTask(toolUse);
 					break;
 
 				// 编辑工具
@@ -311,12 +332,60 @@ export class ToolExecutorImpl implements IToolExecutor {
 	}
 
 	/**
-	 * 处理待办列表更新
+	 * 处理待办列表更新（update_todo_list / todowrite）
+	 * 完整实现：解析、验证、持久化、返回确认
 	 */
 	private handleUpdateTodoList(toolUse: ToolUse): ToolResponse {
 		const { todos } = toolUse.params;
-		// TODO: 实现待办列表更新
-		return `更新待办列表: ${todos || '(未提供待办项)'}`;
+
+		if (!todos) {
+			return '错误: todos 参数缺失，请提供待办事项数组';
+		}
+
+		let rawTodos: IRawTodoInput[];
+		try {
+			rawTodos = typeof todos === 'string' ? JSON.parse(todos) : todos;
+			if (!Array.isArray(rawTodos)) {
+				return '错误: todos 必须是数组';
+			}
+		} catch (e) {
+			return `错误: todos 参数解析失败: ${e}`;
+		}
+
+		let parsedTodos;
+		try {
+			parsedTodos = parseTodos(rawTodos);
+		} catch (e) {
+			return `错误: 待办事项格式无效: ${e instanceof Error ? e.message : String(e)}`;
+		}
+
+		const sessionId = this.context.sessionId || 'default';
+		TodoStore.update(sessionId, parsedTodos);
+
+		console.log(`[Maxian] TodoStore 已更新 (session: ${sessionId}), 共 ${parsedTodos.length} 项`);
+
+		// 触发上下文回调（由 maxianService 注入）
+		if (this.context.onTodoListUpdate) {
+			this.context.onTodoListUpdate(parsedTodos);
+		}
+
+		return formatTodoList(parsedTodos);
+	}
+
+	/**
+	 * 读取当前 Session 的待办列表（todoread）
+	 */
+	private handleTodoRead(): ToolResponse {
+		const sessionId = this.context.sessionId || 'default';
+		const todos = TodoStore.get(sessionId);
+
+		if (todos.length === 0) {
+			return '当前没有待办事项。使用 todowrite 工具创建待办列表。';
+		}
+
+		return `当前待办列表（共 ${todos.length} 项）:
+
+${formatTodoList(todos)}`;
 	}
 
 	/**
@@ -324,6 +393,49 @@ export class ToolExecutorImpl implements IToolExecutor {
 	 */
 	updateContext(context: Partial<ToolExecutionContext>): void {
 		this.context = { ...this.context, ...context };
+	}
+
+	/**
+	 * 注入子 Agent 运行器（由 maxianService 在 initialize 后调用）
+	 */
+	setSubAgentRunner(runner: (agentType: string, prompt: string, taskId?: string) => Promise<string>): void {
+		this.subAgentRunner = runner;
+	}
+
+
+	/**
+	 * P2优化：执行子 Agent 委托（task 工具）
+	 * 参考 OpenCode sub-agent 系统设计
+	 */
+	private async executeTask(toolUse: ToolUse): Promise<ToolResponse> {
+		const { subagent_type, prompt, task: taskParam } = toolUse.params;
+		const agentType = subagent_type || 'execute';
+		const taskPrompt = prompt || taskParam || '';
+
+		if (!taskPrompt) {
+			return '错误: task 工具需要 prompt 参数（任务描述）';
+		}
+
+		const validTypes = ['explore', 'plan', 'execute', 'build'];
+		if (!validTypes.includes(agentType)) {
+			return `错误: 无效的 subagent_type ""。有效类型: ${validTypes.join(', ')}`;
+		}
+
+		if (!this.subAgentRunner) {
+			return '错误: 子 Agent 运行器未初始化。请确保在 maxianService 中调用了 setSubAgentRunner()。';
+		}
+
+		console.log(`[Maxian] 启动子 Agent: type=${agentType}, prompt=${taskPrompt.substring(0, 80)}...`);
+
+		try {
+			const result = await this.subAgentRunner(agentType, taskPrompt);
+			console.log(`[Maxian] 子 Agent 完成: type=${agentType}`);
+			return result;
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			console.error(`[Maxian] 子 Agent 失败: ${errorMsg}`);
+			return `子 Agent 执行失败: ${errorMsg}`;
+		}
 	}
 
 	/**

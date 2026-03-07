@@ -3514,9 +3514,7 @@ export class MaxianView extends ViewPane {
 		yesButton.style.fontWeight = '600';
 		yesButton.onclick = () => {
 			this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
-			yesButton.disabled = true;
-			noButton.disabled = true;
-			yesButton.textContent = '已接受';
+			confirmMsg.remove();
 		};
 
 		// No按钮
@@ -3530,9 +3528,7 @@ export class MaxianView extends ViewPane {
 		noButton.style.cursor = 'pointer';
 		noButton.onclick = () => {
 			this.maxianService.handleAskResponse(message.ts, 'noButtonClicked');
-			yesButton.disabled = true;
-			noButton.disabled = true;
-			noButton.textContent = '已拒绝';
+			confirmMsg.remove();
 		};
 
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;

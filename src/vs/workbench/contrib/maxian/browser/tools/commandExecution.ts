@@ -7,6 +7,7 @@ import { ITerminalService, ITerminalInstance } from '../../../terminal/browser/t
 import { ExecuteCommandToolUse, ToolResponse } from '../../common/tools/toolTypes.js';
 import { ICommandExecutionService } from '../../common/services/commandExecutionService.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
+import { truncateOutput } from '../../common/utils/outputTruncation.js';
 
 /**
  * 命令执行工具类
@@ -101,7 +102,11 @@ export class CommandExecutionTool {
 				outputParts.push(`\n<command_metadata>\n${metadata.join('\n')}\n</command_metadata>`);
 			}
 
-			return outputParts.join('\n') || '(无输出)';
+			const rawOutput = outputParts.join('\n') || '(无输出)';
+
+			// 统一输出截断（对齐 OpenCode truncation.ts：MAX_LINES=2000, MAX_BYTES=50KB）
+			const truncateResult = await truncateOutput(rawOutput, { saveToFile: true });
+			return truncateResult.content;
 		} catch (error) {
 			if (abortSignal?.aborted) {
 				return '命令被用户中止';

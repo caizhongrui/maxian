@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ToolUse, ToolResponse, ToolName } from './toolTypes.js';
+import { ITodoItem } from './todoStore.js';
 
 /**
  * 工具执行器接口
@@ -40,6 +41,8 @@ export interface ToolExecutionContext {
 	workspaceRoot?: string; // 工作区根目录
 	sessionId?: string; // P1-7: 会话ID，用于 Doom Loop 检测
 	agentName?: string; // P2-9: Agent名称，用于工具过滤
+	/** P2优化：待办列表更新回调（由 maxianService 注入，用于触发 UI 更新） */
+	onTodoListUpdate?: (todos: ITodoItem[]) => void;
 }
 
 /**

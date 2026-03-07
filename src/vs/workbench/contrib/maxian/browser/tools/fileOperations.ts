@@ -108,6 +108,11 @@ export class FileOperationsTool {
 			// 检查文件是否存在
 			const exists = await this.fileService.exists(uri);
 			if (!exists) {
+				// "Did you mean?" - 模糊匹配同目录下相似文件名
+				const suggestions = await this.getSimilarFiles(absolutePath);
+				if (suggestions.length > 0) {
+					return `错误: 文件不存在\n路径: ${absolutePath}\n\n你是否要找:\n${suggestions.map(s => `  - ${s}`).join('\n')}`;
+				}
 				return `错误: 文件不存在\n路径: ${absolutePath}`;
 			}
 
@@ -179,17 +184,48 @@ export class FileOperationsTool {
 
 			// 大文件限制（对齐OpenCode的2000行限制，减少token消耗）
 			const maxLines = 2000;
+			const maxBytesPerFile = 50 * 1024; // 50KB
+			const maxLineLength = 2000; // 每行最多 2000 字符
+
+			// 每行字符截断（防止超长单行占满上下文）
+			const processedLines = allLines.map(line => {
+				if (line.length > maxLineLength) {
+					return line.substring(0, maxLineLength) + `... (行截断，共 ${line.length} 字符)`;
+				}
+				return line;
+			});
+
 			if (totalLines > maxLines) {
-				const truncatedLines = allLines.slice(0, maxLines);
+				const truncatedLines = processedLines.slice(0, maxLines);
 				const numberedContent = addLineNumbers(truncatedLines.join('\n'), 1);
 
 				return `<file path="${displayPath}">\n<content lines="1-${maxLines}">\n${numberedContent}</content>\n<notice>文件共 ${totalLines} 行，仅显示前 ${maxLines} 行。使用 start_line 和 end_line 参数读取其他部分。</notice>\n</file>`;
 			}
 
-			// 正常读取整个文件（添加行号）
-			const numberedContent = addLineNumbers(text, 1);
+			// 50KB 字节限制
+			let byteCount = 0;
+			let truncatedByBytes = false;
+			const byteLines: string[] = [];
+			for (const line of processedLines) {
+				const lineBytes = estimateFileByteLengthForRead(line) + 1; // +1 换行
+				if (byteCount + lineBytes > maxBytesPerFile) {
+					truncatedByBytes = true;
+					break;
+				}
+				byteLines.push(line);
+				byteCount += lineBytes;
+			}
 
-			return `<file path="${displayPath}">\n<content lines="1-${totalLines}">\n${numberedContent}</content>\n</file>`;
+			if (truncatedByBytes) {
+				const shownLines = byteLines.length;
+				const numberedContent = addLineNumbers(byteLines.join('\n'), 1);
+				return `<file path="${displayPath}">\n<content lines="1-${shownLines}">\n${numberedContent}</content>\n<notice>文件内容较大（超过50KB），仅显示前 ${shownLines} 行（共 ${totalLines} 行）。使用 start_line 参数读取后续内容。</notice>\n</file>`;
+			}
+
+			// 正常读取整个文件（添加行号）
+			const numberedContent = addLineNumbers(processedLines.join('\n'), 1);
+
+			return `<file path="${displayPath}">\n<content lines="1-${totalLines}">\n${numberedContent}</content>\n<notice>(End of file - total ${totalLines} lines)</notice>\n</file>`;
 
 		} catch (error) {
 			return `错误: 读取文件失败\n路径: ${absolutePath}\n详情: ${error instanceof Error ? error.message : String(error)}`;
@@ -602,6 +638,44 @@ ${assertResult.message}
 	}
 
 	/**
+	 * 获取与目标路径相似的文件列表（用于 "Did you mean?" 提示）
+	 * @param targetPath 目标文件路径（绝对路径）
+	 * @param maxSuggestions 最多返回几个建议（默认3个）
+	 */
+	private async getSimilarFiles(targetPath: string, maxSuggestions: number = 3): Promise<string[]> {
+		try {
+			const dirPath = path.dirname(targetPath);
+			const baseName = path.basename(targetPath).toLowerCase();
+			const dirUri = URI.file(dirPath);
+
+			const dirExists = await this.fileService.exists(dirUri);
+			if (!dirExists) { return []; }
+
+			const dirStat = await this.fileService.resolve(dirUri);
+			if (!dirStat.isDirectory || !dirStat.children) { return []; }
+
+			const siblings = dirStat.children
+				.filter(child => !child.isDirectory)
+				.map(child => child.name);
+
+			// 模糊匹配：文件名包含目标基名，或目标基名包含文件名
+			const matches = siblings
+				.filter(name => {
+					const nameLower = name.toLowerCase();
+					return nameLower.includes(baseName) ||
+						baseName.includes(nameLower) ||
+						levenshteinDistance(nameLower, baseName) <= Math.max(2, Math.floor(baseName.length * 0.3));
+				})
+				.slice(0, maxSuggestions)
+				.map(name => path.join(dirPath, name));
+
+			return matches;
+		} catch {
+			return [];
+		}
+	}
+
+	/**
 	 * 使用Glob模式匹配文件
 	 * 优化：并行遍历，边遍历边匹配，添加超时机制
 	 * @param toolUse Glob工具使用信息
@@ -867,4 +941,43 @@ ${assertResult.message}
 			return `应用diff失败: ${error instanceof Error ? error.message : String(error)}`;
 		}
 	}
+}
+
+/**
+ * 估算字符串字节长度（用于文件读取的字节限制）
+ * UTF-8：非 ASCII 字符估算为 3 字节
+ */
+function estimateFileByteLengthForRead(str: string): number {
+	let bytes = 0;
+	for (let i = 0; i < str.length; i++) {
+		const code = str.charCodeAt(i);
+		bytes += code > 0x7f ? 3 : 1;
+	}
+	return bytes;
+}
+
+/**
+ * Levenshtein 距离计算（用于文件名模糊匹配）
+ */
+function levenshteinDistance(a: string, b: string): number {
+	const m = a.length;
+	const n = b.length;
+	if (m === 0) { return n; }
+	if (n === 0) { return m; }
+
+	const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
+		Array.from({ length: n + 1 }, (__, j) => i === 0 ? j : j === 0 ? i : 0)
+	);
+
+	for (let i = 1; i <= m; i++) {
+		for (let j = 1; j <= n; j++) {
+			if (a[i - 1] === b[j - 1]) {
+				dp[i][j] = dp[i - 1][j - 1];
+			} else {
+				dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+			}
+		}
+	}
+
+	return dp[m][n];
 }

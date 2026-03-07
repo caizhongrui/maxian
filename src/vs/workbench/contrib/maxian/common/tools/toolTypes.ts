@@ -106,6 +106,8 @@ export const toolNames = [
 	'lsp_references', // LSP功能：引用查找
 	'lsp_type_definition', // LSP功能：类型定义
 	'skill',        // Skills系统：按需加载专业知识
+	'todowrite',    // P2优化：写入待办列表（同 update_todo_list 但更丰富）
+	'todoread',     // P2优化：读取当前待办列表
 ] as const;
 
 // 工具名称
@@ -252,6 +254,8 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 	lsp_references: 'LSP引用',   // LSP功能
 	lsp_type_definition: 'LSP类型定义', // LSP功能
 	skill: '加载专业知识',        // Skills系统
+	todowrite: '写入待办列表',    // P2优化
+	todoread: '读取待办列表',     // P2优化
 } as const;
 
 // 工具分组
@@ -319,5 +323,7 @@ export const ALWAYS_AVAILABLE_TOOLS: ToolName[] = [
 	'attempt_completion',
 	'new_task',
 	'update_todo_list',
+	'todowrite',       // 待办写入始终可用
+	'todoread',        // 待办读取始终可用
 	'skill',           // Skills始终可用
 ] as const;
