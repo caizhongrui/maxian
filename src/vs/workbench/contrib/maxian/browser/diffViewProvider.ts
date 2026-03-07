@@ -306,8 +306,36 @@ export class DiffViewProvider extends Disposable {
 				continue;
 			}
 
+			// 策略4: 标准化缩进（制表符 ↔ 4空格）后逐行匹配
+			const normalizeIndent = (s: string) => s.replace(/\t/g, '    ');
+			const normalizedResultForIndent = normalizeIndent(result.replace(/\r\n/g, '\n'));
+			const normalizedSearchForIndent = normalizeIndent(searchText.replace(/\r\n/g, '\n'));
+			const indentRange = this.findByLines(normalizedResultForIndent, normalizedSearchForIndent);
+			if (indentRange !== null) {
+				// 对标准化后的内容执行替换，同步标准化 replaceText 的缩进
+				const normalizedReplace = normalizeIndent(replaceText);
+				result = normalizedResultForIndent.substring(0, indentRange.start) + normalizedReplace + normalizedResultForIndent.substring(indentRange.end);
+				continue;
+			}
+
+			// 策略5: 忽略所有行首缩进（只比较内容），找到后用原文件的缩进
+			const trimAllIndent = (s: string) => s.replace(/^[ \t]+/gm, '');
+			const strippedResult = trimAllIndent(result.replace(/\r\n/g, '\n'));
+			const strippedSearch = trimAllIndent(normalizedSearchForIndent);
+			const strippedRange = this.findByLines(strippedResult, strippedSearch);
+			if (strippedRange !== null) {
+				// 使用原始位置在未截断内容上做替换（按行数定位）
+				const linesBefore = strippedResult.substring(0, strippedRange.start).split('\n').length - 1;
+				const searchLineCount = strippedSearch.split('\n').length;
+				const originalLines = result.replace(/\r\n/g, '\n').split('\n');
+				const beforeLines = originalLines.slice(0, linesBefore);
+				const afterLines = originalLines.slice(linesBefore + searchLineCount);
+				result = [...beforeLines, replaceText, ...afterLines].join('\n');
+				continue;
+			}
+
 			// 所有策略均失败
-			console.warn('[Maxian] 未找到SEARCH文本（精确/CRLF/逐行均失败）:', searchText.substring(0, 50) + '...');
+			console.warn('[Maxian] 未找到SEARCH文本（精确/CRLF/逐行/缩进均失败）:', searchText.substring(0, 50) + '...');
 			return null;
 		}
 
