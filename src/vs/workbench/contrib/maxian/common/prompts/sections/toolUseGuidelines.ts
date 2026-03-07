@@ -13,27 +13,48 @@ export function getToolUseGuidelinesSection(): string {
 
 TOOL USE GUIDELINES
 
-## ⚡ 效率规则（最高优先级）
+## 🔍 探索策略（核心原则）
 
-1. **每次响应尽可能多做事** — 把所有独立操作合并到一次batch调用中，每次batch可同时读取10-20个文件。
-2. **探索策略** — 第1轮batch用glob+codebase_search+search_files定位所有相关文件，第2轮batch一次性读取**全部**相关文件（不要分批分轮）。任务复杂时可继续读更多文件直到充分理解，再开始修改。
-3. **充分读取，不要遗漏** — 宁可多读几个相关文件，也不要因为"读得差不多了"就停止。核心实现类、接口、配置类都要读到。
-4. **搜索失败立即换策略** — glob找不到就用codebase_search，绝不重复同类搜索超过2次。
-5. **skill工具限制** — 每个任务最多调用1次skill，已调用过的不再重复。
+**先定位，再读取。** 不要通过读文件来发现其他文件——先用搜索工具找到所有相关文件路径，确认相关性后再批量读取。
+
+### 工具分工
+
+| 工具 | 用途 | 何时使用 |
+|------|------|----------|
+| glob | 按文件名/路径模式查找 | 知道文件名规律时（如 **/*Controller.java） |
+| codebase_search | 语义搜索代码内容 | 知道功能关键词但不知道在哪个文件 |
+| search_files | 精确文本/正则搜索 | 查找具体类名、方法名、配置项 |
+| read_file | 读取文件完整内容 | **只在已确认文件相关后才使用** |
+
+### 探索流程
+
+第1步 [定位] — 用 glob + codebase_search + search_files 找出所有相关文件路径
+第2步 [批量读取] — 确认路径后，一次 batch 读取全部相关文件
+第3步 [分析/行动] — 基于已读内容给出结论或开始修改
+
+**禁止**：通过读 A 文件发现引用了 B，再读 B 发现引用了 C，如此无限链式探索。这是最低效的模式。
+
+**搜索失败换策略**：glob 找不到 → 换 codebase_search；搜索无结果 → 换不同关键词，不要重复同类搜索超过2次。
 
 ## batch工具（必须掌握）
 
 **⚠️ 强制规则**：需要执行2+个独立操作时，**必须**使用batch并行执行，严禁逐个单独调用。
 
-多文件读取（一次batch读取所有相关文件，不要分多轮）：
+第1步（定位阶段）：
 \`\`\`json
 {"tool_calls": [
-  {"tool": "read_file", "parameters": {"path": "src/a.ts"}},
-  {"tool": "read_file", "parameters": {"path": "src/b.ts"}},
-  {"tool": "read_file", "parameters": {"path": "src/c.ts"}},
-  {"tool": "read_file", "parameters": {"path": "src/d.ts"}},
-  {"tool": "read_file", "parameters": {"path": "src/e.ts"}},
-  {"tool": "glob", "parameters": {"pattern": "**/*.ts"}}
+  {"tool": "glob", "parameters": {"pattern": "**/*Controller.java"}},
+  {"tool": "codebase_search", "parameters": {"query": "用户认证登录"}},
+  {"tool": "search_files", "parameters": {"path": ".", "regex": "class.*ServiceImpl"}}
+]}
+\`\`\`
+
+第2步（读取阶段，一次读完所有相关文件）：
+\`\`\`json
+{"tool_calls": [
+  {"tool": "read_file", "parameters": {"path": "src/a/Foo.java"}},
+  {"tool": "read_file", "parameters": {"path": "src/b/Bar.java"}},
+  {"tool": "read_file", "parameters": {"path": "src/c/Baz.java"}}
 ]}
 \`\`\`
 
@@ -45,14 +66,15 @@ TOOL USE GUIDELINES
 ]}
 \`\`\`
 
-## 工具选择
+## 效率规则
+
+1. **每次响应尽可能多做事** — 把所有独立操作合并到一次batch调用中。
+2. **skill工具限制** — 每个任务最多调用1次skill，已调用过的不再重复。
+
+## 工具选择（修改类）
 
 | 需求 | 工具 |
 |------|------|
-| 按文件名查找 | glob |
-| 语义搜索 | codebase_search |
-| 精确文本搜索 | search_files |
-| 读取文件 | read_file |
 | 局部修改 | edit 或 apply_diff（首选） |
 | 多处修改同文件 | multiedit |
 | 创建新文件 | write_to_file |

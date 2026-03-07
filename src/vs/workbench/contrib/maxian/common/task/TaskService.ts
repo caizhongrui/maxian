@@ -200,8 +200,7 @@ export class TaskService extends Disposable {
 	private consecutiveSingleReadToolCount = 0;
 	// 效率优化：连续只读轮数计数器（包括batch只读），超过阈值强制要求开始写代码
 	private consecutiveReadOnlyRounds = 0;
-	private static readonly MAX_EXPLORE_ROUNDS = 6; // 最多6轮探索（超过后强制阻断只读工具）
-	private static readonly BATCH_REMINDER_ROUNDS = 3; // 第3轮时注入"最终批量机会"提醒
+	private static readonly MAX_EXPLORE_ROUNDS = 10; // 安全兜底上限（正常任务靠搜索策略控制效率，不靠轮次）
 
 	// Token & Tool usage
 	private tokenUsage: TokenUsage = {
@@ -1155,17 +1154,7 @@ export class TaskService extends Disposable {
 				this.consecutiveSingleReadToolCount = 0; // 提醒后重置
 			}
 
-			// 第3轮时注入"最终批量读取机会"提醒
-			if (this.consecutiveReadOnlyRounds === TaskService.BATCH_REMINDER_ROUNDS) {
-				const filesRead = this.fileReadTracker.size;
-				this.apiConversationHistory.push({
-					role: 'user',
-					content: `[SYSTEM] 📋 探索进度提醒：你已进行了 ${this.consecutiveReadOnlyRounds} 轮只读探索，共读取了 ${filesRead} 个文件。\n\n⚠️ 你还有 ${TaskService.MAX_EXPLORE_ROUNDS - this.consecutiveReadOnlyRounds} 轮探索机会。如果还有需要读取的文件，请在接下来的1次batch调用中一次性读取所有剩余相关文件（可以包含10-20个read_file），不要再分多轮读取。\n\n之后请立即给出结论（attempt_completion）或开始修改代码。`
-				});
-				console.log(`[TaskService] 📋 探索中期提醒：已读 ${filesRead} 个文件，剩余 ${TaskService.MAX_EXPLORE_ROUNDS - this.consecutiveReadOnlyRounds} 轮`);
-			}
-
-			// 超过最大探索轮数，强制要求开始写代码
+			// 超过安全兜底上限，强制要求给出结论
 			if (this.consecutiveReadOnlyRounds >= TaskService.MAX_EXPLORE_ROUNDS) {
 				this.apiConversationHistory.push({
 					role: 'user',
