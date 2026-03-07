@@ -200,7 +200,8 @@ export class TaskService extends Disposable {
 	private consecutiveSingleReadToolCount = 0;
 	// 效率优化：连续只读轮数计数器（包括batch只读），超过阈值强制要求开始写代码
 	private consecutiveReadOnlyRounds = 0;
-	private static readonly MAX_EXPLORE_ROUNDS = 4; // 最多4轮探索（超过后强制阻断只读工具）
+	private static readonly MAX_EXPLORE_ROUNDS = 6; // 最多6轮探索（超过后强制阻断只读工具）
+	private static readonly BATCH_REMINDER_ROUNDS = 3; // 第3轮时注入"最终批量机会"提醒
 
 	// Token & Tool usage
 	private tokenUsage: TokenUsage = {
@@ -912,20 +913,10 @@ export class TaskService extends Disposable {
 	 * 在流式处理时提前检测，避免XML字符泄露到前端
 	 */
 	private mightBeXmlToolCall(text: string): boolean {
-		// 必须以 < 开头
-		if (!text.startsWith('<')) {
-			return false;
-		}
-
-		// 检查是否匹配任何工具名称的开始标签
-		// 例如: <read_file>, <skill>, <task> 等
+		// 检查文本中是否包含任何工具名称的 XML 标签（无论位置）
+		// AI 可能先输出文字再跟 XML 工具调用，所以不能只检查开头
 		for (const toolName of this.TOOL_NAMES) {
-			// 匹配 <toolName> 或 <toolName 或 < toolName（考虑不完整的情况）
-			if (text.startsWith(`<${toolName}>`) || text.startsWith(`<${toolName} `)) {
-				return true;
-			}
-			// 如果文本太短，可能还在输入工具名称
-			if (text.length < toolName.length + 2 && toolName.startsWith(text.substring(1))) {
+			if (text.includes(`<${toolName}>`) || text.includes(`<${toolName} `)) {
 				return true;
 			}
 		}
@@ -1164,11 +1155,21 @@ export class TaskService extends Disposable {
 				this.consecutiveSingleReadToolCount = 0; // 提醒后重置
 			}
 
+			// 第3轮时注入"最终批量读取机会"提醒
+			if (this.consecutiveReadOnlyRounds === TaskService.BATCH_REMINDER_ROUNDS) {
+				const filesRead = this.fileReadTracker.size;
+				this.apiConversationHistory.push({
+					role: 'user',
+					content: `[SYSTEM] 📋 探索进度提醒：你已进行了 ${this.consecutiveReadOnlyRounds} 轮只读探索，共读取了 ${filesRead} 个文件。\n\n⚠️ 你还有 ${TaskService.MAX_EXPLORE_ROUNDS - this.consecutiveReadOnlyRounds} 轮探索机会。如果还有需要读取的文件，请在接下来的1次batch调用中一次性读取所有剩余相关文件（可以包含10-20个read_file），不要再分多轮读取。\n\n之后请立即给出结论（attempt_completion）或开始修改代码。`
+				});
+				console.log(`[TaskService] 📋 探索中期提醒：已读 ${filesRead} 个文件，剩余 ${TaskService.MAX_EXPLORE_ROUNDS - this.consecutiveReadOnlyRounds} 轮`);
+			}
+
 			// 超过最大探索轮数，强制要求开始写代码
 			if (this.consecutiveReadOnlyRounds >= TaskService.MAX_EXPLORE_ROUNDS) {
 				this.apiConversationHistory.push({
 					role: 'user',
-					content: '[SYSTEM] ⚠️ 你已经进行了' + this.consecutiveReadOnlyRounds + '轮只读探索，消耗了大量时间和token。你已经拥有足够的上下文信息了。请立即开始修改代码（使用edit/apply_diff/write_to_file），不要再搜索和读取文件。如果你不确定某些细节，可以在修改时做合理的假设。'
+					content: '[SYSTEM] ⚠️ 你已经进行了' + this.consecutiveReadOnlyRounds + '轮只读探索，已拥有足够的上下文信息。请立即行动：\n- 如果任务是分析/解释/问答类：调用 attempt_completion 给出完整结论，不要继续读取文件\n- 如果任务是编码/修改类：直接调用 edit/apply_diff/write_to_file 开始修改代码\n禁止再次调用任何读取或搜索工具。'
 				});
 				console.log(`[TaskService] 🛑 强制停止探索：已达到 ${this.consecutiveReadOnlyRounds} 轮只读上限`);
 			}
@@ -1285,14 +1286,16 @@ export class TaskService extends Disposable {
 		shouldEndLoop: boolean;
 		toolResult?: ContentBlock;
 	}> {
-		// 检查重复调用
-		const repetitionCheck = this.toolRepetitionDetector.check({
-			type: 'tool_use',
-			name: toolUse.name as ToolName,
-			params: toolUse.input,
-			partial: false,
-			toolUseId: toolUse.id
-		});
+		// 检查重复调用（batch 是元工具，重复检测交给子工具层面，此处跳过）
+		const repetitionCheck = toolUse.name === 'batch'
+			? { allowExecution: true }
+			: this.toolRepetitionDetector.check({
+				type: 'tool_use',
+				name: toolUse.name as ToolName,
+				params: toolUse.input,
+				partial: false,
+				toolUseId: toolUse.id
+			});
 
 		if (!repetitionCheck.allowExecution) {
 			console.warn('[TaskService] 工具重复调用检测触发:', toolUse.name);
@@ -1594,14 +1597,64 @@ export class TaskService extends Disposable {
 			.slice(0, BatchToolConstants.MAX_CALLS);
 		const invalidCalls = toolCalls.filter(call => BatchToolConstants.DISALLOWED_TOOLS.has(call.tool as any));
 
-		// 转换为 executeToolsInParallel 期望的格式
-		const subToolUses = validCalls.map((call, idx) => ({
+		// 将子工具分为只读（并行执行）和写入（需要用户确认，顺序执行）两类
+		const WRITE_TOOLS_IN_BATCH = new Set([
+			'write_to_file', 'apply_diff', 'edit_file', 'edit', 'multiedit', 'patch',
+			'insert_content', 'search_and_replace', 'execute_command'
+		]);
+
+		const readOnlyCalls: Array<{ call: { tool: string; parameters: any }; idx: number }> = [];
+		const writeCalls: Array<{ call: { tool: string; parameters: any }; idx: number }> = [];
+		validCalls.forEach((call, idx) => {
+			if (WRITE_TOOLS_IN_BATCH.has(call.tool)) {
+				writeCalls.push({ call, idx });
+			} else {
+				readOnlyCalls.push({ call, idx });
+			}
+		});
+
+		// 并行执行只读子工具
+		const readOnlySubToolUses = readOnlyCalls.map(({ call, idx }) => ({
 			id: `${toolUse.id}_sub_${idx}`,
 			name: call.tool,
 			input: call.parameters ?? {}
 		}));
+		const readResults = await this.executeToolsInParallel(readOnlySubToolUses) as ToolResultContentBlock[];
 
-		const subResults = await this.executeToolsInParallel(subToolUses) as ToolResultContentBlock[];
+		// 顺序执行写入子工具（走 executeSingleTool，包含用户确认流程）
+		const writeResultMap = new Map<number, ToolResultContentBlock>();
+		for (const { call, idx } of writeCalls) {
+			const subToolUse = {
+				id: `${toolUse.id}_sub_${idx}`,
+				name: call.tool,
+				input: call.parameters ?? {}
+			};
+			const singleResult = await this.executeSingleTool(subToolUse);
+			if (singleResult.toolResult) {
+				writeResultMap.set(idx, singleResult.toolResult as ToolResultContentBlock);
+			} else {
+				writeResultMap.set(idx, {
+					type: 'tool_result',
+					tool_use_id: subToolUse.id,
+					content: '用户拒绝了工具执行',
+					is_error: true
+				} as ToolResultContentBlock);
+			}
+			// 如果子工具触发了流程终止，直接中止 batch
+			if (singleResult.shouldEndLoop) {
+				this._onToolCompleted.fire({ toolId: toolUse.id, toolName: 'batch', isError: false });
+				return { shouldContinue: singleResult.shouldContinue, shouldEndLoop: true };
+			}
+		}
+
+		// 按原始顺序合并结果
+		const subResults: ToolResultContentBlock[] = validCalls.map((call, idx) => {
+			if (WRITE_TOOLS_IN_BATCH.has(call.tool)) {
+				return writeResultMap.get(idx)!;
+			}
+			const readIdx = readOnlyCalls.findIndex(r => r.idx === idx);
+			return readResults[readIdx];
+		});
 
 		// 格式化批量结果（与原 BatchToolExecutor.formatBatchResponse 保持一致）
 		const parts: string[] = [];
@@ -1780,6 +1833,9 @@ export class TaskService extends Disposable {
 			'write_to_file',      // 写入文件
 			'apply_diff',         // 应用差异
 			'edit_file',          // 编辑文件
+			'edit',               // 编辑文件（alias）
+			'multiedit',          // 多块编辑
+			'patch',              // 补丁应用
 			'insert_content',     // 插入内容
 			'search_and_replace', // 搜索替换
 			'execute_command'     // 执行命令

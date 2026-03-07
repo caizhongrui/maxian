@@ -3903,9 +3903,12 @@ export class MaxianView extends ViewPane {
 			alwaysAllowButton.disabled = true;
 			approveButton.textContent = '正在保存...';
 
-			await this.maxianService.saveDiffAndClose();
-			this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
-			toolMsg.remove();
+			try {
+				await this.maxianService.saveDiffAndClose();
+				this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
+			} finally {
+				toolMsg.remove();
+			}
 		};
 
 		// Deny按钮
@@ -3958,9 +3961,12 @@ export class MaxianView extends ViewPane {
 				this.maxianService.setToolAutoApprove(currentToolName, true);
 			}
 
-			await this.maxianService.saveDiffAndClose();
-			this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
-			toolMsg.remove();
+			try {
+				await this.maxianService.saveDiffAndClose();
+				this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
+			} finally {
+				toolMsg.remove();
+			}
 		};
 
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;

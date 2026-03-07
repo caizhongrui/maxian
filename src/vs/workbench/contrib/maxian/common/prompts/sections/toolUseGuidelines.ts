@@ -15,20 +15,24 @@ TOOL USE GUIDELINES
 
 ## ⚡ 效率规则（最高优先级）
 
-1. **每次响应尽可能多做事** — 把所有独立操作合并到一次batch调用中。
-2. **探索阶段最多3轮** — 用1次batch(glob+codebase_search+search_files)定位，用1次batch(read_file x N)读取，然后立即开始修改。
-3. **搜索失败立即换策略** — glob找不到就用codebase_search，绝不重复同类搜索超过2次。
-4. **skill工具限制** — 每个任务最多调用1次skill，已调用过的不再重复。
+1. **每次响应尽可能多做事** — 把所有独立操作合并到一次batch调用中，每次batch可同时读取10-20个文件。
+2. **探索策略** — 第1轮batch用glob+codebase_search+search_files定位所有相关文件，第2轮batch一次性读取**全部**相关文件（不要分批分轮）。任务复杂时可继续读更多文件直到充分理解，再开始修改。
+3. **充分读取，不要遗漏** — 宁可多读几个相关文件，也不要因为"读得差不多了"就停止。核心实现类、接口、配置类都要读到。
+4. **搜索失败立即换策略** — glob找不到就用codebase_search，绝不重复同类搜索超过2次。
+5. **skill工具限制** — 每个任务最多调用1次skill，已调用过的不再重复。
 
 ## batch工具（必须掌握）
 
 **⚠️ 强制规则**：需要执行2+个独立操作时，**必须**使用batch并行执行，严禁逐个单独调用。
 
-多文件读取：
+多文件读取（一次batch读取所有相关文件，不要分多轮）：
 \`\`\`json
 {"tool_calls": [
   {"tool": "read_file", "parameters": {"path": "src/a.ts"}},
   {"tool": "read_file", "parameters": {"path": "src/b.ts"}},
+  {"tool": "read_file", "parameters": {"path": "src/c.ts"}},
+  {"tool": "read_file", "parameters": {"path": "src/d.ts"}},
+  {"tool": "read_file", "parameters": {"path": "src/e.ts"}},
   {"tool": "glob", "parameters": {"pattern": "**/*.ts"}}
 ]}
 \`\`\`

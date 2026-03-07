@@ -16,12 +16,29 @@ TOOL USE
 
 # 工具使用格式
 
-工具使用采用XML格式。工具名称本身成为XML标签名，每个参数都封装在自己的标签中：
+工具使用采用XML格式。**工具的实际名称**作为XML标签名，**工具的实际参数名**作为子标签名，参数值写在子标签内。
 
-<actual_tool_name>
-<parameter1_name>value1</parameter1_name>
-<parameter2_name>value2</parameter2_name>
-</actual_tool_name>
+示例（读取文件）：
+<read_file>
+<path>src/main/java/com/example/UserController.java</path>
+</read_file>
 
-注意：始终使用实际的工具名称作为XML标签名，参数值可以是多行文本。`;
+示例（搜索代码）：
+<codebase_search>
+<query>password validation</query>
+</codebase_search>
+
+示例（应用修改）：
+<apply_diff>
+<path>src/main/java/com/example/UserController.java</path>
+<diff>
+<<<<<<< SEARCH
+old code
+=======
+new code
+>>>>>>> REPLACE
+</diff>
+</apply_diff>
+
+**重要**：必须使用工具的真实名称和真实参数名，绝不能使用占位符。参数值可以是多行文本。`;
 }
