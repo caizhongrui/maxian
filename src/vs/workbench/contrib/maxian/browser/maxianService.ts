@@ -496,15 +496,13 @@ export class MaxianService extends Disposable implements IMaxianService {
 			this.terminalService,
 			this.workspaceContextService
 		);
-		console.log('[Maxian] 环境上下文跟踪器已初始化');
-
+	
 		// 🔧 初始化所有LSP服务
 		globalLspDiagnosticsHandler.setService(this.lspDiagnosticsService);
 		globalLspHoverHandler.setService(this.lspHoverService);
 		globalLspDefinitionHandler.setService(this.lspDefinitionService);
 		globalLspReferencesHandler.setService(this.lspReferencesService);
 		globalLspTypeDefinitionHandler.setService(this.lspTypeDefinitionService);
-		console.log('[Maxian] 所有LSP服务已初始化 (Diagnostics, Hover, Definition, References, TypeDefinition)');
 
 		// 🔧 初始化自动诊断注入器（Task #18）
 		this.autoDiagnosticInjector = this._register(
@@ -536,12 +534,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 		this._register(
 			this.autoDiagnosticInjector.onDiagnosticReady((event: IDiagnosticInjectionEvent) => {
 				this.currentDiagnosticText = event.formattedText;
-				console.log('[Maxian] 诊断信息已就绪，将在下次AI调用时自动注入:', {
-					filePath: event.filePath,
-					summary: event.summary,
-					count: event.count,
-					hasCriticalErrors: event.hasCriticalErrors,
-				});
 			})
 		);
 
@@ -549,11 +541,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 		this._register(
 			this.autoDiagnosticInjector.onDiagnosticCleared(() => {
 				this.currentDiagnosticText = null;
-				console.log('[Maxian] 诊断信息已清除');
-			})
+				})
 		);
 
-		console.log('[Maxian] 自动诊断注入器已初始化');
 
 		// 🔥 不再加载自动批准规则，"始终允许"仅针对单个任务会话，不持久化
 		// this.loadAutoApproveRules();
@@ -629,20 +619,17 @@ export class MaxianService extends Disposable implements IMaxianService {
 			}
 		);
 
-		console.log('[Maxian] 工具执行器已初始化，工作区:', workspaceRoot);
 
 		// P1优化：初始化 RepoMapService
 		if (workspaceRoot) {
 			this.repoMapService = this._repoMapService;
 			await this.repoMapService.initialize(workspaceRoot);
-			console.log('[Maxian] RepoMapService已初始化');
 		}
 
 		// P1优化：初始化 SteeringService（加载 .maxian/steering/*.md）
 		if (workspaceRoot) {
 			this.steeringService = new SteeringService(workspaceRoot, this.fileService);
 			await this.steeringService.initialize();
-			console.log('[Maxian] SteeringService已初始化');
 		}
 
 		// 从StorageService读取认证凭据（与authService使用相同的key）
@@ -666,7 +653,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 	}
 
 	async sendMessage(message: string, mode: Mode = DEFAULT_MODE, knowledgeBaseConfig?: IKnowledgeBaseConfig): Promise<void> {
-		console.log('[Maxian] 发送消息:', message, '模式:', mode, '知识库配置:', knowledgeBaseConfig ? '已提供' : '未提供');
 
 		// 更新当前模式
 		this.currentMode = mode;
@@ -677,7 +663,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 		this.currentFirstTokenTime = null;
 		this.currentKnowledgeBaseConfig = knowledgeBaseConfig || null;
 
-		console.log('[Maxian] AI调用开始 - TraceId:', this.currentTraceId, '开始时间:', this.currentCallStartTime.toISOString());
 
 		// 确保已初始化
 		if (!this._initialized) {
@@ -695,7 +680,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
 		const resolvedMessage = workspaceRoot ? await this.resolveAtMentionedFiles(message, workspaceRoot) : message;
 		if (resolvedMessage !== message) {
-			console.log('[Maxian] @mention 文件已注入，原始长度:', message.length, '注入后长度:', resolvedMessage.length);
 		}
 
 		// 根据模式选择不同的处理方式
@@ -874,9 +858,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 					};
 					this.difyHandler = new DifyHandler(difyConfig);
 					this.currentDifyConfig = configHash;
-					console.log('[Maxian] DifyHandler 已使用新配置初始化');
 				} else {
-					console.log('[Maxian] 复用现有DifyHandler实例（配置未改变，保留conversation_id）');
 				}
 			} else {
 				// 未选择知识库，提示用户
@@ -888,7 +870,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 				return;
 			}
 
-			console.log('[Maxian] 使用 Dify 知识库接口发送消息');
 
 			// 记录输入长度（用于中止时的估算）
 			inputLength = message.length;
@@ -967,12 +948,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 				isPartial: false
 			});
 
-			console.log('[Maxian] Dify 响应完成，总长度:', fullResponse.length);
 
 		} catch (error) {
 			// 检查是否是中止导致的错误
 			if (this.askModeAbortController?.signal.aborted) {
-				console.log('[Maxian] Ask模式已被用户中止');
 				wasAborted = true;
 			} else {
 				console.error('[Maxian] Dify 请求错误:', error);
@@ -1046,13 +1025,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 			const recentlyModifiedFiles = this.fileTracker?.getAndClearRecentlyModifiedFiles() || [];
 			const environmentDetails = await this.environmentTracker.generateEnvironmentDetails(recentlyModifiedFiles);
 
-			const parallelStart = Date.now();
-
 			// 1. 同步提取关键词（零延迟，无需AI调用）
 			// 这些关键词会作为 mentionedIdents 传入 RepoMap，使 PageRank 个性化排序，
 			// 让相关文件浮到顶部，预加载命中正确文件，减少 AI 的探索轮数
 			const keywords = this.extractKeywordsSync(message);
-			console.log('[Maxian] 同步提取关键词:', keywords);
 
 			// 2. 生成 RepoMap（传入关键词，个性化PageRank排序）
 			let repoMap = '';
@@ -1062,22 +1038,15 @@ export class MaxianService extends Disposable implements IMaxianService {
 				repoMap = this.lastRepoMap;
 			}
 
-			console.log(`[Maxian] 并行阶段完成，耗时: ${Date.now() - parallelStart}ms`);
 
 			// 🚀 使用已翻译的关键词进行预加载（此时 RepoMap 已就绪）
 			let preloadedCode = '';
 			if (repoMap && keywords.length > 0) {
-				console.log('[Maxian] 开始智能预加载相关代码...');
-				const preloadStart = Date.now();
 				// 使用已翻译的关键词，跳过再次翻译
 				preloadedCode = await this.smartPreloadCodeWithKeywords(message, repoMap, workspaceRoot, keywords);
-				console.log(`[Maxian] 预加载耗时: ${Date.now() - preloadStart}ms, 内容长度: ${preloadedCode.length}`);
 			} else if (repoMap) {
 				// 如果关键词提取失败，使用备用方案
-				console.log('[Maxian] 关键词为空，使用备用预加载...');
-				const preloadStart = Date.now();
 				preloadedCode = await this.smartPreloadCode(message, repoMap, workspaceRoot);
-				console.log(`[Maxian] 备用预加载耗时: ${Date.now() - preloadStart}ms, 内容长度: ${preloadedCode.length}`);
 			}
 
 			// 组合完整消息
@@ -1094,18 +1063,12 @@ export class MaxianService extends Disposable implements IMaxianService {
 			}
 			const fullMessage = messageParts.join('\n\n');
 
-			console.log('[Maxian] 消息组合完成，总长度:', fullMessage.length,
-				'(原始:', message.length,
-				'+ env:', environmentDetails.length,
-				'+ repomap:', repoMap.length,
-				'+ preloaded:', preloadedCode.length, ')');
 
 			// 创建新的TaskService实例，并重置取消标志
 			this.currentTaskCancelled = false;
 
 			// 🔥 新任务开始时清除自动批准设置（始终允许是针对单个任务的）
 			this.clearAutoApproveRules();
-			console.log('[Maxian] 新任务开始，已清除之前的自动批准设置');
 
 			this.currentTask = new TaskService({
 				task: fullMessage,
@@ -1206,7 +1169,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 					});
 					// 🔥 任务完成，清除自动批准设置
 					this.clearAutoApproveRules();
-					console.log('[Maxian] 任务完成，已清除自动批准设置');
 					// 任务结束后重置currentTask，避免取消按钮误触发
 					this.currentTask = null;
 				} else if (status === TaskStatus.ERROR) {
@@ -1217,14 +1179,12 @@ export class MaxianService extends Disposable implements IMaxianService {
 					});
 					// 🔥 任务错误，清除自动批准设置
 					this.clearAutoApproveRules();
-					console.log('[Maxian] 任务错误，已清除自动批准设置');
 					// 任务结束后重置currentTask，避免取消按钮误触发
 					this.currentTask = null;
 				} else if (status === TaskStatus.ABORTED) {
 					// ABORTED状态静默处理，不显示任何提示
 					// 🔥 任务中止，清除自动批准设置
 					this.clearAutoApproveRules();
-					console.log('[Maxian] 任务中止，已清除自动批准设置');
 					// 任务结束后重置currentTask，避免取消按钮误触发
 					this.currentTask = null;
 				}
@@ -1232,7 +1192,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 			this._register(statusChangedDisposable);
 
 			const messageAddedDisposable = this.currentTask.onMessageAdded(clineMessage => {
-				console.log('[Maxian] Task消息:', clineMessage);
 
 				// 发送完整的ClineMessage（新版本）
 				this._onClineMessage.fire({ message: clineMessage });
@@ -1283,21 +1242,18 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 只记录日志用于调试
 			const tokenUsageDisposable = this.currentTask.onTokenUsageUpdated((tokenUsage) => {
 				if (tokenUsage && (tokenUsage.totalTokensIn > 0 || tokenUsage.totalTokensOut > 0)) {
-					console.log(`[Maxian] Token使用量实时更新 - 输入:${tokenUsage.totalTokensIn}, 输出:${tokenUsage.totalTokensOut}`);
 				}
 			});
 			this._register(tokenUsageDisposable);
 
 			// 监听用户输入请求
 			const userInputDisposable = this.currentTask.onUserInputRequired(({ question, toolUseId }) => {
-				console.log('[Maxian] 转发用户输入请求到UI:', question);
 				this._onQuestionAsked.fire({ question, toolUseId });
 			});
 			this._register(userInputDisposable);
 
 			// 监听步骤更新事件，转发到任务进度事件
 			const stepUpdatedDisposable = this.currentTask.onStepUpdated((stepInfo) => {
-				console.log('[Maxian] 步骤更新:', stepInfo);
 
 				// 转换状态
 				let status: 'running' | 'completed' | 'error' | 'cancelled';
@@ -1327,7 +1283,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 			// 监听工具输入流式事件，转发到UI
 			const toolInputStreamingDisposable = this.currentTask.onToolInputStreaming((event) => {
-				console.log('[Maxian] 工具输入流式:', event.toolName, event.isPartial ? '(部分)' : '(完整)');
 				this._onToolInputStreaming.fire({
 					toolId: event.toolId,
 					toolName: event.toolName,
@@ -1339,7 +1294,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 			// 监听工具完成事件，转发到UI
 			const toolCompletedDisposable = this.currentTask.onToolCompleted((event) => {
-				console.log('[Maxian] 工具完成:', event.toolName, event.isError ? '(失败)' : '(成功)');
 				this._onToolCompleted.fire({
 					toolId: event.toolId,
 					toolName: event.toolName,
@@ -1350,7 +1304,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 			// 监听任务列表更新事件，转发到UI
 			const todoListUpdatedDisposable = this.currentTask.onTodoListUpdated((event) => {
-				console.log('[Maxian] 任务列表更新:', event.todos.length, '项任务');
 				this._onTodoListUpdate.fire({
 					todos: event.todos
 				});
@@ -1498,8 +1451,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			? this.steeringService.getActiveContent()
 			: null;
 		if (steeringContent) {
-			console.log('[Maxian] Steering内容已加载，长度:', steeringContent.length);
-		}
+			}
 
 		let prompt = SystemPromptGenerator.generate(
 			workspaceRoot,
@@ -1967,13 +1919,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		// 获取当前模式允许使用的工具列表
 		const allowedTools = getToolsForMode(mode.groups);
-		console.log(`[Maxian] 模式 ${this.currentMode} 允许的工具:`, allowedTools);
 
 		// 过滤工具定义
 		const allTools = this.getAllToolDefinitions();
 		const filteredTools = allTools.filter(tool => allowedTools.includes(tool.name));
 
-		console.log(`[Maxian] 模式 ${this.currentMode} 实际提供的工具数量: ${filteredTools.length}/${allTools.length}`);
 
 		return filteredTools;
 	}
@@ -2127,7 +2077,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 			console.error('[Maxian] 无当前任务，无法提交用户回复');
 			return;
 		}
-		console.log('[Maxian] 提交用户回复:', response);
 		this.currentTask.resumeWithUserInput(response);
 	}
 
@@ -2139,7 +2088,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 			console.error('[Maxian] 无当前任务，无法提交ask响应');
 			return;
 		}
-		console.log('[Maxian] 提交ask响应:', { askTs, response, text, images });
 		this.currentTask.handleWebviewAskResponse(askTs, response, text, images);
 	}
 
@@ -2191,17 +2139,14 @@ export class MaxianService extends Disposable implements IMaxianService {
 	 * 取消当前正在执行的任务
 	 */
 	cancelTask(): void {
-		console.log('[Maxian] cancelTask 被调用, currentTask:', !!this.currentTask, ', currentTaskCancelled:', this.currentTaskCancelled, ', isAskModeRunning:', this.isAskModeRunning);
 
 		// 如果任务已经被取消，直接返回，不做任何处理
 		if (this.currentTaskCancelled) {
-			console.log('[Maxian] 任务已被取消，忽略重复取消请求');
 			return;
 		}
 
 		// 检查是否有TaskService任务在运行（code/architect/debug等模式）
 		if (this.currentTask) {
-			console.log('[Maxian] 取消当前TaskService任务');
 			// 立即设置取消标志，防止重复点击
 			this.currentTaskCancelled = true;
 			const task = this.currentTask;
@@ -2232,7 +2177,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		// 检查是否有ask模式任务在运行
 		if (this.isAskModeRunning && this.askModeAbortController && this.difyHandler) {
-			console.log('[Maxian] 中止Ask模式任务');
 			// 立即重置状态，防止重复点击
 			this.isAskModeRunning = false;
 			const controller = this.askModeAbortController;
@@ -2248,14 +2192,12 @@ export class MaxianService extends Disposable implements IMaxianService {
 		}
 
 		// 没有正在执行的任务，不触发任何事件，不显示任何提示
-		console.log('[Maxian] 没有正在执行的任务，忽略取消请求');
 	}
 
 	/**
 	 * 清空对话历史
 	 */
 	clearConversation(): void {
-		console.log('[Maxian] 清空对话历史');
 
 		// 如果有正在执行的TaskService任务，先中止它
 		if (this.currentTask) {
@@ -2275,7 +2217,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 		// 触发对话清空事件
 		this._onConversationCleared.fire();
 
-		console.log('[Maxian] 对话历史已清空');
 	}
 
 	/**
@@ -2284,7 +2225,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 	resetAskConversation(): void {
 		if (this.difyHandler) {
 			this.difyHandler.resetConversation();
-			console.log('[Maxian] Ask模式会话ID已重置');
 		}
 	}
 
@@ -2451,10 +2391,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 	setToolAutoApprove(toolName: string, autoApprove: boolean): void {
 		if (autoApprove) {
 			this.autoApprovedTools.add(toolName);
-			console.log(`[Maxian] 工具 "${toolName}" 已设置为自动批准（仅当前任务有效）`);
 		} else {
 			this.autoApprovedTools.delete(toolName);
-			console.log(`[Maxian] 工具 "${toolName}" 已取消自动批准`);
 		}
 		// 🔥 不再保存到持久化存储，"始终允许"仅针对单个任务会话
 		// this.saveAutoApproveRules();
@@ -2473,10 +2411,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 	setCommandAutoApprove(command: string, autoApprove: boolean): void {
 		if (autoApprove) {
 			this.autoApprovedCommands.add(command);
-			console.log(`[Maxian] 命令 "${command}" 已设置为自动批准（仅当前任务有效）`);
 		} else {
 			this.autoApprovedCommands.delete(command);
-			console.log(`[Maxian] 命令 "${command}" 已取消自动批准`);
 		}
 		// 🔥 不再保存到持久化存储，"始终允许"仅针对单个任务会话
 		// this.saveAutoApproveRules();
@@ -2509,7 +2445,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 	clearAutoApproveRules(): void {
 		this.autoApprovedTools.clear();
 		this.autoApprovedCommands.clear();
-		console.log('[Maxian] 所有自动批准规则已清除');
 	}
 
 	// ====== 快捷键触发方法 ======
@@ -2526,7 +2461,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 	enableAutoDiagnostics(): void {
 		if (this.autoDiagnosticInjector) {
 			this.autoDiagnosticInjector.enable();
-			console.log('[Maxian] 自动诊断注入已启用');
 		}
 	}
 
@@ -2536,7 +2470,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 	disableAutoDiagnostics(): void {
 		if (this.autoDiagnosticInjector) {
 			this.autoDiagnosticInjector.disable();
-			console.log('[Maxian] 自动诊断注入已禁用');
 		}
 	}
 
@@ -2573,7 +2506,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 			this.autoDiagnosticInjector.clearDiagnosticText();
 		}
 		this.currentDiagnosticText = null;
-		console.log('[Maxian] 当前诊断信息已清除');
 	}
 
 	/**
@@ -2611,7 +2543,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 		}
 
 		try {
-			console.log('[Maxian] 开始生成RepoMap...');
 			const startTime = Date.now();
 
 			// 1. 获取工作区中的所有代码文件
@@ -2691,8 +2622,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 	 * 将用户的中文消息提取关键词并翻译为英文
 	 */
 	private async extractKeywordsWithAI(message: string): Promise<string[]> {
-		const startTime = Date.now();
-
 		// 1. 先提取已有的英文关键词（驼峰命名、文件名等）
 		const words: string[] = [];
 
@@ -2716,7 +2645,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 		const hasChinese = /[\u4e00-\u9fa5]/.test(message);
 		if (!hasChinese) {
 			const uniqueWords = [...new Set(words)].slice(0, 30);
-			console.log('[Maxian] 提取的关键词（无中文）:', uniqueWords);
 			return uniqueWords;
 		}
 
@@ -2724,7 +2652,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 		const cacheKey = message.substring(0, 100); // 使用前100字符作为缓存key
 		const cached = this.keywordTranslationCache.get(cacheKey);
 		if (cached) {
-			console.log('[Maxian] 使用缓存的关键词翻译');
 			words.push(...cached);
 			const uniqueWords = [...new Set(words)].slice(0, 30);
 			return uniqueWords;
@@ -2753,7 +2680,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 		}
 
 		const uniqueWords = [...new Set(words)].slice(0, 30);
-		console.log(`[Maxian] 提取的关键词 (耗时${Date.now() - startTime}ms):`, uniqueWords);
 		return uniqueWords;
 	}
 
@@ -2788,7 +2714,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 			if (match) {
 				const keywords = JSON.parse(match[0]);
 				if (Array.isArray(keywords)) {
-					console.log('[Maxian] AI关键词翻译成功:', keywords);
 					return keywords.filter((k: unknown) => typeof k === 'string');
 				}
 			}
@@ -2901,7 +2826,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 			.slice(0, maxFiles)
 			.map(([filePath, _score]) => filePath);
 
-		console.log('[Maxian] 预加载文件选择:', sortedFiles, '(关键词:', keywords.slice(0, 5), ')');
 		return sortedFiles;
 	}
 
@@ -2920,7 +2844,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		for (const filePath of filePaths) {
 			if (totalSize >= maxTotalSize) {
-				console.log('[Maxian] 预加载达到总大小限制，停止加载更多文件');
 				break;
 			}
 
@@ -2954,7 +2877,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 			return '';
 		}
 
-		console.log(`[Maxian] 预加载完成: ${results.length}个文件, 总大小 ${totalSize} 字符`);
 		return results.join('\n\n');
 	}
 
@@ -2966,7 +2888,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 		// 1. 使用AI提取并翻译关键词
 		const keywords = await this.extractKeywordsWithAI(message);
 		if (keywords.length === 0) {
-			console.log('[Maxian] 未提取到有效关键词，跳过预加载');
 			return '';
 		}
 
@@ -2987,7 +2908,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 		// 1. 从RepoMap选择相关文件
 		const relevantFiles = this.selectRelevantFilesFromRepoMap(keywords, repoMap, 5);
 		if (relevantFiles.length === 0) {
-			console.log('[Maxian] 未找到匹配的文件，跳过预加载');
 			return '';
 		}
 

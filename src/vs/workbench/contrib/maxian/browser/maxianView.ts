@@ -531,12 +531,10 @@ export class MaxianView extends ViewPane {
 
 		// 点击显示框切换下拉列表
 		this.modeSelector.onclick = (e) => {
-			console.log('[MaxianView] 模式选择器被点击');
-			e.stopPropagation();
+				e.stopPropagation();
 			this.isModeDropdownOpen = !this.isModeDropdownOpen;
 
 			if (this.isModeDropdownOpen) {
-				console.log('[MaxianView] 打开模式下拉列表');
 
 				// 判断应该向上还是向下展开
 				const selectorRect = this.modeSelector.getBoundingClientRect();
@@ -586,7 +584,6 @@ export class MaxianView extends ViewPane {
 				this.modeSelector.style.borderColor = 'var(--vscode-focusBorder, #007ACC)';
 				this.modeSelector.style.boxShadow = '0 0 0 2px rgba(0, 122, 204, 0.25)';
 			} else {
-				console.log('[MaxianView] 关闭模式下拉列表');
 				this.closeModeDropdown();
 			}
 		};
@@ -694,16 +691,10 @@ export class MaxianView extends ViewPane {
 
 		// 点击显示框切换下拉列表
 		this.knowledgeBaseSelector.onclick = (e) => {
-			console.log('[MaxianView] 知识库选择器被点击');
 			e.stopPropagation();
 			this.isKnowledgeBaseDropdownOpen = !this.isKnowledgeBaseDropdownOpen;
-			console.log('[MaxianView] isDropdownOpen:', this.isKnowledgeBaseDropdownOpen);
 
 			if (this.isKnowledgeBaseDropdownOpen) {
-				console.log('[MaxianView] 打开下拉列表');
-				console.log('[MaxianView] dropdown元素:', this.knowledgeBaseDropdown);
-				console.log('[MaxianView] 列表项数量:', this.knowledgeBaseDropdownList.children.length);
-
 				// 判断应该向上还是向下展开
 				const selectorRect = this.knowledgeBaseSelector.getBoundingClientRect();
 				const viewportHeight = window.innerHeight;
@@ -712,21 +703,15 @@ export class MaxianView extends ViewPane {
 				const spaceBelow = viewportHeight - selectorRect.bottom - margin; // 选择器下方的可用空间
 				const spaceAbove = selectorRect.top - margin; // 选择器上方的可用空间（避免被输入框挡住）
 
-				console.log('[MaxianView] 窗口高度:', viewportHeight);
-				console.log('[MaxianView] 选择器位置:', selectorRect.top, '-', selectorRect.bottom);
-				console.log('[MaxianView] 下方可用空间:', spaceBelow, 'px, 上方可用空间:', spaceAbove, 'px');
-
 				let actualMaxHeight = dropdownMaxHeight;
 
 				if (spaceBelow < dropdownMaxHeight && spaceAbove > spaceBelow) {
 					// 下方空间不足且上方空间更大，向上展开
 					this.isDropdownOpeningUpward = true;
 					actualMaxHeight = Math.min(dropdownMaxHeight, spaceAbove); // 使用上方实际可用空间
-					console.log('[MaxianView] 向上展开下拉列表, maxHeight:', actualMaxHeight);
 				} else {
 					this.isDropdownOpeningUpward = false;
 					actualMaxHeight = Math.min(dropdownMaxHeight, spaceBelow); // 使用下方实际可用空间
-					console.log('[MaxianView] 向下展开下拉列表, maxHeight:', actualMaxHeight);
 				}
 
 				// 清除之前的top/bottom设置
@@ -746,41 +731,28 @@ export class MaxianView extends ViewPane {
 					const bottomPosition = viewportHeight - selectorRect.top + 2; // 2px间隙
 					this.knowledgeBaseDropdown.style.bottom = `${bottomPosition}px`;
 					this.knowledgeBaseDropdown.style.transform = 'translateY(8px)'; // 向下偏移8px（动画效果）
-					console.log('[MaxianView] 设置bottom定位:', bottomPosition, 'px');
 				} else {
 					// 向下展开：设置top为选择器底部位置
 					const topPosition = selectorRect.bottom + 2; // 2px间隙
 					this.knowledgeBaseDropdown.style.top = `${topPosition}px`;
 					this.knowledgeBaseDropdown.style.transform = 'translateY(-8px)'; // 向上偏移8px（动画效果）
-					console.log('[MaxianView] 设置top定位:', topPosition, 'px');
 				}
 
 				// 设置display: block（但保持opacity: 0）
 				this.knowledgeBaseDropdown.style.display = 'block';
-				console.log('[MaxianView] 设置display为block');
 
 				// 强制浏览器重新计算布局（触发reflow）
-				const forceReflow = this.knowledgeBaseDropdown.offsetHeight;
-				console.log('[MaxianView] 强制reflow完成, offsetHeight:', forceReflow);
+				void this.knowledgeBaseDropdown.offsetHeight;
 
 				// 使用requestAnimationFrame确保在下一帧设置opacity，让transition生效
 				requestAnimationFrame(() => {
 					this.knowledgeBaseDropdown.style.opacity = '1';
 					this.knowledgeBaseDropdown.style.transform = 'translateY(0)';
-					console.log('[MaxianView] 下拉列表显示完成');
-
-					// transition完成后检查位置
-					setTimeout(() => {
-						const rect = this.knowledgeBaseDropdown.getBoundingClientRect();
-						console.log('[MaxianView] 下拉列表最终位置:', 'top:', rect.top, 'bottom:', rect.bottom);
-						console.log('[MaxianView] 下拉列表是否在可视区域:', rect.top >= 0 && rect.bottom <= window.innerHeight);
-					}, 250);
 				});
 				this.knowledgeBaseSelectorArrow.style.transform = 'rotate(180deg)';
 				this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-focusBorder, #007ACC)';
 				this.knowledgeBaseSelector.style.boxShadow = '0 0 0 2px rgba(0, 122, 204, 0.25)';
 			} else {
-				console.log('[MaxianView] 关闭下拉列表');
 				this.closeKnowledgeBaseDropdown();
 			}
 		};
@@ -847,7 +819,6 @@ export class MaxianView extends ViewPane {
 			refreshButton.style.backgroundColor = 'transparent';
 		};
 		refreshButton.onclick = async () => {
-			console.log('[MaxianView] 刷新按钮被点击');
 			// 添加旋转动画
 			refreshButton.style.transform = 'rotate(360deg)';
 			refreshButton.style.transition = 'transform 0.5s ease';
@@ -883,7 +854,6 @@ export class MaxianView extends ViewPane {
 		this.continuousConversationCheckbox.style.margin = '0';
 		this.continuousConversationCheckbox.onchange = () => {
 			this.isContinuousConversation = this.continuousConversationCheckbox.checked;
-			console.log('[MaxianView] 连续对话模式:', this.isContinuousConversation ? '已启用' : '已禁用');
 		};
 
 		const checkboxLabel = append(this.continuousConversationWrapper, $('span'));
@@ -2085,7 +2055,6 @@ export class MaxianView extends ViewPane {
 			// 如果没有启用连续对话，重置conversation_id（开始新对话）
 			if (!this.isContinuousConversation) {
 				this.maxianService.resetAskConversation();
-				console.log('[MaxianView] 未启用连续对话，已重置会话ID');
 			}
 
 			// 如果选中了知识库，传递知识库配置
@@ -2098,7 +2067,6 @@ export class MaxianView extends ViewPane {
 						id: selectedKb.id,
 						name: selectedKb.applicationName
 					};
-					console.log('[MaxianView] 使用知识库配置:', knowledgeBaseConfig.apiUrl);
 				}
 			}
 		}
@@ -2419,7 +2387,6 @@ export class MaxianView extends ViewPane {
 
 			case 'system_internal':
 				// 🔧 系统内部消息 - 静默处理，不显示在UI（避免系统提示泄露）
-				console.log('[MaxianView] 系统内部消息（已过滤）:', message.text?.substring(0, 50));
 				break;
 
 			default:
@@ -3111,16 +3078,13 @@ export class MaxianView extends ViewPane {
 				// 🔥 工具完成后，1秒后自动移除状态卡片（缩短延迟以便快速看到效果）
 				const elementToRemove = toolStatusElement; // 捕获引用
 				const capturedToolId = toolId; // 捕获 toolId
-				console.log(`[MaxianView] 设置工具状态自动移除: ${toolInfo.tool}, toolId=${capturedToolId}, status=${status}`);
 
 				setTimeout(() => {
-					console.log(`[MaxianView] 开始移除工具状态: ${toolInfo.tool}, 元素存在=${!!elementToRemove}, 有父节点=${!!elementToRemove?.parentElement}`);
 					if (elementToRemove && elementToRemove.parentElement) {
 						// 添加淡出动画
 						elementToRemove.style.transition = 'opacity 0.5s ease-out';
 						elementToRemove.style.opacity = '0';
 						setTimeout(() => {
-							console.log(`[MaxianView] 移除工具状态DOM: ${toolInfo.tool}`);
 							elementToRemove.remove();
 							// 清除引用
 							if (this.currentToolStatusElement === elementToRemove) {
@@ -3738,7 +3702,6 @@ export class MaxianView extends ViewPane {
 		// 如果工具已设置为自动批准，直接执行批准操作
 		const toolName = toolInfo?.tool || '';
 		if (toolName && this.maxianService.isToolAutoApproved(toolName)) {
-			console.log(`[MaxianView] 工具 "${toolName}" 已自动批准，跳过审批UI`);
 			// 直接执行批准操作
 			this.maxianService.saveDiffAndClose().then(() => {
 				this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
@@ -4011,7 +3974,6 @@ export class MaxianView extends ViewPane {
 		// 🔥 首先检查是否已设置命令自动批准
 		const cmdText = message.text || '';
 		if (this.maxianService.isCommandAutoApproved('*')) {
-			console.log('[MaxianView] 命令已设置为自动批准，跳过审批UI');
 			// 直接执行批准操作
 			this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
 			return;
@@ -4232,12 +4194,10 @@ export class MaxianView extends ViewPane {
 			}
 
 			const result = await response.json();
-			console.log('[MaxianView] Knowledge bases response:', result);
 
 			// 支持数字和字符串类型的code
 			if ((result.code === 200 || result.code === '200') && result.data) {
 				this.knowledgeBases = result.data;
-				console.log('[MaxianView] Loaded', this.knowledgeBases.length, 'knowledge bases');
 				this.updateKnowledgeBaseSelector();
 			} else {
 				// API返回失败，清空知识库列表
@@ -4256,7 +4216,6 @@ export class MaxianView extends ViewPane {
 	 * 更新知识库选择器选项
 	 */
 	private updateKnowledgeBaseSelector(): void {
-		console.log('[MaxianView] 更新知识库选择器,共', this.knowledgeBases.length, '个知识库');
 		if (!this.knowledgeBaseDropdownList) {
 			console.warn('[MaxianView] knowledgeBaseDropdownList is not initialized');
 			return;
@@ -4324,7 +4283,6 @@ export class MaxianView extends ViewPane {
 				if (textSpan) {
 					textSpan.textContent = kb.applicationName;
 				}
-				console.log('[MaxianView] Selected knowledge base:', kb.applicationName);
 
 				// 更新所有列表项的选中状态
 				Array.from(this.knowledgeBaseDropdownList.children).forEach((item, idx) => {
@@ -4372,8 +4330,7 @@ export class MaxianView extends ViewPane {
 				}
 			}
 
-			console.log('[MaxianView] 已自动选择第一个知识库:', this.knowledgeBases[0].applicationName);
-		} else {
+			} else {
 			// 没有知识库时，清空选择并更新UI
 			this.selectedKnowledgeBaseId = null;
 			const textSpan = this.knowledgeBaseSelector.querySelector('[data-role="kb-text"]') as HTMLSpanElement;
@@ -4428,8 +4385,6 @@ export class MaxianView extends ViewPane {
 		if (!this.modeSelector || !this.modeDropdownList || !this.knowledgeBaseSelectorWrapper) {
 			return; // 如果选择器还未创建,跳过
 		}
-
-		console.log('[MaxianView] 更新可用模式列表');
 
 		// 清空现有列表项
 		while (this.modeDropdownList.firstChild) {
@@ -4538,8 +4493,6 @@ export class MaxianView extends ViewPane {
 					textSpan.textContent = `${modeIconMap[mode.slug] || '📝'} ${mode.name}`;
 				}
 
-				console.log('[MaxianView] Selected mode:', mode.slug);
-
 				// 控制连续对话复选框的显示（仅ask模式显示）
 				if (this.currentMode === 'ask') {
 					this.continuousConversationWrapper.style.display = 'flex';
@@ -4591,8 +4544,6 @@ export class MaxianView extends ViewPane {
 
 		// 根据当前模式更新知识库选择器显示状态
 		this.knowledgeBaseSelectorWrapper.style.display = this.currentMode === 'ask' ? '' : 'none';
-
-		console.log('[MaxianView] Updated available modes:', availableModes.map(m => m.slug), 'Current mode:', this.currentMode);
 	}
 
 	/**
@@ -4731,7 +4682,6 @@ export class MaxianView extends ViewPane {
 	 * 实时显示工具调用的参数信息
 	 */
 	private handleToolInputStreaming(event: IToolInputStreamingEvent): void {
-		console.log('[MaxianView] 工具输入流式:', event.toolName, event.isPartial);
 
 		// 获取或创建显示元素
 		let streamingElement = this.toolInputStreamingElements.get(event.toolId);
@@ -4866,7 +4816,6 @@ export class MaxianView extends ViewPane {
 	 * 更新工具执行状态（从运行中到完成/失败）
 	 */
 	private handleToolCompleted(event: IToolCompletedEvent): void {
-		console.log('[MaxianView] 工具完成:', event.toolName, event.isError ? '(失败)' : '(成功)');
 
 		// 通过toolId查找对应的工具状态元素
 		const toolStatusElement = this.toolStatusElements.get(event.toolId);
@@ -4892,7 +4841,6 @@ export class MaxianView extends ViewPane {
 			setTimeout(() => {
 				toolStatusElement.remove();
 				this.toolStatusElements.delete(event.toolId);
-				console.log('[MaxianView] 工具卡片已自动移除:', event.toolId);
 			}, 1500);
 			return;
 		}
@@ -4926,8 +4874,7 @@ export class MaxianView extends ViewPane {
 			statusBadge.classList.add(`maxian-tool-status-${finalStatus}`);
 		}
 
-		console.log('[MaxianView] 工具错误状态已更新:', event.toolId, finalStatus);
-	}
+		}
 
 	// ========== 任务列表（Todo List）相关方法 ==========
 
@@ -5024,7 +4971,6 @@ export class MaxianView extends ViewPane {
 			e.preventDefault();
 			e.stopPropagation();
 			isCollapsed = !isCollapsed;
-			console.log('[MaxianView] 任务列表折叠状态:', isCollapsed);
 			arrow.style.transform = isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
 			if (this.todoListContent) {
 				this.todoListContent.style.display = isCollapsed ? 'none' : 'block';
@@ -5036,7 +4982,6 @@ export class MaxianView extends ViewPane {
 	 * 处理任务列表更新事件
 	 */
 	private handleTodoListUpdate(event: ITodoListEvent): void {
-		console.log('[MaxianView] 任务列表更新:', event.todos.length, '项');
 
 		if (!this.todoListContainer || !this.todoListContent) {
 			return;
@@ -5086,24 +5031,18 @@ export class MaxianView extends ViewPane {
 
 		// 渲染任务列表
 		this.renderTodoList(event.todos);
-
-		console.log('[MaxianView] 任务列表渲染完成，todos:', event.todos);
 	}
 
 	/**
 	 * 渲染任务列表内容
 	 */
 	private renderTodoList(todos: ITodoItem[]): void {
-		console.log('[MaxianView] renderTodoList 开始, todos数量:', todos.length, 'todoListContent存在:', !!this.todoListContent);
-
 		if (!this.todoListContent) {
-			console.log('[MaxianView] todoListContent 不存在，退出');
 			return;
 		}
 
 		// 清空现有内容
 		clearNode(this.todoListContent);
-		console.log('[MaxianView] 已清空内容，开始渲染');
 
 		if (todos.length === 0) {
 			const emptyMsg = append(this.todoListContent, $('div.todo-empty'));
@@ -5126,7 +5065,6 @@ export class MaxianView extends ViewPane {
 		`;
 
 		todos.forEach((todo, index) => {
-			console.log(`[MaxianView] 渲染任务 ${index + 1}:`, todo.content, '状态:', todo.status);
 			const item = append(list, $('li.todo-item'));
 			item.style.cssText = `
 				display: flex;

@@ -48,7 +48,6 @@ const MAX_CONSECUTIVE_MISTAKES = 3; // 最大连续错误次数
 const MAX_CONTEXT_TOKENS = 100000; // 最大上下文 token 数
 const TOKEN_BUFFER = 20000; // 预留给响应的 token
 const MAX_TOOL_RESULT_LENGTH = 20000; // 🚀 优化：对齐OpenCode标准（2000行/50KB），减少token消耗
-const MAX_HISTORY_MESSAGES = 50; // 最大历史消息数
 const TRUNCATE_FRACTION = 0.5; // 截断时移除的消息比例
 
 /**
@@ -188,7 +187,8 @@ export class TaskService extends Disposable {
 
 	// P2优化：完整的上下文管理系统
 	private readonly modelContextTracker: ModelContextTracker;
-	private readonly _fullContextManager: ContextManager;  // TODO: 待完整集成
+	// @ts-ignore - TODO: 待完整集成
+	private readonly _fullContextManager: ContextManager;
 	private readonly stateMutex: StateMutex;
 	private readonly checkpointManager: CheckpointManager;
 
@@ -280,8 +280,6 @@ export class TaskService extends Disposable {
 		this._fullContextManager = new ContextManager();  // TODO: 待完整集成
 		this.stateMutex = new StateMutex();
 		this.checkpointManager = new CheckpointManager();
-		console.log(`[TaskService] Phase 2 上下文管理系统已初始化（最大消息数: ${MAX_HISTORY_MESSAGES}, 上下文管理器: ${!!this._fullContextManager}, 状态锁: ${!!this.stateMutex}, withStateLock: ${!!this._withStateLock}）`);
-
 		// 初始化 Agent 编排器
 		this.agentOrchestrator = new AgentOrchestrator(
 			this.toolExecutor,
@@ -293,16 +291,9 @@ export class TaskService extends Disposable {
 				verbose: this.agentConfig.verbose
 			},
 			{
-				// Agent 事件回调
-				onPhaseChange: (phase, context) => {
-					console.log(`[TaskService] Agent 阶段变更: ${phase}`);
-				},
-				onExplorationComplete: (result) => {
-					console.log(`[TaskService] 探索完成: ${result.output}`);
-				},
-				onPlanningComplete: (result) => {
-					console.log(`[TaskService] 规划完成: ${result.data?.steps?.length || 0} 个步骤`);
-				}
+				onPhaseChange: (_phase, _context) => {},
+				onExplorationComplete: (_result) => {},
+				onPlanningComplete: (_result) => {}
 			}
 		);
 
@@ -612,8 +603,6 @@ export class TaskService extends Disposable {
 		this.updateStep('正在分析任务...');
 
 		try {
-			console.log('[TaskService] 启动任务循环（无强制探索阶段）');
-
 			// 执行主任务循环
 			this.updateStep('正在执行任务...');
 			await this.initiateTaskLoop();
@@ -640,7 +629,6 @@ export class TaskService extends Disposable {
 			} else {
 				// 对于问答模式，AI可以不使用工具直接回答，直接结束循环
 				if (this.currentMode === 'ask') {
-					console.log('[TaskService] 问答模式：AI已回答，无需使用工具，任务结束');
 					break;
 				}
 
@@ -779,15 +767,10 @@ export class TaskService extends Disposable {
 					content: `${focusChainPrompt}\n\n${existingContent}`
 				};
 				conversationHistoryForRequest = history;
-				console.log('[TaskService] FocusChain 提示词注入为用户消息（system prompt 保持稳定）');
 			}
 		}
 
 		const toolDefinitions = this.getToolDefinitions();
-
-		// 记录当前上下文大小
-		const estimatedTokens = this.estimateTokens(this.apiConversationHistory);
-		console.log(`[TaskService] API请求: 历史消息=${this.apiConversationHistory.length}, 估算tokens=${estimatedTokens}`);
 
 		if (retryAttempt === 0) {
 			await this.say('api_req_started', 'API请求已开始...');
@@ -823,7 +806,6 @@ export class TaskService extends Disposable {
 		for await (const chunk of stream) {
 			// 检查是否已中止，如果是则停止处理流
 			if (this.abort) {
-				console.log('[TaskService] 任务已中止，停止处理API流');
 				hasError = true;
 				break;
 			}
@@ -835,13 +817,11 @@ export class TaskService extends Disposable {
 				// 记录首Token时间
 				if (!firstTokenReceived) {
 					firstTokenReceived = true;
-					console.log('[TaskService] 首Token到达');
 				}
 
 				// 🔒 检测是否可能是XML工具调用
 				if (!xmlDetected && this.mightBeXmlToolCall(assistantMessage)) {
 					xmlDetected = true;
-					console.log('[TaskService] 检测到可能的XML工具调用，停止流式显示');
 				}
 
 				// 只有在未检测到XML时才进行流式显示
@@ -862,17 +842,14 @@ export class TaskService extends Disposable {
 
 					// 🔧 修复：对于batch工具，尝试手动解析JSON（可能被大内容影响）
 					if (chunk.name === 'batch' && typeof chunk.input === 'string') {
-						console.log('[TaskService] 尝试手动解析batch工具参数...');
 						try {
 							// 尝试提取 tool_calls 内容（可能是XML格式）
 							const toolCallsMatch = chunk.input.match(/<tool_calls>([\s\S]*?)<\/tool_calls>/);
 							if (toolCallsMatch) {
 								const toolCallsStr = toolCallsMatch[1].trim();
-								console.log('[TaskService] 提取到tool_calls内容，长度:', toolCallsStr.length);
-								const toolCalls = JSON.parse(toolCallsStr);
+									const toolCalls = JSON.parse(toolCallsStr);
 								input = { tool_calls: toolCalls };
-								console.log('[TaskService] batch参数解析成功，工具数量:', toolCalls.length);
-							} else {
+								} else {
 								// 如果不是XML格式，尝试直接解析为对象
 								input = typeof chunk.input === 'object' ? chunk.input : {};
 								console.warn('[TaskService] 未找到tool_calls标签，使用原始input或空对象');
@@ -894,7 +871,6 @@ export class TaskService extends Disposable {
 					input: input,
 					isPartial: false, // 工具输入接收完整后发出
 				});
-				console.log(`[TaskService] 工具调用: ${chunk.name}`, input);
 
 				toolUses.push({ id: chunk.id, name: chunk.name, input });
 			} else if (chunk.type === 'usage') {
@@ -910,7 +886,6 @@ export class TaskService extends Disposable {
 		if (toolUses.length === 0 && assistantMessage) {
 			const xmlToolUses = this.parseXmlToolCalls(assistantMessage);
 			if (xmlToolUses.length > 0) {
-				console.log('[TaskService] 从文本中解析到 XML 格式的工具调用:', xmlToolUses.length);
 				toolUses.push(...xmlToolUses);
 				// 清空 assistantMessage，因为这是工具调用，不是普通响应
 				// 前端通过检测hasXmlTag已经阻止了XML文本的显示，这里无需特殊处理
@@ -1001,7 +976,6 @@ export class TaskService extends Disposable {
 					input: params
 				});
 
-				console.log(`[TaskService] 解析 XML 工具调用: ${toolName}`, params);
 			}
 		}
 
@@ -1088,44 +1062,27 @@ export class TaskService extends Disposable {
 		const readOnlyToolNames = ['read_file', 'search_files', 'glob', 'list_files', 'codebase_search', 'list_code_definition_names', 'lsp_hover', 'lsp_diagnostics', 'lsp_definition', 'lsp_references', 'lsp_type_definition', 'webfetch'];
 		const standaloneReadCalls = toolUses.filter(t => readOnlyToolNames.includes(t.name));
 
-		if (hasBatch) {
-			// 找出 batch 内包含的子工具数量
-			const batchTool = toolUses.find(t => t.name === 'batch');
-			let batchSubTools: string[] = [];
-			try {
-				const toolCallsParam = batchTool?.input?.tool_calls;
-				const toolCallsArr = typeof toolCallsParam === 'string' ? JSON.parse(toolCallsParam) : toolCallsParam;
-				if (Array.isArray(toolCallsArr)) {
-					batchSubTools = toolCallsArr.map((c: any) => c.tool);
-				}
-			} catch (_) { /* ignore */ }
-			console.log(`[Batch Monitor] ✅ 使用了 batch 工具，包含 ${batchSubTools.length} 个子调用: [${batchSubTools.join(', ')}]`);
-		} else if (standaloneReadCalls.length >= 2) {
+		if (!hasBatch && standaloneReadCalls.length >= 2) {
 			// 有2个以上只读工具被单独调用 - 这是可以优化的情况
 			console.warn(`[Batch Monitor] ⚠️ 未使用 batch！本次AI响应包含 ${standaloneReadCalls.length} 个独立只读调用: [${standaloneReadCalls.map(t => t.name).join(', ')}]，应合并为1次 batch 调用`);
-		} else if (standaloneReadCalls.length === 1 && toolUses.length === 1) {
-			console.log(`[Batch Monitor] ℹ️ 单次只读调用: ${toolUses[0].name}（仅1个，无需batch）`);
-		} else {
-			console.log(`[Batch Monitor] 工具调用: [${toolNames.join(', ')}]`);
 		}
 		// ====== [Batch Monitor] end ======
 
 		// 1. 并行执行只读工具（超过探索上限时强制阻断）
 		if (readOnlyTools.length > 0) {
 			if (this.consecutiveReadOnlyRounds >= TaskService.MAX_EXPLORE_ROUNDS && writeTools.length === 0 && specialTools.length === 0) {
-				// 超过探索上限且本轮没有写入工具 → 强制阻断只读工具，返回错误迫使AI写代码
+				// 超过探索上限且本轮没有写入工具 → 强制阻断只读工具，返回明确指令要求AI得出结论
 				console.log(`[TaskService] 🚫 阻断只读工具执行：已超过 ${TaskService.MAX_EXPLORE_ROUNDS} 轮探索上限，本轮无写入工具`);
 				for (const toolUse of readOnlyTools) {
 					toolResults.push({
 						type: 'tool_result',
 						tool_use_id: toolUse.id,
-						content: `[BLOCKED] 只读工具已被阻断。你已经进行了${this.consecutiveReadOnlyRounds}轮探索，远超${TaskService.MAX_EXPLORE_ROUNDS}轮上限。请立即使用 apply_diff 或 write_to_file 开始修改代码。不要再调用任何读取/搜索工具。`,
+						content: `[探索阶段结束] 你已完成 ${this.consecutiveReadOnlyRounds} 轮只读探索，已达到 ${TaskService.MAX_EXPLORE_ROUNDS} 轮上限，不再允许继续读取文件或搜索代码。\n\n请立即基于你已收集到的所有信息执行以下操作之一：\n- 如果任务需要修改代码：直接调用 apply_diff 或 write_to_file 进行修改\n- 如果任务是分析/问答：直接调用 attempt_completion 给出完整结论\n\n禁止再次调用任何读取、搜索或列出文件的工具。`,
 						is_error: true
 					} as ContentBlock);
 					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: true });
 				}
 			} else {
-				console.log(`[TaskService] 并行执行 ${readOnlyTools.length} 个只读工具`);
 				const readResults = await this.executeToolsInParallel(readOnlyTools);
 				toolResults.push(...readResults);
 			}
@@ -1194,7 +1151,6 @@ export class TaskService extends Disposable {
 					role: 'user',
 					content: '[SYSTEM] 效率提醒：你已经连续' + this.consecutiveSingleReadToolCount + '次单独调用只读工具。请使用batch工具将多个操作合并为一次调用。'
 				});
-				console.log(`[TaskService] ⚡ 效率提醒已注入：连续 ${this.consecutiveSingleReadToolCount} 次单独只读调用`);
 				this.consecutiveSingleReadToolCount = 0; // 提醒后重置
 			}
 
@@ -1229,7 +1185,6 @@ export class TaskService extends Disposable {
 				// 优先检查缓存（缓存命中直接返回内容，避免重复检测误拦截导致AI拿不到内容）
 				const cachedResult = this.toolCache.get(toolUse.name, toolUse.input);
 				if (cachedResult !== null) {
-					console.log(`[TaskService] 使用缓存结果: ${toolUse.name}`);
 					// 缓存命中时也检查重复读取，给AI添加警告，防止AI陷入无限重复读取同一文件的死循环
 					const duplicateNoticeOnCacheHit = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
 					const cachedContent = duplicateNoticeOnCacheHit
@@ -1392,7 +1347,6 @@ export class TaskService extends Disposable {
 		// P0优化：对只读工具检查缓存（与 executeToolsInParallel 保持一致）
 		const cachedResult = this.toolCache.get(toolUse.name, toolUse.input);
 		if (cachedResult !== null) {
-			console.log(`[TaskService] executeSingleTool 缓存命中: ${toolUse.name}`);
 			this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: false });
 			return {
 				shouldContinue: true,
@@ -1537,11 +1491,9 @@ export class TaskService extends Disposable {
 			// P0优化：如果是 update_todo_list 工具，更新 FocusChain 清单并触发UI更新
 			if ((toolUse.name === 'update_todo_list' || toolUse.name === 'todowrite') && toolUse.input && toolUse.input.todos) {
 				this.focusChainManager.updateChecklist(toolUse.input.todos);
-				console.log('[TaskService] FocusChain 清单已更新，共', toolUse.input.todos.length, '项任务');
 
 				// 触发任务列表更新事件，通知UI更新
 				this._onTodoListUpdated.fire({ todos: toolUse.input.todos });
-				console.log('[TaskService] 已触发任务列表更新事件');
 			}
 
 			// 🔧 触发工具完成事件
@@ -1639,12 +1591,7 @@ export class TaskService extends Disposable {
 			input: call.parameters ?? {}
 		}));
 
-		console.log(`[Batch Monitor] 🚀 batch(cached) 并行执行 ${subToolUses.length} 个工具: [${subToolUses.map(t => t.name).join(', ')}]`);
-		const batchStart = Date.now();
-
 		const subResults = await this.executeToolsInParallel(subToolUses) as ToolResultContentBlock[];
-
-		const batchElapsed = Date.now() - batchStart;
 
 		// 格式化批量结果（与原 BatchToolExecutor.formatBatchResponse 保持一致）
 		const parts: string[] = [];
@@ -1675,7 +1622,6 @@ export class TaskService extends Disposable {
 
 		const combinedContent = parts.join('\n\n---\n\n') + `\n\n${summary}`;
 
-		console.log(`[Batch Monitor] ✅ batch(cached) 完成: ${successful}/${validCalls.length} 成功，耗时 ${batchElapsed}ms（节省约 ${validCalls.length - 1} 次 API round-trip，结果已写入缓存）`);
 		this.toolUsage['batch'] = (this.toolUsage['batch'] || 0) + 1;
 		this.consecutiveMistakeCount = 0;
 		this._onToolCompleted.fire({ toolId: toolUse.id, toolName: 'batch', isError: false });
@@ -2072,7 +2018,6 @@ export class TaskService extends Disposable {
 
 		// 对于问答模式，不需要用户确认，直接结束
 		if (this.currentMode === 'ask') {
-			console.log('[TaskService] 问答模式：跳过任务完成确认');
 			return {
 				shouldContinue: true,
 				shouldEndLoop: true
@@ -2135,8 +2080,6 @@ export class TaskService extends Disposable {
 		// 更新上下文 Token（当前消息历史的估算）
 		this.tokenUsage.contextTokens = this.estimateTokens(this.apiConversationHistory);
 
-		console.log(`[TaskService] Token统计更新 - 输入:${this.tokenUsage.totalTokensIn}, 输出:${this.tokenUsage.totalTokensOut}, 缓存读:${this.tokenUsage.totalCacheReads || 0}, 缓存写:${this.tokenUsage.totalCacheWrites || 0}, 上下文:${this.tokenUsage.contextTokens}`);
-
 		this._onTokenUsageUpdated.fire(this.tokenUsage);
 	}
 
@@ -2157,7 +2100,6 @@ export class TaskService extends Disposable {
 			status: status,
 		});
 
-		console.log(`[TaskService] 步骤更新: ${this.currentStepIndex}/${this.totalSteps} - ${description} (${status})`);
 	}
 
 	/**
@@ -2167,7 +2109,6 @@ export class TaskService extends Disposable {
 	private setTotalSteps(steps: number): void {
 		this.totalSteps = steps;
 		this.currentStepIndex = 0;
-		console.log(`[TaskService] 设置总步骤数: ${steps}`);
 	}
 
 	/**
@@ -2456,6 +2397,7 @@ export class TaskService extends Disposable {
 	 * P2优化：使用状态锁执行关键操作
 	 * TODO: 在关键状态修改处使用
 	 */
+	// @ts-ignore - TODO: 在关键状态修改处使用
 	private async _withStateLock<T>(fn: () => T | Promise<T>): Promise<T> {
 		return await this.stateMutex.withLock(fn);
 	}

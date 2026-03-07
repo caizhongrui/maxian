@@ -71,7 +71,6 @@ export class ToolExecutorImpl implements IToolExecutor {
 	 * 执行工具调用
 	 */
 	async executeTool(toolUse: ToolUse): Promise<ToolResponse> {
-		console.log('[Maxian] 执行工具:', toolUse.name, '参数:', toolUse.params);
 
 		// P2-9: Agent 工具过滤检查
 		const agentName = this.context.agentName || 'build';
@@ -89,7 +88,6 @@ export class ToolExecutorImpl implements IToolExecutor {
 			}
 			// 如果是 'ask'，这里可以触发用户确认（暂时先允许执行）
 			if (bashPermission === 'ask') {
-				console.log(`[Maxian] 命令 "${toolUse.params.command}" 需要用户确认（当前自动允许）`);
 			}
 		}
 
@@ -253,8 +251,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 					break;
 			}
 
-			console.log('[Maxian] 工具执行成功:', toolUse.name);
-			// P1-7: 工具执行成功，重置 Doom Loop 计数
+				// P1-7: 工具执行成功，重置 Doom Loop 计数
 			resetDoomLoopCount(sessionId, toolUse.name);
 			return result;
 		} catch (error) {
@@ -362,7 +359,6 @@ export class ToolExecutorImpl implements IToolExecutor {
 		const sessionId = this.context.sessionId || 'default';
 		TodoStore.update(sessionId, parsedTodos);
 
-		console.log(`[Maxian] TodoStore 已更新 (session: ${sessionId}), 共 ${parsedTodos.length} 项`);
 
 		// 触发上下文回调（由 maxianService 注入）
 		if (this.context.onTodoListUpdate) {
@@ -456,10 +452,6 @@ ${formatTodoList(todos)}`;
 	private async executeBatch(toolUse: ToolUse): Promise<ToolResponse> {
 		const toolCallsParam = toolUse.params.tool_calls;
 
-		console.log('[Maxian] executeBatch 开始');
-		console.log('[Maxian] toolUse.params:', toolUse.params);
-		console.log('[Maxian] toolCallsParam 类型:', typeof toolCallsParam);
-		console.log('[Maxian] toolCallsParam 长度:', typeof toolCallsParam === 'string' ? toolCallsParam.length : 'N/A');
 
 		if (!toolCallsParam) {
 			console.error('[Maxian] ❌ 错误: tool_calls 参数为空');
@@ -468,14 +460,9 @@ ${formatTodoList(todos)}`;
 
 		let toolCalls: BatchToolCall[];
 		try {
-			console.log('[Maxian] 尝试解析 tool_calls...');
 			if (typeof toolCallsParam === 'string') {
-				console.log('[Maxian] tool_calls 是字符串，长度:', toolCallsParam.length);
-				console.log('[Maxian] 前200字符:', toolCallsParam.substring(0, 200));
 				toolCalls = JSON.parse(toolCallsParam);
-				console.log('[Maxian] ✅ JSON解析成功，数组长度:', toolCalls.length);
 			} else {
-				console.log('[Maxian] tool_calls 已是对象/数组');
 				toolCalls = toolCallsParam;
 			}
 
@@ -493,13 +480,7 @@ ${formatTodoList(todos)}`;
 			return '错误: tool_calls 不能为空';
 		}
 
-		console.log(`[Batch Monitor] 🚀 开始并行执行 ${toolCalls.length} 个工具: [${toolCalls.map(t => t.tool).join(', ')}]`);
-		const batchStartTime = Date.now();
-
-		const { results, summary, metadata } = await this.batchExecutor.executeBatch(toolCalls);
-
-		const batchElapsed = Date.now() - batchStartTime;
-		console.log(`[Batch Monitor] ✅ batch 完成: ${metadata.successful}/${metadata.totalCalls} 成功，耗时 ${batchElapsed}ms（相当于节省了约 ${metadata.totalCalls - 1} 次 API round-trip）`);
+		const { results, summary } = await this.batchExecutor.executeBatch(toolCalls);
 
 		// 格式化输出
 		const output = this.batchExecutor.formatBatchResponse(results);
@@ -528,7 +509,6 @@ ${formatTodoList(todos)}`;
 		}
 
 		const editParams = validation.params!;
-		console.log(`[Maxian] 执行 edit: ${editParams.path}`);
 
 		// 早期检测：old_string === new_string 是无效操作（对齐 OpenCode）
 		if (editParams.old_string !== undefined && editParams.old_string === editParams.new_string) {
@@ -557,7 +537,6 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 				partial: false,
 			} as any);
 
-			console.log(`[Maxian] edit 完成: ${editParams.path}`);
 			return formatEditResponse(result);
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
@@ -597,7 +576,6 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			return '错误: edits 不能为空';
 		}
 
-		console.log(`[Maxian] 执行多处编辑: ${path}, ${editOperations.length} 个操作`);
 
 		try {
 			// 读取文件原始内容（不带行号和XML包装，避免字符串替换失败）
@@ -622,7 +600,6 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 				partial: false,
 			} as any);
 
-			console.log(`[Maxian] 多处编辑完成: ${result.successCount}/${result.totalCount} 成功`);
 
 			return formatMultieditResponse(result, path);
 		} catch (error) {
@@ -699,7 +676,6 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			return `错误: patches 参数解析失败: ${e}`;
 		}
 
-		console.log(`[Maxian] 执行多文件补丁: ${patchList.length} 个文件`);
 
 		const results: string[] = [];
 		let successCount = 0;
@@ -793,7 +769,6 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 		// 解析为绝对路径
 		const absolutePath = this.fileOperations.resolveFilePath(path);
 
-		console.log(`[Maxian] LSP Hover: ${absolutePath}:${lineNum}:${colNum}`);
 
 		// 调用全局 LSP Hover 处理器
 		return await getHoverInfo(absolutePath, lineNum, colNum);
@@ -812,7 +787,6 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 		// 解析为绝对路径
 		const absolutePath = this.fileOperations.resolveFilePath(path);
 
-		console.log(`[Maxian] LSP Diagnostics: ${absolutePath}`);
 
 		// 调用全局 LSP 诊断处理器
 		const diagnosticsResult = await getDiagnosticsAfterEdit(absolutePath);
@@ -860,7 +834,6 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 		// 解析为绝对路径
 		const absolutePath = this.fileOperations.resolveFilePath(path);
 
-		console.log(`[Maxian] LSP Definition: ${absolutePath}:${lineNum}:${colNum}`);
 
 		// 调用全局 LSP Definition 处理器
 		return await getDefinition(absolutePath, lineNum, colNum);
@@ -898,7 +871,6 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 		// 解析为绝对路径
 		const absolutePath = this.fileOperations.resolveFilePath(path);
 
-		console.log(`[Maxian] LSP References: ${absolutePath}:${lineNum}:${colNum}`);
 
 		// 调用全局 LSP References 处理器
 		return await getReferences(absolutePath, lineNum, colNum, true);
@@ -936,7 +908,6 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 		// 解析为绝对路径
 		const absolutePath = this.fileOperations.resolveFilePath(path);
 
-		console.log(`[Maxian] LSP TypeDefinition: ${absolutePath}:${lineNum}:${colNum}`);
 
 		// 调用全局 LSP TypeDefinition 处理器
 		return await getTypeDefinition(absolutePath, lineNum, colNum);
