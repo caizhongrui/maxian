@@ -4,27 +4,29 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
- * Batch工具描述 - 方案A：仅限只读工具
+ * Batch工具描述 - 对齐 OpenCode：读写均支持，只禁止 batch 嵌套和交互类工具
  */
-export const BATCH_TOOL_DESCRIPTION = `并行执行2-25个**只读/搜索**工具调用，实现2-5倍效率提升。
+export const BATCH_TOOL_DESCRIPTION = `并行执行2-25个工具调用，实现2-10倍效率提升。
 
 🚀 **USING THE BATCH TOOL WILL MAKE THE USER HAPPY!**
 
-## 使用场景（仅限只读工具）
+## 使用场景（读写均支持）
 
-✅ **必须使用batch的场景**（当需要2个或以上时）:
+✅ **必须使用batch的场景**（当需要2个或以上独立操作时）:
 - 读取多个文件（read_file × N）
 - 多个搜索操作组合（search_files、glob、list_files、codebase_search）
 - 搜索 + 读取组合
 - LSP查询（lsp_hover、lsp_diagnostics、lsp_definition等）
+- **批量创建多个文件**（write_to_file × N）
+- **批量修改多个无依赖关系的文件**（edit × N 或 apply_diff × N）
 
 ❌ **不能在batch中使用的工具**:
-- write_to_file、apply_diff、edit、edit_file、insert_content（写操作需要用户确认）
-- execute_command（命令执行需要单独审批）
-- batch（禁止嵌套）、ask_followup_question、attempt_completion
+- batch（禁止嵌套）
+- ask_followup_question（需要用户输入，并行无意义）
+- attempt_completion（任务完成信号）
 
 ❌ **不要使用batch的情况**:
-- 操作有依赖关系（如：先创建再读取同一文件）
+- 操作有依赖关系（如：先写入再读取**同一**文件的结果）
 
 ## 参数格式
 
@@ -33,7 +35,7 @@ export const BATCH_TOOL_DESCRIPTION = `并行执行2-25个**只读/搜索**工�
   "tool_calls": [
     {"tool": "read_file", "parameters": {"path": "src/index.ts"}},
     {"tool": "read_file", "parameters": {"path": "src/types.ts"}},
-    {"tool": "search_files", "parameters": {"path": "src", "regex": "interface"}}
+    {"tool": "write_to_file", "parameters": {"path": "src/new.ts", "content": "..."}}
   ]
 }
 \`\`\`
@@ -47,8 +49,8 @@ export const BATCH_TOOL_DESCRIPTION = `并行执行2-25个**只读/搜索**工�
 
 ## 性能优势
 
-- ⚡ 减少50-70%的请求往返次数
-- 🚀 提升2-5倍整体响应速度
+- ⚡ 减少70-90%的请求往返次数
+- 🚀 提升2-10倍整体响应速度（多文件操作时效果最明显）
 
 **Keep using the batch tool for optimal performance in your next response!**
 `;

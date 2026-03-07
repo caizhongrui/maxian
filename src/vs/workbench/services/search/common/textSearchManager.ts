@@ -138,7 +138,11 @@ export class TextSearchManager {
 				if (result.uri === undefined) {
 					throw Error('Text search result URI is undefined. Please check provider implementation.');
 				}
-				const folderQuery = folderMappings.findQueryFragmentAwareSubstr(result.uri)!;
+				const folderQuery = folderMappings.findQueryFragmentAwareSubstr(result.uri);
+				if (!folderQuery) {
+					// Skip results that don't match any folder query (e.g., when searching outside workspace)
+					return;
+				}
 				const hasSibling = folderQuery.folder.scheme === Schemas.file ?
 					hasSiblingPromiseFn(() => {
 						return this.fileUtils.readdir(resources.dirname(result.uri));

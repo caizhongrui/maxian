@@ -82,6 +82,12 @@ export const LSP_DIAGNOSTICS_CONFIG = {
 
 	/** 是否包含提示 */
 	INCLUDE_HINTS: false,
+
+	/**
+	 * P1优化：对齐 OpenCode write.ts MAX_PROJECT_DIAGNOSTICS_FILES
+	 * 编辑后额外展示的其他文件诊断数量上限（显示受影响的关联文件错误）
+	 */
+	MAX_PROJECT_DIAGNOSTICS_FILES: 5,
 };
 
 /**
@@ -299,6 +305,7 @@ export class LspDiagnosticsHandler {
 
 	/**
 	 * 在文件编辑后获取诊断
+	 * P1优化：对齐 OpenCode write.ts — 同时显示当前文件 + 项目其他文件的诊断错误
 	 * @param filePath 文件路径
 	 * @returns 格式化的诊断信息，如果没有服务或没有诊断则返回空字符串
 	 */
@@ -315,11 +322,49 @@ export class LspDiagnosticsHandler {
 			// 等待诊断更新
 			await new Promise(resolve => setTimeout(resolve, LSP_DIAGNOSTICS_CONFIG.WAIT_TIME_MS));
 
-			// 获取诊断
+			// 获取当前文件的诊断
 			const diagnostics = await this.service.getDiagnostics(filePath);
+			const currentFileAppendix = createDiagnosticsAppendix(filePath, diagnostics);
 
-			// 创建附加信息
-			return createDiagnosticsAppendix(filePath, diagnostics);
+			// P1优化：获取项目其他文件的诊断（对齐 OpenCode MAX_PROJECT_DIAGNOSTICS_FILES）
+			let projectDiagnosticsAppendix = '';
+			try {
+				const allDiagnostics = await this.service.getAllDiagnostics();
+				const otherFilesWithErrors: string[] = [];
+
+				for (const [otherPath, otherDiags] of allDiagnostics) {
+					// 跳过当前文件（已在上面处理）
+					if (otherPath === filePath) continue;
+
+					const filtered = filterDiagnostics(otherDiags);
+					const hasError = filtered.some(d => d.severity === DiagnosticSeverity.Error);
+					if (hasError) {
+						otherFilesWithErrors.push(otherPath);
+					}
+
+					if (otherFilesWithErrors.length >= LSP_DIAGNOSTICS_CONFIG.MAX_PROJECT_DIAGNOSTICS_FILES) {
+						break;
+					}
+				}
+
+				if (otherFilesWithErrors.length > 0) {
+					const projectParts: string[] = ['\n\n<project_diagnostics>'];
+					projectParts.push(`以下文件在本次修改后出现错误（可能受当前文件影响）：`);
+					for (const otherPath of otherFilesWithErrors) {
+						const otherDiags = allDiagnostics.get(otherPath)!;
+						const filtered = filterDiagnostics(otherDiags);
+						const errorCount = filtered.filter(d => d.severity === DiagnosticSeverity.Error).length;
+						projectParts.push(`\n${formatDiagnostics(otherPath, otherDiags)}`);
+						console.log(`[LspDiagnostics] 项目文件 ${otherPath} 有 ${errorCount} 个错误`);
+					}
+					projectParts.push('</project_diagnostics>');
+					projectDiagnosticsAppendix = projectParts.join('\n');
+				}
+			} catch (projectErr) {
+				console.warn('[LspDiagnostics] 获取项目诊断失败（不影响主流程）:', projectErr);
+			}
+
+			return currentFileAppendix + projectDiagnosticsAppendix;
 		} catch (error) {
 			console.warn(`[LspDiagnostics] 获取诊断失败: ${filePath}`, error);
 			return '';

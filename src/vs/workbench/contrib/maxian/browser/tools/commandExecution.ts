@@ -5,29 +5,121 @@
 
 import { ITerminalService, ITerminalInstance } from '../../../terminal/browser/terminal.js';
 import { ExecuteCommandToolUse, ToolResponse } from '../../common/tools/toolTypes.js';
+import { ICommandExecutionService } from '../../common/services/commandExecutionService.js';
+import { generateUuid } from '../../../../../base/common/uuid.js';
 
 /**
  * 命令执行工具类
- * 实现终端命令执行功能
- * 优化：复用终端实例，添加超时机制
+ *
+ * 优先使用 ICommandExecutionService（主进程实现，通过 IPC 代理注入）执行命令并捕获输出。
+ * 若 ICommandExecutionService 不可用（如 web 环境），降级使用终端 sendText 执行。
  */
 export class CommandExecutionTool {
-	// 复用的终端实例
+	// 复用的终端实例（降级模式用）
 	private cachedTerminal: ITerminalInstance | null = null;
 	private terminalReady: boolean = false;
+
+	private commandExecutionService: ICommandExecutionService | undefined;
 
 	constructor(
 		private readonly terminalService: ITerminalService
 	) { }
 
 	/**
-	 * 获取或创建终端实例（复用机制）
+	 * 设置命令执行服务（通过 IPC 代理注入）
+	 */
+	setCommandExecutionService(service: ICommandExecutionService): void {
+		this.commandExecutionService = service;
+	}
+
+	/**
+	 * 执行命令并捕获输出
+	 */
+	async executeCommand(toolUse: ExecuteCommandToolUse, abortSignal?: AbortSignal): Promise<ToolResponse> {
+		const { command, cwd } = toolUse.params;
+
+		if (!command) {
+			return '错误: 未提供命令';
+		}
+
+		// 优先使用 ICommandExecutionService（主进程，通过 IPC 完整输出捕获）
+		if (this.commandExecutionService) {
+			return this.executeWithService(command, cwd, abortSignal);
+		}
+
+		// 降级：使用终端 sendText（无输出捕获）
+		return this.executeWithTerminal(command, cwd);
+	}
+
+	/**
+	 * 通过 ICommandExecutionService 执行（主进程 IPC，完整输出捕获）
+	 * AbortSignal 不可通过 IPC 序列化，使用 commandId + cancel() 实现取消。
+	 */
+	private async executeWithService(command: string, cwd?: string, abortSignal?: AbortSignal): Promise<ToolResponse> {
+		const commandId = generateUuid();
+
+		// 如果已经被取消，直接返回
+		if (abortSignal?.aborted) {
+			return '命令被用户中止';
+		}
+
+		// 监听取消信号，调用 cancel() 通知主进程杀死进程
+		let abortHandler: (() => void) | undefined;
+		if (abortSignal) {
+			abortHandler = () => {
+				this.commandExecutionService!.cancel(commandId).catch(() => { /* ignore */ });
+			};
+			abortSignal.addEventListener('abort', abortHandler, { once: true });
+		}
+
+		try {
+			const result = await this.commandExecutionService!.execute(command, {
+				cwd,
+				commandId
+			});
+
+			const outputParts: string[] = [];
+			if (result.stdout) {
+				outputParts.push(result.stdout);
+			}
+			if (result.stderr) {
+				outputParts.push(`\nSTDERR:\n${result.stderr}`);
+			}
+
+			const metadata: string[] = [];
+			if (result.timedOut) {
+				metadata.push('命令超时（120秒后终止）');
+			}
+			if (result.aborted || abortSignal?.aborted) {
+				metadata.push('命令被用户中止');
+			}
+			if (result.exitCode !== null && result.exitCode !== 0) {
+				metadata.push(`退出码: ${result.exitCode}`);
+			}
+
+			if (metadata.length > 0) {
+				outputParts.push(`\n<command_metadata>\n${metadata.join('\n')}\n</command_metadata>`);
+			}
+
+			return outputParts.join('\n') || '(无输出)';
+		} catch (error) {
+			if (abortSignal?.aborted) {
+				return '命令被用户中止';
+			}
+			return `执行命令失败: ${error instanceof Error ? error.message : String(error)}`;
+		} finally {
+			if (abortSignal && abortHandler) {
+				abortSignal.removeEventListener('abort', abortHandler);
+			}
+		}
+	}
+
+	/**
+	 * 获取或创建终端实例（降级模式复用机制）
 	 */
 	private async getOrCreateTerminal(cwd?: string): Promise<ITerminalInstance> {
-		// 检查缓存的终端是否可用
 		if (this.cachedTerminal && this.terminalReady) {
 			try {
-				// 检查终端是否还存在
 				const terminals = this.terminalService.instances;
 				if (terminals.includes(this.cachedTerminal)) {
 					return this.cachedTerminal;
@@ -39,8 +131,6 @@ export class CommandExecutionTool {
 			this.terminalReady = false;
 		}
 
-		// 创建新终端
-		console.log('[CommandExecution] 创建新终端...');
 		const terminal = await this.terminalService.createTerminal({
 			config: {
 				name: '码弦 Agent',
@@ -48,10 +138,7 @@ export class CommandExecutionTool {
 			}
 		});
 
-		// 带超时的等待终端准备
-		const timeout = 5000; // 5秒超时
-		const startTime = Date.now();
-
+		const timeout = 5000;
 		try {
 			await Promise.race([
 				terminal.processReady,
@@ -61,10 +148,7 @@ export class CommandExecutionTool {
 			]);
 			this.cachedTerminal = terminal;
 			this.terminalReady = true;
-			console.log('[CommandExecution] 终端准备就绪，耗时:', Date.now() - startTime, 'ms');
-		} catch (error) {
-			console.warn('[CommandExecution] 终端准备超时，继续执行');
-			// 即使超时也尝试使用
+		} catch {
 			this.cachedTerminal = terminal;
 			this.terminalReady = true;
 		}
@@ -73,56 +157,48 @@ export class CommandExecutionTool {
 	}
 
 	/**
-	 * 执行命令
-	 * 优化：复用终端，添加超时机制
-	 * @param toolUse 执行命令工具使用信息
-	 * @returns 执行结果
+	 * 通过终端 sendText 执行（降级方案，无输出捕获）
 	 */
-	async executeCommand(toolUse: ExecuteCommandToolUse): Promise<ToolResponse> {
-		const { command, cwd } = toolUse.params;
-
-		if (!command) {
-			return '错误: 未提供命令';
-		}
-
-		const startTime = Date.now();
-
+	private async executeWithTerminal(command: string, cwd?: string): Promise<ToolResponse> {
 		try {
-			// 获取或创建终端（复用机制）
 			const terminal = await this.getOrCreateTerminal(cwd);
-
-			// 发送命令
 			await terminal.sendText(command, true);
 
-			// 显示终端
 			try {
 				await this.terminalService.revealTerminal(terminal);
 			} catch {
 				// 忽略显示失败
 			}
 
-			const elapsed = Date.now() - startTime;
-			console.log('[CommandExecution] 命令发送完成，耗时:', elapsed, 'ms');
-
 			return `命令已执行: ${command}\n\n提示: 请在终端中查看命令输出结果。`;
 		} catch (error) {
-			const elapsed = Date.now() - startTime;
-			console.error('[CommandExecution] 命令执行失败，耗时:', elapsed, 'ms', error);
 			return `执行命令失败: ${error instanceof Error ? error.message : String(error)}`;
 		}
 	}
 
 	/**
 	 * 在后台执行命令并返回结果
-	 * 注意：VSCode的终端API主要是交互式的，后台执行需要使用Node.js的child_process
-	 * 这里我们先提供一个占位实现
 	 */
 	async executeCommandSilent(command: string, cwd?: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-		// TODO: 实现后台命令执行
-		// 可能需要使用VSCode的扩展主机进程或Node.js的child_process
+		if (this.commandExecutionService) {
+			try {
+				const result = await this.commandExecutionService.execute(command, { cwd });
+				return {
+					stdout: result.stdout,
+					stderr: result.stderr,
+					exitCode: result.exitCode ?? -1
+				};
+			} catch (error) {
+				return {
+					stdout: '',
+					stderr: error instanceof Error ? error.message : String(error),
+					exitCode: -1
+				};
+			}
+		}
 		return {
 			stdout: '',
-			stderr: '后台命令执行功能暂未实现',
+			stderr: '命令执行服务不可用',
 			exitCode: -1
 		};
 	}

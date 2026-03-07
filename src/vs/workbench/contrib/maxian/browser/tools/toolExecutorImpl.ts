@@ -25,6 +25,7 @@ import { getDiagnosticsAfterEdit } from '../../common/lsp/lspDiagnostics.js';
 import { getDefinition } from '../../common/lsp/lspDefinition.js';
 import { getReferences } from '../../common/lsp/lspReferences.js';
 import { getTypeDefinition } from '../../common/lsp/lspTypeDefinition.js';
+import { ICommandExecutionService } from '../../common/services/commandExecutionService.js';
 
 /**
  * 工具执行器实现类
@@ -44,10 +45,14 @@ export class ToolExecutorImpl implements IToolExecutor {
 		searchService: ISearchService,
 		ripgrepService: IRipgrepService,
 		context: ToolExecutionContext,
-		skillService?: ISkillService
+		skillService?: ISkillService,
+		commandExecutionService?: ICommandExecutionService
 	) {
 		this.fileOperations = new FileOperationsTool(fileService, context.workspaceRoot || '');
 		this.commandExecution = new CommandExecutionTool(terminalService);
+		if (commandExecutionService) {
+			this.commandExecution.setCommandExecutionService(commandExecutionService);
+		}
 		this.searchTool = new SearchTool(searchService, ripgrepService, context.workspaceRoot || '');
 		this.context = context;
 		this.skillService = skillService;
@@ -169,12 +174,6 @@ export class ToolExecutorImpl implements IToolExecutor {
 					result = await this.executeEdit(toolUse);
 					break;
 
-				// 编辑工具（待实现）
-				case 'edit_file':
-				case 'insert_content':
-					result = `工具 ${toolUse.name} 暂未实现`;
-					break;
-
 				// P0优化：批量执行工具
 				case 'batch':
 					result = await this.executeBatch(toolUse);
@@ -188,11 +187,6 @@ export class ToolExecutorImpl implements IToolExecutor {
 				// P0优化：网页获取工具
 				case 'webfetch':
 					result = await this.executeWebFetch(toolUse);
-					break;
-
-				// P1优化：子Agent任务委托
-				case 'task':
-					result = await this.executeTask(toolUse);
 					break;
 
 				// P1优化：多文件补丁
@@ -209,17 +203,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 					result = await this.executeLspDiagnostics(toolUse);
 					break;
 
-				// LSP功能：Hover信息
-				case 'lsp_hover':
-					result = await this.executeLspHover(toolUse);
-					break;
-
-				// LSP功能：诊断信息
-				case 'lsp_diagnostics':
-					result = await this.executeLspDiagnostics(toolUse);
-					break;
-
-				// LSP功能：定义位置
+					// LSP功能：定义位置
 				case 'lsp_definition':
 					result = await this.executeLspDefinition(toolUse);
 					break;
@@ -423,24 +407,17 @@ export class ToolExecutorImpl implements IToolExecutor {
 		const editParams = validation.params!;
 		console.log(`[Maxian] 执行 edit: ${editParams.path}`);
 
-		try {
-			// 尝试读取文件
-			let content: string | null = null;
-			try {
-				const readResult = await this.fileOperations.readFile({
-					type: 'tool_use',
-					name: 'read_file',
-					params: { path: editParams.path },
-					partial: false,
-				} as any);
+		// 早期检测：old_string === new_string 是无效操作（对齐 OpenCode）
+		if (editParams.old_string !== undefined && editParams.old_string === editParams.new_string) {
+			return `<error>
+old_string 和 new_string 完全相同，这是一个无效操作。
+请检查您的修改内容，确保 new_string 与 old_string 不同。
+</error>`;
+		}
 
-				if (typeof readResult === 'string' && !readResult.startsWith('错误:')) {
-					content = readResult;
-				}
-			} catch {
-				// 文件不存在
-				content = null;
-			}
+		try {
+			// 读取文件原始内容（不带行号和XML包装，避免字符串替换失败）
+			const content = await this.fileOperations.readRawFileContent(editParams.path);
 
 			// 执行编辑
 			const result = executeEdit(content, editParams);
@@ -500,20 +477,15 @@ export class ToolExecutorImpl implements IToolExecutor {
 		console.log(`[Maxian] 执行多处编辑: ${path}, ${editOperations.length} 个操作`);
 
 		try {
-			// 读取文件内容
-			const readResult = await this.fileOperations.readFile({
-				type: 'tool_use',
-				name: 'read_file',
-				params: { path },
-				partial: false,
-			} as any);
+			// 读取文件原始内容（不带行号和XML包装，避免字符串替换失败）
+			const rawContent = await this.fileOperations.readRawFileContent(path);
 
-			if (typeof readResult !== 'string') {
+			if (rawContent === null) {
 				return `错误: 无法读取文件 ${path}`;
 			}
 
 			// 执行多处编辑
-			const result = executeMultiedit(readResult, editOperations);
+			const result = executeMultiedit(rawContent, editOperations);
 
 			if (!result.success) {
 				return formatMultieditResponse(result, path);
@@ -584,28 +556,6 @@ export class ToolExecutorImpl implements IToolExecutor {
 	}
 
 	/**
-	 * P1优化：执行子Agent任务委托
-	 */
-	private async executeTask(toolUse: ToolUse): Promise<ToolResponse> {
-		const { description, prompt, subagent_type } = toolUse.params;
-
-		if (!prompt) {
-			return '错误: task 工具需要 prompt 参数';
-		}
-
-		console.log(`[Maxian] 创建子任务: ${description || '(无描述)'}`);
-
-		// 子Agent任务委托需要更复杂的实现
-		// 这里提供基础框架，实际需要集成完整的Agent系统
-		return `子任务已创建:
-- 描述: ${description || '(无描述)'}
-- 类型: ${subagent_type || 'general'}
-- 提示: ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}
-
-⚠️ 子Agent系统尚在开发中，任务已记录但需要手动处理。`;
-	}
-
-	/**
 	 * P1优化：执行多文件补丁
 	 */
 	private async executePatch(toolUse: ToolUse): Promise<ToolResponse> {
@@ -634,22 +584,17 @@ export class ToolExecutorImpl implements IToolExecutor {
 
 		for (const patch of patchList) {
 			try {
-				// 读取文件
-				const readResult = await this.fileOperations.readFile({
-					type: 'tool_use',
-					name: 'read_file',
-					params: { path: patch.path },
-					partial: false,
-				} as any);
+				// 读取文件原始内容（不带行号和XML包装）
+				const rawContent = await this.fileOperations.readRawFileContent(patch.path);
 
-				if (typeof readResult !== 'string' || readResult.startsWith('错误:')) {
+				if (rawContent === null) {
 					results.push(`❌ ${patch.path}: 读取失败`);
 					failCount++;
 					continue;
 				}
 
 				// 执行编辑
-				let content = readResult;
+				let content = rawContent;
 				let patchSuccess = true;
 
 				for (const op of patch.operations) {

@@ -37,6 +37,11 @@ export class ToolRepetitionDetector {
 	private doomLoopDetected = false;
 	private doomLoopCount = 0;
 
+	// 同一文件反复写入检测
+	private fileWriteHistory: Array<{ file: string; tool: string; timestamp: number }> = [];
+	private readonly FILE_WRITE_LOOP_THRESHOLD = 3; // 同一文件写入3次触发检测
+	private readonly WRITE_TOOLS = new Set(['apply_diff', 'edit', 'write_to_file', 'multiedit', 'patch']);
+
 	/**
 	 * Creates a new ToolRepetitionDetector
 	 * @param limit The maximum number of identical consecutive tool calls allowed (default: 3)
@@ -66,6 +71,23 @@ export class ToolRepetitionDetector {
 
 		// P2优化：记录到历史
 		this.addToHistory(currentToolCallBlock.name, paramsHash);
+
+		// 同一文件反复写入检测（优先级最高，在连续相同检测之前）
+		if (this.WRITE_TOOLS.has(currentToolCallBlock.name)) {
+			const fileWriteResult = this.detectSameFileWriteLoop(currentToolCallBlock);
+			if (fileWriteResult.detected) {
+				this.doomLoopDetected = true;
+				this.doomLoopCount++;
+				console.warn(`[ToolRepetitionDetector] 同一文件反复写入检测触发: ${currentToolCallBlock.name}`);
+				return {
+					allowExecution: false,
+					askUser: {
+						messageKey: 'doom_loop_detected',
+						messageDetail: fileWriteResult.message,
+					},
+				};
+			}
+		}
 
 		// 连续相同检测
 		if (this.previousToolCallJson === currentToolCallJson) {
@@ -166,6 +188,41 @@ export class ToolRepetitionDetector {
 		const patternResult = this.detectLoopPattern();
 		if (patternResult.detected) {
 			return patternResult;
+		}
+
+		return { detected: false, message: '' };
+	}
+
+	/**
+	 * 检测同一文件被反复写入（apply_diff/edit/write_to_file 在同一文件上多次调用）
+	 * 这是 AI 陷入"改了又改"死循环的核心检测
+	 */
+	private detectSameFileWriteLoop(toolUse: ToolUse): { detected: boolean; message: string } {
+		// 提取目标文件路径
+		const filePath = (toolUse.params as any).path as string | undefined;
+		if (!filePath) {
+			return { detected: false, message: '' };
+		}
+
+		const now = Date.now();
+		const windowStart = now - this.TIME_WINDOW_MS;
+
+		// 记录本次写入
+		this.fileWriteHistory.push({ file: filePath, tool: toolUse.name, timestamp: now });
+		// 清理过期记录
+		this.fileWriteHistory = this.fileWriteHistory.filter(e => e.timestamp >= windowStart);
+
+		// 统计同一文件在时间窗口内的写入次数（不包含本次）
+		const previousWrites = this.fileWriteHistory.filter(
+			e => e.file === filePath && e.timestamp < now
+		);
+
+		if (previousWrites.length >= this.FILE_WRITE_LOOP_THRESHOLD) {
+			const toolNames = previousWrites.map(e => e.tool).join(' → ');
+			return {
+				detected: true,
+				message: `🔴 检测到对同一文件的重复修改！文件 "${filePath}" 在过去 ${Math.round(this.TIME_WINDOW_MS / 1000)} 秒内已被写入 ${previousWrites.length} 次（${toolNames}）。\n\n⚠️ 你陷入了"改了又改"的死循环！这通常意味着：\n1. 你的修改策略有误——已修改的内容被你重新覆盖\n2. LSP 错误并非源于这个文件，而是其他文件引用了已被删除的字段\n\n💡 立即停止修改此文件，转向：\n1. 检查引用了该文件字段的其他文件（使用 search_files 搜索字段名）\n2. 使用 read_file 确认当前文件实际内容，再决定是否需要修改\n3. 如果不确定，使用 ask_followup_question 询问用户`
+			};
 		}
 
 		return { detected: false, message: '' };
@@ -310,6 +367,7 @@ export class ToolRepetitionDetector {
 		this.previousToolCallJson = null;
 		this.consecutiveIdenticalToolCallCount = 0;
 		this.toolCallHistory = [];
+		this.fileWriteHistory = [];
 		this.doomLoopDetected = false;
 		// 不重置doomLoopCount，保留统计
 	}

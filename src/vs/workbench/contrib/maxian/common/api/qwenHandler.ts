@@ -132,10 +132,24 @@ const QWEN_MODELS: Record<string, ModelInfo> = {
 export class QwenHandler implements IApiHandler {
 	private config: ApiConfiguration;
 	private apiEndpoint = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+	private currentAbortController: AbortController | null = null;
 
 	constructor(config: ApiConfiguration) {
 		this.config = config;
 		console.log('[Maxian] QwenHandler 初始化，模型:', config.model);
+	}
+
+	/**
+	 * 中止当前请求
+	 */
+	async stopCurrentRequest(): Promise<boolean> {
+		if (this.currentAbortController) {
+			console.log('[Maxian] QwenHandler: 使用AbortController中止请求');
+			this.currentAbortController.abort();
+			this.currentAbortController = null;
+			return true;
+		}
+		return false;
 	}
 
 	/**
@@ -182,16 +196,17 @@ export class QwenHandler implements IApiHandler {
 				...(qwenTools && qwenTools.length > 0 ? { tools: qwenTools } : {})
 			};
 
-			// 发送请求
+			// 发送请求（使用 AbortController 支持用户中止）
+			const controller = new AbortController();
+			this.currentAbortController = controller;
 			const response = await fetch(this.apiEndpoint, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
 					'Authorization': `Bearer ${this.config.apiKey}`
 				},
-				body: JSON.stringify(requestBody)
-				// 移除超时限制，允许长时间流式响应
-			// signal: AbortSignal.timeout(this.config.timeout ?? 30000)
+				body: JSON.stringify(requestBody),
+				signal: controller.signal
 			});
 
 			if (!response.ok) {
@@ -209,12 +224,19 @@ export class QwenHandler implements IApiHandler {
 			yield* this.processStream(response);
 
 		} catch (error) {
+			// AbortError 不作为错误处理
+			if (error instanceof DOMException && error.name === 'AbortError') {
+				console.log('[Maxian] QwenHandler: 请求被用户中止');
+				return;
+			}
 			console.error('[Maxian] QwenHandler 错误:', error);
 			const errorChunk: ErrorStreamChunk = {
 				type: 'error',
 				error: error instanceof Error ? error.message : String(error)
 			};
 			yield errorChunk;
+		} finally {
+			this.currentAbortController = null;
 		}
 	}
 

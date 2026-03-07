@@ -50,8 +50,6 @@ TOOL SELECTION DECISION TREE
 │   ├── 完全重写（变化>50%）
 │   │   └── write_to_file
 │   │
-│   └── 在特定位置插入
-│       └── insert_content
 │
 └── 修改前必须先做
     └── read_file（了解当前内容）
@@ -83,8 +81,8 @@ TOOL SELECTION DECISION TREE
 ├── 任务完成
 │   └── attempt_completion
 │
-└── 复杂任务需要跟踪
-    └── update_todo_list
+└── 复杂任务
+    └── 先明确步骤列表再逐步执行
 \`\`\`
 
 ## 关键原则

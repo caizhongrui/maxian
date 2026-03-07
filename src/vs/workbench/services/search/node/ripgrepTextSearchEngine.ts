@@ -5,7 +5,6 @@
 
 import * as cp from 'child_process';
 import { EventEmitter } from 'events';
-import { StringDecoder } from 'string_decoder';
 import { coalesce, mapArrayOrNot } from '../../../../base/common/arrays.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { groupBy } from '../../../../base/common/collections.js';
@@ -202,16 +201,21 @@ function buildRegexParseError(lines: string[]): string {
 
 
 export class RipgrepParser extends EventEmitter {
-	private remainder = '';
+	// Use a Buffer-level accumulator instead of StringDecoder + string remainder.
+	// This avoids the race condition where StringDecoder's internal byte buffer and
+	// the string remainder buffer both buffer incomplete data independently, causing
+	// multi-byte UTF-8 characters (e.g. Chinese) to be split across chunks and
+	// producing "malformed line from rg" errors.
+	// By finding '\n' at the byte level (0x0a is always a single byte in UTF-8),
+	// we guarantee clean line boundaries before decoding to a UTF-8 string.
+	private dataBuffer: Buffer = Buffer.alloc(0);
 	private isDone = false;
 	private hitLimit = false;
-	private stringDecoder: StringDecoder;
 
 	private numResults = 0;
 
 	constructor(private maxResults: number, private root: URI, private previewOptions: ITextSearchPreviewOptions) {
 		super();
-		this.stringDecoder = new StringDecoder();
 	}
 
 	cancel(): void {
@@ -219,7 +223,14 @@ export class RipgrepParser extends EventEmitter {
 	}
 
 	flush(): void {
-		this.handleDecodedData(this.stringDecoder.end());
+		// Decode and process any remaining bytes that didn't end with a newline
+		if (this.dataBuffer.length > 0) {
+			const remaining = this.dataBuffer.toString('utf8').trim();
+			this.dataBuffer = Buffer.alloc(0);
+			if (remaining) {
+				this.handleLine(remaining);
+			}
+		}
 	}
 
 
@@ -235,33 +246,33 @@ export class RipgrepParser extends EventEmitter {
 			return;
 		}
 
-		const dataStr = typeof data === 'string' ? data : this.stringDecoder.write(data);
-		this.handleDecodedData(dataStr);
+		// Accumulate incoming data as raw bytes
+		const chunk = typeof data === 'string' ? Buffer.from(data, 'utf8') : data;
+		this.dataBuffer = this.dataBuffer.length === 0 ? chunk : Buffer.concat([this.dataBuffer, chunk]);
+
+		// Extract and process all complete lines from the buffer
+		this.processBuffer();
 	}
 
-	private handleDecodedData(decodedData: string): void {
-		// check for newline before appending to remainder
-		let newlineIdx = decodedData.indexOf('\n');
+	private processBuffer(): void {
+		// Find '\n' at the byte level (0x0a is always single-byte in UTF-8)
+		let newlineIdx = this.dataBuffer.indexOf(0x0a);
+		while (newlineIdx !== -1) {
+			// Decode the complete line from bytes to UTF-8 string in one shot,
+			// so multi-byte characters are never split across decode calls.
+			const line = this.dataBuffer.subarray(0, newlineIdx).toString('utf8').trim();
+			this.dataBuffer = this.dataBuffer.subarray(newlineIdx + 1);
 
-		// If the previous data chunk didn't end in a newline, prepend it to this chunk
-		const dataStr = this.remainder + decodedData;
+			if (line) {
+				this.handleLine(line);
+			}
 
-		if (newlineIdx >= 0) {
-			newlineIdx += this.remainder.length;
-		} else {
-			// Shortcut
-			this.remainder = dataStr;
-			return;
+			if (this.isDone) {
+				return;
+			}
+
+			newlineIdx = this.dataBuffer.indexOf(0x0a);
 		}
-
-		let prevIdx = 0;
-		while (newlineIdx >= 0) {
-			this.handleLine(dataStr.substring(prevIdx, newlineIdx).trim());
-			prevIdx = newlineIdx + 1;
-			newlineIdx = dataStr.indexOf('\n', prevIdx);
-		}
-
-		this.remainder = dataStr.substring(prevIdx);
 	}
 
 

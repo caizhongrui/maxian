@@ -98,10 +98,25 @@ export class SearchTool {
 						return `❌ 未找到匹配正则表达式 "${regex}" 的内容\n\n📁 搜索路径: "${searchPath}"${file_pattern ? '\n📄 文件模式: ' + file_pattern : ''}\n\n💡 建议：\n1. 检查正则表达式语法是否正确\n2. 或使用 codebase_search 进行关键词搜索\n3. 或使用 glob 工具按文件名搜索`;
 					}
 
-					// 返回按 mtime 排序的唯一文件路径列表（最近修改的在前，参考 OpenCode grep.ts）
-					const uniqueFiles = [...new Set(Array.from(results.values()).map(r => r.filePath))];
-					const sortedFiles = await this.sortFilesByMtime(uniqueFiles);
-					return sortedFiles.join('\n');
+					// 返回 filePath:lineNumber: content 格式（与 codebaseSearch 一致，参考 OpenCode grep.ts）
+					const resultsByFile = new Map<string, { lineNumber: number; line: string }[]>();
+					for (const { filePath, lineNumber, line } of results.values()) {
+						if (!resultsByFile.has(filePath)) {
+							resultsByFile.set(filePath, []);
+						}
+						resultsByFile.get(filePath)!.push({ lineNumber, line });
+					}
+					const sortedFiles = await this.sortFilesByMtime([...resultsByFile.keys()]);
+					const allResults: string[] = [];
+					for (const filePath of sortedFiles) {
+						const fileResults = resultsByFile.get(filePath)!;
+						for (const { lineNumber, line } of fileResults) {
+							allResults.push(`${filePath}:${lineNumber}: ${line.trim()}`);
+							if (allResults.length >= 100) { break; }
+						}
+						if (allResults.length >= 100) { break; }
+					}
+					return `找到 ${results.size} 个匹配 (显示前${allResults.length}个):\n\n${allResults.join('\n')}`;
 				}
 
 				// 只有 file_pattern，执行文件名搜索（QueryType.File）

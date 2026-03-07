@@ -153,38 +153,13 @@ export class FocusChainManager {
 	/**
 	 * 获取当前状态应该添加的提示词
 	 * 这个方法返回的提示词会被自动附加到用户消息或系统提示词中
+	 *
+	 * 性能优化：前10轮API调用不注入任何FocusChain提示，避免干扰AI的探索和执行阶段
 	 */
 	getPromptForCurrentState(): string {
-		// 1. 首次任务且应该创建清单：强制要求创建
-		if (this.checklist.length === 0 && this.shouldCreateChecklist()) {
-			console.log('[FocusChain] 需要创建任务清单');
-			return FOCUS_CHAIN_PROMPTS.initial;
-		}
-
-		// 2. API调用过多但没有清单：强制提醒
-		if (this.shouldRemindToUpdate() && this.checklist.length === 0) {
-			console.log('[FocusChain] 需要提醒创建清单');
-			return FOCUS_CHAIN_PROMPTS.reminder
-				.replace('{{apiRequestCount}}', this.apiCallCount.toString());
-		}
-
-		// 3. 所有任务完成：提示完成
-		if (this.areAllCompleted()) {
-			console.log('[FocusChain] 所有任务已完成');
-			return FOCUS_CHAIN_PROMPTS.completed
-				.replace('{{totalItems}}', this.checklist.length.toString())
-				.replace('{{currentFocusChainChecklist}}', this.formatChecklist());
-		}
-
-		// 4. 定期提醒更新（有清单但很久没更新）
-		if (this.shouldRemindToUpdate() && this.checklist.length > 0) {
-			console.log('[FocusChain] 需要提醒更新进度');
-			return FOCUS_CHAIN_PROMPTS.updateReminder
-				.replace('{{apiRequestCount}}', this.apiCallCount.toString())
-				.replace('{{completedCount}}', this.getCompletedCount().toString())
-				.replace('{{totalCount}}', this.checklist.length.toString());
-		}
-
+		// 性能优化：完全禁用FocusChain提示注入
+		// 原因：FocusChain要求AI创建任务清单会浪费round-trip，干扰正常工作流
+		// 任务进度追踪改由前端UI实现，不再通过system prompt注入
 		return '';
 	}
 

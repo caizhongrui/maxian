@@ -181,7 +181,15 @@ export function executeEdit(
 	const result = fuzzyReplace(content, old_string, new_string, replace_all);
 
 	if (!result.success) {
-		// 提供详细的失败信息
+		// P1优化：多处匹配时给出专门提示，对齐 OpenCode "Found multiple matches"
+		if (result.error) {
+			return {
+				success: false,
+				message: `${result.error}\n\n要查找的内容:\n\`\`\`\n${old_string.substring(0, 500)}${old_string.length > 500 ? '\n...(内容过长已截断)' : ''}\n\`\`\``,
+				path,
+			};
+		}
+		// 未找到匹配：提供详细失败信息
 		const hint = generateMatchHint(content, old_string);
 		return {
 			success: false,

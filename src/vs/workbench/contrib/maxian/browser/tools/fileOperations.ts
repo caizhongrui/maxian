@@ -151,6 +151,9 @@ export class FileOperationsTool {
 
 			const totalLines = allLines.length;
 
+			// P2优化：使用绝对路径（对齐 OpenCode read.ts，AI 可明确知道文件位置）
+			const displayPath = absolutePath;
+
 			// 处理行范围读取
 			if (start_line !== undefined || end_line !== undefined) {
 				const startIdx = start_line ? Math.max(0, parseInt(start_line, 10) - 1) : 0;
@@ -168,25 +171,25 @@ export class FileOperationsTool {
 				const selectedLines = allLines.slice(startIdx, endIdx);
 				const lineStart = startIdx + 1;
 
-				// 添加行号
+				// 添加行号（P2优化：新格式 "N: content"）
 				const numberedContent = addLineNumbers(selectedLines.join('\n'), lineStart);
 
-				return `<file path="${path}">\n<content lines="${lineStart}-${endIdx}">\n${numberedContent}</content>\n</file>`;
+				return `<file path="${displayPath}">\n<content lines="${lineStart}-${endIdx}">\n${numberedContent}</content>\n</file>`;
 			}
 
-			// 大文件限制（默认5000行）
-			const maxLines = 5000;
+			// 大文件限制（对齐OpenCode的2000行限制，减少token消耗）
+			const maxLines = 2000;
 			if (totalLines > maxLines) {
 				const truncatedLines = allLines.slice(0, maxLines);
 				const numberedContent = addLineNumbers(truncatedLines.join('\n'), 1);
 
-				return `<file path="${path}">\n<content lines="1-${maxLines}">\n${numberedContent}</content>\n<notice>文件共 ${totalLines} 行，仅显示前 ${maxLines} 行。使用 start_line 和 end_line 参数读取其他部分。</notice>\n</file>`;
+				return `<file path="${displayPath}">\n<content lines="1-${maxLines}">\n${numberedContent}</content>\n<notice>文件共 ${totalLines} 行，仅显示前 ${maxLines} 行。使用 start_line 和 end_line 参数读取其他部分。</notice>\n</file>`;
 			}
 
 			// 正常读取整个文件（添加行号）
 			const numberedContent = addLineNumbers(text, 1);
 
-			return `<file path="${path}">\n<content lines="1-${totalLines}">\n${numberedContent}</content>\n</file>`;
+			return `<file path="${displayPath}">\n<content lines="1-${totalLines}">\n${numberedContent}</content>\n</file>`;
 
 		} catch (error) {
 			return `错误: 读取文件失败\n路径: ${absolutePath}\n详情: ${error instanceof Error ? error.message : String(error)}`;
@@ -427,6 +430,13 @@ ${assertResult.message}
 		const startTime = Date.now();
 		const timeout = 10000; // 10秒超时
 
+		// P3优化：对齐 OpenCode ls.ts — 更多忽略目录（构建产物、依赖等）
+		const IGNORED_DIRS = new Set([
+			'node_modules', '.git', 'dist', 'build', 'out', 'target',
+			'vendor', 'bin', '.cache', 'cache', '__pycache__', '.next',
+			'.nuxt', 'coverage', '.nyc_output',
+		]);
+
 		try {
 			const uri = URI.file(absolutePath);
 			const result: string[] = [];
@@ -443,8 +453,8 @@ ${assertResult.message}
 				return false;
 			};
 
-			// 并行遍历目录
-			const listDir = async (currentUri: URI, isRecursive: boolean, depth: number = 0): Promise<void> => {
+			// P3优化：树形结构遍历（对齐 OpenCode ls.ts，使用缩进展示层级）
+			const listDir = async (currentUri: URI, isRecursive: boolean, depth: number = 0, prefix: string = ''): Promise<void> => {
 				if (count >= limit || timedOut || checkTimeout()) {
 					return;
 				}
@@ -461,31 +471,31 @@ ${assertResult.message}
 						return;
 					}
 
-					// 过滤并排序
+					// 过滤并排序（目录优先，字母序）
 					const filteredChildren = stat.children.filter(child =>
-						!child.name.startsWith('.') && child.name !== 'node_modules'
+						!child.name.startsWith('.') && !IGNORED_DIRS.has(child.name)
 					).sort((a, b) => {
 						if (a.isDirectory && !b.isDirectory) return -1;
 						if (!a.isDirectory && b.isDirectory) return 1;
 						return a.name.localeCompare(b.name);
 					});
 
-					// 先收集当前目录的所有项目
+					// P3优化：树形输出，每级缩进 2 空格
+					const indent = '  '.repeat(depth);
 					const dirs: typeof filteredChildren = [];
 					for (const child of filteredChildren) {
 						if (count >= limit || timedOut) break;
 
-						const childPath = child.resource.fsPath;
 						if (child.isDirectory) {
-							result.push(`${childPath}/`);
+							result.push(`${indent}${child.name}/`);
 							dirs.push(child);
 						} else {
-							result.push(childPath);
+							result.push(`${indent}${child.name}`);
 						}
 						count++;
 					}
 
-					// 并行递归子目录（限制并发数）
+					// 递归子目录（限制并发数）
 					if (isRecursive && dirs.length > 0 && !timedOut) {
 						const concurrency = 5; // 最多5个并发
 						for (let i = 0; i < dirs.length; i += concurrency) {
@@ -519,6 +529,40 @@ ${assertResult.message}
 			return response;
 		} catch (error) {
 			return `列出文件失败\n路径: ${absolutePath}\n详情: ${error instanceof Error ? error.message : String(error)}`;
+		}
+	}
+
+	/**
+	 * 读取文件原始内容（不带行号和XML包装）
+	 * 供内部工具（edit、multiedit）使用，以便正确做字符串替换
+	 * @param filePath 文件路径（绝对或相对）
+	 * @returns 文件原始文本，如文件不存在返回 null
+	 */
+	async readRawFileContent(filePath: string): Promise<string | null> {
+		const absolutePath = this.resolveFilePath(filePath);
+		try {
+			const uri = URI.file(absolutePath);
+			const exists = await this.fileService.exists(uri);
+			if (!exists) {
+				return null;
+			}
+			const content = await this.fileService.readFile(uri);
+			const text = content.value.toString();
+
+			// 同时记录读取时间戳（与 readFile 行为一致）
+			try {
+				const stat = await this.fileService.resolve(uri);
+				const mtime = stat.mtime ?? Date.now();
+				const size = stat.size ?? text.length;
+				trackFileRead(this.sessionId, absolutePath, mtime, size);
+			} catch (e) {
+				console.warn(`[FileOperations] readRawFileContent: 获取 stat 失败: ${absolutePath}`, e);
+			}
+
+			return text;
+		} catch (error) {
+			console.warn(`[FileOperations] readRawFileContent 失败: ${absolutePath}`, error);
+			return null;
 		}
 	}
 
@@ -591,8 +635,9 @@ ${assertResult.message}
 				return `错误: 路径不存在 "${absolutePath}"\n请检查 path 参数是否正确`;
 			}
 
-			const matchedFiles: string[] = [];
-			const limit = 200; // 匹配文件限制
+			// P2优化：记录 mtime 以便按修改时间排序（对齐 OpenCode glob.ts）
+		const matchedFiles: Array<{ path: string; mtime: number }> = [];
+			const limit = 100; // 匹配文件限制（对齐 OpenCode glob.ts limit 100）
 			let scannedCount = 0;
 			let timedOut = false;
 
@@ -648,7 +693,9 @@ ${assertResult.message}
 							const normalizedPath = relativePath.replace(/\\/g, '/');
 
 							if (pattern(normalizedPath)) {
-								matchedFiles.push(filePath);
+								// P2优化：记录 mtime 以便按修改时间排序（对齐 OpenCode glob.ts）
+								const mtime = child.mtime ?? 0;
+								matchedFiles.push({ path: filePath, mtime });
 							}
 						}
 					}
@@ -676,12 +723,16 @@ ${assertResult.message}
 				return `未找到匹配模式 "${file_pattern}" 的文件（扫描了 ${scannedCount} 个文件）`;
 			}
 
-			let response = `找到 ${matchedFiles.length} 个匹配的文件:\n${matchedFiles.join('\n')}`;
+			// P2优化：按 mtime 降序排序（最近修改的文件优先，对齐 OpenCode glob.ts）
+			matchedFiles.sort((a, b) => b.mtime - a.mtime);
+			const sortedPaths = matchedFiles.map(f => f.path);
+
+			let response = `找到 ${matchedFiles.length} 个匹配的文件:\n${sortedPaths.join('\n')}`;
 
 			if (timedOut) {
-				response = `⚠️ 搜索超时（${timeout / 1000}秒），已找到 ${matchedFiles.length} 个匹配:\n\n${matchedFiles.join('\n')}`;
+				response = `⚠️ 搜索超时（${timeout / 1000}秒），已找到 ${matchedFiles.length} 个匹配:\n\n${sortedPaths.join('\n')}`;
 			} else if (matchedFiles.length >= limit) {
-				response = `找到超过 ${limit} 个匹配，仅显示前 ${limit} 个:\n${matchedFiles.join('\n')}`;
+				response = `找到超过 ${limit} 个匹配，仅显示前 ${limit} 个（按修改时间倒序）:\n${sortedPaths.join('\n')}`;
 			}
 
 			return response;
@@ -716,6 +767,26 @@ ${assertResult.message}
 
 			if (!fileExists) {
 				return `错误: 文件不存在\n\n路径: ${absolutePath}\n\n<error_details>\n请检查文件路径是否正确。如果文件尚未创建，请先使用 write_to_file 工具创建文件。\n</error_details>`;
+			}
+
+			// P1-8: 文件时间戳校验（必须先读取文件才能修改）
+			try {
+				const stat = await this.fileService.resolve(uri);
+				const currentMtime = stat.mtime ?? Date.now();
+				const currentSize = stat.size ?? 0;
+
+				const assertResult = assertFileWritable(this.sessionId, absolutePath, currentMtime, currentSize);
+				if (!assertResult.success) {
+					return `<error>
+${assertResult.message}
+
+提示：这是一个安全保护机制，防止覆盖您或其他程序对文件的修改。
+请先使用 read_file 工具读取文件内容后再应用 diff。
+</error>`;
+				}
+			} catch (e) {
+				console.warn(`[FileOperations] 时间戳校验失败: ${absolutePath}`, e);
+				// 校验失败不阻止写入，只记录警告
 			}
 
 			// 读取原始文件内容
@@ -756,28 +827,42 @@ ${assertResult.message}
 				return `⚠️ 文件内容未发生变化: ${absolutePath}\n\n这通常意味着：\n1. 修改已经存在于文件中\n2. 或者SEARCH块没有匹配到任何内容\n\n💡 建议：\n- 使用 read_file 查看当前文件状态\n- 如果问题已解决，使用 attempt_completion 完成任务\n- 如果问题未解决，使用不同的SEARCH内容重新尝试\n\n⚠️ 请不要重复应用相同的diff，这会浪费时间和资源！`;
 			}
 
-			const buffer = VSBuffer.fromString(newContent);
-			await this.fileService.writeFile(uri, buffer);
-
-			// 检查是否有部分Diff块失败
-			let partialFailureHint = '';
-			if (diffResult.failParts && diffResult.failParts.length > 0) {
-				const failedCount = diffResult.failParts.filter(p => !p.success).length;
-				if (failedCount > 0) {
-					partialFailureHint = `注意: ${failedCount} 个diff块未能应用。请使用 read_file 检查文件内容并重新尝试。\n\n`;
-				}
-			}
-
-			// 检查是否只有单个SEARCH/REPLACE块
+			// 检查是否只有单个SEARCH/REPLACE块（提前计算，在锁外）
 			const searchBlockCount = (diffContent.match(/<<<<<<< SEARCH/g) || []).length;
-			const singleBlockNotice = searchBlockCount === 1
-				? '\n<notice>提示: 如果需要在此文件中进行多个相关更改，建议在单个 apply_diff 调用中使用多个 SEARCH/REPLACE 块，这样更高效。</notice>'
-				: '';
 
-			// P2-12: 获取 LSP 诊断
-			const diagnosticsAppendix = await getDiagnosticsAfterEdit(absolutePath);
+			// 写入文件（使用文件锁确保串行写入）
+			const buffer = VSBuffer.fromString(newContent);
+			return await withFileLock(absolutePath, async () => {
+				await this.fileService.writeFile(uri, buffer);
 
-			return `${partialFailureHint}成功应用diff到文件: ${absolutePath}\n\n已应用 ${searchBlockCount} 个diff块${singleBlockNotice}${diagnosticsAppendix}`;
+				// P1-8: 写入后更新时间戳记录
+				try {
+					const newStat = await this.fileService.resolve(uri);
+					const newMtime = newStat.mtime ?? Date.now();
+					const newSize = newStat.size ?? newContent.length;
+					updateFileAfterWrite(this.sessionId, absolutePath, newMtime, newSize);
+				} catch (e) {
+					console.warn(`[FileOperations] 更新时间戳记录失败: ${absolutePath}`, e);
+				}
+
+				// 检查是否有部分Diff块失败
+				let partialFailureHint = '';
+				if (diffResult.failParts && diffResult.failParts.length > 0) {
+					const failedCount = diffResult.failParts.filter(p => !p.success).length;
+					if (failedCount > 0) {
+						partialFailureHint = `注意: ${failedCount} 个diff块未能应用。请使用 read_file 检查文件内容并重新尝试。\n\n`;
+					}
+				}
+
+				const singleBlockNotice = searchBlockCount === 1
+					? '\n<notice>提示: 如果需要在此文件中进行多个相关更改，建议在单个 apply_diff 调用中使用多个 SEARCH/REPLACE 块，这样更高效。</notice>'
+					: '';
+
+				// P2-12: 获取 LSP 诊断
+				const diagnosticsAppendix = await getDiagnosticsAfterEdit(absolutePath);
+
+				return `${partialFailureHint}成功应用diff到文件: ${absolutePath}\n\n已应用 ${searchBlockCount} 个diff块${singleBlockNotice}${diagnosticsAppendix}`;
+			});
 		} catch (error) {
 			return `应用diff失败: ${error instanceof Error ? error.message : String(error)}`;
 		}

@@ -124,6 +124,8 @@ import { IDatabaseMainService } from '../../workbench/contrib/database/electron-
 import { DatabaseServiceImpl } from '../../workbench/contrib/database/node/databaseServiceImpl.js';
 import { IRepoMapService } from '../../workbench/contrib/maxian/common/repomap/repoMapService.js';
 import { RepoMapService } from '../../workbench/contrib/maxian/node/repomap/repoMapServiceImpl.js';
+import { ICommandExecutionService } from '../../workbench/contrib/maxian/common/services/commandExecutionService.js';
+import { CommandExecutionServiceImpl } from '../../workbench/contrib/maxian/node/commandExecutionServiceImpl.js';
 import { ISkillService } from '../../workbench/contrib/skills/common/skillService.js';
 import { SkillServiceImpl } from '../../workbench/contrib/skills/node/skillServiceImpl.js';
 
@@ -1132,6 +1134,9 @@ export class CodeApplication extends Disposable {
 		// RepoMap
 		services.set(IRepoMapService, new SyncDescriptor(RepoMapService, undefined, true));
 
+		// 码弦 Agent 命令执行服务
+		services.set(ICommandExecutionService, new CommandExecutionServiceImpl());
+
 		// Skills System
 		services.set(ISkillService, new SyncDescriptor(SkillServiceImpl, undefined, true));
 
@@ -1270,6 +1275,10 @@ export class CodeApplication extends Disposable {
 		// RepoMap
 		const repoMapChannel = ProxyChannel.fromService(accessor.get(IRepoMapService), disposables);
 		mainProcessElectronServer.registerChannel('repoMap', repoMapChannel);
+
+		// 码弦 Agent 命令执行
+		const maxianCommandExecutionChannel = ProxyChannel.fromService(accessor.get(ICommandExecutionService), disposables);
+		mainProcessElectronServer.registerChannel('maxianCommandExecution', maxianCommandExecutionChannel);
 
 		// Skills System
 		this.logService.info('[App] Getting ISkillService...');

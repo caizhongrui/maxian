@@ -16,6 +16,7 @@
  */
 
 import { ToolResponse } from './toolTypes.js';
+import { fuzzyReplace } from '../diff/fuzzyMatch.js';
 
 /**
  * 单个编辑操作
@@ -166,45 +167,36 @@ export function executeMultiedit(content: string, edits: EditOperation[]): Multi
 			};
 		}
 
-		// 计算匹配次数
-		let matchCount = 0;
-		let searchIndex = 0;
-		while ((searchIndex = currentContent.indexOf(edit.oldString, searchIndex)) !== -1) {
-			matchCount++;
-			searchIndex += edit.oldString.length;
-		}
+		// 使用 fuzzyReplace 执行容错匹配替换（对齐 OpenCode multiedit.ts 调用 EditTool 的方式）
+		const fuzzyResult = fuzzyReplace(currentContent, edit.oldString, edit.newString, edit.replaceAll ?? false);
 
-		if (matchCount === 0) {
+		if (!fuzzyResult.success || fuzzyResult.matchCount === 0) {
+			const errMsg = fuzzyResult.error
+				? `${fuzzyResult.error}`
+				: `在文件中未找到匹配的内容 "${edit.oldString.substring(0, 30)}..."`;
 			details.push({
 				index: i,
 				success: false,
 				oldString: edit.oldString.substring(0, 50),
 				matchCount: 0,
-				error: '在文件中未找到匹配的内容',
+				error: errMsg,
 			});
 			return {
 				success: false,
 				successCount,
 				totalCount: edits.length,
-				error: `编辑 #${i + 1} 失败: 未找到匹配内容 "${edit.oldString.substring(0, 30)}..."`,
+				error: `编辑 #${i + 1} 失败: ${errMsg}`,
 				details,
 			};
 		}
 
-		// 执行替换
-		if (edit.replaceAll) {
-			// 替换所有匹配项
-			currentContent = currentContent.split(edit.oldString).join(edit.newString);
-		} else {
-			// 只替换第一个匹配项
-			currentContent = currentContent.replace(edit.oldString, edit.newString);
-		}
+		currentContent = fuzzyResult.result;
 
 		details.push({
 			index: i,
 			success: true,
 			oldString: edit.oldString.substring(0, 50),
-			matchCount: edit.replaceAll ? matchCount : 1,
+			matchCount: fuzzyResult.matchCount,
 		});
 		successCount++;
 	}
@@ -248,7 +240,7 @@ export const MULTIEDIT_TOOL_DESCRIPTION = `## multiedit
 
 **规则**：
 - 编辑按顺序执行，每个基于前一个的结果
-- oldString 必须与文件内容精确匹配
+- oldString 支持容错匹配（空格/缩进轻微不一致也能匹配）
 - 最多支持 ${MULTIEDIT_CONFIG.MAX_EDITS} 个编辑操作
 
 **参数**：

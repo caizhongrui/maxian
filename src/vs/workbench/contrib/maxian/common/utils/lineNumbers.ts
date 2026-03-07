@@ -5,9 +5,11 @@
 
 // Ported from Kilocode: src/integrations/misc/extract-text.ts
 // Adapted for tianhe-zhikai-ide: Line number utilities for file content
+// P2优化：对齐 OpenCode read.ts 行号格式 "N: content"（去除填充空格）
 
 /**
  * Adds line numbers to content with proper formatting
+ * P2优化：对齐 OpenCode 格式 `{lineNum}: {line}`（无填充，冒号分隔）
  *
  * @param content The content to add line numbers to
  * @param startLine The starting line number (default: 1)
@@ -15,10 +17,10 @@
  */
 export function addLineNumbers(content: string, startLine: number = 1): string {
 	// If content is empty, return empty string - empty files should not have line numbers
-	// If content is empty but startLine > 1, return "startLine | " because we know the file is not empty
+	// If content is empty but startLine > 1, return "startLine: " because we know the file is not empty
 	// but the content is empty at that line offset
 	if (content === '') {
-		return startLine === 1 ? '' : `${startLine} | \n`;
+		return startLine === 1 ? '' : `${startLine}: \n`;
 	}
 
 	// Split into lines and handle trailing line feeds (\n)
@@ -28,36 +30,36 @@ export function addLineNumbers(content: string, startLine: number = 1): string {
 		lines.pop();
 	}
 
-	const maxLineNumberWidth = String(startLine + lines.length - 1).length;
+	// P2优化：使用 "N: content" 格式（对齐 OpenCode，无填充空格）
 	const numberedContent = lines
-		.map((line, index) => {
-			const lineNumber = String(startLine + index).padStart(maxLineNumberWidth, ' ');
-			return `${lineNumber} | ${line}`;
-		})
+		.map((line, index) => `${startLine + index}: ${line}`)
 		.join('\n');
 
 	return numberedContent + '\n';
 }
 
 /**
- * Checks if every line in the content has line numbers prefixed (e.g., "1 | content" or "123 | content")
- * Line numbers must be followed by a single pipe character (not double pipes)
+ * Checks if every line in the content has line numbers prefixed
+ * P2优化：对齐新格式 "N: content"
  *
  * @param content The content to check
  * @returns True if every line has line numbers, false otherwise
  */
 export function everyLineHasLineNumbers(content: string): boolean {
-	const lines = content.split(/\r?\n/); // Handles both CRLF and LF line endings
-	return lines.length > 0 && lines.every((line) => /^\s*\d+\s+\|(?!\|)/.test(line));
+	const lines = content.split(/\r?\n/);
+	// 兼容新格式 "N: " 和旧格式 "N | "（避免 AI 输出旧格式时剥离失败）
+	return lines.length > 0 && lines.every((line) =>
+		/^\d+: /.test(line) || /^\s*\d+\s+\|(?!\|)/.test(line)
+	);
 }
 
 /**
  * Strips line numbers from content while preserving the actual content.
+ * P2优化：对齐新格式 "N: content"，同时保留旧格式 "N | content" 兼容
  *
  * @param content The content to process
- * @param aggressive When false (default): Only strips lines with clear number patterns like "123 | content"
- *                   When true: Uses a more lenient pattern that also matches lines with just a pipe character,
- *                   which can be useful when LLMs don't perfectly format the line numbers in diffs
+ * @param aggressive When false (default): Only strips lines with clear number patterns
+ *                   When true: Uses a more lenient pattern
  * @returns The content with line numbers removed
  */
 export function stripLineNumbers(content: string, aggressive: boolean = false): string {
@@ -66,9 +68,16 @@ export function stripLineNumbers(content: string, aggressive: boolean = false): 
 
 	// Process each line
 	const processedLines = lines.map((line) => {
-		// Match line number pattern and capture everything after the pipe
-		const match = aggressive ? line.match(/^\s*(?:\d+\s)?\|\s(.*)$/) : line.match(/^\s*\d+\s+\|(?!\|)\s?(.*)$/);
-		return match ? match[1] : line;
+		// 优先匹配新格式 "N: content"
+		const newFmtMatch = line.match(/^(\d+): (.*)$/);
+		if (newFmtMatch) {
+			return newFmtMatch[2];
+		}
+		// 兼容旧格式 "N | content"
+		const oldFmtMatch = aggressive
+			? line.match(/^\s*(?:\d+\s)?\|\s(.*)$/)
+			: line.match(/^\s*\d+\s+\|(?!\|)\s?(.*)$/);
+		return oldFmtMatch ? oldFmtMatch[1] : line;
 	});
 
 	// Join back with original line endings (carriage return + line feed or just line feed)

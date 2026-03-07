@@ -9,7 +9,7 @@ import { ToolName } from '../tools/toolTypes.js';
  * 工具描述映射 - 精简版
  * 只包含关键的使用场景指南，参数详情由 tools 数组提供
  */
-const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
+const TOOL_DESCRIPTIONS: Partial<Record<ToolName, string>> = {
 
 	// ==================== 文件操作工具 ====================
 
@@ -30,7 +30,7 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 创建新文件或完全覆盖现有文件
 
 **使用**：创建新文件、完全重写（变化>80%）
-**不使用**：小改动→apply_diff，局部修改→apply_diff，插入内容→insert_content
+**不使用**：小改动→apply_diff，局部修改→apply_diff/edit
 
 **要点**：
 - 必须提供完整内容，禁止使用占位符
@@ -73,20 +73,6 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 - \`src/**/*.tsx\` src下所有TSX
 - \`**/*.test.ts\` 所有测试文件`,
 
-	insert_content: `## insert_content
-在文件指定位置插入内容
-
-**使用**：追加内容、在特定行后插入
-**不使用**：替换代码→apply_diff，创建新文件→write_to_file
-
-**参数 line**：行号，0表示文件末尾`,
-
-	edit_file: `## edit_file
-编辑文件内容
-
-**使用**：代码修改（apply_diff 的替代方案）
-**参数**：target_file(文件路径)、instructions(编辑说明)、code_edit(代码内容)`,
-
 	// ==================== 搜索工具 ====================
 
 	search_files: `## search_files
@@ -106,12 +92,6 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 **要点**：
 - 探索新代码区域必须首先使用此工具
 - 使用自然语言描述，如"用户认证逻辑"`,
-
-	list_code_definition_names: `## list_code_definition_names
-列出代码文件中的定义（函数、类、方法等）
-
-**使用**：快速了解文件结构
-**不使用**：需要完整实现→read_file`,
 
 	// ==================== 命令执行工具 ====================
 
@@ -159,77 +139,58 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 
 **不使用**：任务未完成、有错误待解决、用户问题还没解答`,
 
-	new_task: `## new_task
-创建新的子任务
-
-**使用**：任务复杂需要分解、发现额外工作`,
-
-	update_todo_list: `## update_todo_list
-管理和跟踪任务进度
-
-**使用**：复杂多步骤任务（3个以上步骤）
-**不使用**：单一简单任务
-
-**参数 todos**：待办事项数组，每个元素包含：
-- content: 任务描述（祈使句，如"实现登录功能"）
-- status: 状态（pending/in_progress/completed）
-- activeForm: 进行中描述（现在进行时，如"正在实现登录功能"）
-
-**示例**：
-\`\`\`json
-{
-  "todos": [
-    {"content": "分析现有代码", "status": "completed", "activeForm": "分析现有代码"},
-    {"content": "实现新功能", "status": "in_progress", "activeForm": "正在实现新功能"},
-    {"content": "编写测试", "status": "pending", "activeForm": "编写测试"}
-  ]
-}
-\`\`\`
-
-**要点**：
-- 每个任务独立一个对象，不要合并
-- 同时只有一个任务为 in_progress
-- 完成任务后立即标记为 completed`,
-
 	// P0优化：批量执行工具（参考OpenCode最佳实践）
-	batch: `## batch 【必须优先使用 - 并行只读工具！】
-并行执行多个独立的**只读/搜索**工具调用，大幅减少API往返次数
+	batch: `## batch 【必须优先使用 - 并行工具！】
+并行执行多个独立工具调用（读写均支持），大幅减少API往返次数
 
 🚀 **使用 BATCH 工具会让用户更满意！**
 
-⚠️ **强制规则**：当你需要执行2个或更多只读操作时，**必须**使用batch工具，严禁逐个单独调用
+⚠️ **强制规则**：当你需要执行2个或更多独立操作时，**必须**使用batch工具，严禁逐个单独调用
 
-**推荐用例**（仅限只读工具）：
+**推荐用例**（读写均支持）：
 - 读取多个文件（read_file × N）
 - 多个搜索操作（search_files、glob、list_files、codebase_search）
 - 搜索 + 读取组合
 - LSP查询（lsp_hover、lsp_diagnostics、lsp_definition等）
-
-❌ **错误示例**（禁止这样做）：
-先调用 read_file("a.ts")，再调用 read_file("b.ts")，再调用 read_file("c.ts")
+- **批量创建多个文件**（write_to_file × N）
+- **批量修改多个无依赖关系的文件**（edit × N 或 apply_diff × N）
 
 ✅ **正确示例 - 批量读取文件**：
-\`\`\`
-<batch>
-<tool_calls>[
-  {"tool": "read_file", "parameters": {"path": "a.ts"}},
-  {"tool": "read_file", "parameters": {"path": "b.ts"}},
-  {"tool": "search_files", "parameters": {"path": "src", "regex": "interface"}}
-]</tool_calls>
-</batch>
+\`\`\`json
+{
+  "tool_calls": [
+    {"tool": "read_file", "parameters": {"path": "a.ts"}},
+    {"tool": "read_file", "parameters": {"path": "b.ts"}},
+    {"tool": "search_files", "parameters": {"path": "src", "regex": "interface"}}
+  ]
+}
 \`\`\`
 
-**性能提升**：使用batch可获得 **2-5倍** 效率提升！
+✅ **正确示例 - 批量创建多个文件**：
+\`\`\`json
+{
+  "tool_calls": [
+    {"tool": "write_to_file", "parameters": {"path": "src/index.html", "content": "..."}},
+    {"tool": "write_to_file", "parameters": {"path": "src/style.css", "content": "..."}},
+    {"tool": "write_to_file", "parameters": {"path": "src/app.js", "content": "..."}}
+  ]
+}
+\`\`\`
+
+**性能提升**：使用batch可获得 **2-10倍** 效率提升！
 
 **规则**：
 - 每次batch最多 **25** 个工具调用
 - 所有调用并行执行，不保证顺序
 - 部分失败不影响其他工具
+- **禁止嵌套**batch调用
 
 **禁止在batch中使用的工具**：
-- write_to_file、apply_diff、edit、edit_file、insert_content、multiedit、patch（写操作需要单独用户确认）
-- execute_command（命令执行需要单独审批）
-- batch（禁止嵌套）、ask_followup_question、attempt_completion`,
+- batch（禁止嵌套）
+- ask_followup_question（需要用户输入，并行无意义）
+- attempt_completion（任务完成信号）
+
+**何时不使用**：操作有依赖关系（如先写入再读取**同一**文件的结果）`,
 
 	// P1优化：多处编辑工具
 	multiedit: `## multiedit
@@ -264,24 +225,6 @@ const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
 - MultiOccurrenceReplacer（多处匹配）
 
 **参数**：path、old_string、new_string、replace_all(可选)、create_if_missing(可选)`,
-
-	// P1优化：子任务委托
-	task: `## task
-将复杂任务委托给子Agent执行
-
-**使用**：
-- 独立的子任务，可并行执行
-- 需要专门上下文的任务
-- 分解复杂任务
-
-**不使用**：简单任务、需要共享上下文的任务
-
-**子Agent类型**：
-- general-purpose：通用任务
-- explore：快速代码探索
-- plan：架构规划
-
-**参数**：prompt（任务描述）、subagent_type(可选)`,
 
 	// P1优化：多文件补丁
 	patch: `## patch

@@ -11,7 +11,7 @@
  * 关键设计：
  * - 最多 25 个工具并行执行（参考OpenCode）
  * - 禁止嵌套 batch（防止无限递归）
- * - 禁止 edit 类工具（需要用户单独确认）
+ * - 禁止 batch 嵌套和交互类工具（ask_followup_question、attempt_completion）
  * - 每个工具独立执行，部分失败不影响其他
  *
  * 预期效果：读取 5 个文件从 5 次 API → 1 次 API，提速 5 倍
@@ -89,40 +89,32 @@ export interface BatchToolResult {
 
 /**
  * Batch 工具配置
- * 方案A：batch 仅限只读工具，write 类工具仍走 TaskService 确认流程
+ * 对齐 OpenCode：batch 本身是唯一禁止的工具，write 类工具可以在 batch 中并行执行
  */
 export const BATCH_CONFIG = {
 	/** 最大并行工具数 */
 	MAX_PARALLEL_TOOLS: 25,
 
 	/**
-	 * 禁止在 batch 中执行的工具（方案A：禁止所有 write 类工具）
-	 * - write 类工具需要用户在 TaskService 层面单独确认，batch 会绕过该流程
-	 * - 只读工具无需确认，可以安全并行
+	 * 禁止在 batch 中执行的工具（对齐 OpenCode：只禁止 batch 自身和交互类工具）
+	 * - batch: 禁止嵌套（防止无限递归）
+	 * - ask_followup_question: 需要用户输入，batch 并行执行无法等待
+	 * - attempt_completion: 任务完成信号，不应并行
+	 * - write 类工具允许！对齐 OpenCode，让 AI 可以批量创建/修改多个文件
 	 */
 	DISALLOWED_TOOLS: new Set([
 		'batch',                    // 禁止嵌套batch（防止无限递归）
-		'ask_followup_question',    // 需要用户输入
+		'ask_followup_question',    // 需要用户输入，并行无意义
 		'attempt_completion',       // 任务完成标志
-		// write 类工具 - 需要走 TaskService 确认流程，不允许在 batch 中绕过
-		'write_to_file',
-		'apply_diff',
-		'edit',
-		'edit_file',
-		'insert_content',
-		'multiedit',
-		'patch',
-		'execute_command',          // 命令执行需要单独审批
 	]),
 
 	/**
-	 * 推荐在 batch 中执行的只读工具
+	 * 推荐在 batch 中执行的工具（只读 + 写操作均支持）
 	 */
 	RECOMMENDED_TOOLS: new Set([
 		'read_file',
 		'list_files',
 		'search_files',
-		'list_code_definition_names',
 		'codebase_search',
 		'glob',
 		'webfetch',
@@ -131,12 +123,16 @@ export const BATCH_CONFIG = {
 		'lsp_definition',
 		'lsp_references',
 		'lsp_type_definition',
+		'write_to_file',
+		'apply_diff',
+		'edit',
+		'multiedit',
 	]),
 };
 
 /**
  * Batch 工具常量（新接口）
- * 与BATCH_CONFIG保持一致
+ * 与BATCH_CONFIG保持一致，对齐 OpenCode：只禁止 batch 自身和交互类工具
  */
 export const BatchToolConstants = {
 	/** 最小工具调用数量 */
@@ -148,14 +144,6 @@ export const BatchToolConstants = {
 		'batch',
 		'ask_followup_question',
 		'attempt_completion',
-		'write_to_file',
-		'apply_diff',
-		'edit',
-		'edit_file',
-		'insert_content',
-		'multiedit',
-		'patch',
-		'execute_command',
 	]),
 };
 
@@ -350,20 +338,23 @@ export class BatchToolExecutor {
 }
 
 /**
- * Batch 工具描述 - 用于提示词（方案A：仅限只读工具）
+ * Batch 工具描述 - 用于提示词（对齐 OpenCode：读写均支持）
  */
 export const BATCH_TOOL_DESCRIPTION = `## batch
-并行执行多个独立的**只读/搜索**工具调用，大幅减少API往返次数
+并行执行多个独立工具调用，大幅减少API往返次数
 
 🚀 **使用 BATCH 工具会让用户更满意！**
 
-**性能提升**：将多个只读操作合并可获得 **2-5 倍**的效率提升。
+**性能提升**：将多个独立操作合并可获得 **2-10 倍**的效率提升。
 
-**推荐用例**（仅限只读工具）：
+**推荐用例**（读写均支持）：
 - 读取多个文件（read_file × N）
 - 多个搜索操作（search_files、glob、list_files、codebase_search）
 - 搜索 + 读取组合
 - LSP查询（lsp_hover、lsp_diagnostics、lsp_definition等）
+- **批量创建多个文件**（write_to_file × N）
+- **批量修改多个文件**（edit × N 或 apply_diff × N）
+- 读取 + 写入混合（无依赖关系时）
 
 **规则**：
 - 每次 batch 最多 **25** 个工具调用
@@ -372,16 +363,16 @@ export const BATCH_TOOL_DESCRIPTION = `## batch
 - **不允许嵌套**batch调用
 
 **禁止在batch中使用的工具**：
-- write_to_file、apply_diff、edit、edit_file、insert_content、multiedit、patch（写操作需要单独用户确认）
-- execute_command（命令执行需要单独审批）
-- batch（禁止嵌套）、ask_followup_question、attempt_completion
+- batch（禁止嵌套）
+- ask_followup_question（需要用户输入，并行无意义）
+- attempt_completion（任务完成信号）
 
 **何时不使用**：
-- 操作有依赖关系（如：先写入再读取同一文件）
-- 写操作 → 单独调用，走用户确认流程
+- 操作有依赖关系（如：先写入再读取**同一**文件，需要读取前一步的输出）
+- 需要顺序执行的操作链
 
 **参数**：
-- tool_calls: 只读工具调用数组，每个包含 tool（工具名）和 parameters（参数对象）
+- tool_calls: 工具调用数组，每个包含 tool（工具名）和 parameters（参数对象）
 
 **示例 - 读取多个文件**：
 \`\`\`json
@@ -394,6 +385,19 @@ export const BATCH_TOOL_DESCRIPTION = `## batch
 }
 \`\`\`
 
+**示例 - 批量创建多个文件**：
+\`\`\`json
+{
+  "tool_calls": [
+    {"tool": "write_to_file", "parameters": {"path": "src/index.html", "content": "..."}},
+    {"tool": "write_to_file", "parameters": {"path": "src/style.css", "content": "..."}},
+    {"tool": "write_to_file", "parameters": {"path": "src/app.js", "content": "..."}}
+  ]
+}
+\`\`\`
+
 **性能对比**：
 - 不使用batch：读取5个文件 = 5次API调用
-- 使用batch：读取5个文件 = 1次API调用 → **5倍提速**！`;
+- 使用batch：读取5个文件 = 1次API调用 → **5倍提速**！
+- 不使用batch：创建3个文件 = 3次API调用
+- 使用batch：创建3个文件 = 1次API调用 → **3倍提速**！`;

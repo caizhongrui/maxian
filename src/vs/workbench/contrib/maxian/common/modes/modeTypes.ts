@@ -38,7 +38,6 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 			'read_file',
 			'search_files',
 			'list_files',
-			'list_code_definition_names',
 			'codebase_search',
 			'glob',
 			'batch'  // P0优化：批量并行执行只读工具
@@ -47,9 +46,7 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 	edit: {
 		tools: [
 			'apply_diff',
-			'edit_file',
 			'write_to_file',
-			'insert_content',
 			'edit',       // P0优化：基于old_string/new_string的容错替换
 			'multiedit',  // P1优化：单文件多处编辑
 			'patch'       // P1优化：多文件批量操作
@@ -74,7 +71,7 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 		]
 	},
 	agent: {
-		tools: ['task']  // P1优化：子Agent委托
+		tools: []  // 子Agent委托（暂未实现）
 	},
 	skills: {
 		tools: ['skill']  // Skills系统：按需加载专业知识
@@ -88,9 +85,7 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 export const ALWAYS_AVAILABLE_TOOLS = [
 	'ask_followup_question',
 	'attempt_completion',
-	'switch_mode',
-	'new_task',
-	'update_todo_list'
+	'switch_mode'
 ] as const;
 
 /**
@@ -134,23 +129,19 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 
 2. 向用户提出澄清问题，以更好地理解任务。
 
-3. 一旦你对用户的请求有了更多了解，将任务分解为清晰、可操作的步骤，并使用 update_todo_list 工具创建待办列表。每个待办事项应该：
+3. 一旦你对用户的请求有了更多了解，将任务分解为清晰、可操作的步骤。将计划写入markdown文件（例如 plan.md 或 todo.md），每个待办事项应该：
    - 具体且可操作
    - 按逻辑执行顺序列出
    - 专注于单一、明确的结果
    - 清晰到其他模式可以独立执行
 
-   **注意**：如果 update_todo_list 工具不可用，请将计划写入markdown文件（例如 plan.md 或 todo.md）。
+4. 当你收集更多信息或发现新需求时，更新计划以反映对需要完成工作的当前理解。
 
-4. 当你收集更多信息或发现新需求时，更新待办列表以反映对需要完成工作的当前理解。
-
-5. 询问用户是否满意这个计划，或者是否想要进行任何更改。把这看作是一个头脑风暴会议，你可以讨论任务并完善待办列表。
+5. 询问用户是否满意这个计划，或者是否想要进行任何更改。把这看作是一个头脑风暴会议，你可以讨论任务并完善计划。
 
 6. 如果有助于阐明复杂的工作流程或系统架构，请包含Mermaid图表。
 
-7. 使用 new_task 工具请求用户切换到另一个模式来实施解决方案。
-
-**重要**：专注于创建清晰、可操作的待办列表，而不是冗长的markdown文档。使用待办列表作为主要规划工具来跟踪和组织需要完成的工作。`
+**重要**：专注于创建清晰、可操作的计划，而不是冗长的文档。`
 	},
 	{
 		slug: 'code',

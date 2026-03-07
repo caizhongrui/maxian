@@ -212,6 +212,9 @@ import './contrib/database/electron-sandbox/databaseService.js';
 // RepoMap Service (P1优化：PageRank智能排序)
 import './contrib/maxian/electron-sandbox/repoMapService.js';
 
+// 码弦 Agent 命令执行服务（IPC 代理注册）
+import './contrib/maxian/electron-sandbox/commandExecutionService.js';
+
 // Skills System (按需加载专业领域知识)
 import './contrib/skills/electron-sandbox/skills.contribution.js';
 

@@ -47,6 +47,7 @@ import { ILspTypeDefinitionService, globalLspTypeDefinitionHandler } from '../co
 import { ITextFileService } from '../../../services/textfile/common/textfiles.js';
 import { AutoDiagnosticInjector, IDiagnosticInjectionEvent } from './lspIntegration/AutoDiagnosticInjector.js';
 import { SteeringService } from '../common/steering/SteeringService.js';
+import { ICommandExecutionService } from '../common/services/commandExecutionService.js';
 
 export const IMaxianService = createDecorator<IMaxianService>('maxianService');
 
@@ -476,7 +477,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 		@ILspReferencesService private readonly lspReferencesService: ILspReferencesService,
 		@ILspTypeDefinitionService private readonly lspTypeDefinitionService: ILspTypeDefinitionService,
 		@ITextFileService private readonly textFileService: ITextFileService,
-		@ITerminalProfileService private readonly terminalProfileService: ITerminalProfileService
+		@ITerminalProfileService private readonly terminalProfileService: ITerminalProfileService,
+		@ICommandExecutionService private readonly commandExecutionService: ICommandExecutionService
 	) {
 		super();
 		this.apiFactory = new ApiFactory(this.configurationService);
@@ -601,7 +603,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 			{
 				cwd: workspaceRoot,
 				workspaceRoot: workspaceRoot
-			}
+			},
+			this.skillService,
+			this.commandExecutionService
 		);
 
 		console.log('[Maxian] 工具执行器已初始化，工作区:', workspaceRoot);
@@ -1018,25 +1022,22 @@ export class MaxianService extends Disposable implements IMaxianService {
 			const recentlyModifiedFiles = this.fileTracker?.getAndClearRecentlyModifiedFiles() || [];
 			const environmentDetails = await this.environmentTracker.generateEnvironmentDetails(recentlyModifiedFiles);
 
-			// 🚀 性能优化：并行执行 RepoMap 生成和 AI 关键词翻译
-			// 这两个操作可以独立进行，并行执行可节省约40%启动时间
 			const parallelStart = Date.now();
 
-			// 启动 RepoMap 生成（如果需要）
-			const repoMapPromise = (async () => {
-				if (this.repoMapService && this.shouldGenerateRepoMap(recentlyModifiedFiles)) {
-					return await this.generateRepoMap(workspaceRoot);
-				} else if (this.lastRepoMap) {
-					return this.lastRepoMap;
-				}
-				return '';
-			})();
+			// 1. 同步提取关键词（零延迟，无需AI调用）
+			// 这些关键词会作为 mentionedIdents 传入 RepoMap，使 PageRank 个性化排序，
+			// 让相关文件浮到顶部，预加载命中正确文件，减少 AI 的探索轮数
+			const keywords = this.extractKeywordsSync(message);
+			console.log('[Maxian] 同步提取关键词:', keywords);
 
-			// 同时启动 AI 关键词翻译（不依赖 RepoMap）
-			const keywordsPromise = this.extractKeywordsWithAI(message);
+			// 2. 生成 RepoMap（传入关键词，个性化PageRank排序）
+			let repoMap = '';
+			if (this.repoMapService && this.shouldGenerateRepoMap(recentlyModifiedFiles)) {
+				repoMap = await this.generateRepoMap(workspaceRoot, keywords);
+			} else if (this.lastRepoMap) {
+				repoMap = this.lastRepoMap;
+			}
 
-			// 等待两者完成
-			const [repoMap, keywords] = await Promise.all([repoMapPromise, keywordsPromise]);
 			console.log(`[Maxian] 并行阶段完成，耗时: ${Date.now() - parallelStart}ms`);
 
 			// 🚀 使用已翻译的关键词进行预加载（此时 RepoMap 已就绪）
@@ -1670,50 +1671,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
-			// 9. edit_file - 编辑文件（查找替换）
-			{
-				name: 'edit_file',
-				description: '编辑文件内容（查找替换）。oldText要足够独特以准确匹配。',
-				parameters: {
-					type: 'object',
-					properties: {
-						target_file: { type: 'string', description: '文件路径' },
-						instructions: { type: 'string', description: '编辑说明' },
-						code_edit: { type: 'string', description: '代码编辑内容' }
-					},
-					required: ['target_file', 'instructions', 'code_edit']
-				}
-			},
-
-			// 10. insert_content - 插入内容
-			{
-				name: 'insert_content',
-				description: '在文件的指定位置插入内容。不会覆盖现有内容，只插入。',
-				parameters: {
-					type: 'object',
-					properties: {
-						path: { type: 'string', description: '文件路径' },
-						line: { type: 'string', description: '插入位置（行号，0表示文件末尾）' },
-						content: { type: 'string', description: '要插入的内容' }
-					},
-					required: ['path', 'line', 'content']
-				}
-			},
-
-			// 11. list_code_definition_names - 列出代码定义
-			{
-				name: 'list_code_definition_names',
-				description: '列出代码文件中的定义（函数、类、方法等）。快速了解文件结构。',
-				parameters: {
-					type: 'object',
-					properties: {
-						path: { type: 'string', description: '代码文件路径' }
-					},
-					required: ['path']
-				}
-			},
-
-			// 12. ask_followup_question - 提问
+			// 9. ask_followup_question - 提问
 			{
 				name: 'ask_followup_question',
 				description: '向用户询问问题以获取更多信息。仅在真正需要时使用，问题要清晰、具体、可操作。',
@@ -1740,56 +1698,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
-			// 14. new_task - 创建新任务
-			{
-				name: 'new_task',
-				description: '创建新的子任务。将复杂任务分解为多个子任务时使用。',
-				parameters: {
-					type: 'object',
-					properties: {
-						mode: { type: 'string', description: '任务模式（可选）' },
-						message: { type: 'string', description: '子任务描述' },
-						todos: { type: 'string', description: '待办列表（可选）' }
-					},
-					required: ['message']
-				}
-			},
-
-			// 15. update_todo_list - 更新待办列表
-			{
-				name: 'update_todo_list',
-				description: '管理任务待办列表。用于跟踪复杂多步骤任务的进度。每个待办项必须包含content(任务描述)、status(状态)、activeForm(进行中描述)。同时只能有一个任务处于in_progress状态。',
-				parameters: {
-					type: 'object',
-					properties: {
-						todos: {
-							type: 'array',
-							description: '待办事项数组，每个元素代表一个独立的任务项',
-							items: {
-								type: 'object',
-								properties: {
-									content: {
-										type: 'string',
-										description: '任务描述（祈使句形式，如"实现用户登录功能"）'
-									},
-									status: {
-										type: 'string',
-										enum: ['pending', 'in_progress', 'completed'],
-										description: '任务状态：pending(待处理)、in_progress(进行中，同时只能有一个)、completed(已完成)'
-									},
-									activeForm: {
-										type: 'string',
-										description: '进行中状态的描述（现在进行时，如"正在实现用户登录功能"）'
-									}
-								},
-								required: ['content', 'status', 'activeForm']
-							}
-						}
-					},
-					required: ['todos']
-				}
-			},
-
 			// ==================== P0/P1 优化工具 ====================
 
 			// 16. batch - 批量并行执行只读工具【重要：优先使用！】
@@ -1801,7 +1709,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 					properties: {
 						tool_calls: {
 							type: 'array',
-							description: '只读工具调用数组，最多25个。格式：[{"tool":"read_file","parameters":{"path":"a.ts"}},{"tool":"read_file","parameters":{"path":"b.ts"}}]。禁止的工具：batch、write_to_file、apply_diff、edit、edit_file、insert_content、multiedit、patch、execute_command、ask_followup_question、attempt_completion',
+							description: '只读工具调用数组，最多25个。格式：[{"tool":"read_file","parameters":{"path":"a.ts"}},{"tool":"read_file","parameters":{"path":"b.ts"}}]。禁止的工具：batch、write_to_file、apply_diff、edit、multiedit、patch、execute_command、ask_followup_question、attempt_completion',
 							items: {
 								type: 'object',
 								properties: {
@@ -1902,21 +1810,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
-			// 21. task - 子Agent委托
-			{
-				name: 'task',
-				description: '将复杂任务委托给子Agent执行。适合独立的子任务、需要专门上下文的任务、分解复杂任务。',
-				parameters: {
-					type: 'object',
-					properties: {
-						prompt: { type: 'string', description: '任务描述（详细说明子Agent需要完成的工作）' },
-						subagent_type: { type: 'string', enum: ['general-purpose', 'explore', 'plan'], description: '子Agent类型（可选，默认general-purpose）' }
-					},
-					required: ['prompt']
-				}
-			},
-
-			// 22. lsp_hover - LSP悬停信息
+			// 21. lsp_hover - LSP悬停信息
 			{
 				name: 'lsp_hover',
 				description: '获取代码位置的LSP悬停信息，包括类型、函数签名、文档等。',
@@ -2517,8 +2411,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	/**
 	 * 生成RepoMap
+	 * @param mentionedIdents 从用户消息中同步提取的关键词，PageRank会给包含这些标识符的文件 ×10 权重
 	 */
-	private async generateRepoMap(workspaceRoot: string): Promise<string> {
+	private async generateRepoMap(workspaceRoot: string, mentionedIdents: string[] = []): Promise<string> {
 		if (!this.repoMapService) {
 			return '';
 		}
@@ -2530,12 +2425,14 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 1. 获取工作区中的所有代码文件
 			const allFiles = await this.repoMapService.getWorkspaceCodeFiles(workspaceRoot);
 
-			// 2. 准备上下文（首次生成时chatFiles为空）
+			// 2. 准备上下文，填充 mentionedIdents 使 PageRank 个性化排序
+			// mentionedIdents 中的标识符在相关文件中会获得 ×10 权重，
+			// 让 RepoMap 把当前任务最相关的文件排到前面，从而让预加载命中正确文件
 			const context: IRepoMapContext = {
-				chatFiles: [],  // TODO: 后续可以从任务历史中提取
+				chatFiles: [],
 				otherFiles: allFiles,
-				mentionedFiles: [],  // TODO: 从用户消息中提取
-				mentionedIdents: [], // TODO: 从用户消息中提取
+				mentionedFiles: [],
+				mentionedIdents: mentionedIdents,
 				tokenBudget: 2048
 			};
 
@@ -2557,6 +2454,38 @@ export class MaxianService extends Disposable implements IMaxianService {
 	}
 
 	// ==================== 预加载代码优化 ====================
+
+	/**
+	 * 从用户消息中同步提取关键词（不调用AI，零延迟）
+	 * 提取驼峰命名、英文单词、文件名、以及中文关键词（通过映射表）
+	 * 用于填充 RepoMap 的 mentionedIdents，使 PageRank 能给相关文件 ×10 权重
+	 */
+	private extractKeywordsSync(message: string): string[] {
+		const words: string[] = [];
+
+		// 提取驼峰命名（如 LoginController, getUserInfo）
+		const camelCaseMatches = message.match(/[A-Z][a-z]+[A-Z][a-zA-Z]*/g) || [];
+		words.push(...camelCaseMatches);
+
+		// 提取英文单词（至少3个字符）
+		const stopWords = new Set([
+			'can', 'you', 'please', 'help', 'me', 'the', 'a', 'an', 'is', 'are', 'to', 'and', 'or',
+			'in', 'on', 'at', 'for', 'with', 'this', 'that', 'what', 'how', 'why', 'where', 'when'
+		]);
+		const englishMatches = message.match(/\b[a-zA-Z]{3,}\b/g) || [];
+		words.push(...englishMatches.filter(w => !stopWords.has(w.toLowerCase())));
+
+		// 提取文件名模式（去掉扩展名作为标识符）
+		const filePatterns = message.match(/[A-Za-z][A-Za-z0-9]*\.(java|ts|tsx|js|jsx|py|go|rs)/gi) || [];
+		words.push(...filePatterns.map(p => p.replace(/\.[^.]+$/, '')));
+
+		// 中文关键词映射（无需AI调用）
+		if (/[\u4e00-\u9fa5]/.test(message)) {
+			words.push(...this.extractKeywordsFallback(message));
+		}
+
+		return [...new Set(words)].slice(0, 30);
+	}
 
 	/**
 	 * 从用户消息中提取关键词

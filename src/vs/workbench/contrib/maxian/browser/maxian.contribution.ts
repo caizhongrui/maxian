@@ -37,9 +37,22 @@ import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { MAXIAN_INPUT_FOCUSED, MAXIAN_MENTION_DROPDOWN_VISIBLE } from './maxianContextKeys.js';
+import { ICommandExecutionService, ICommandExecutionResult, ICommandExecutionOptions } from '../common/services/commandExecutionService.js';
 
 // 确保ripgrep服务被注册（导入副作用）
 import '../../../services/ripgrep/browser/ripgrep.contribution.js';
+
+// 注册命令执行服务浏览器降级实现
+// 在 Electron desktop 环境中，此注册会被 electron-sandbox/commandExecutionService.ts 中的
+// registerMainProcessRemoteService 覆盖，使用主进程 child_process.spawn 实现
+class BrowserCommandExecutionService implements ICommandExecutionService {
+	readonly _serviceBrand: undefined;
+	async execute(_command: string, _options?: ICommandExecutionOptions): Promise<ICommandExecutionResult> {
+		return { stdout: '', stderr: '命令执行服务在 web 环境中不可用', exitCode: -1, timedOut: false, aborted: false };
+	}
+	async cancel(_commandId: string): Promise<void> { }
+}
+registerSingleton(ICommandExecutionService, BrowserCommandExecutionService, InstantiationType.Delayed);
 
 // 注册码弦服务
 registerSingleton(IMaxianService, MaxianService, InstantiationType.Delayed);

@@ -129,6 +129,7 @@ export class AiProxyHandler implements IApiHandler {
 	private currentRequestId: string | null = null;
 	private modelInfo: ModelInfo;
 	private currentAbortController: AbortController | null = null;
+	private userAborted = false;
 
 	// 🚀 超时和重试配置
 	private readonly REQUEST_TIMEOUT = 120000; // 120秒超时（流式响应需要较长时间）
@@ -202,11 +203,15 @@ export class AiProxyHandler implements IApiHandler {
 	 * 🚀 判断错误是否可重试
 	 */
 	private isRetryableError(error: any): boolean {
+		// 用户主动取消 → 不重试
+		if (this.userAborted) {
+			return false;
+		}
 		// 网络错误可重试
 		if (error.name === 'TypeError' && error.message.includes('fetch')) {
 			return true;
 		}
-		// 超时可重试
+		// 超时导致的AbortError可重试，用户取消不重试
 		if (error.name === 'AbortError') {
 			return true;
 		}
@@ -452,6 +457,9 @@ export class AiProxyHandler implements IApiHandler {
 		tools?: ToolDefinition[]
 	): ApiStream {
 		try {
+			// 重置用户取消标志
+			this.userAborted = false;
+
 			// 生成请求ID
 			this.currentRequestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -633,8 +641,7 @@ export class AiProxyHandler implements IApiHandler {
 				// 处理内容块数组
 				let textContent = '';
 				const toolCalls: AiProxyToolCall[] = [];
-				let toolCallId: string | undefined;
-				let toolName: string | undefined;
+				const toolResults: Array<{ tool_call_id: string; content: string }> = [];
 
 				for (const block of msg.content) {
 					if (block.type === 'text') {
@@ -649,29 +656,42 @@ export class AiProxyHandler implements IApiHandler {
 							}
 						});
 					} else if (block.type === 'tool_result') {
-						toolCallId = block.tool_use_id;
-						textContent = block.content;
+						toolResults.push({
+							tool_call_id: block.tool_use_id,
+							content: block.content
+						});
 					}
 				}
 
-				const aiProxyMsg: AiProxyMessage = {
-					role: msg.role,
-					content: textContent
-				};
-
-				if (toolCalls.length > 0) {
-					aiProxyMsg.tool_calls = toolCalls;
+				// assistant消息：包含文本和tool_calls
+				if (msg.role === 'assistant' || toolCalls.length > 0) {
+					const aiProxyMsg: AiProxyMessage = {
+						role: msg.role,
+						content: textContent || ''
+					};
+					if (toolCalls.length > 0) {
+						aiProxyMsg.tool_calls = toolCalls;
+					}
+					result.push(aiProxyMsg);
 				}
 
-				if (toolCallId) {
-					aiProxyMsg.tool_call_id = toolCallId;
+				// tool消息：每个tool_result必须作为独立消息（OpenAI API格式要求）
+				// 关键修复：之前只保留最后一个tool_result，导致模型丢失前面的工具结果
+				if (toolResults.length > 0) {
+					for (const tr of toolResults) {
+						result.push({
+							role: 'tool',
+							content: tr.content,
+							tool_call_id: tr.tool_call_id
+						});
+					}
+				} else if (msg.role !== 'assistant' && toolCalls.length === 0) {
+					// 普通用户消息
+					result.push({
+						role: msg.role,
+						content: textContent
+					});
 				}
-
-				if (toolName) {
-					aiProxyMsg.name = toolName;
-				}
-
-				result.push(aiProxyMsg);
 			}
 		}
 
@@ -713,6 +733,10 @@ export class AiProxyHandler implements IApiHandler {
 
 		const decoder = new TextDecoder();
 		let buffer = '';
+		let totalBytesReceived = 0;
+		let dataLinesCount = 0;
+		let nonDataLinesCount = 0;
+		const nonDataLines: string[] = []; // 记录非data行（通常是错误信息）
 
 		// 用于累积工具调用的参数（使用index作为key，与QwenHandler一致）
 		const toolCallsMap = new Map<string, { id: string; name: string; arguments: string }>();
@@ -726,7 +750,9 @@ export class AiProxyHandler implements IApiHandler {
 				}
 
 				// 解码数据
-				buffer += decoder.decode(value, { stream: true });
+				const chunk = decoder.decode(value, { stream: true });
+				totalBytesReceived += value.byteLength;
+				buffer += chunk;
 
 				// 按行分割
 				const lines = buffer.split('\n');
@@ -742,14 +768,22 @@ export class AiProxyHandler implements IApiHandler {
 					let data: string;
 					if (trimmedLine.startsWith('data: ')) {
 						data = trimmedLine.slice(6); // 移除 "data: " 前缀
+						dataLinesCount++;
 					} else if (trimmedLine.startsWith('data:')) {
 						data = trimmedLine.slice(5); // 移除 "data:" 前缀
+						dataLinesCount++;
 					} else {
+						// 非 data: 行 - 可能是错误响应体或其他SSE字段
+						nonDataLinesCount++;
+						if (nonDataLines.length < 10) {
+							nonDataLines.push(trimmedLine);
+						}
 						continue;
 					}
 
 					// 检查是否结束
 					if (data === '[DONE]') {
+						console.log('[Maxian] 收到 [DONE]');
 						continue;
 					}
 
@@ -828,6 +862,17 @@ export class AiProxyHandler implements IApiHandler {
 
 		} finally {
 			reader.releaseLock();
+			// 诊断日志：显示流接收到的数据统计
+			console.log(`[Maxian] 流处理完成: 总字节=${totalBytesReceived}, data行=${dataLinesCount}, 非data行=${nonDataLinesCount}`);
+			if (nonDataLinesCount > 0) {
+				console.warn('[Maxian] 流中存在非data行（可能是错误响应）:', nonDataLines);
+			}
+			if (dataLinesCount === 0 && totalBytesReceived > 0) {
+				console.error('[Maxian] 收到响应数据但无任何data行！后端可能返回了非SSE格式的错误响应。');
+			}
+			if (totalBytesReceived === 0) {
+				console.error('[Maxian] 响应流完全为空（0字节）！');
+			}
 		}
 	}
 
@@ -866,9 +911,12 @@ export class AiProxyHandler implements IApiHandler {
 	 * 🚀 优化：使用AbortController立即中止客户端请求
 	 */
 	async stopCurrentRequest(): Promise<boolean> {
+		// 标记为用户主动取消，防止AbortError触发重试
+		this.userAborted = true;
+
 		// 首先使用AbortController立即中止客户端请求
 		if (this.currentAbortController) {
-			console.log('[Maxian] 使用AbortController中止请求');
+			console.log('[Maxian] 使用AbortController中止请求（用户取消）');
 			this.currentAbortController.abort();
 			this.currentAbortController = null;
 		}

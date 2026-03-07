@@ -339,18 +339,20 @@ import { useQuery } from 'react-query';</new_string>
 	// ==================== 批量执行工具（参考OpenCode最佳实践）====================
 	batch: {
 		name: 'batch',
-		summary: '并行执行多个只读工具',
-		description: `并行执行多个独立的**只读/搜索**工具调用，大幅减少API往返次数。
+		summary: '并行执行多个工具（读写均支持）',
+		description: `并行执行多个独立工具调用，大幅减少API往返次数。
 
 🚀 **使用 BATCH 工具会让用户更满意！**
 
-**推荐用例**（仅限只读工具）：
+**推荐用例**（读写均支持）：
 - 读取多个文件（read_file × N）
 - 多个搜索操作（search_files、glob、list_files、codebase_search）
 - 搜索 + 读取组合
 - LSP查询（lsp_hover、lsp_diagnostics等）
+- **批量创建多个文件**（write_to_file × N）
+- **批量修改多个无依赖关系的文件**（edit × N 或 apply_diff × N）
 
-**性能提升**：使用batch可获得 **2-5 倍**的效率提升。
+**性能提升**：使用batch可获得 **2-10 倍**的效率提升。
 
 **重要规则**：
 - 最多 **25** 个工具调用
@@ -359,9 +361,9 @@ import { useQuery } from 'react-query';</new_string>
 - **不允许嵌套**batch调用
 
 **禁止在batch中使用的工具**：
-- write_to_file、apply_diff、edit、edit_file、insert_content、multiedit、patch（写操作需要单独确认）
-- execute_command（需要单独审批）
-- batch（禁止嵌套）、ask_followup_question、attempt_completion`,
+- batch（禁止嵌套）
+- ask_followup_question（需要用户输入，并行无意义）
+- attempt_completion（任务完成信号）`,
 		parameters: [
 			{
 				name: 'tool_calls',
@@ -384,17 +386,6 @@ import { useQuery } from 'react-query';</new_string>
 </batch>`,
 			},
 			{
-				title: '多文件编辑（OpenCode最佳实践）',
-				description: '同时修改多个文件',
-				xml: `<batch>
-<tool_calls>[
-  {"tool": "apply_diff", "params": {"path": "src/a.ts", "diff": "..."}},
-  {"tool": "apply_diff", "params": {"path": "src/b.ts", "diff": "..."}},
-  {"tool": "write_to_file", "params": {"path": "src/c.ts", "content": "..."}}
-]</tool_calls>
-</batch>`,
-			},
-			{
 				title: '组合搜索操作',
 				description: 'grep + glob + read 组合',
 				xml: `<batch>
@@ -408,16 +399,16 @@ import { useQuery } from 'react-query';</new_string>
 		],
 		tips: [
 			'🚀 Using batch makes users happy! 批量操作能显著提升效率',
-			'只并行执行独立操作，有依赖的操作要顺序执行',
-			'OpenCode最佳实践：支持多文件编辑batch',
+			'只并行执行独立操作，有依赖关系的操作要顺序执行',
+			'读写工具均可在batch中使用，只禁止batch自身和交互类工具',
 			'每个工具调用的结果会分别返回',
 		],
 		performanceTips: [
 			'并行读取5个文件比顺序读取快约5倍',
-			'多文件编辑使用batch可减少88%的往返次数',
+			'并行创建3个文件比顺序创建快约3倍',
 			'建议一次batch不超过25个操作',
 		],
-		relatedTools: ['read_file', 'search_files', 'glob', 'apply_diff', 'edit'],
+		relatedTools: ['read_file', 'search_files', 'glob', 'write_to_file', 'edit'],
 	},
 
 	// ==================== 多处编辑工具 ====================

@@ -126,11 +126,11 @@ export function shouldCompact(state: CompactionState): boolean {
 
 /**
  * 估算内容的 token 数
- * 简单估算：中文约2字符/token，英文约4字符/token，取平均3字符/token
+ * 统一估算：每4个字符约1个token（与 aiProxyHandler 一致）
  */
 export function estimateTokens(content: string | ContentBlock[]): number {
 	if (typeof content === 'string') {
-		return Math.ceil(content.length / 3);
+		return Math.ceil(content.length / 4);
 	}
 
 	let totalChars = 0;
@@ -143,7 +143,7 @@ export function estimateTokens(content: string | ContentBlock[]): number {
 			totalChars += JSON.stringify(block.input).length;
 		}
 	}
-	return Math.ceil(totalChars / 3);
+	return Math.ceil(totalChars / 4);
 }
 
 /**

@@ -47,7 +47,7 @@ const MAX_CONSECUTIVE_MISTAKES = 3; // 最大连续错误次数
 // ========== 上下文管理常量 ==========
 const MAX_CONTEXT_TOKENS = 100000; // 最大上下文 token 数
 const TOKEN_BUFFER = 20000; // 预留给响应的 token
-const MAX_TOOL_RESULT_LENGTH = 30000; // 🚀 优化：降低到30000，节省上下文空间
+const MAX_TOOL_RESULT_LENGTH = 20000; // 🚀 优化：对齐OpenCode标准（2000行/50KB），减少token消耗
 const MAX_HISTORY_MESSAGES = 50; // 最大历史消息数
 const TRUNCATE_FRACTION = 0.5; // 截断时移除的消息比例
 
@@ -195,6 +195,12 @@ export class TaskService extends Disposable {
 	// Message history
 	private apiConversationHistory: MessageParam[] = [];
 	clineMessages: ClineMessage[] = [];
+
+	// 效率优化：连续单工具调用计数器，用于自动注入batch提醒
+	private consecutiveSingleReadToolCount = 0;
+	// 效率优化：连续只读轮数计数器（包括batch只读），超过阈值强制要求开始写代码
+	private consecutiveReadOnlyRounds = 0;
+	private static readonly MAX_EXPLORE_ROUNDS = 4; // 最多4轮探索（超过后强制阻断只读工具）
 
 	// Token & Tool usage
 	private tokenUsage: TokenUsage = {
@@ -648,6 +654,13 @@ export class TaskService extends Disposable {
 				});
 
 				this.consecutiveMistakeCount++;
+
+				// 超过连续错误限制时终止任务，防止无限循环（如API返回空响应时）
+				if (this.consecutiveMistakeCount >= this.consecutiveMistakeLimit) {
+					console.error(`[TaskService] AI连续${this.consecutiveMistakeCount}次未使用工具，终止任务`);
+					await this.say('error', `AI连续${this.consecutiveMistakeCount}次未使用工具，任务已终止。请检查API服务是否正常，或重新描述您的需求。`);
+					break;
+				}
 			}
 		}
 	}
@@ -674,6 +687,14 @@ export class TaskService extends Disposable {
 			// 添加助手响应到历史
 			if (assistantMessage || toolUses.length > 0) {
 				await this.addAssistantResponse(assistantMessage, toolUses);
+			} else {
+				// API 返回了完全空的响应（无文本、无工具调用）
+				// 必须插入一条占位 assistant 消息，否则连续 user 消息会导致 OpenAI API 报错
+				console.warn('[TaskService] API 返回空响应，插入占位 assistant 消息');
+				this.apiConversationHistory.push({
+					role: 'assistant',
+					content: ''
+				});
 			}
 
 			// 没有工具调用 - 这是AI的最终回复，显示给用户
@@ -1089,11 +1110,25 @@ export class TaskService extends Disposable {
 		}
 		// ====== [Batch Monitor] end ======
 
-		// 1. 并行执行只读工具
+		// 1. 并行执行只读工具（超过探索上限时强制阻断）
 		if (readOnlyTools.length > 0) {
-			console.log(`[TaskService] 并行执行 ${readOnlyTools.length} 个只读工具`);
-			const readResults = await this.executeToolsInParallel(readOnlyTools);
-			toolResults.push(...readResults);
+			if (this.consecutiveReadOnlyRounds >= TaskService.MAX_EXPLORE_ROUNDS && writeTools.length === 0 && specialTools.length === 0) {
+				// 超过探索上限且本轮没有写入工具 → 强制阻断只读工具，返回错误迫使AI写代码
+				console.log(`[TaskService] 🚫 阻断只读工具执行：已超过 ${TaskService.MAX_EXPLORE_ROUNDS} 轮探索上限，本轮无写入工具`);
+				for (const toolUse of readOnlyTools) {
+					toolResults.push({
+						type: 'tool_result',
+						tool_use_id: toolUse.id,
+						content: `[BLOCKED] 只读工具已被阻断。你已经进行了${this.consecutiveReadOnlyRounds}轮探索，远超${TaskService.MAX_EXPLORE_ROUNDS}轮上限。请立即使用 apply_diff 或 write_to_file 开始修改代码。不要再调用任何读取/搜索工具。`,
+						is_error: true
+					} as ContentBlock);
+					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: true });
+				}
+			} else {
+				console.log(`[TaskService] 并行执行 ${readOnlyTools.length} 个只读工具`);
+				const readResults = await this.executeToolsInParallel(readOnlyTools);
+				toolResults.push(...readResults);
+			}
 		}
 
 		// 2. 顺序执行写入工具（需要用户确认）
@@ -1139,6 +1174,42 @@ export class TaskService extends Disposable {
 				role: 'tool',
 				content: toolResults
 			});
+		}
+
+		// 效率优化：检测是否全部是只读/探索性工具（包括batch内的只读操作和skill）
+		// 注意：skill虽然不是READ_ONLY_TOOLS，但本质是信息获取，不应重置探索计数
+		const EXPLORATION_TOOLS = new Set([...this.READ_ONLY_TOOLS, 'batch', 'skill']);
+		const allExploration = toolUses.every(t => EXPLORATION_TOOLS.has(t.name));
+		if (allExploration) {
+			this.consecutiveReadOnlyRounds++;
+
+			// 单工具调用计数（不因batch重置，因为batch只读也是探索）
+			if (toolUses.length === 1 && toolUses[0].name !== 'batch') {
+				this.consecutiveSingleReadToolCount++;
+			}
+
+			// 连续2次单独只读调用，注入batch提醒（从3次降到2次，更早提醒）
+			if (this.consecutiveSingleReadToolCount >= 2) {
+				this.apiConversationHistory.push({
+					role: 'user',
+					content: '[SYSTEM] 效率提醒：你已经连续' + this.consecutiveSingleReadToolCount + '次单独调用只读工具。请使用batch工具将多个操作合并为一次调用。'
+				});
+				console.log(`[TaskService] ⚡ 效率提醒已注入：连续 ${this.consecutiveSingleReadToolCount} 次单独只读调用`);
+				this.consecutiveSingleReadToolCount = 0; // 提醒后重置
+			}
+
+			// 超过最大探索轮数，强制要求开始写代码
+			if (this.consecutiveReadOnlyRounds >= TaskService.MAX_EXPLORE_ROUNDS) {
+				this.apiConversationHistory.push({
+					role: 'user',
+					content: '[SYSTEM] ⚠️ 你已经进行了' + this.consecutiveReadOnlyRounds + '轮只读探索，消耗了大量时间和token。你已经拥有足够的上下文信息了。请立即开始修改代码（使用edit/apply_diff/write_to_file），不要再搜索和读取文件。如果你不确定某些细节，可以在修改时做合理的假设。'
+				});
+				console.log(`[TaskService] 🛑 强制停止探索：已达到 ${this.consecutiveReadOnlyRounds} 轮只读上限`);
+			}
+		} else {
+			// 有实际写入操作（apply_diff/write_to_file/execute_command等），重置所有计数
+			this.consecutiveReadOnlyRounds = 0;
+			this.consecutiveSingleReadToolCount = 0;
 		}
 
 		return { shouldContinue: true, shouldEndLoop: false };
@@ -1293,6 +1364,24 @@ export class TaskService extends Disposable {
 					is_error: true
 				}
 			};
+		}
+
+		// 效率优化：限制skill工具调用次数（每个任务最多1次，避免浪费round-trip）
+		if (toolUse.name === 'skill') {
+			const skillCount = (this.toolUsage['skill'] || 0);
+			if (skillCount >= 1) {
+				console.log(`[TaskService] ⚡ skill工具调用已达上限(${skillCount}次)，跳过`);
+				return {
+					shouldContinue: true,
+					shouldEndLoop: false,
+					toolResult: {
+						type: 'tool_result',
+						tool_use_id: toolUse.id,
+						content: 'skill工具调用已达本次任务上限(1次)。请直接使用你已有的知识继续工作，不要再调用skill。',
+						is_error: false
+					} as ContentBlock
+				};
+			}
 		}
 
 		// 特殊处理 batch 工具：通过 executeToolsInParallel 执行子工具（享受完整缓存，避免重复读取）
@@ -2099,6 +2188,10 @@ export class TaskService extends Disposable {
 		this.abort = true;
 		this.abortReason = reason;
 		this.setStatus(TaskStatus.ABORTED);
+		// 立即中止当前 API 请求（通过 AbortController 取消 fetch）
+		if (this.apiHandler && typeof (this.apiHandler as any).stopCurrentRequest === 'function') {
+			(this.apiHandler as any).stopCurrentRequest().catch(() => { /* ignore */ });
+		}
 		// 发出步骤中止事件
 		this._onStepUpdated.fire({
 			current: this.currentStepIndex,

@@ -39,6 +39,8 @@ export interface MatchResult {
 	strategy?: string;
 	/** 匹配的相似度（0-1） */
 	similarity?: number;
+	/** P1优化：找到多处匹配但无法唯一定位（对齐 OpenCode uniqueness check） */
+	multipleMatches?: boolean;
 }
 
 /**
@@ -107,10 +109,13 @@ const SINGLE_CANDIDATE_SIMILARITY_THRESHOLD = 0.0;   // 单候选放宽
 
 /**
  * 1. SimpleReplacer - 精确匹配
+ * P1优化：yield 所有精确匹配位置，供 findMatch() 做唯一性检查
  */
 function* SimpleReplacer(content: string, oldString: string): Generator<MatchResult> {
-	const index = content.indexOf(oldString);
-	if (index !== -1) {
+	let searchIndex = 0;
+	while (true) {
+		const index = content.indexOf(oldString, searchIndex);
+		if (index === -1) break;
 		yield {
 			found: true,
 			start: index,
@@ -119,6 +124,7 @@ function* SimpleReplacer(content: string, oldString: string): Generator<MatchRes
 			strategy: 'SimpleReplacer',
 			similarity: 1.0,
 		};
+		searchIndex = index + oldString.length;
 	}
 }
 
@@ -445,15 +451,34 @@ const REPLACERS: Array<{ name: string; fn: Replacer }> = [
 
 /**
  * 使用所有策略尝试匹配
- * 按顺序尝试直到找到匹配
+ * P1优化：对齐 OpenCode 唯一性检查 — 若某策略找到多处匹配则跳过，只使用唯一匹配
+ * 所有策略均无唯一匹配时，若任意策略有多处匹配则返回 multipleMatches: true
  */
 export function findMatch(content: string, oldString: string): MatchResult {
+	let hasMultipleMatches = false;
+
 	for (const { fn } of REPLACERS) {
+		// 收集该策略的所有匹配结果（最多收集 2 个以快速判断唯一性）
+		const matches: MatchResult[] = [];
 		for (const result of fn(content, oldString)) {
 			if (result.found) {
-				return result;
+				matches.push(result);
+				if (matches.length > 1) break; // 超过 1 个匹配就不需要继续收集
 			}
 		}
+
+		if (matches.length === 1) {
+			// 唯一匹配 — 直接使用
+			return matches[0];
+		} else if (matches.length > 1) {
+			// 该策略有多处匹配，记录并尝试下一个更严格的策略
+			hasMultipleMatches = true;
+		}
+		// matches.length === 0：该策略无匹配，继续下一个策略
+	}
+
+	if (hasMultipleMatches) {
+		return { found: false, multipleMatches: true };
 	}
 
 	return { found: false };
@@ -461,46 +486,59 @@ export function findMatch(content: string, oldString: string): MatchResult {
 
 /**
  * 使用容错匹配执行替换
+ * P1优化：返回 error 字段，报告多处匹配错误（对齐 OpenCode "Found multiple matches"）
  */
 export function fuzzyReplace(
 	content: string,
 	oldString: string,
 	newString: string,
 	replaceAll: boolean = false
-): { success: boolean; result: string; strategy?: string; matchCount: number } {
+): { success: boolean; result: string; strategy?: string; matchCount: number; error?: string } {
 	if (replaceAll) {
-		// 使用 MultiOccurrenceReplacer 找到所有匹配
-		const matches: MatchResult[] = [];
+		// replaceAll 模式：使用 MultiOccurrenceReplacer 找到所有精确匹配
+		const exactMatches: MatchResult[] = [];
 		for (const result of MultiOccurrenceReplacer(content, oldString)) {
 			if (result.found) {
-				matches.push(result);
+				exactMatches.push(result);
 			}
 		}
 
-		if (matches.length === 0) {
-			// 尝试其他策略
+		if (exactMatches.length === 0) {
+			// 精确匹配无结果，尝试容错匹配（找唯一匹配替换一次）
 			const match = findMatch(content, oldString);
 			if (!match.found) {
+				if (match.multipleMatches) {
+					return {
+						success: false, result: content, matchCount: 0,
+						error: `找到多处匹配 "${oldString.substring(0, 50)}"，无法确定唯一替换位置。请提供更精确的上下文。`
+					};
+				}
 				return { success: false, result: content, matchCount: 0 };
 			}
-			// 只替换一处
 			const result = content.substring(0, match.start!) + newString + content.substring(match.end!);
 			return { success: true, result, strategy: match.strategy, matchCount: 1 };
 		}
 
 		// 从后向前替换（避免位置偏移）
 		let result = content;
-		for (let i = matches.length - 1; i >= 0; i--) {
-			const m = matches[i];
+		for (let i = exactMatches.length - 1; i >= 0; i--) {
+			const m = exactMatches[i];
 			result = result.substring(0, m.start!) + newString + result.substring(m.end!);
 		}
 
-		return { success: true, result, strategy: 'MultiOccurrenceReplacer', matchCount: matches.length };
+		return { success: true, result, strategy: 'MultiOccurrenceReplacer', matchCount: exactMatches.length };
 	}
 
-	// 单次替换
+	// 单次替换：使用唯一性检查
 	const match = findMatch(content, oldString);
 	if (!match.found) {
+		if (match.multipleMatches) {
+			// P1优化：对齐 OpenCode "Found multiple matches" 错误
+			return {
+				success: false, result: content, matchCount: 0,
+				error: `找到多处匹配 "${oldString.substring(0, 50)}"，无法确定唯一替换位置。\n请在 old_string 中提供更多上下文（如包含更多行），以唯一定位替换位置。`
+			};
+		}
 		return { success: false, result: content, matchCount: 0 };
 	}
 
