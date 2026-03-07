@@ -42,7 +42,14 @@ const CACHEABLE_TOOLS = new Set([
 	'read_file',
 	'list_files',
 	'list_code_definition_names',
-	'glob'
+	'glob',
+	'search_files',
+	'codebase_search',
+	'lsp_hover',
+	'lsp_diagnostics',
+	'lsp_definition',
+	'lsp_references',
+	'lsp_type_definition',
 ]);
 
 /**

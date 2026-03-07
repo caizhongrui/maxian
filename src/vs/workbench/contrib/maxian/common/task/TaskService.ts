@@ -321,15 +321,10 @@ export class TaskService extends Disposable {
 	}
 
 	/**
-	 * 生成消息时间戳 - 参照kilocode
+	 * 生成消息时间戳 - 单调递增，避免忙等待
 	 */
-	private async nextClineMessageTimestamp(): Promise<number> {
-		let ts = Date.now();
-		while (ts <= (this.clineMessages[this.clineMessages.length - 1]?.ts ?? 0)) {
-			await new Promise<void>(resolve => setTimeout(resolve, 1));
-			ts = Date.now();
-		}
-		return ts;
+	private nextClineMessageTimestamp(): number {
+		return Math.max(Date.now(), (this.clineMessages[this.clineMessages.length - 1]?.ts ?? 0) + 1);
 	}
 
 	/**
@@ -385,7 +380,7 @@ export class TaskService extends Disposable {
 					throw new Error('Current ask promise was ignored (#1)');
 				} else {
 					// 新的partial消息
-					askTs = await this.nextClineMessageTimestamp();
+					askTs = this.nextClineMessageTimestamp();
 					this.lastMessageTs = askTs;
 					const message: ClineMessage = { ts: askTs, type: 'ask', ask: type, text, partial };
 					this.clineMessages.push(message);
@@ -410,7 +405,7 @@ export class TaskService extends Disposable {
 					this.askResponse = undefined;
 					this.askResponseText = undefined;
 					this.askResponseImages = undefined;
-					askTs = await this.nextClineMessageTimestamp();
+					askTs = this.nextClineMessageTimestamp();
 					this.lastMessageTs = askTs;
 					const message: ClineMessage = { ts: askTs, type: 'ask', ask: type, text };
 					this.clineMessages.push(message);
@@ -422,7 +417,7 @@ export class TaskService extends Disposable {
 			this.askResponse = undefined;
 			this.askResponseText = undefined;
 			this.askResponseImages = undefined;
-			askTs = await this.nextClineMessageTimestamp();
+			askTs = this.nextClineMessageTimestamp();
 			this.lastMessageTs = askTs;
 			const message: ClineMessage = { ts: askTs, type: 'ask', ask: type, text };
 			this.clineMessages.push(message);
@@ -521,7 +516,7 @@ export class TaskService extends Disposable {
 					this._onMessageAdded.fire(lastMessage);
 				} else {
 					// 新的partial消息
-					const sayTs = await this.nextClineMessageTimestamp();
+					const sayTs = this.nextClineMessageTimestamp();
 					this.lastMessageTs = sayTs;
 					const message: ClineMessage = { ts: sayTs, type: 'say', say: type, text, images, partial };
 					this.clineMessages.push(message);
@@ -538,7 +533,7 @@ export class TaskService extends Disposable {
 					this._onMessageAdded.fire(lastMessage);
 				} else {
 					// 新的完整消息
-					const sayTs = await this.nextClineMessageTimestamp();
+					const sayTs = this.nextClineMessageTimestamp();
 					this.lastMessageTs = sayTs;
 					const message: ClineMessage = { ts: sayTs, type: 'say', say: type, text, images };
 					this.clineMessages.push(message);
@@ -547,7 +542,7 @@ export class TaskService extends Disposable {
 			}
 		} else {
 			// 新的非partial消息
-			const sayTs = await this.nextClineMessageTimestamp();
+			const sayTs = this.nextClineMessageTimestamp();
 			this.lastMessageTs = sayTs;
 			const message: ClineMessage = { ts: sayTs, type: 'say', say: type, text, images };
 			this.clineMessages.push(message);
@@ -908,7 +903,7 @@ export class TaskService extends Disposable {
 		'read_file', 'write_to_file', 'list_files', 'search_files', 'codebase_search',
 		'glob', 'list_code_definition_names', 'execute_command', 'apply_diff',
 		'edit_file', 'insert_content', 'batch', 'edit', 'multiedit', 'patch',
-		'webfetch', 'lsp_hover', 'lsp_diagnostics', 'task', 'skill',
+		'webfetch', 'lsp_hover', 'lsp_diagnostics', 'lsp_definition', 'lsp_references', 'lsp_type_definition', 'task', 'skill',
 		'ask_followup_question', 'attempt_completion', 'switch_mode', 'new_task', 'update_todo_list'
 	];
 
@@ -1135,8 +1130,23 @@ export class TaskService extends Disposable {
 
 		// 效率优化：检测是否全部是只读/探索性工具（包括batch内的只读操作和skill）
 		// 注意：skill虽然不是READ_ONLY_TOOLS，但本质是信息获取，不应重置探索计数
-		const EXPLORATION_TOOLS = new Set([...this.READ_ONLY_TOOLS, 'batch', 'skill']);
-		const allExploration = toolUses.every(t => EXPLORATION_TOOLS.has(t.name));
+		// 注意：batch 需要检查子工具，若含写入工具则不算探索
+		const EXPLORATION_TOOLS = new Set([...this.READ_ONLY_TOOLS, 'skill']);
+		const batchHasWriteTool = (batchInput: any): boolean => {
+			try {
+				const rawCalls = batchInput?.tool_calls;
+				const calls: Array<{ name: string }> = typeof rawCalls === 'string'
+					? JSON.parse(rawCalls)
+					: (Array.isArray(rawCalls) ? rawCalls : []);
+				return calls.some(c => !EXPLORATION_TOOLS.has(c.name));
+			} catch {
+				return false; // 无法解析时保守处理，视为只读
+			}
+		};
+		const allExploration = toolUses.every(t => {
+			if (t.name === 'batch') return !batchHasWriteTool(t.input);
+			return EXPLORATION_TOOLS.has(t.name);
+		});
 		if (allExploration) {
 			this.consecutiveReadOnlyRounds++;
 

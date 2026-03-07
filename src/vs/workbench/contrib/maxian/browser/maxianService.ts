@@ -452,6 +452,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private readonly SYSTEM_PROMPT_CACHE_TTL = 5 * 60 * 1000; // 5分钟TTL
 	private cachedSystemPromptTime: number = 0;
 
+	// 🚀 认证凭据缓存（P1优化：避免每次从StorageService读取）
+	private _cachedCredentials: { username: string; password: string } | null | undefined = undefined;
+
 	// 🔧 自动诊断注入器（Task #18 - LSP自动诊断注入）
 	private autoDiagnosticInjector: AutoDiagnosticInjector | null = null;
 	private currentDiagnosticText: string | null = null;
@@ -554,27 +557,37 @@ export class MaxianService extends Disposable implements IMaxianService {
 	 * 使用与authService相同的存储key
 	 */
 	private loadAuthCredentials(): { username: string; password: string } | undefined {
+		// 实例级缓存：undefined 表示未加载，null 表示加载但未找到
+		if (this._cachedCredentials !== undefined) {
+			return this._cachedCredentials ?? undefined;
+		}
 		try {
 			const stored = this.storageService.get('zhikai.auth.credentials', StorageScope.APPLICATION);
 			if (!stored) {
-				console.log('[Maxian] 未找到存储的认证凭据');
+				this._cachedCredentials = null;
 				return undefined;
 			}
 
 			const parsed = JSON.parse(stored);
 			if (parsed && parsed.username && parsed.password) {
-				console.log('[Maxian] 从StorageService加载认证凭据成功，用户:', parsed.username);
-				return {
-					username: parsed.username,
-					password: parsed.password
-				};
+				this._cachedCredentials = { username: parsed.username, password: parsed.password };
+				return this._cachedCredentials;
 			}
 
+			this._cachedCredentials = null;
 			return undefined;
 		} catch (error) {
 			console.error('[Maxian] 加载认证凭据失败:', error);
+			this._cachedCredentials = null;
 			return undefined;
 		}
+	}
+
+	/**
+	 * 重置认证凭据缓存（凭据变更时调用）
+	 */
+	public invalidateCredentialsCache(): void {
+		this._cachedCredentials = undefined;
 	}
 
 	async initialize(): Promise<void> {
@@ -620,16 +633,14 @@ export class MaxianService extends Disposable implements IMaxianService {
 		);
 
 
-		// P1优化：初始化 RepoMapService
+		// P1优化：并行初始化 RepoMapService 和 SteeringService
 		if (workspaceRoot) {
 			this.repoMapService = this._repoMapService;
-			await this.repoMapService.initialize(workspaceRoot);
-		}
-
-		// P1优化：初始化 SteeringService（加载 .maxian/steering/*.md）
-		if (workspaceRoot) {
 			this.steeringService = new SteeringService(workspaceRoot, this.fileService);
-			await this.steeringService.initialize();
+			await Promise.all([
+				this.repoMapService.initialize(workspaceRoot),
+				this.steeringService.initialize()
+			]);
 		}
 
 		// 从StorageService读取认证凭据（与authService使用相同的key）
@@ -704,16 +715,17 @@ export class MaxianService extends Disposable implements IMaxianService {
 		if (matches.length === 0) return message;
 
 		const workspaceRootUri = URI.file(workspaceRoot);
-		let fileContentsBlock = '';
 		const processedUris = new Set<string>();
+		const MAX_SINGLE_FILE_SIZE = 100 * 1024; // 100KB per file
+		const MAX_TOTAL_SIZE = 500 * 1024; // 500KB total
 
+		// 去重并构建 URI 列表
+		type FileEntry = { fileUri: URI; relativePath: string };
+		const fileEntries: FileEntry[] = [];
 		for (const match of matches) {
 			const mentionedPath = match[1];
-
-			// 构建文件 URI（支持绝对路径或相对于工作区的路径）
 			let fileUri: URI;
 			let relativePath: string;
-
 			if (mentionedPath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(mentionedPath)) {
 				fileUri = URI.file(mentionedPath);
 				const uriPathStr = fileUri.path;
@@ -725,20 +737,36 @@ export class MaxianService extends Disposable implements IMaxianService {
 				relativePath = mentionedPath;
 				fileUri = URI.joinPath(workspaceRootUri, mentionedPath);
 			}
-
 			const uriKey = fileUri.toString();
 			if (processedUris.has(uriKey)) continue;
 			processedUris.add(uriKey);
+			fileEntries.push({ fileUri, relativePath });
+		}
 
+		// 并行读取所有 @mention 文件
+		const readResults = await Promise.all(fileEntries.map(async ({ fileUri, relativePath }) => {
 			try {
 				const content = await this.fileService.readFile(fileUri);
 				const text = content.value.toString();
 				const ext = basename(relativePath).split('.').pop() || 'txt';
-				fileContentsBlock += `\n<file_content path="${relativePath}">\n\`\`\`${ext}\n${text}\n\`\`\`\n</file_content>\n`;
-				console.log('[Maxian] @mention 文件已读取:', relativePath, '大小:', text.length);
+				return { relativePath, ext, text, error: null };
 			} catch (e) {
 				console.warn('[Maxian] @mention 文件读取失败:', fileUri.toString(), e);
+				return { relativePath, ext: '', text: '', error: e };
 			}
+		}));
+
+		// 组合结果（限制总大小）
+		let fileContentsBlock = '';
+		let totalSize = 0;
+		for (const result of readResults) {
+			if (result.error || !result.text) continue;
+			if (totalSize >= MAX_TOTAL_SIZE) break;
+			const text = result.text.length > MAX_SINGLE_FILE_SIZE
+				? result.text.substring(0, MAX_SINGLE_FILE_SIZE) + '\n// ... [文件过大，已截断]'
+				: result.text;
+			fileContentsBlock += `\n<file_content path="${result.relativePath}">\n\`\`\`${result.ext}\n${text}\n\`\`\`\n</file_content>\n`;
+			totalSize += text.length;
 		}
 
 		if (fileContentsBlock) {
@@ -2620,51 +2648,32 @@ export class MaxianService extends Disposable implements IMaxianService {
 	/**
 	 * 使用AI进行中文分词和翻译
 	 * 将用户的中文消息提取关键词并翻译为英文
+	 * 优化：先调用 extractKeywordsSync，若关键词足够则跳过AI调用
 	 */
 	private async extractKeywordsWithAI(message: string): Promise<string[]> {
-		// 1. 先提取已有的英文关键词（驼峰命名、文件名等）
-		const words: string[] = [];
+		// 1. 复用同步提取逻辑，避免代码重复
+		const words: string[] = [...this.extractKeywordsSync(message)];
 
-		// 提取驼峰命名（如 LoginController, getUserInfo）
-		const camelCaseMatches = message.match(/[A-Z][a-z]+[A-Z][a-zA-Z]*/g) || [];
-		words.push(...camelCaseMatches);
-
-		// 提取英文单词（至少3个字符）
-		const stopWords = new Set([
-			'can', 'you', 'please', 'help', 'me', 'the', 'a', 'an', 'is', 'are', 'to', 'and', 'or',
-			'in', 'on', 'at', 'for', 'with', 'this', 'that', 'what', 'how', 'why', 'where', 'when'
-		]);
-		const englishMatches = message.match(/\b[a-zA-Z]{3,}\b/g) || [];
-		words.push(...englishMatches.filter(w => !stopWords.has(w.toLowerCase())));
-
-		// 提取文件路径或类名模式
-		const filePatterns = message.match(/[A-Za-z][A-Za-z0-9]*\.(java|ts|tsx|js|jsx|py|go|rs)/gi) || [];
-		words.push(...filePatterns.map(p => p.replace(/\.[^.]+$/, ''))); // 移除扩展名
-
-		// 2. 检查是否有中文内容需要翻译
+		// 2. 若同步关键词已足够（≥5个），无需调用AI
 		const hasChinese = /[\u4e00-\u9fa5]/.test(message);
-		if (!hasChinese) {
-			const uniqueWords = [...new Set(words)].slice(0, 30);
-			return uniqueWords;
+		if (!hasChinese || words.length >= 5) {
+			return words.slice(0, 30);
 		}
 
 		// 3. 检查缓存
-		const cacheKey = message.substring(0, 100); // 使用前100字符作为缓存key
+		const cacheKey = message.substring(0, 100);
 		const cached = this.keywordTranslationCache.get(cacheKey);
 		if (cached) {
 			words.push(...cached);
-			const uniqueWords = [...new Set(words)].slice(0, 30);
-			return uniqueWords;
+			return [...new Set(words)].slice(0, 30);
 		}
 
-		// 4. 调用AI进行分词和翻译
+		// 4. 调用AI进行分词和翻译（关键词不足时才触发）
 		try {
 			const translatedKeywords = await this.translateChineseKeywords(message);
 			if (translatedKeywords.length > 0) {
 				words.push(...translatedKeywords);
-				// 缓存结果
 				this.keywordTranslationCache.set(cacheKey, translatedKeywords);
-				// 限制缓存大小
 				if (this.keywordTranslationCache.size > 100) {
 					const firstKey = this.keywordTranslationCache.keys().next().value;
 					if (firstKey) {
@@ -2674,13 +2683,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 			}
 		} catch (error) {
 			console.warn('[Maxian] AI关键词翻译失败，使用备用方案:', error);
-			// 备用方案：使用简单的映射表
-			const fallbackKeywords = this.extractKeywordsFallback(message);
-			words.push(...fallbackKeywords);
+			words.push(...this.extractKeywordsFallback(message));
 		}
 
-		const uniqueWords = [...new Set(words)].slice(0, 30);
-		return uniqueWords;
+		return [...new Set(words)].slice(0, 30);
 	}
 
 	/**
@@ -2837,39 +2843,37 @@ export class MaxianService extends Disposable implements IMaxianService {
 			return '';
 		}
 
-		const results: string[] = [];
 		const maxFileSize = 50000; // 单文件最大50KB
 		const maxTotalSize = 150000; // 总计最大150KB
-		let totalSize = 0;
 
-		for (const filePath of filePaths) {
-			if (totalSize >= maxTotalSize) {
-				break;
-			}
-
+		// 并行读取所有文件
+		const readResults = await Promise.all(filePaths.map(async (filePath) => {
 			try {
-				// 构建完整路径
 				const absolutePath = filePath.startsWith('/') || filePath.includes(':')
 					? filePath
 					: `${workspaceRoot}/${filePath}`;
-
 				const uri = URI.file(absolutePath);
 				const content = await this.fileService.readFile(uri);
-				const text = content.value.toString();
-
-				// 检查文件大小
-				if (text.length > maxFileSize) {
-					// 只取前面部分
-					const truncatedText = text.substring(0, maxFileSize);
-					results.push(`// File: ${filePath} (截断至 ${maxFileSize} 字符)\n${truncatedText}\n// ... [文件过大，已截断]`);
-					totalSize += maxFileSize;
-				} else {
-					results.push(`// File: ${filePath}\n${text}`);
-					totalSize += text.length;
-				}
+				return { filePath, text: content.value.toString(), error: null };
 			} catch (error) {
 				console.warn(`[Maxian] 预加载文件失败: ${filePath}`, error);
-				// 忽略加载失败的文件
+				return { filePath, text: '', error };
+			}
+		}));
+
+		// 组合结果（限制总大小）
+		const results: string[] = [];
+		let totalSize = 0;
+		for (const { filePath, text, error } of readResults) {
+			if (error || !text) continue;
+			if (totalSize >= maxTotalSize) break;
+			if (text.length > maxFileSize) {
+				const truncatedText = text.substring(0, maxFileSize);
+				results.push(`// File: ${filePath} (截断至 ${maxFileSize} 字符)\n${truncatedText}\n// ... [文件过大，已截断]`);
+				totalSize += maxFileSize;
+			} else {
+				results.push(`// File: ${filePath}\n${text}`);
+				totalSize += text.length;
 			}
 		}
 
