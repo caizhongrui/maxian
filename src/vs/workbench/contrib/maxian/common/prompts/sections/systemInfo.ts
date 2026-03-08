@@ -11,6 +11,8 @@ export interface SystemInfo {
 	arch: string;
 	nodeVersion: string;
 	shell: string;
+	shellPath?: string;  // shell 完整路径，如 /bin/zsh
+	homeDir?: string;    // 用户主目录，如 /Users/username
 }
 
 /**
@@ -19,6 +21,14 @@ export interface SystemInfo {
 export function getSystemInfoSection(workspaceRoot: string, systemInfo: SystemInfo): string {
 	const isWindows = systemInfo.platform.toLowerCase().includes('win');
 	const isMac = systemInfo.platform.toLowerCase().includes('darwin');
+
+	// 人类可读的 OS 名称（参考 Cline）
+	const osDisplayName = isWindows ? `Windows (${systemInfo.platform})`
+		: isMac ? `macOS (${systemInfo.platform} ${systemInfo.arch})`
+		: `Linux (${systemInfo.platform})`;
+
+	// Shell 显示：优先用完整路径，否则用名称
+	const shellDisplay = systemInfo.shellPath || systemInfo.shell;
 
 	const shellLower = systemInfo.shell.toLowerCase();
 	const isPowerShell = shellLower.includes('powershell') || shellLower.includes('pwsh');
@@ -98,26 +108,58 @@ ${isGitBash ? '- Git Bash 不支持 Windows 原生 GUI 程序调用' : '- 运行
 操作系统: macOS (${systemInfo.platform})
 Shell: ${systemInfo.shell}
 
-命令规范:
-- 使用标准 Unix/macOS 命令
+⚠️ 当前是 macOS 系统，必须使用 Unix/macOS 命令，严禁使用 Windows 命令（del、rmdir /s、type、copy、move、dir、cls 等）。
+
+【常用命令】
+- 删除文件        → rm <file>
+- 删除目录        → rm -rf <dir>
+- 列出文件        → ls / ls -la
+- 查看文件内容    → cat <file>
+- 复制文件        → cp <src> <dst>
+- 移动/重命名     → mv <src> <dst>
+- 创建目录        → mkdir -p <dir>
+- 创建空文件      → touch <file>
+- 搜索内容        → grep -r "pattern" <dir>
+- 查找文件        → find <dir> -name "pattern"
+- 当前目录        → pwd
+- 清屏            → clear
+- 安装软件包      → brew install <pkg>
+
+【路径规范】
 - 路径使用正斜杠 /
-- 可使用 brew 安装软件包` : `
+- 可使用 ~ 表示用户主目录
+- 命令链接使用 && 或 ||` : `
 操作系统: Linux (${systemInfo.platform})
 Shell: ${systemInfo.shell}
 
-命令规范:
-- 使用标准 Unix/Linux 命令
+⚠️ 当前是 Linux 系统，必须使用 Unix/Linux 命令，严禁使用 Windows 命令。
+
+【常用命令】
+- 删除文件        → rm <file>
+- 删除目录        → rm -rf <dir>
+- 列出文件        → ls / ls -la
+- 查看文件内容    → cat <file>
+- 复制文件        → cp <src> <dst>
+- 移动/重命名     → mv <src> <dst>
+- 创建目录        → mkdir -p <dir>
+- 创建空文件      → touch <file>
+- 搜索内容        → grep -r "pattern" <dir>
+- 查找文件        → find <dir> -name "pattern"
+- 安装软件包      → apt/yum/dnf install <pkg>
+
+【路径规范】
 - 路径使用正斜杠 /
-- 可使用 apt/yum/dnf 等包管理器`;
+- 可使用 ~ 表示用户主目录
+- 命令链接使用 && 或 ||`;
 
 	return `====
 
 SYSTEM INFORMATION
 
-操作系统: ${systemInfo.platform}
-架构: ${systemInfo.arch}
+操作系统: ${osDisplayName}
+Default Shell: ${shellDisplay}
+Home Directory: ${systemInfo.homeDir || '~'}
+Current Working Directory: ${workspaceRoot}
 Node.js 版本: ${systemInfo.nodeVersion}
-Shell: ${systemInfo.shell}
-工作区: ${workspaceRoot}
 ${platformCommands}`;
 }

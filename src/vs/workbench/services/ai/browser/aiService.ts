@@ -57,12 +57,12 @@ export class AIService implements IAIService {
 		}
 	}
 
-	async complete(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string; businessCode?: string }): Promise<string> {
+	async complete(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string; businessCode?: string; apiType?: 'chat' | 'completions'; fimSuffix?: string }): Promise<string> {
 		const response = await this.completeWithUsage(prompt, options);
 		return response.content;
 	}
 
-	async completeWithUsage(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string; businessCode?: string }): Promise<AIResponse> {
+	async completeWithUsage(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string; businessCode?: string; apiType?: 'chat' | 'completions'; fimSuffix?: string }): Promise<AIResponse> {
 		const model = this.configurationService.getValue<string>('zhikai.ai.model') || 'qwen-plus';
 		const provider = this.configurationService.getValue<string>('zhikai.ai.provider') || 'qwen';
 		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
@@ -71,14 +71,9 @@ export class AIService implements IAIService {
 		const temperature = options?.temperature ?? 0.15;
 		const maxTokens = options?.maxTokens ?? 1000;
 		const systemMessage = options?.systemMessage;
-		const businessCode = options?.businessCode;  // 新增：从选项中获取businessCode
-
-		// 构建消息数组
-		const messages: any[] = [];
-		if (systemMessage) {
-			messages.push({ role: 'system', content: systemMessage });
-		}
-		messages.push({ role: 'user', content: prompt });
+		const businessCode = options?.businessCode;
+		const apiType = options?.apiType ?? 'chat';
+		const fimSuffix = options?.fimSuffix;
 
 		// 初始化日志追踪
 		this.currentTraceId = this.generateTraceId();
@@ -93,7 +88,7 @@ export class AIService implements IAIService {
 			await this.logAICall({
 				provider: provider,
 				model: model,
-				operation: businessCode || 'chat',  // 使用businessCode作为operation，如果没有则降级使用'chat'
+				operation: businessCode || 'chat',
 				mode: 'code_action',
 				status: 'failed',
 				errorMessage: errorMsg,
@@ -105,7 +100,20 @@ export class AIService implements IAIService {
 		}
 
 		// 使用AI代理服务
-		this.logService.info('[AI Service] 使用AI代理服务');
+		this.logService.info('[AI Service] 使用AI代理服务, apiType:', apiType);
+
+		if (apiType === 'completions') {
+			// FIM 模式：不使用 messages，直接发送 fimPrefix/fimSuffix
+			return this.completeWithProxyFIM(apiUrl, provider, model, prompt, fimSuffix ?? '', temperature, maxTokens, businessCode);
+		}
+
+		// Chat 模式：构建消息数组
+		const messages: any[] = [];
+		if (systemMessage) {
+			messages.push({ role: 'system', content: systemMessage });
+		}
+		messages.push({ role: 'user', content: prompt });
+
 		return this.completeWithProxy(apiUrl, provider, model, messages, temperature, maxTokens, businessCode);
 	}
 
@@ -210,7 +218,108 @@ export class AIService implements IAIService {
 		}
 	}
 
+	/**
+	 * FIM 模式代理调用 - 使用 /completions 端点进行 Fill-in-the-Middle 补全
+	 * 适用于 qwen-coder-turbo 等支持 FIM 的代码补全专用模型
+	 */
+	private async completeWithProxyFIM(
+		apiUrl: string,
+		provider: string,
+		model: string,
+		fimPrefix: string,
+		fimSuffix: string,
+		temperature: number,
+		maxTokens: number,
+		businessCode?: string
+	): Promise<AIResponse> {
+		const endpoint = `${apiUrl.replace(/\/$/, '')}/ai/proxy/chat/completions`;
 
+		try {
+			const requestData: any = {
+				provider: provider,
+				model: model,
+				apiType: 'completions',   // 告知后端使用 /completions FIM 端点
+				fimPrefix: fimPrefix,
+				fimSuffix: fimSuffix,
+				temperature: temperature,
+				maxTokens: maxTokens,
+				username: btoa(this.credentials!.username),
+				password: btoa(this.credentials!.password)
+			};
+
+			if (businessCode) {
+				requestData.businessCode = businessCode;
+			}
+
+			this.logService.info('[AI Service] FIM请求: fimPrefix_len=', fimPrefix.length, 'fimSuffix_len=', fimSuffix.length);
+
+			const response = await this.requestService.request({
+				type: 'POST',
+				url: endpoint,
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				data: JSON.stringify(requestData)
+			}, CancellationToken.None);
+
+			const data = await asJson<any>(response);
+
+			if (data && data.data && data.data.choices && data.data.choices[0]) {
+				const content = data.data.choices[0].message?.content ?? '';
+				const usage: AIUsage | undefined = data.data.usage ? {
+					promptTokens: data.data.usage.promptTokens || 0,
+					completionTokens: data.data.usage.completionTokens || 0,
+					totalTokens: data.data.usage.totalTokens || 0
+				} : undefined;
+
+				this.logService.info('[AI Service] FIM代理调用成功, response length:', content.length, 'usage:', usage);
+
+				await this.logAICall({
+					provider: provider,
+					model: model,
+					operation: businessCode || 'IDE_CODE_COMPLETION',
+					mode: 'code_action',
+					inputTokens: usage?.promptTokens,
+					outputTokens: usage?.completionTokens,
+					status: 'success',
+					deviceInfo: this.getDeviceInfo(),
+					ideInfo: this.getIdeInfo()
+				});
+
+				return { content, usage };
+			}
+
+			this.logService.error('[AI Service] FIM代理服务返回格式错误:', data);
+
+			await this.logAICall({
+				provider: provider,
+				model: model,
+				operation: businessCode || 'IDE_CODE_COMPLETION',
+				mode: 'code_action',
+				status: 'failed',
+				errorMessage: 'Invalid FIM proxy response',
+				deviceInfo: this.getDeviceInfo(),
+				ideInfo: this.getIdeInfo()
+			});
+
+			return { content: '' };
+		} catch (error) {
+			this.logService.error('[AI Service] FIM代理服务调用失败:', error);
+
+			await this.logAICall({
+				provider: provider,
+				model: model,
+				operation: businessCode || 'IDE_CODE_COMPLETION',
+				mode: 'code_action',
+				status: 'failed',
+				errorMessage: String(error),
+				deviceInfo: this.getDeviceInfo(),
+				ideInfo: this.getIdeInfo()
+			});
+
+			return { content: '' };
+		}
+	}
 
 	/**
 	 * 流式完成 - 使用AI代理服务

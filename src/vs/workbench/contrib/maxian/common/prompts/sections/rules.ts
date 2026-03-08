@@ -15,8 +15,8 @@ RULES
 基本规则：
 - 项目根目录：${workspaceRoot}
 - 所有文件路径相对于此目录
-- 不能使用 ~ 或 $HOME 表示用户目录
-- 执行命令前检查系统信息以确保兼容性
+- 执行命令前检查 SYSTEM INFORMATION 以确保命令与当前平台兼容（macOS/Linux 用 Unix 命令，Windows 用对应命令）
+- 路径格式以 SYSTEM INFORMATION 中的 Home Directory 为准（macOS/Linux 可用 ~，Windows 不可用）
 
 文件操作规则：
 - 创建新项目时，在专用目录中组织文件
@@ -75,7 +75,7 @@ RULES
 - attempt_completion 结果不能以问题结尾
 
 执行规则：
-- 每次使用工具后等待用户确认
+- 每次工具调用后等待工具结果再继续（不要在工具未返回前就继续输出）
 - 命令执行失败时分析错误并修复
 - 一次只执行一个MCP操作
 

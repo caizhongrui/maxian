@@ -48,7 +48,7 @@ export interface IAIService {
 	 * @param options Optional parameters (temperature, maxTokens, systemMessage, businessCode)
 	 * @returns AI response content
 	 */
-	complete(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string; businessCode?: string }): Promise<string>;
+	complete(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string; businessCode?: string; apiType?: 'chat' | 'completions'; fimSuffix?: string }): Promise<string>;
 
 	/**
 	 * Complete with AI and return usage statistics (返回内容和token使用量)
@@ -56,7 +56,7 @@ export interface IAIService {
 	 * @param options Optional parameters (temperature, maxTokens, systemMessage, businessCode)
 	 * @returns AI response with usage statistics
 	 */
-	completeWithUsage(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string; businessCode?: string }): Promise<AIResponse>;
+	completeWithUsage(prompt: string, options?: { temperature?: number; maxTokens?: number; systemMessage?: string; businessCode?: string; apiType?: 'chat' | 'completions'; fimSuffix?: string }): Promise<AIResponse>;
 
 	/**
 	 * Complete with AI in streaming mode (流式响应)

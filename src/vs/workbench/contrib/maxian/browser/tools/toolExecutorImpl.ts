@@ -44,7 +44,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 	 * 子 Agent 运行器（由 maxianService 注入）
 	 * 接受 agentType 和 prompt，返回子 Agent 的完成结果
 	 */
-	private subAgentRunner?: (agentType: string, prompt: string, taskId?: string) => Promise<string>;
+	private subAgentRunner?: (agentType: string, prompt: string, taskId?: string, taskToolId?: string) => Promise<string>;
 
 	constructor(
 		fileService: IFileService,
@@ -394,7 +394,7 @@ ${formatTodoList(todos)}`;
 	/**
 	 * 注入子 Agent 运行器（由 maxianService 在 initialize 后调用）
 	 */
-	setSubAgentRunner(runner: (agentType: string, prompt: string, taskId?: string) => Promise<string>): void {
+	setSubAgentRunner(runner: (agentType: string, prompt: string, taskId?: string, taskToolId?: string) => Promise<string>): void {
 		this.subAgentRunner = runner;
 	}
 
@@ -426,7 +426,8 @@ ${formatTodoList(todos)}`;
 
 		try {
 			// 传入 task_id 支持 session resume（恢复已有子 Agent 上下文）
-			const result = await this.subAgentRunner(agentType, taskPrompt, task_id);
+			// 传入 toolUse.id 让 runSubAgent 可以更新该 task 工具的 UI 状态
+			const result = await this.subAgentRunner(agentType, taskPrompt, task_id, toolUse.toolUseId);
 			console.log(`[Maxian] 子 Agent 完成: type=${agentType}`);
 
 			// 在结果中包含 task_id，供主 Agent 后续恢复使用

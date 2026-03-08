@@ -200,7 +200,10 @@ export class TaskService extends Disposable {
 	private consecutiveSingleReadToolCount = 0;
 	// 效率优化：连续只读轮数计数器（包括batch只读），超过阈值强制要求开始写代码
 	private consecutiveReadOnlyRounds = 0;
-	private static readonly MAX_EXPLORE_ROUNDS = 10; // 安全兜底上限（正常任务靠搜索策略控制效率，不靠轮次）
+	private static readonly MAX_EXPLORE_ROUNDS = 6; // 安全兜底上限（超过6轮只读就需要给出结论或开始修改）
+	// 连续阻断计数器：连续N次阻断仍无法让AI给出结论时，强制结束
+	private consecutiveBlockedRounds = 0;
+	private static readonly MAX_BLOCKED_ROUNDS = 2;
 
 	// Token & Tool usage
 	private tokenUsage: TokenUsage = {
@@ -685,6 +688,12 @@ export class TaskService extends Disposable {
 				if (assistantMessage) {
 					// 显示AI的最终回复（不是工具调用前的"思考"文本）
 					await this.say('text', assistantMessage);
+					// 如果回复文本非常长（>500字符），说明AI在直接输出最终答案
+					// 直接结束循环，避免系统追加"noToolsUsed"提示导致模型反复调用 attempt_completion
+					if (assistantMessage.length > 500) {
+						console.log('[TaskService] AI输出了长文本回答（无工具调用），直接结束任务');
+						return true;
+					}
 				}
 				return false;
 			}
@@ -935,21 +944,30 @@ export class TaskService extends Disposable {
 
 		// 尝试匹配每个工具名称的 XML 标签
 		for (const toolName of toolNames) {
-			const regex = new RegExp(`<${toolName}>(.*?)</${toolName}>`, 'gs');
+			const regex = new RegExp(`<${toolName}[^>]*>(.*?)<\/${toolName}>`, 'gs');
 			const matches = text.matchAll(regex);
 
 			for (const match of matches) {
-				const innerXml = match[1];
+				const innerXml = match[1].trim();
 				const params: any = {};
 
-				// 解析参数（查找所有 <param>value</param> 格式）
-				const paramRegex = /<(\w+)>(.*?)<\/\1>/gs;
-				const paramMatches = innerXml.matchAll(paramRegex);
+				// 优先尝试解析 JSON body（AI 有时会输出 {"param": "value"} 格式）
+				if (innerXml.startsWith('{')) {
+					try {
+						const jsonBody = JSON.parse(innerXml);
+						Object.assign(params, jsonBody);
+					} catch {
+						// JSON 解析失败，继续尝试 XML 参数格式
+					}
+				}
 
-				for (const paramMatch of paramMatches) {
-					const paramName = paramMatch[1];
-					const paramValue = paramMatch[2].trim();
-					params[paramName] = paramValue;
+				// 如果 JSON 解析没有得到参数，尝试 XML 参数格式 <param>value</param>
+				if (Object.keys(params).length === 0) {
+					const paramRegex = /<(\w+)>(.*?)<\/\1>/gs;
+					const paramMatches = innerXml.matchAll(paramRegex);
+					for (const paramMatch of paramMatches) {
+						params[paramMatch[1]] = paramMatch[2].trim();
+					}
 				}
 
 				// 生成唯一ID
@@ -960,7 +978,6 @@ export class TaskService extends Disposable {
 					name: toolName,
 					input: params
 				});
-
 			}
 		}
 
@@ -1047,27 +1064,53 @@ export class TaskService extends Disposable {
 		const readOnlyToolNames = ['read_file', 'search_files', 'glob', 'list_files', 'codebase_search', 'list_code_definition_names', 'lsp_hover', 'lsp_diagnostics', 'lsp_definition', 'lsp_references', 'lsp_type_definition', 'webfetch'];
 		const standaloneReadCalls = toolUses.filter(t => readOnlyToolNames.includes(t.name));
 
+		let goto_skipReadOnly = false;
 		if (!hasBatch && standaloneReadCalls.length >= 2) {
-			// 有2个以上只读工具被单独调用 - 这是可以优化的情况
-			console.warn(`[Batch Monitor] ⚠️ 未使用 batch！本次AI响应包含 ${standaloneReadCalls.length} 个独立只读调用: [${standaloneReadCalls.map(t => t.name).join(', ')}]，应合并为1次 batch 调用`);
+			// 强制要求使用 batch：2+ 个独立只读调用直接拒绝，返回错误要求使用 batch
+			console.warn(`[Batch Monitor] 🚫 强制拒绝 ${standaloneReadCalls.length} 个独立只读调用，要求使用 batch 工具`);
+			const batchEnforceResults: ContentBlock[] = standaloneReadCalls.map(toolUse => ({
+				type: 'tool_result' as const,
+				tool_use_id: toolUse.id,
+				content: `[BATCH_REQUIRED] 你在一次响应中调用了 ${standaloneReadCalls.length} 个独立只读工具，这不符合效率要求。\n\n⛔ 必须使用 batch 工具合并多个操作！\n\n正确示例：\nbatch({tool_calls: [{tool: "read_file", parameters: {path: "..."}}, {tool: "read_file", parameters: {path: "..."}}]})\n\n请在下一次响应中改用 batch 工具，将所有需要读取的文件合并到一次 batch 调用中。`,
+				is_error: true
+			}));
+			toolResults.push(...batchEnforceResults);
+			if (writeTools.length === 0 && specialTools.length === 0) {
+				this.apiConversationHistory.push({ role: 'tool', content: toolResults });
+				return { shouldContinue: true, shouldEndLoop: false };
+			}
+			goto_skipReadOnly = true;
 		}
 		// ====== [Batch Monitor] end ======
 
 		// 1. 并行执行只读工具（超过探索上限时强制阻断）
-		if (readOnlyTools.length > 0) {
+		if (!goto_skipReadOnly && readOnlyTools.length > 0) {
 			if (this.consecutiveReadOnlyRounds >= TaskService.MAX_EXPLORE_ROUNDS && writeTools.length === 0 && specialTools.length === 0) {
 				// 超过探索上限且本轮没有写入工具 → 强制阻断只读工具，返回明确指令要求AI得出结论
-				console.log(`[TaskService] 🚫 阻断只读工具执行：已超过 ${TaskService.MAX_EXPLORE_ROUNDS} 轮探索上限，本轮无写入工具`);
+				this.consecutiveBlockedRounds++;
+				console.log(`[TaskService] 🚫 阻断只读工具执行：已超过 ${TaskService.MAX_EXPLORE_ROUNDS} 轮探索上限，连续阻断第${this.consecutiveBlockedRounds}次`);
+
+				// 连续阻断超过上限：说明AI一直无法自主结束，强制结束任务
+				if (this.consecutiveBlockedRounds >= TaskService.MAX_BLOCKED_ROUNDS) {
+					console.log(`[TaskService] 🔴 强制结束任务：连续 ${this.consecutiveBlockedRounds} 次阻断后AI仍未给出结论`);
+					// 返回一个合成的 attempt_completion 结果，直接结束循环
+					const alreadyReadFiles = Array.from(this.fileReadTracker.keys()).slice(0, 20).join('\n- ');
+					const forcedResult = `[系统强制结束探索]\n\n你已读取了以下文件但一直未给出结论：\n- ${alreadyReadFiles}\n\n请基于以上已读取的信息，给出你的分析和结论。`;
+					await this.say('completion_result', forcedResult);
+					return { shouldContinue: false, shouldEndLoop: true };
+				}
+
 				for (const toolUse of readOnlyTools) {
 					toolResults.push({
 						type: 'tool_result',
 						tool_use_id: toolUse.id,
-						content: `[探索阶段结束] 你已完成 ${this.consecutiveReadOnlyRounds} 轮只读探索，已达到 ${TaskService.MAX_EXPLORE_ROUNDS} 轮上限，不再允许继续读取文件或搜索代码。\n\n请立即基于你已收集到的所有信息执行以下操作之一：\n- 如果任务需要修改代码：直接调用 apply_diff 或 write_to_file 进行修改\n- 如果任务是分析/问答：直接调用 attempt_completion 给出完整结论\n\n禁止再次调用任何读取、搜索或列出文件的工具。`,
+						content: `[探索阶段结束] 已完成 ${this.consecutiveReadOnlyRounds} 轮只读探索，不允许继续读取。请立即调用 attempt_completion 给出结论（分析/问答任务）或调用 apply_diff/write_to_file 修改代码（编码任务）。`,
 						is_error: true
 					} as ContentBlock);
 					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: true });
 				}
 			} else {
+				this.consecutiveBlockedRounds = 0; // 正常执行时重置阻断计数
 				const readResults = await this.executeToolsInParallel(readOnlyTools);
 				toolResults.push(...readResults);
 			}
@@ -1166,6 +1209,7 @@ export class TaskService extends Disposable {
 			// 有实际写入操作（apply_diff/write_to_file/execute_command等），重置所有计数
 			this.consecutiveReadOnlyRounds = 0;
 			this.consecutiveSingleReadToolCount = 0;
+			this.consecutiveBlockedRounds = 0;
 		}
 
 		return { shouldContinue: true, shouldEndLoop: false };
@@ -1187,9 +1231,8 @@ export class TaskService extends Disposable {
 				if (cachedResult !== null) {
 					// 缓存命中时也检查重复读取，给AI添加警告，防止AI陷入无限重复读取同一文件的死循环
 					const duplicateNoticeOnCacheHit = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
-					const cachedContent = duplicateNoticeOnCacheHit
-						? `${duplicateNoticeOnCacheHit}\n\n⚠️ 注意：此文件已在本次会话中读取过，请勿再次请求读取同一文件。以下是缓存内容：\n\n${cachedResult}`
-						: cachedResult;
+					// 如果是重复读取，只返回简短通知，不返回完整内容，防止 context 继续增长
+					const cachedContent = duplicateNoticeOnCacheHit ? duplicateNoticeOnCacheHit : cachedResult;
 					// 触发工具完成事件（缓存命中也需要通知UI移除工具卡片）
 					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: false });
 					return {
@@ -1349,6 +1392,9 @@ export class TaskService extends Disposable {
 		// P0优化：对只读工具检查缓存（与 executeToolsInParallel 保持一致）
 		const cachedResult = this.toolCache.get(toolUse.name, toolUse.input);
 		if (cachedResult !== null) {
+			// 检查是否是重复读取：重复时只返回简短通知，不返回完整内容
+			const duplicateNotice = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
+			const content = duplicateNotice ? duplicateNotice : cachedResult;
 			this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: false });
 			return {
 				shouldContinue: true,
@@ -1356,7 +1402,7 @@ export class TaskService extends Disposable {
 				toolResult: {
 					type: 'tool_result',
 					tool_use_id: toolUse.id,
-					content: cachedResult,
+					content: content,
 					is_error: false
 				}
 			};
@@ -1563,6 +1609,21 @@ export class TaskService extends Disposable {
 			}
 		} catch (e) {
 			console.error('[TaskService] batch 参数解析失败:', e);
+			// 尝试修复截断的 JSON（模型输出被截断时缺少结尾 ]}）
+			const rawCalls = toolUse.input?.tool_calls;
+			if (typeof rawCalls === 'string') {
+				try {
+					// 找到最后一个完整的对象（以 } 结尾）然后补全数组
+					const lastBrace = rawCalls.lastIndexOf('}');
+					if (lastBrace !== -1) {
+						const fixed = rawCalls.substring(0, lastBrace + 1) + ']';
+						toolCalls = JSON.parse(fixed);
+						console.log(`[TaskService] batch JSON 截断修复成功，恢复 ${toolCalls.length} 个工具调用`);
+					}
+				} catch (e2) {
+					console.error('[TaskService] batch JSON 截断修复也失败:', e2);
+				}
+			}
 		}
 
 		if (toolCalls.length === 0) {
@@ -1782,11 +1843,11 @@ export class TaskService extends Disposable {
 			return null;
 		}
 
-		// 重复读取，返回简化通知
+		// 重复读取，返回简化通知（不返回文件内容，防止 context 增长）
 		console.log(`[TaskService] 检测到重复文件读取: ${filePath} (第${readCount + 1}次)`);
-		return `[文件内容已在之前读取过，参见上文的 ${filePath}]
+		return `[DUPLICATE_READ] 文件 "${filePath}" 已读取过 ${readCount + 1} 次，内容已在对话历史中。
 
-提示：你已经读取过这个文件了。如果需要查看特定部分，请说明你要查找的内容，我会帮你定位。如果文件内容已经改变，请使用其他工具确认。`;
+⛔ 请勿继续重复读取此文件。你已经掌握了该文件的内容。请直接使用已有信息完成任务，或调用 attempt_completion 总结已了解的内容。`;
 	}
 
 	/**
@@ -2052,20 +2113,34 @@ export class TaskService extends Disposable {
 		shouldEndLoop: boolean;
 		toolResult?: ContentBlock;
 	}> {
-		const result = toolUse.input.result;
+		let result = toolUse.input.result;
 
 		if (!result) {
-			const errorMsg = await this.sayAndCreateMissingParamError('attempt_completion', 'result');
-			return {
-				shouldContinue: true,
-				shouldEndLoop: false,
-				toolResult: {
-					type: 'tool_result',
-					tool_use_id: toolUse.id,
-					content: errorMsg,
-					is_error: true
+			// attempt_completion 调用意味着 AI 已经完成任务。
+			// 无论 result 是否存在，都应该结束循环（AI 可能已将结果作为文本输出）。
+			// 策略：先在最近 5 条 assistant 消息里找文本作为结果，找不到就静默结束。
+			const recentAssistants = [...this.apiConversationHistory]
+				.reverse()
+				.filter(m => m.role === 'assistant')
+				.slice(0, 5);
+
+			for (const msg of recentAssistants) {
+				const content = msg.content;
+				if (typeof content === 'string' && content.trim()) {
+					result = content.trim();
+					break;
+				} else if (Array.isArray(content)) {
+					const textPart = content.find((c: any) => c.type === 'text' && c.text?.trim());
+					if (textPart) {
+						result = (textPart as any).text.trim();
+						break;
+					}
 				}
-			};
+			}
+
+			// 无论是否找到文本，attempt_completion 调用都意味着任务完成，直接结束
+			console.log('[TaskService] attempt_completion 无 result 参数，静默结束任务（AI 已完成输出）');
+			return { shouldContinue: true, shouldEndLoop: true };
 		}
 
 		// 显示完成结果
@@ -2311,6 +2386,9 @@ export class TaskService extends Disposable {
 			const stats = this.contextCompactor.getStats();
 			console.log(`[TaskService] ContextCompactor 修剪完成: 修剪了 ${stats.compactedParts} 个工具输出, 节省 ${stats.savedTokens} tokens, 当前 ${newTokens} tokens`);
 
+			// 修剪后重置文件读取追踪器（部分工具输出已移除）
+			this.fileReadTracker.clear();
+
 			// 如果修剪后仍在限制内，直接返回
 			if (newTokens <= allowedTokens) {
 				return;
@@ -2377,6 +2455,10 @@ export class TaskService extends Disposable {
 					// AI 摘要失败，但分层压缩仍然有效
 				}
 			}
+
+			// 分层压缩后重置文件读取追踪器（旧工具输出已移除，AI 可能需要重读某些文件）
+			this.fileReadTracker.clear();
+			console.log('[TaskService] 上下文压缩完成，重置文件读取追踪器');
 
 			// 如果分层压缩后仍在限制内，直接返回
 			const newTokens = this.estimateTokens(this.apiConversationHistory);

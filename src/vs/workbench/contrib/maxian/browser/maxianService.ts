@@ -627,8 +627,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		// P2优化：注入子 Agent 工厂（支持 task 工具）
 		(this.toolExecutor as ToolExecutorImpl).setSubAgentRunner(
-			async (agentType: string, prompt: string): Promise<string> => {
-				return this.runSubAgent(agentType, prompt, workspaceRoot);
+			async (agentType: string, prompt: string, taskId?: string, taskToolId?: string): Promise<string> => {
+				return this.runSubAgent(agentType, prompt, workspaceRoot, taskToolId);
 			}
 		);
 
@@ -1377,13 +1377,14 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		// 读取用户实际配置的 Shell（与 Cline/Roo-Code 一致）
 		// 优先从 ITerminalProfileService 获取默认 profile 名称
+		let shellPath: string | undefined;
 		try {
 			const defaultProfileName = this.terminalProfileService.getDefaultProfileName();
 			const defaultProfile = this.terminalProfileService.getDefaultProfile();
 
 			if (defaultProfile?.path) {
+				shellPath = defaultProfile.path;
 				// 取路径最后一个文件名，如 powershell.exe → powershell, /bin/zsh → zsh
-				const shellPath = defaultProfile.path;
 				const shellName = shellPath.split(/[\\/]/).pop()?.replace(/\.exe$/i, '') || shellPath;
 				shell = shellName;
 			} else if (defaultProfileName) {
@@ -1396,6 +1397,16 @@ export class MaxianService extends Disposable implements IMaxianService {
 			shell = isWindows ? 'PowerShell' : isMacintosh ? 'zsh' : 'bash';
 		}
 
+		// Home Directory（参考 Cline，帮助模型正确处理 ~ 路径）
+		let homeDir: string | undefined;
+		try {
+			if (typeof process !== 'undefined' && process.env) {
+				homeDir = process.env['HOME'] || process.env['USERPROFILE'] || process.env['HOMEPATH'];
+			}
+		} catch {
+			// ignore
+		}
+
 		// 架构信息（从 navigator.userAgent 推断）
 		const arch = (typeof navigator !== 'undefined' && navigator.userAgent.includes('arm')) ? 'arm64' : 'x64';
 
@@ -1406,7 +1417,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 			platform,
 			arch,
 			nodeVersion,
-			shell
+			shell,
+			shellPath,
+			homeDir
 		};
 	}
 
@@ -1960,7 +1973,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 	 * P2优化：运行子 Agent
 	 * 创建 FilteredToolExecutor + 独立 TaskService 实例，运行至 attempt_completion
 	 */
-	private async runSubAgent(agentType: string, prompt: string, workspaceRoot: string): Promise<string> {
+	private async runSubAgent(agentType: string, prompt: string, workspaceRoot: string, taskToolId?: string): Promise<string> {
 		if (!this.toolExecutor || !this.apiHandler) {
 			return '子 Agent 启动失败：主服务未初始化';
 		}
@@ -2014,11 +2027,33 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		// 捕获 completion_result
 		let completionResult = '';
-		const disposable = subTask.onMessageAdded((msg) => {
+		const completionDisposable = subTask.onMessageAdded((msg) => {
 			if (msg.type === 'say' && msg.say === 'completion_result' && msg.text) {
 				completionResult = msg.text;
 			}
 		});
+
+		// 将子 Agent 的工具进度实时转发给主 UI
+		// 使用 isPartial:true 保持状态元素可见，让用户看到子 Agent 正在做什么
+		let subAgentToolCount = 0;
+		const streamingDisposable = taskToolId ? subTask.onToolInputStreaming((event) => {
+			subAgentToolCount++;
+			const toolLabel = event.toolName === 'batch' ? 'batch(并行)' : event.toolName;
+			// 提取最关键的参数信息（文件路径/搜索词等）
+			let keyParam = '';
+			if (event.input) {
+				keyParam = event.input.path || event.input.query || event.input.pattern || event.input.command || '';
+				if (typeof keyParam === 'string' && keyParam.length > 60) {
+					keyParam = '...' + keyParam.slice(-60);
+				}
+			}
+			this._onToolInputStreaming.fire({
+				toolId: taskToolId,
+				toolName: 'task',
+				input: `[子Agent #${subAgentToolCount}] ${toolLabel}${keyParam ? ': ' + keyParam : ''}`,
+				isPartial: true  // 保持元素可见，不触发自动清理
+			});
+		}) : { dispose: () => {} };
 
 		console.log(`[Maxian] 子 Agent 启动: type=${agentType}, tools=${subAgentToolDefs.length}`);
 
@@ -2027,7 +2062,17 @@ export class MaxianService extends Disposable implements IMaxianService {
 		} catch (error) {
 			console.error(`[Maxian] 子 Agent 异常: ${error}`);
 		} finally {
-			disposable.dispose();
+			completionDisposable.dispose();
+			streamingDisposable.dispose();
+			// 子 Agent 完成后，发一次 isPartial:false 触发进度元素的自动清理
+			if (taskToolId && subAgentToolCount > 0) {
+				this._onToolInputStreaming.fire({
+					toolId: taskToolId,
+					toolName: 'task',
+					input: `[子Agent 完成] 共执行 ${subAgentToolCount} 个工具操作`,
+					isPartial: false
+				});
+			}
 			subTask.dispose();
 		}
 
@@ -2040,7 +2085,27 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private getAgentRoleDescription(agentType: string): string {
 		switch (agentType) {
 			case 'explore':
-				return '你是代码库探索专家。你的任务是深入分析代码库结构、找到相关文件、理解架构设计。只使用只读工具（read_file, search_files, glob, list_files, codebase_search）。';
+				return `你是代码库探索专家。你的任务是深入分析代码库结构、找到相关文件、理解架构设计。
+
+## 关键规则
+
+**必须用 batch 工具并行执行多个搜索/读取操作，严禁逐个单独调用。**
+
+正确示例（定位阶段，一次 batch 并行搜索）：
+{"tool_calls": [
+  {"tool": "glob", "parameters": {"pattern": "**/*Service.ts"}},
+  {"tool": "codebase_search", "parameters": {"query": "核心功能关键词"}},
+  {"tool": "search_files", "parameters": {"path": ".", "regex": "class.*Impl"}}
+]}
+
+正确示例（读取阶段，一次 batch 并行读多文件）：
+{"tool_calls": [
+  {"tool": "read_file", "parameters": {"path": "src/a/Foo.ts"}},
+  {"tool": "read_file", "parameters": {"path": "src/b/Bar.ts"}}
+]}
+
+**禁止链式发现**（读A发现B再读B再读C...），应先 glob/search 定位所有相关文件，然后一次 batch 读完。完成分析后立即调用 attempt_completion 返回精简摘要。`;
+
 			case 'plan':
 				return '你是任务规划专家。你的任务是分析需求、制定详细的实施计划、识别关键文件和风险。只使用只读工具进行分析。';
 			case 'execute':

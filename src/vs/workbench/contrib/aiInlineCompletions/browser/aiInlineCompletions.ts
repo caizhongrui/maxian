@@ -42,11 +42,11 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	private rejectedCount = 0;
 	private readonly acceptanceThreshold = 0.35; // 采纳率低于35%时增加过滤
 
-	// 动态防抖参数 - 短防抖 + 智能过滤（参考 Copilot 75ms，折中取 150ms）
-	private baseDebounceDelay = 150; // 150ms（Copilot 是 75ms）
-	private baseMinRequestInterval = 500; // 500ms 最小间隔
-	private adaptiveDebounceDelay = 150;
-	private adaptiveMinInterval = 500;
+	// 动态防抖参数 - 针对 Qwen3-Coder FIM 模型优化
+	private baseDebounceDelay = 100; // 100ms debounce
+	private baseMinRequestInterval = 200; // 200ms 最小间隔
+	private adaptiveDebounceDelay = 100;
+	private adaptiveMinInterval = 200;
 
 	// 🆕 场景采纳率学习（记录不同触发场景的采纳率）
 	private scenarioStats: Map<string, { accepted: number; rejected: number }> = new Map();
@@ -287,32 +287,9 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			console.log('[AI Inline Completions] ⏳ Debounce: proceeding after ' + currentDebounceDelay + 'ms wait (adaptive)');
 		}
 
-		// Get complete context: before and after cursor
-		// (lineContent and prefix already declared above for debugging)
-		// suffix is included in enhancedContext later
-
-		// Get previous lines (up to 30 lines)
-		const startLine = Math.max(1, position.lineNumber - 30);
-		const beforeLines: string[] = [];
-		for (let i = startLine; i < position.lineNumber; i++) {
-			beforeLines.push(model.getLineContent(i));
-		}
-
-		// Get following lines (up to 30 lines)
-		const totalLines = model.getLineCount();
-		const endLine = Math.min(totalLines, position.lineNumber + 30);
-		const afterLines: string[] = [];
-		for (let i = position.lineNumber + 1; i <= endLine; i++) {
-			afterLines.push(model.getLineContent(i));
-		}
-
-		// Need minimal context to proceed
-		const hasGoodContext = beforeLines.some(line => line.trim().length > 0) ||
-		                       afterLines.some(line => line.trim().length > 0);
-
-		if (prefix.trim().length === 0 && !hasGoodContext) {
-			return undefined;
-		}
+		// 通过 extractContext 获取完整上下文（50行前+50行后+LSP类型信息）
+		// 基础检查：prefix 为空时需要有代码上下文才值得请求
+		// 具体的 hasGoodContext 检查在 extractContext 之后进行
 
 		console.log('[AI Inline Completions] Extracting enhanced context...');
 
@@ -346,8 +323,8 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 				.map(edit => ({ range: edit.range, text: edit.text }));
 		}
 
-		// Build enhanced prompt with structural information
-		const prompt = await this.buildEnhancedPrompt(enhancedContext);
+		// Build enhanced prompt with structural information（FIM格式，前后缀分离）
+		const { fimPrefix, fimSuffix } = await this.buildEnhancedPrompt(enhancedContext);
 
 		// 检查缓存
 		const cacheKey = this.generateCacheKey(enhancedContext);
@@ -369,16 +346,20 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			return { items };
 		}
 
+		// extractCompletions 时需要光标前内容（当前行的 prefix）
+		const currentLinePrefix = enhancedContext.prefix;
+
 		try {
-			console.log('[AI Inline Completions] Calling AI service...');
+			console.log('[AI Inline Completions] Calling AI service (FIM mode)...');
 			const requestStartTime = Date.now();
 
-			// 使用优化的参数调用 AI
-			const aiResponse = await this.aiService.complete(prompt, {
-				temperature: 0.05,  // 极低温度，确保输出确定性（从0.1降低到0.05）
-				maxTokens: 1200,   // 支持较长的代码补全
-				systemMessage: 'You are a Fill-in-the-Middle (FIM) code completion engine. The user prompt contains a <CURSOR> marker indicating the exact insertion point. Output ONLY the code to insert at <CURSOR>. Do NOT output any code that already exists before or after <CURSOR>. NO explanations, NO markdown, NO conversational text. NEVER generate methods or fields that do not exist in the provided type definitions.',
-				businessCode: 'IDE_CODE_COMPLETION'  // 代码补全业务场景
+			// 使用 /completions FIM 端点，qwen-coder-turbo 原生支持 Fill-in-the-Middle
+			const aiResponse = await this.aiService.complete(fimPrefix, {
+				temperature: 0.05,
+				maxTokens: 128,    // FIM 补全通常 <50 tokens，128 足够且避免超时
+				apiType: 'completions',
+				fimSuffix: fimSuffix,
+				businessCode: 'IDE_CODE_COMPLETION'
 			});
 
 			// 记录响应时间
@@ -387,7 +368,7 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 			console.log('[AI Inline Completions] AI response time:', responseTime + 'ms, length:', aiResponse.length);
 
 			// Extract and clean the completion
-			let completions = this.extractCompletions(aiResponse, prefix, enhancedContext.suffix, enhancedContext.afterLines);
+			let completions = this.extractCompletions(aiResponse, currentLinePrefix, enhancedContext.suffix, enhancedContext.afterLines);
 			console.log('[AI Inline Completions] Extracted completions:', completions.length);
 
 			// 验证补全内容
@@ -482,95 +463,59 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	 * 提取 AI 返回的代码补全（强化过滤 + 前缀/后缀去重）
 	 */
 	private extractCompletions(aiResponse: string, prefix: string, suffix: string = '', afterLines: string[] = []): string[] {
-		const results: string[] = [];
+		// Qwen3-Coder FIM 模型直接输出补全代码，不会有 markdown 或解释文字
+		let cleaned = aiResponse.trim();
 
-		// 步骤 1: 清理 markdown 代码块
-		let cleanedResponse = aiResponse.trim();
-		const codeBlockMatch = cleanedResponse.match(/```(?:\w+)?\s*\n([\s\S]*?)```/);
+		// 清理 markdown 代码块（Chat API 模式下模型仍会输出 markdown）
+		const codeBlockMatch = cleaned.match(/```(?:\w+)?\s*\n([\s\S]*?)```/);
 		if (codeBlockMatch) {
-			cleanedResponse = codeBlockMatch[1].trim();
+			cleaned = codeBlockMatch[1].trim();
 		} else {
-			// 移除所有 ``` 标记
-			cleanedResponse = cleanedResponse.replace(/```/g, '').trim();
+			// 移除单独的 ``` 标记
+			cleaned = cleaned.replace(/```\w*/g, '').trim();
 		}
 
-		// 步骤 2: 检测并过滤对话式文本（扩展模式）
-		const conversationalPatterns = [
-			/^(it seems|i think|i would|i can|let me|here|sorry|i'm|could you|please|would you|you can|you should|you may)/i,
-			/^(this|that|the code|here's|this is|that is|this will|here are)/i,
-			/^(to |in order to |we |you |I )\s/i, // 以介词或人称开头 (移除 for,避免误过滤 for 循环)
-			/\?$/, // 以问号结尾
-			/^(注意|请注意|说明|解释|这里|这个|这段)/  // 中文对话
-		];
+		// 移除可能残留的 FIM 特殊 token（防御性处理）
+		cleaned = cleaned
+			.replace(/<\|fim_prefix\|>/g, '')
+			.replace(/<\|fim_suffix\|>/g, '')
+			.replace(/<\|fim_middle\|>/g, '')
+			.replace(/<\|fim_pad\|>/g, '')
+			.replace(/<\|endoftext\|>/g, '')
+			.trim();
 
-		const firstLine = cleanedResponse.split('\n')[0];
-		for (const pattern of conversationalPatterns) {
-			if (pattern.test(firstLine)) {
-				console.warn('[AI Inline Completions] Filtered conversational response:', firstLine.substring(0, 50));
-				return [];
-			}
-		}
-
-		// 步骤 3: 检测是否包含代码特征（必须包含至少一个）
-		const codePatterns = [
-			/[{}\[\]();]/,  // 代码符号
-			/\b(function|const|let|var|if|for|while|class|def|return|import|public|private|protected)\b/,  // 关键字
-			/[a-zA-Z_$][a-zA-Z0-9_$]*\s*[:=]/,  // 赋值语句
-			/\.[a-zA-Z_$]/,  // 方法调用
-			/=>/  // 箭头函数
-		];
-
-		const hasCodeFeatures = codePatterns.some(pattern => pattern.test(cleanedResponse));
-		if (!hasCodeFeatures && cleanedResponse.length > 50) {
-			console.warn('[AI Inline Completions] Response lacks code features, likely explanation text');
+		if (!cleaned) {
 			return [];
 		}
 
-		// 🆕 步骤 3.5: 移除前缀重复 - 关键修复！
-		// 如果 AI 返回的内容以用户已输入的前缀开头，需要移除
-		cleanedResponse = this.removePrefixDuplication(cleanedResponse, prefix);
+		// 移除前缀重复（FIM 模型有时会回显已有内容）
+		cleaned = this.removePrefixDuplication(cleaned, prefix);
 
-		// 🆕 步骤 3.6: 移除后缀重叠 - 防止AI生成光标后已存在的代码
-		// AI 可能会在输出末尾附带光标后的代码，需要截断
-		cleanedResponse = this.removeSuffixOverlap(cleanedResponse, suffix, afterLines);
+		// 移除后缀重叠（截断模型多生成的光标后内容）
+		cleaned = this.removeSuffixOverlap(cleaned, suffix, afterLines);
 
-		// 步骤 4: 分割为行并处理
-		const allLines = cleanedResponse.split('\n');
-
-		// 过滤空结果
-		if (allLines.length === 0 || (allLines.length === 1 && allLines[0].trim().length === 0)) {
-			console.log('[AI Inline Completions] Empty result after prefix removal');
+		if (!cleaned.trim()) {
 			return [];
 		}
 
-		// 步骤 5: 提供补全选项（优先完整，然后部分）
-		// 选项 1: 完整补全（最多 15 行）
-		const fullCompletion = allLines.slice(0, 15).join('\n').trim();
-		if (fullCompletion && fullCompletion.length > 0 && fullCompletion.length < 1500) {
+		const results: string[] = [];
+		const allLines = cleaned.split('\n');
+
+		// 主补全：最多 15 行
+		const fullCompletion = allLines.slice(0, 15).join('\n');
+		if (fullCompletion.trim()) {
 			results.push(fullCompletion);
 		}
 
-		// 选项 2: 如果超过 4 行，提供部分补全
+		// 若超过 4 行，额外提供只补第一行的选项
 		if (allLines.length > 4) {
-			// 前一半
-			const halfCompletion = allLines.slice(0, Math.ceil(allLines.length / 2)).join('\n').trim();
-			if (halfCompletion !== fullCompletion && halfCompletion.length > 0 && halfCompletion.length < 800) {
-				results.push(halfCompletion);
-			}
-
-			// 只第一行
-			const firstLineOnly = allLines[0].trim();
-			if (firstLineOnly && firstLineOnly !== fullCompletion && firstLineOnly !== halfCompletion) {
-				results.push(firstLineOnly);
+			const firstLine = allLines[0];
+			if (firstLine.trim() && firstLine !== fullCompletion) {
+				results.push(firstLine);
 			}
 		}
 
-		console.log('[AI Inline Completions] Extracted completions:', {
-			count: results.length,
-			lengths: results.map(r => r.length),
-			previews: results.map(r => r.substring(0, 60) + (r.length > 60 ? '...' : ''))
-		});
-
+		console.log('[AI Inline Completions] Extracted', results.length, 'completions, lengths:', results.map(r => r.length));
 		return results;
 	}
 
@@ -690,285 +635,65 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	}
 
 	/**
-	 * Build enhanced prompt with structural code information
-	 * 强制 AI 返回纯代码，不返回任何解释
+	 * Build enhanced FIM prompt (Fill-in-the-Middle)
+	 * 返回 fimPrefix 和 fimSuffix，由后端通过 /completions 端点调用 qwen-coder-turbo 原生 FIM 接口
+	 *
+	 * FIM 格式: <|fim_prefix|>{fimPrefix}<|fim_suffix|>{fimSuffix}<|fim_middle|>
+	 * 由后端 buildFimPrompt() 拼装后发送到 DashScope /completions 端点
 	 */
-	private async buildEnhancedPrompt(context: CompletionContext): Promise<string> {
-		console.log('[AI Inline Completions] buildEnhancedPrompt called');
+	private async buildEnhancedPrompt(context: CompletionContext): Promise<{ fimPrefix: string; fimSuffix: string }> {
+		const prefixParts: string[] = [];
 
-		// ⚠️ 架构决策：100% 本地生成提示词，不调用后端API
-		// 原因：
-		// 1. 本地生成：<1ms
-		// 2. API调用：50-200ms
-		// 3. 性能差距：200倍
-		// 4. 本地提示词已经非常完善（包含LSP增强信息）
-		// 详见：src/vs/workbench/contrib/maxian/common/prompts/README.md
-		//
-		// ❌ 不要恢复这段代码：
-		// const backendPrompt = await this.fetchCompletionPromptFromBackend(context);
-		// if (backendPrompt) { return backendPrompt; }
+		// 1. 文件路径注释（帮助模型了解文件类型和语言）
+		const filename = context.fileUri.path.split('/').pop() || '';
+		prefixParts.push(`// File: ${filename}`);
 
-		// ✅ 直接使用本地提示词（性能最优）
-		console.log('[AI Inline Completions] 使用本地提示词（已禁用后端API调用）');
-		const parts: string[] = [];
-
-		// 检测是否是换行场景
-		const isNewLine = context.prefix.trim().length === 0 && context.suffix.trim().length === 0;
-
-		// 系统角色定义
-		parts.push(`你是一个专业的${context.languageId}代码补全引擎。`);
-		parts.push('你的任务是预测并生成用户接下来要写的代码。');
-		parts.push('');
-		parts.push('⚠️ 【工作模式：Fill-in-the-Middle（填充模式）】');
-		parts.push('下面的代码中有一个 <CURSOR> 标记，表示用户光标的精确位置。');
-		parts.push('你的任务：只输出应该插入到 <CURSOR> 处的代码。');
-		parts.push('<CURSOR> 左边和右边的代码均已存在，你的输出不能包含这些已有代码！');
-		parts.push('');
-
-		// 添加结构化上下文
-		const hasStructuredContext = context.currentClass || context.currentMethod ||
-			context.frameworks || context.methodParams || context.currentClassFields;
-
-		if (hasStructuredContext) {
-			parts.push('【当前上下文】');
-
-			if (context.currentClass) {
-				parts.push(`当前类: ${context.currentClass}`);
-				if (context.currentMethod) {
-					parts.push(`当前方法: ${context.currentMethod}`);
-				}
-			}
-
-			// 添加方法参数信息（关键！让AI知道可用的变量）
-			if (context.methodParams && context.methodParams.length > 0) {
-				parts.push(`方法参数: ${context.methodParams.join(', ')}`);
-			}
-
-			// 添加类字段信息
-			if (context.currentClassFields && context.currentClassFields.length > 0) {
-				parts.push(`类字段: ${context.currentClassFields.slice(0, 10).join(', ')}${context.currentClassFields.length > 10 ? '...' : ''}`);
-			}
-
-			if (context.frameworks && context.frameworks.length > 0) {
-				parts.push(`使用框架: ${context.frameworks.join(', ')}`);
-			}
-
-			if (context.imports && context.imports.length > 0) {
-				const importSummary = context.imports.slice(0, 8).map((imp: any) => imp.modulePath);
-				parts.push(`已导入: ${importSummary.join(', ')}${context.imports.length > 8 ? '...' : ''}`);
-			}
-
-			parts.push('');
+		// 2. 类型约束注入（保留 LSP 类型检测优势，注入为代码注释）
+		// 方法引用约束（Java ClassName:: 场景）
+		if (context.methodReference && context.methodReference.candidates.length > 0) {
+			const candidates = context.methodReference.candidates.slice(0, 20).join(', ');
+			prefixParts.push(`// Available methods in ${context.methodReference.className}: ${candidates}`);
 		}
 
-		// 🆕 添加 Java 方法引用上下文（关键优化！）
-		if (context.methodReference) {
-			parts.push('【⚠️ 方法引用约束 - 必须严格遵守】');
-			parts.push(`当前正在编写 ${context.methodReference.className}::${context.methodReference.methodPrefix || ''} 方法引用`);
-			if (context.methodReference.candidates.length > 0) {
-				parts.push('');
-				parts.push(`🔒 ${context.methodReference.className} 类【仅有】以下方法，禁止生成其他方法名：`);
-				parts.push(context.methodReference.candidates.slice(0, 20).join(', '));
-				parts.push('');
-				parts.push('❌ 严禁生成上述列表中不存在的方法名！');
-				parts.push('❌ 如果不确定方法是否存在，宁可不生成！');
-			}
-			parts.push('');
-		}
-
-		// 🆕 添加类型定义信息（从 LSP 获取）- 增强版
+		// 类型成员约束（防止幻觉方法/字段）
 		if (context.typeDefinitions && context.typeDefinitions.length > 0) {
-			parts.push('【⚠️ 类型约束 - 必须严格遵守】');
-			parts.push('以下是上下文中涉及的类型及其【完整】的可用成员：');
-			parts.push('');
-
-			for (const typeDef of context.typeDefinitions.slice(0, 5)) {
-				parts.push(`🔒 类型 ${typeDef.typeName}：`);
-
-				// 显示字段（增强版）
-				if (typeDef.enhancedFields && typeDef.enhancedFields.length > 0) {
-					const fieldsList = typeDef.enhancedFields
-						.slice(0, 10)
-						.map(f => `${f.type} ${f.name}`)
-						.join(', ');
-					parts.push(`  【字段】${fieldsList}`);
-				} else if (typeDef.fields.length > 0) {
-					parts.push(`  【字段】${typeDef.fields.slice(0, 10).join(', ')}`);
+			for (const typeDef of context.typeDefinitions.slice(0, 3)) {
+				const methods = typeDef.enhancedMethods
+					? typeDef.enhancedMethods.filter(m => m.accessModifier !== 'private').slice(0, 10).map(m => m.signature || m.name)
+					: typeDef.methods.slice(0, 10);
+				const fields = typeDef.enhancedFields
+					? typeDef.enhancedFields.slice(0, 5).map(f => `${f.type} ${f.name}`)
+					: typeDef.fields.slice(0, 5);
+				if (methods.length > 0 || fields.length > 0) {
+					const memberInfo = [...fields, ...methods].join(', ');
+					prefixParts.push(`// ${typeDef.typeName} members: ${memberInfo}`);
 				}
-
-				// 显示方法（增强版，包含签名）
-				if (typeDef.enhancedMethods && typeDef.enhancedMethods.length > 0) {
-					const publicMethods = typeDef.enhancedMethods
-						.filter(m => m.accessModifier !== 'private')
-						.slice(0, 15);
-					if (publicMethods.length > 0) {
-						const methodsList = publicMethods
-							.map(m => m.signature || m.name)
-							.join('; ');
-						parts.push(`  【方法】${methodsList}`);
-					}
-				} else if (typeDef.methods.length > 0) {
-					parts.push(`  【方法】${typeDef.methods.slice(0, 15).join(', ')}`);
-				}
-
-				// 显示继承信息
-				if (typeDef.parentClass) {
-					parts.push(`  【继承】extends ${typeDef.parentClass}`);
-				}
-				if (typeDef.interfaces && typeDef.interfaces.length > 0) {
-					parts.push(`  【实现】implements ${typeDef.interfaces.join(', ')}`);
-				}
-
-				parts.push('');
-			}
-
-			parts.push('❌ 严禁调用上述类型中不存在的方法或访问不存在的字段！');
-			parts.push('❌ 严禁生成类型中未列出的 getter/setter 方法！');
-			parts.push('');
-		}
-
-		// 🆕 添加变量类型映射
-		if (context.variableTypes && context.variableTypes.size > 0) {
-			parts.push('【局部变量类型】');
-			const entries = Array.from(context.variableTypes.entries()).slice(0, 10);
-			for (const [varName, typeName] of entries) {
-				parts.push(`  ${varName}: ${typeName}`);
-			}
-			parts.push('');
-		}
-
-		// 🆕 添加框架特化上下文
-		if (context.frameworkContext) {
-			const fc = context.frameworkContext;
-			parts.push('【框架上下文】');
-			parts.push(`框架: ${fc.name}${fc.version ? ` v${fc.version}` : ''}`);
-
-			if (fc.contextType) {
-				parts.push(`上下文类型: ${fc.contextType}`);
-			}
-
-			if (fc.annotations && fc.annotations.length > 0) {
-				parts.push(`已使用注解: ${fc.annotations.join(', ')}`);
-			}
-
-			if (fc.hints && fc.hints.length > 0) {
-				parts.push('');
-				parts.push('💡 框架提示:');
-				for (const hint of fc.hints.slice(0, 5)) {
-					parts.push(`  - ${hint}`);
-				}
-			}
-
-			if (fc.patterns && fc.patterns.length > 0) {
-				parts.push('');
-				parts.push('📝 常用模式:');
-				for (const pattern of fc.patterns.slice(0, 3)) {
-					parts.push(`  ${pattern}`);
-				}
-			}
-
-			parts.push('');
-		}
-
-		// 🆕 添加跨文件上下文
-		if (context.relatedFiles && context.relatedFiles.length > 0) {
-			parts.push('【相关文件上下文】');
-			parts.push('以下是当前文件导入的相关模块信息，可参考其定义：');
-			parts.push('');
-
-			for (const relFile of context.relatedFiles.slice(0, 3)) {
-				const fileName = relFile.filepath.split('/').pop() || relFile.filepath;
-				parts.push(`📁 ${fileName} (${relFile.fileType}):`);
-
-				if (relFile.definitions.length > 0) {
-					parts.push(`  定义: ${relFile.definitions.slice(0, 5).join(', ')}`);
-				}
-
-				// 只在摘要较短时添加
-				if (relFile.summary && relFile.summary.length < 300) {
-					parts.push(`  摘要: ${relFile.summary.substring(0, 200)}...`);
-				}
-
-				parts.push('');
 			}
 		}
 
-		// 🆕 最近编辑历史（参考 Copilot NES edit_diff_history）
-		// 让 AI 理解用户最近的修改意图，生成更一致的补全
-		if (context.recentEdits && context.recentEdits.length > 0) {
-			parts.push('【最近编辑历史（用于推断修改意图）】');
-			for (const edit of context.recentEdits) {
-				const lineInfo = edit.range.startLineNumber === edit.range.endLineNumber
-					? `行${edit.range.startLineNumber}`
-					: `行${edit.range.startLineNumber}-${edit.range.endLineNumber}`;
-				if (edit.text.trim()) {
-					const previewText = edit.text.length > 100
-						? edit.text.substring(0, 100) + '...'
-						: edit.text;
-					parts.push(`  ${lineInfo}: 添加 \`${previewText.replace(/\n/g, '↵')}\``);
-				} else {
-					parts.push(`  ${lineInfo}: 删除代码`);
-				}
-			}
-			parts.push('');
-		}
-
-		// 代码上下文 - FIM 风格：用统一代码块 + <CURSOR> 标记精确插入位置
-		// 这样 AI 能清晰识别光标位置，不会误以为需要修改周围代码
+		// 3. 光标前的代码（主体）
 		const beforeCode = context.beforeLines.join('\n');
-		const afterCode = context.afterLines.join('\n');
-
-		// 构造光标所在行：prefix + <CURSOR> + suffix
-		const cursorLine = (context.prefix || '') + '<CURSOR>' + (context.suffix || '');
-
-		parts.push('【当前文件代码（<CURSOR> 标记为光标精确位置，你需要生成插入到此处的代码）】');
-		parts.push('```' + context.languageId);
 		if (beforeCode) {
-			parts.push(beforeCode);
+			prefixParts.push(beforeCode);
 		}
-		parts.push(cursorLine);
+		prefixParts.push(context.prefix);  // 当前行光标前内容（可能包含注释、代码片段）
+
+		// 4. 光标后的代码（suffix）- 只取 20 行，减少模型处理量
+		const suffixParts: string[] = [];
+		if (context.suffix) {
+			suffixParts.push(context.suffix);  // 当前行光标后内容
+		}
+		const afterCode = context.afterLines.slice(0, 20).join('\n');
 		if (afterCode) {
-			parts.push(afterCode);
+			suffixParts.push(afterCode);
 		}
-		parts.push('```');
-		parts.push('');
 
-		// 输出要求
-		parts.push('【任务】');
-		if (context.methodReference) {
-			// Java 方法引用场景的特殊要求
-			parts.push(`用户正在输入 ${context.methodReference.className}:: 方法引用，请补全方法名。`);
-			parts.push('必须使用上面列出的可用方法之一，直接输出方法名即可。');
-		} else if (isNewLine) {
-			parts.push('用户刚按下回车，光标在 <CURSOR> 处（空行）。请预测并输出这里应该写的下一行代码。');
-		} else {
-			parts.push('请输出应该插入到 <CURSOR> 位置的代码。');
-			parts.push('<CURSOR> 左边是用户已输入的内容，右边是已存在的代码，你的输出会被插入到 <CURSOR> 处，左右内容保持不变。');
-		}
-		parts.push('');
-		parts.push('【🔒 关键规则 - 必须严格遵守】');
-		parts.push('');
-		parts.push('1. 【仅插入】只输出需要插入到 <CURSOR> 位置的新代码，<CURSOR> 两侧已有的代码绝对不能出现在你的输出中');
-		parts.push('2. 【代码风格】仔细分析上下文代码的模式和风格，生成一致的代码');
-		parts.push('3. 【变量使用】只使用上下文中已出现或明确定义的变量名、方法名和类名');
-		parts.push('4. 【类型约束】如果提供了类型定义信息，必须只使用该类型实际存在的字段和方法');
-		parts.push('5. 【禁止猜测】禁止生成任何未在上下文中出现的方法名或字段名');
-		parts.push('6. 【输出格式】只输出代码，不要任何解释、注释或markdown标记');
-		parts.push('7. 【缩进格式】保持与上下文一致的缩进');
-		parts.push('');
-		parts.push('⚠️ 违规示例（禁止）：');
-		parts.push('  - 输出中包含 <CURSOR> 右边已有的代码（如已有的括号、方法体、语句）');
-		parts.push('  - 生成类型中不存在的 getXxx() 方法');
-		parts.push('  - 访问类型中不存在的字段');
-		parts.push('  - 调用未导入或未定义的方法');
-		parts.push('');
-		parts.push('直接输出插入 <CURSOR> 处的代码（无解释）：');
+		const fimPrefix = prefixParts.join('\n');
+		const fimSuffix = suffixParts.join('\n');
 
-		const finalPrompt = parts.join('\n');
-		console.log('[AI Inline Completions] 本地提示词内容（前500字符）:', finalPrompt.substring(0, 500));
-		return finalPrompt;
+		console.log('[AI Inline Completions] FIM prompt built, prefix_len:', fimPrefix.length, 'suffix_len:', fimSuffix.length);
+		return { fimPrefix, fimSuffix };
 	}
-
 
 	freeInlineCompletions(): void {
 		// Cleanup if needed
@@ -1246,11 +971,13 @@ export class AIInlineCompletionsProvider implements InlineCompletionsProvider {
 	 * 生成补全缓存的 key
 	 */
 	private generateCacheKey(context: CompletionContext): string {
-		// 使用前缀、后缀和关键上下文信息生成缓存 key
+		// 必须包含 beforeLines 的最近内容，否则空行场景下 prefix 相同导致缓存命中同一结果
+		const recentBeforeLines = context.beforeLines.slice(-5).join('\n').slice(-200);
 		const keyParts = [
 			context.languageId,
-			context.prefix.slice(-100), // 最后100个字符
-			context.suffix.slice(0, 50), // 前50个字符
+			recentBeforeLines,             // 光标前最近 5 行内容
+			context.prefix.slice(-100),    // 当前行光标前内容
+			context.suffix.slice(0, 50),   // 当前行光标后内容
 			context.currentClass || '',
 			context.currentMethod || ''
 		];

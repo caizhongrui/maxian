@@ -101,7 +101,8 @@ export const EXPLORE_AGENT_TOOLS = [
 	'list_files',
 	'list_code_definition_names',
 	'codebase_search',
-	'glob'
+	'glob',
+	'batch'  // 允许并行搜索/读取，避免逐轮单独调用
 ] as const;
 
 /**
