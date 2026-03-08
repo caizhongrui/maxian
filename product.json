@@ -668,6 +668,27 @@
     "redhat.telemetry.enabled": false,
     "files.associations": {
       "*.vue": "vue"
+    },
+    "terminal.integrated.env.windows": {
+      "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8"
+    },
+    "terminal.integrated.env.osx": {
+      "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8",
+      "LANG": "zh_CN.UTF-8"
+    },
+    "terminal.integrated.env.linux": {
+      "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8",
+      "LANG": "zh_CN.UTF-8"
+    },
+    "terminal.integrated.profiles.windows": {
+      "Command Prompt": {
+        "path": "C:\\Windows\\System32\\cmd.exe",
+        "args": ["/K", "chcp 65001 > nul"]
+      },
+      "PowerShell": {
+        "source": "PowerShell",
+        "args": ["-NoExit", "-Command", "chcp 65001 | Out-Null"]
+      }
     }
   }
 }
