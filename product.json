@@ -38,9 +38,9 @@
   "webviewContentExternalBaseUrlTemplate": "https://{{uuid}}.vscode-cdn.net/insider/ef65ac1ba57f57f2a3961bfe94aa20481caca4c6/out/vs/workbench/contrib/webview/browser/pre/",
   "locale": "zh-cn",
   "extensionsGallery": {
-    "serviceUrl": "https://open-vsx.org/vscode/gallery",
-    "itemUrl": "https://open-vsx.org/vscode/item",
-    "resourceUrlTemplate": "https://open-vsx.org/vscode/asset/{publisher}/{name}/{version}/{path}",
+    "serviceUrl": "http://10.205.81.162/vscode/gallery",
+    "itemUrl": "http://10.205.81.162/vscode/item",
+    "resourceUrlTemplate": "http://10.205.81.162/vscode/assets/{publisher}/{name}/{version}/{path}",
     "controlUrl": "",
     "nlsBaseUrl": "https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/package"
   },
