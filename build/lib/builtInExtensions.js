@@ -45,7 +45,7 @@ function isUpToDate(extension) {
     }
 }
 function getExtensionDownloadStream(extension) {
-    const galleryServiceUrl = process.env['VSCODE_GALLERY_SERVICE_URL'] || 'https://marketplace.visualstudio.com/_apis/public/gallery';
+    const galleryServiceUrl = process.env['VSCODE_GALLERY_SERVICE_URL'] || 'https://open-vsx.org/vscode/gallery';
     return (galleryServiceUrl ? ext.fromMarketplace(galleryServiceUrl, extension) : ext.fromGithub(extension))
         .pipe(rename(p => p.dirname = `${extension.name}/${p.dirname}`));
 }
@@ -59,7 +59,7 @@ function getExtensionStream(extension) {
     return getExtensionDownloadStream(extension);
 }
 function syncMarketplaceExtension(extension) {
-    const galleryServiceUrl = process.env['VSCODE_GALLERY_SERVICE_URL'] || 'https://marketplace.visualstudio.com/_apis/public/gallery';
+    const galleryServiceUrl = process.env['VSCODE_GALLERY_SERVICE_URL'] || 'https://open-vsx.org/vscode/gallery';
     const source = ansiColors.blue(galleryServiceUrl ? '[marketplace]' : '[github]');
     if (isUpToDate(extension)) {
         log(source, `${extension.name}@${extension.version}`, ansiColors.green('✔︎'));
