@@ -670,14 +670,14 @@
       "*.vue": "vue"
     },
     "terminal.integrated.env.windows": {
-      "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8"
+      "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 -Dlogging.charset.console=UTF-8 -Dlogging.charset.file=UTF-8"
     },
     "terminal.integrated.env.osx": {
-      "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8",
+      "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 -Dlogging.charset.console=UTF-8 -Dlogging.charset.file=UTF-8",
       "LANG": "zh_CN.UTF-8"
     },
     "terminal.integrated.env.linux": {
-      "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8",
+      "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 -Dlogging.charset.console=UTF-8 -Dlogging.charset.file=UTF-8",
       "LANG": "zh_CN.UTF-8"
     },
     "terminal.integrated.profiles.windows": {
