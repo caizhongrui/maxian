@@ -21,9 +21,10 @@ import { IStorageService, StorageScope } from '../../../../platform/storage/comm
 import { getAllModes, DEFAULT_MODE, type Mode } from '../common/modes/modeTypes.js';
 import { MarkdownRendererDom } from './markdownRendererDom.js';
 import { FileAccess } from '../../../../base/common/network.js';
+import { URI } from '../../../../base/common/uri.js';
 import { ClineMessage } from '../common/task/taskTypes.js';
 import { IAuthService } from '../../auth/common/authService.js';
-import { IQuickInputService, IQuickPickItem } from '../../../../platform/quickinput/common/quickInput.js';
+import { IQuickInputService } from '../../../../platform/quickinput/common/quickInput.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import {
 	renderDiffStats,
@@ -56,7 +57,8 @@ import {
 export class MaxianView extends ViewPane {
 	private container!: HTMLElement;
 	private messageArea!: HTMLElement;
-	private inputBox!: HTMLTextAreaElement;
+	private inputBox!: HTMLDivElement; // contenteditable，支持内嵌文件 chip
+	private inputPlaceholderEl!: HTMLElement; // placeholder 覆盖层
 	private sendButton!: HTMLButtonElement;
 	private currentAiMessageElement: HTMLElement | null = null;
 	private currentAiMessageText: string = ''; // 累积的原始文本
@@ -72,6 +74,7 @@ export class MaxianView extends ViewPane {
 	private currentToolStatusElement: HTMLElement | null = null; // 当前工具状态元素（更新而非新建）
 	private toolStatusElements: Map<string, HTMLElement> = new Map(); // 工具ID到状态元素的映射（支持并行工具）
 	private thinkingMessageElement: HTMLElement | null = null; // "正在思考"消息元素（避免重复显示）
+	private waitingIndicatorElement: HTMLElement | null = null; // 发送后"等待中"三点动画气泡
 	private tokenStatsElement: HTMLElement | null = null; // token统计元素（唯一，更新而非累加）
 	private cancelButton!: HTMLButtonElement; // 取消任务按钮
 	private clearButton!: HTMLButtonElement; // 清空对话按钮
@@ -111,8 +114,10 @@ export class MaxianView extends ViewPane {
 	private mentionDropdown: HTMLElement | null = null; // @mention 下拉列表容器（用于部分输入时的过滤）
 	private mentionDropdownItems: string[] = []; // 当前下拉列表中的文件路径
 	private mentionDropdownIndex: number = -1; // 当前高亮项索引
-	private mentionAtPos: number = -1; // @ 符号在输入框中的位置
-	private mentionQuickPickOpen: boolean = false; // QuickPick 文件选择器是否已打开
+	// @mention 相关（contenteditable 光标跟踪）
+	private mentionAtNode: Text | null = null; // 包含 @ 的文本节点
+	private mentionAtOffset: number = -1;      // @ 在文本节点中的 offset
+	private mentionCursorOffset: number = -1;  // 光标在文本节点中的 offset
 	// 快捷键上下文键
 	private maxianInputFocusedCtx!: IContextKey<boolean>;
 	private maxianMentionDropdownVisibleCtx!: IContextKey<boolean>;
@@ -132,7 +137,7 @@ export class MaxianView extends ViewPane {
 		@IMaxianService private readonly maxianService: IMaxianService,
 		@IAuthService private readonly authService: IAuthService,
 		@IStorageService private readonly storageService: IStorageService,
-		@IQuickInputService private readonly quickInputService: IQuickInputService,
+		@IQuickInputService private readonly _quickInputService: IQuickInputService,
 		@ICommandService private readonly commandService: ICommandService
 	) {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, telemetryService, hoverService);
@@ -173,9 +178,9 @@ export class MaxianView extends ViewPane {
 			this.clearButton?.click();
 		}));
 
-		// 当快捷键绑定发生变化时，更新输入框 placeholder
+		// 当快捷键绑定发生变化时，更新输入框 placeholder 文字
 		this._register(this.keybindingService.onDidUpdateKeybindings(() => {
-			this.updateInputPlaceholder();
+			this.refreshInputPlaceholderText();
 		}));
 
 		// 监听旧版消息事件（向后兼容）
@@ -364,6 +369,40 @@ export class MaxianView extends ViewPane {
 		inputContainer.style.padding = '8px 12px';
 		inputContainer.style.position = 'relative';
 
+		// ========== 拖拽把手（在输入区顶部，拖动调整输入区高度） ==========
+		const resizeHandle = append(inputContainer, $('div.maxian-resize-handle'));
+
+		// 拖拽逻辑：向上拖增大，向下拖缩小
+		let _isDragging = false;
+		let _dragStartY = 0;
+		let _dragStartHeight = 0;
+
+		resizeHandle.addEventListener('mousedown', (e: MouseEvent) => {
+			_isDragging = true;
+			_dragStartY = e.clientY;
+			_dragStartHeight = this.inputBox ? this.inputBox.offsetHeight : 90;
+			resizeHandle.classList.add('dragging');
+			document.body.style.userSelect = 'none';
+			e.preventDefault();
+		});
+
+		document.addEventListener('mousemove', (e: MouseEvent) => {
+			if (!_isDragging) return;
+			const delta = _dragStartY - e.clientY; // 向上拖 => delta > 0 => height 增加
+			const newHeight = Math.max(60, Math.min(500, _dragStartHeight + delta));
+			if (this.inputBox) {
+				this.inputBox.style.minHeight = newHeight + 'px';
+				this.inputBox.style.height = newHeight + 'px';
+			}
+		});
+
+		document.addEventListener('mouseup', () => {
+			if (!_isDragging) return;
+			_isDragging = false;
+			resizeHandle.classList.remove('dragging');
+			document.body.style.userSelect = '';
+		});
+
 		// ========== @mention 文件引用下拉列表（定位在输入框上方） ==========
 		this.mentionDropdown = append(inputContainer, $('div.maxian-mention-dropdown'));
 		this.mentionDropdown.style.display = 'none';
@@ -371,14 +410,15 @@ export class MaxianView extends ViewPane {
 		this.mentionDropdown.style.bottom = '100%';
 		this.mentionDropdown.style.left = '12px';
 		this.mentionDropdown.style.right = '12px';
-		this.mentionDropdown.style.maxHeight = '240px';
+		this.mentionDropdown.style.maxHeight = '280px';
 		this.mentionDropdown.style.overflowY = 'auto';
 		this.mentionDropdown.style.backgroundColor = 'var(--vscode-editorWidget-background)';
-		this.mentionDropdown.style.border = '1px solid var(--vscode-editorWidget-border)';
-		this.mentionDropdown.style.borderRadius = '4px';
-		this.mentionDropdown.style.boxShadow = '0 -4px 12px rgba(0, 0, 0, 0.3)';
+		this.mentionDropdown.style.border = '1px solid var(--vscode-widget-border)';
+		this.mentionDropdown.style.borderRadius = '8px';
+		this.mentionDropdown.style.boxShadow = '0 -8px 24px rgba(0, 0, 0, 0.2), 0 -2px 8px rgba(0, 0, 0, 0.12)';
 		this.mentionDropdown.style.zIndex = '1000';
-		this.mentionDropdown.style.marginBottom = '4px';
+		this.mentionDropdown.style.marginBottom = '6px';
+		this.mentionDropdown.style.padding = '4px';
 
 		// 输入框容器（相对定位，为负边距控制区提供基准）
 		const textAreaWrapper = append(inputContainer, $('div'));
@@ -389,44 +429,65 @@ export class MaxianView extends ViewPane {
 		textAreaWrapper.style.overflow = 'hidden';
 		textAreaWrapper.style.borderRadius = '4px';
 
-		// 输入框（底部留出空间给控制区）
-		this.inputBox = append(textAreaWrapper, $('textarea')) as HTMLTextAreaElement;
-		this.inputBox.placeholder = this.getInputPlaceholder('normal');
-		this.inputBox.rows = 3;
+		// 输入框（contenteditable div，支持内嵌文件 chip）
+		this.inputBox = append(textAreaWrapper, $('div')) as HTMLDivElement;
+		this.inputBox.contentEditable = 'true';
 		this.inputBox.style.width = '100%';
 		this.inputBox.style.minHeight = '90px';
 		this.inputBox.style.padding = '8px 12px';
-		this.inputBox.style.paddingBottom = '50px'; // 为底部控制区留出空间（类似kilocode的pb-16）
+		this.inputBox.style.paddingBottom = '50px';
 		this.inputBox.style.backgroundColor = 'var(--vscode-input-background)';
 		this.inputBox.style.color = 'var(--vscode-input-foreground)';
 		this.inputBox.style.border = '1px solid var(--vscode-input-border)';
 		this.inputBox.style.borderRadius = '4px';
 		this.inputBox.style.fontFamily = 'var(--vscode-font-family)';
 		this.inputBox.style.fontSize = '13px';
-		this.inputBox.style.resize = 'vertical';
 		this.inputBox.style.outline = 'none';
 		this.inputBox.style.lineHeight = '1.5';
 		this.inputBox.style.boxSizing = 'border-box';
 		this.inputBox.style.overflowX = 'hidden';
 		this.inputBox.style.overflowY = 'auto';
+		this.inputBox.style.whiteSpace = 'pre-wrap';
+		this.inputBox.style.wordBreak = 'break-word';
 		this.inputBox.style.zIndex = '1';
+		this.inputBox.style.position = 'relative';
+		this.inputBox.setAttribute('role', 'textbox');
+		this.inputBox.setAttribute('aria-multiline', 'true');
+		this.inputBox.setAttribute('spellcheck', 'false');
+
+		// placeholder 覆盖层（contenteditable 不支持原生 placeholder）
+		this.inputPlaceholderEl = append(textAreaWrapper, $('div'));
+		this.inputPlaceholderEl.style.position = 'absolute';
+		this.inputPlaceholderEl.style.top = '8px';
+		this.inputPlaceholderEl.style.left = '12px';
+		this.inputPlaceholderEl.style.right = '12px';
+		this.inputPlaceholderEl.style.color = 'var(--vscode-input-placeholderForeground)';
+		this.inputPlaceholderEl.style.pointerEvents = 'none';
+		this.inputPlaceholderEl.style.fontSize = '13px';
+		this.inputPlaceholderEl.style.lineHeight = '1.5';
+		this.inputPlaceholderEl.style.fontFamily = 'var(--vscode-font-family)';
+		this.inputPlaceholderEl.textContent = this.getInputPlaceholder('normal');
+
+		// 禁止粘贴富文本，只保留纯文本
+		this.inputBox.addEventListener('paste', (e) => {
+			e.preventDefault();
+			const text = e.clipboardData?.getData('text/plain') ?? '';
+			document.execCommand('insertText', false, text);
+			this.updateInputPlaceholder();
+		});
 
 		// 输入框聚焦效果
 		this.inputBox.onfocus = () => {
 			this.inputBox.style.borderColor = 'var(--vscode-focusBorder)';
 			this.inputBox.style.outline = '1px solid var(--vscode-focusBorder)';
-			// 设置上下文键：输入框已聚焦
 			this.maxianInputFocusedCtx?.set(true);
 		};
 		this.inputBox.onblur = (e) => {
 			this.inputBox.style.borderColor = 'var(--vscode-input-border)';
 			this.inputBox.style.outline = 'none';
-			// 清除上下文键：输入框失焦
 			this.maxianInputFocusedCtx?.set(false);
-			// 点击下拉列表项时不隐藏（relatedTarget 是 dropdown 内部元素时不隐藏）
 			const related = (e as FocusEvent).relatedTarget as HTMLElement | null;
 			if (!related || !this.mentionDropdown?.contains(related)) {
-				// 延迟隐藏，允许 click 事件先触发
 				setTimeout(() => this.hideMentionDropdown(), 150);
 			}
 		};
@@ -1014,7 +1075,7 @@ export class MaxianView extends ViewPane {
 
 		// 发送按钮点击事件
 		this.sendButton.onclick = () => {
-			const message = this.inputBox.value.trim();
+			const message = this.getInputText().trim();
 			if (message) {
 				// 清除欢迎消息（使用成员变量，支持清空对话后重新创建的欢迎界面）
 				if (this.welcomeElement && this.welcomeElement.parentElement) {
@@ -1050,17 +1111,17 @@ export class MaxianView extends ViewPane {
 
 					// 提交用户回复
 					this.maxianService.submitUserResponse(message);
-
+					this.showWaitingIndicator();
 					// 恢复正常状态
 					this.awaitingUserResponse = false;
-					this.inputBox.placeholder = this.getInputPlaceholder('normal');
+					this.setInputPlaceholder(this.getInputPlaceholder('normal'));
 				} else {
-					// 正常发送消息
-					this.sendMessage(message);
+					// 正常发送消息：display 文本用于显示，expanded 文本发给 AI（含完整路径）
+					const expanded = this.getInputTextExpanded();
+					this.sendMessage(message, expanded);
 				}
 
-				this.inputBox.value = '';
-				this.inputBox.style.height = 'auto';
+				this.clearInput();
 			}
 		};
 
@@ -1104,13 +1165,11 @@ export class MaxianView extends ViewPane {
 			// 用户可在 "首选项 > 键盘快捷方式" 中自定义这些快捷键
 		};
 
-		// 自动调整输入框高度 + @mention 检测
+		// 自动调整输入框高度 + @mention 检测 + placeholder
 		this.inputBox.oninput = () => {
 			this.inputBox.style.height = 'auto';
-			const newHeight = this.inputBox.scrollHeight;
-			this.inputBox.style.height = newHeight + 'px';
-
-			// 检测光标位置前的 @mention
+			this.inputBox.style.height = this.inputBox.scrollHeight + 'px';
+			this.updateInputPlaceholder();
 			this.handleMentionInput();
 		};
 	}
@@ -1713,38 +1772,93 @@ export class MaxianView extends ViewPane {
 				animation: todo-spin 1s linear infinite !important;
 			}
 
-			/* ========== 滚动条美化 ========== */
-			.maxian-messages::-webkit-scrollbar {
-				width: 8px;
+			/* ========== 统一细滚动条 ========== */
+			.maxian-messages::-webkit-scrollbar,
+			.maxian-input-box::-webkit-scrollbar,
+			.maxian-mention-dropdown::-webkit-scrollbar {
+				width: 4px;
+				height: 4px;
 			}
-
-			.maxian-messages::-webkit-scrollbar-track {
+			.maxian-messages::-webkit-scrollbar-track,
+			.maxian-input-box::-webkit-scrollbar-track,
+			.maxian-mention-dropdown::-webkit-scrollbar-track {
 				background: transparent;
 			}
-
-			.maxian-messages::-webkit-scrollbar-thumb {
+			.maxian-messages::-webkit-scrollbar-thumb,
+			.maxian-input-box::-webkit-scrollbar-thumb,
+			.maxian-mention-dropdown::-webkit-scrollbar-thumb {
 				background: var(--vscode-scrollbarSlider-background);
-				border-radius: 4px;
+				border-radius: 2px;
 			}
-
-			.maxian-messages::-webkit-scrollbar-thumb:hover {
+			.maxian-messages::-webkit-scrollbar-thumb:hover,
+			.maxian-input-box::-webkit-scrollbar-thumb:hover,
+			.maxian-mention-dropdown::-webkit-scrollbar-thumb:hover {
 				background: var(--vscode-scrollbarSlider-hoverBackground);
 			}
 
-			/* ========== @mention 文件引用下拉列表 ========== */
+			/* ========== @mention 下拉框（参照 Trae/OpenCode 风格） ========== */
 			.maxian-mention-dropdown {
 				font-family: var(--vscode-font-family);
-				font-size: 13px;
+				font-size: 12px;
+				padding: 4px;
 			}
 
 			.maxian-mention-item {
 				transition: background-color 0.1s;
+				border-radius: 4px;
 			}
 
-			.maxian-mention-item:hover {
+			.maxian-mention-item:hover,
+			.maxian-mention-item.active {
 				background-color: var(--vscode-list-hoverBackground) !important;
-				color: var(--vscode-list-hoverForeground, var(--vscode-foreground)) !important;
 			}
+
+			.maxian-mention-item-dir {
+				color: var(--vscode-descriptionForeground);
+				font-size: 12px;
+				white-space: nowrap;
+				flex-shrink: 1;
+				overflow: hidden;
+				min-width: 0;
+			}
+
+			.maxian-mention-item-file {
+				color: var(--vscode-foreground);
+				font-size: 12px;
+				font-weight: 500;
+				white-space: nowrap;
+				flex-shrink: 0;
+			}
+
+			/* ========== 输入区拖拽把手 ========== */
+			.maxian-resize-handle {
+				height: 4px;
+				cursor: ns-resize;
+				background: transparent;
+				transition: background 0.15s;
+				flex-shrink: 0;
+			}
+			.maxian-resize-handle:hover,
+			.maxian-resize-handle.dragging {
+				background: var(--vscode-focusBorder);
+			}
+
+			/* ========== 等待中三点动画 ========== */
+			@keyframes maxian-thinking-bounce {
+				0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+				30% { transform: translateY(-5px); opacity: 1; }
+			}
+
+			.maxian-thinking-dot {
+				display: inline-block;
+				width: 6px;
+				height: 6px;
+				border-radius: 50%;
+				background: var(--vscode-charts-blue, #007acc);
+				animation: maxian-thinking-bounce 1.2s ease-in-out infinite;
+			}
+			.maxian-thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+			.maxian-thinking-dot:nth-child(3) { animation-delay: 0.4s; }
 		`;
 		this.container.appendChild(style);
 	}
@@ -1757,136 +1871,213 @@ export class MaxianView extends ViewPane {
 	 * - 已输入 @部分路径 时：显示 inline 过滤下拉列表
 	 */
 	private handleMentionInput(): void {
-		const value = this.inputBox.value;
-		const cursorPos = this.inputBox.selectionStart ?? value.length;
-
-		// 向前查找最近的 @ 符号（同一行内）
-		let atPos = -1;
-		for (let i = cursorPos - 1; i >= 0; i--) {
-			const ch = value[i];
-			if (ch === '@') {
-				atPos = i;
-				break;
-			}
-			// 遇到换行或空格则停止（@ 必须在当前词的开头）
-			if (ch === '\n' || ch === ' ') {
-				break;
-			}
+		const selection = window.getSelection();
+		if (!selection || selection.rangeCount === 0) {
+			this.hideMentionDropdown();
+			return;
 		}
+		const range = selection.getRangeAt(0);
+		if (!range.collapsed) { this.hideMentionDropdown(); return; }
 
-		if (atPos === -1) {
+		const node = range.startContainer;
+		if (node.nodeType !== Node.TEXT_NODE || !this.inputBox.contains(node)) {
 			this.hideMentionDropdown();
 			return;
 		}
 
-		const query = value.slice(atPos + 1, cursorPos);
-		if (query.includes(' ') || query.includes('\n')) {
-			this.hideMentionDropdown();
-			return;
-		}
+		const offset = range.startOffset;
+		const text = (node.textContent ?? '').slice(0, offset);
 
-		this.mentionAtPos = atPos;
-
-		// 刚输入 @ 且 QuickPick 未打开：立即弹出文件选择器
-		if (query === '' && !this.mentionQuickPickOpen) {
-			this.openFileMentionQuickPick(atPos);
-			return;
+		// 向前查找 @（遇到空格/换行则停止）
+		let atIdx = -1;
+		for (let i = text.length - 1; i >= 0; i--) {
+			const ch = text[i];
+			if (ch === '@') { atIdx = i; break; }
+			if (ch === ' ' || ch === '\n') break;
 		}
+		if (atIdx === -1) { this.hideMentionDropdown(); return; }
 
-		// 已输入部分路径：用 inline 下拉列表过滤
-		if (query !== '') {
-			this.maxianService.getWorkspaceFiles(query).then(files => {
-				if (files.length === 0) {
-					this.hideMentionDropdown();
-					return;
-				}
-				this.showMentionDropdown(files);
-			}).catch(() => {
-				this.hideMentionDropdown();
-			});
-		}
+		const query = text.slice(atIdx + 1);
+		if (query.includes(' ') || query.includes('\n')) { this.hideMentionDropdown(); return; }
+
+		this.mentionAtNode = node as Text;
+		this.mentionAtOffset = atIdx;
+		this.mentionCursorOffset = offset;
+
+		this.maxianService.getWorkspaceFiles(query).then(files => {
+			if (!this.mentionAtNode) return;
+			if (files.length === 0) { this.hideMentionDropdown(); return; }
+			this.showMentionDropdown(files.slice(0, 50));
+		}).catch(() => this.hideMentionDropdown());
 	}
 
 	/**
-	 * 打开 VSCode 原生 QuickPick 让用户直接选择文件
-	 * 选择后将 @filepath 插入输入框；取消则移除 @ 符号
+	 * 将选中的文件插入为 chip（inline 下拉列表调用）
 	 */
-	private async openFileMentionQuickPick(atPos: number): Promise<void> {
-		if (this.mentionQuickPickOpen) return;
-		this.mentionQuickPickOpen = true;
+	private insertMentionFile(file: string): void {
+		const atNode = this.mentionAtNode;
+		const atOffset = this.mentionAtOffset;
+		const cursorOffset = this.mentionCursorOffset;
 
-		try {
-			const files = await this.maxianService.getWorkspaceFiles('');
+		if (!atNode) { this.hideMentionDropdown(); return; }
 
-			const picks: IQuickPickItem[] = files.map(f => {
-				// 取文件名作为 label，完整相对路径作为 description
-				const parts = f.replace(/\\/g, '/').split('/');
-				const fileName = parts[parts.length - 1];
-				const dir = parts.slice(0, -1).join('/');
-				return {
-					label: fileName,
-					description: dir || undefined,
-					detail: f
-				};
-			});
+		const name = file.split('/').pop() ?? file;
 
-			const selected = await this.quickInputService.pick(picks, {
-				placeHolder: '选择要引用的文件（可输入关键字搜索）',
-				matchOnDescription: true,
-				matchOnDetail: true,
-			});
+		// 删除 @query 文本（从 atOffset 到 cursorOffset）
+		const fullText = atNode.textContent ?? '';
+		atNode.textContent = fullText.slice(0, atOffset) + fullText.slice(cursorOffset);
 
-			// 获取选中时输入框中 @ 的真实位置（可能因为用户编辑而变化）
-			const currentAtPos = this.mentionAtPos;
+		// 创建 chip 并插入
+		const chip = this.createMentionChip(name, file);
+		const insertRange = document.createRange();
+		insertRange.setStart(atNode, atOffset);
+		insertRange.collapse(true);
+		insertRange.insertNode(chip);
 
-			if (selected && selected.detail) {
-				// 插入 @filepath（替换输入框里的 @ 符号）
-				this.insertMentionFileAtPos(selected.detail, currentAtPos);
-			} else {
-				// 用户取消：移除 @ 符号，光标归位
-				const v = this.inputBox.value;
-				if (currentAtPos >= 0 && v[currentAtPos] === '@') {
-					this.inputBox.value = v.slice(0, currentAtPos) + v.slice(currentAtPos + 1);
-					this.inputBox.setSelectionRange(currentAtPos, currentAtPos);
-				}
-			}
-		} catch (e) {
-			console.warn('[MaxianView] openFileMentionQuickPick 出错:', e);
-		} finally {
-			this.mentionQuickPickOpen = false;
-			this.mentionAtPos = -1;
-			// 聚焦回输入框
-			this.inputBox.focus();
-		}
-	}
+		// chip 后插入空格节点，让光标落在 chip 后
+		const spaceNode = document.createTextNode('\u00A0');
+		chip.after(spaceNode);
 
-	/**
-	 * 在指定 @ 位置插入文件路径（供 QuickPick 和 inline 下拉列表共用）
-	 */
-	private insertMentionFileAtPos(file: string, atPos: number): void {
-		const value = this.inputBox.value;
-		const cursorPos = this.inputBox.selectionStart ?? value.length;
-
-		if (atPos < 0 || atPos >= value.length || value[atPos] !== '@') {
-			// @ 已经不在了，直接追加
-			this.inputBox.value = value + '@' + file + ' ';
-			const newPos = this.inputBox.value.length;
-			this.inputBox.setSelectionRange(newPos, newPos);
-		} else {
-			// 替换从 @ 到当前光标的内容（包含已输入的部分 query）
-			const before = value.slice(0, atPos);
-			const after = value.slice(cursorPos);
-			const newValue = before + '@' + file + ' ' + after;
-			this.inputBox.value = newValue;
-			const newCursorPos = atPos + 1 + file.length + 1;
-			this.inputBox.setSelectionRange(newCursorPos, newCursorPos);
+		// 移动光标到空格后
+		const sel = window.getSelection();
+		if (sel) {
+			const r = document.createRange();
+			r.setStart(spaceNode, 1);
+			r.collapse(true);
+			sel.removeAllRanges();
+			sel.addRange(r);
 		}
 
+		this.mentionAtNode = null;
 		this.inputBox.focus();
 		this.hideMentionDropdown();
-		// 触发高度自适应
 		this.inputBox.style.height = 'auto';
 		this.inputBox.style.height = this.inputBox.scrollHeight + 'px';
+		this.updateInputPlaceholder();
+	}
+
+	/**
+	 * 创建文件引用 chip 元素
+	 */
+	private createMentionChip(displayName: string, relativePath: string): HTMLElement {
+		const chip = $('span') as HTMLSpanElement;
+		(chip as HTMLElement).contentEditable = 'false';
+		(chip as HTMLElement).dataset['mentionKey'] = displayName;
+		(chip as HTMLElement).dataset['mentionPath'] = relativePath;
+		chip.style.display = 'inline-flex';
+		chip.style.alignItems = 'center';
+		chip.style.gap = '3px';
+		chip.style.padding = '1px 7px 1px 5px';
+		chip.style.margin = '0 2px';
+		chip.style.borderRadius = '4px';
+		chip.style.fontSize = '12px';
+		chip.style.fontFamily = 'var(--vscode-editor-font-family)';
+		chip.style.backgroundColor = 'var(--vscode-badge-background)';
+		chip.style.color = 'var(--vscode-badge-foreground)';
+		chip.style.border = '1px solid var(--vscode-focusBorder)';
+		chip.style.cursor = 'pointer';
+		chip.style.verticalAlign = 'middle';
+		chip.style.userSelect = 'none';
+		chip.style.whiteSpace = 'nowrap';
+		chip.title = relativePath;
+
+		// 文件图标
+		const icon = $('span.codicon.codicon-file-code') as HTMLSpanElement;
+		icon.style.fontSize = '11px';
+		icon.style.pointerEvents = 'none';
+		chip.appendChild(icon);
+
+		// 文件名文本
+		const label = $('span') as HTMLSpanElement;
+		label.textContent = '@' + displayName;
+		label.style.pointerEvents = 'none';
+		chip.appendChild(label);
+
+		// 删除按钮
+		const delBtn = $('span.codicon.codicon-close') as HTMLSpanElement;
+		delBtn.style.fontSize = '10px';
+		delBtn.style.marginLeft = '3px';
+		delBtn.style.cursor = 'pointer';
+		delBtn.style.opacity = '0.7';
+		delBtn.title = '移除引用';
+		delBtn.onclick = (e) => {
+			e.stopPropagation();
+			const next = chip.nextSibling;
+			if (next?.nodeType === Node.TEXT_NODE && next.textContent === '\u00A0') {
+				next.remove();
+			}
+			chip.remove();
+			this.updateInputPlaceholder();
+		};
+		chip.appendChild(delBtn);
+
+		// 点击 chip 打开文件
+		chip.onclick = (e) => {
+			if ((e.target as HTMLElement).classList.contains('codicon-close')) return;
+			const workspaceRoot = this.maxianService.getWorkspaceRoot();
+			if (workspaceRoot) {
+				const uri = URI.file(workspaceRoot + '/' + relativePath);
+				this.openerService.open(uri);
+			}
+		};
+
+		chip.onmouseenter = () => { chip.style.opacity = '0.85'; };
+		chip.onmouseleave = () => { chip.style.opacity = '1'; };
+
+		return chip;
+	}
+
+	/**
+	 * 将消息文本渲染到容器中，把 @filename 渲染为可点击的 chip 标签
+	 * 点击 chip 可打开对应文件
+	 */
+	private renderMessageWithMentions(container: HTMLElement, text: string): void {
+		const workspaceRoot = this.maxianService.getWorkspaceRoot();
+		// 正则拆分：把 @xxx 和普通文本分开
+		const parts = text.split(/(@[^\s@，。？！]+)/g);
+		for (const part of parts) {
+			if (part.startsWith('@') && part.length > 1) {
+				const relativePath = part.slice(1); // @后面的内容（完整相对路径）
+				const displayName = relativePath.split('/').pop() ?? relativePath; // 仅显示文件名
+
+				const chip = append(container, $('span'));
+				chip.style.display = 'inline-flex';
+				chip.style.alignItems = 'center';
+				chip.style.gap = '3px';
+				chip.style.padding = '1px 7px 1px 5px';
+				chip.style.margin = '0 2px';
+				chip.style.borderRadius = '4px';
+				chip.style.fontSize = '12px';
+				chip.style.fontFamily = 'var(--vscode-editor-font-family)';
+				chip.style.backgroundColor = 'var(--vscode-badge-background)';
+				chip.style.color = 'var(--vscode-badge-foreground)';
+				chip.style.border = '1px solid var(--vscode-focusBorder)';
+				chip.style.cursor = workspaceRoot ? 'pointer' : 'default';
+				chip.style.verticalAlign = 'middle';
+				chip.title = relativePath; // 完整路径作为 tooltip
+
+				const icon = append(chip, $('span.codicon.codicon-file-code'));
+				icon.style.fontSize = '11px';
+				icon.style.pointerEvents = 'none';
+
+				const label = append(chip, $('span'));
+				label.textContent = '@' + displayName; // 只显示文件名
+				label.style.pointerEvents = 'none';
+
+				if (workspaceRoot) {
+					chip.onclick = () => {
+						// 用完整相对路径直接打开
+						const uri = URI.file(workspaceRoot + '/' + relativePath);
+						this.openerService.open(uri);
+					};
+					chip.onmouseenter = () => { chip.style.opacity = '0.85'; };
+					chip.onmouseleave = () => { chip.style.opacity = '1'; };
+				}
+			} else if (part) {
+				// 普通文本节点
+				container.appendChild(document.createTextNode(part));
+			}
+		}
 	}
 
 	/**
@@ -1898,47 +2089,53 @@ export class MaxianView extends ViewPane {
 		this.mentionDropdownItems = files;
 		this.mentionDropdownIndex = files.length > 0 ? 0 : -1;
 
-		// 清空并重新渲染列表项
-		this.mentionDropdown.innerHTML = '';
-
-		// 标题提示
-		const header = append(this.mentionDropdown, $('div'));
-		header.style.padding = '6px 10px 4px 10px';
-		header.style.fontSize = '11px';
-		header.style.color = 'var(--vscode-descriptionForeground)';
-		header.style.borderBottom = '1px solid var(--vscode-widget-border)';
-		header.textContent = '选择文件（↑↓ 导航，Enter 选择，Esc 关闭）';
+		// 清空并重新渲染列表项（用 DOM API 避免 TrustedHTML CSP 限制）
+		while (this.mentionDropdown.firstChild) {
+			this.mentionDropdown.removeChild(this.mentionDropdown.firstChild);
+		}
 
 		files.forEach((file, index) => {
 			const item = append(this.mentionDropdown!, $('div.maxian-mention-item'));
-			item.style.padding = '6px 10px';
+			item.style.padding = '4px 8px';
 			item.style.cursor = 'pointer';
 			item.style.display = 'flex';
 			item.style.alignItems = 'center';
 			item.style.gap = '6px';
-			item.style.fontSize = '13px';
-			item.style.color = 'var(--vscode-foreground)';
-			item.style.borderRadius = '2px';
 			item.dataset['index'] = String(index);
 
 			// 文件图标
-			const icon = append(item, $('span.codicon.codicon-file'));
-			icon.style.fontSize = '14px';
+			const icon = append(item, $('span.codicon.codicon-file-code'));
+			icon.style.fontSize = '13px';
 			icon.style.color = 'var(--vscode-symbolIcon-fileForeground, var(--vscode-descriptionForeground))';
 			icon.style.flexShrink = '0';
 
-			// 文件路径文本
-			const label = append(item, $('span'));
-			label.style.flex = '1';
-			label.style.overflow = 'hidden';
-			label.style.textOverflow = 'ellipsis';
-			label.style.whiteSpace = 'nowrap';
-			label.textContent = file;
+			// 文字容器：目录（浅色）+ 文件名（主色）同一行，超出截断
+			const textRow = append(item, $('span'));
+			textRow.style.display = 'flex';
+			textRow.style.alignItems = 'baseline';
+			textRow.style.flex = '1';
+			textRow.style.overflow = 'hidden';
+			textRow.style.minWidth = '0';
+			textRow.style.gap = '0';
 
-			// 高亮当前选中项
+			// 解析目录和文件名
+			const slashIdx = file.lastIndexOf('/');
+			const fileName = slashIdx >= 0 ? file.slice(slashIdx + 1) : file;
+			const dirPath = slashIdx >= 0 ? file.slice(0, slashIdx + 1) : ''; // 含末尾 /
+
+			// 目录部分（浅色，可被截断）
+			if (dirPath) {
+				const dirSpan = append(textRow, $('span.maxian-mention-item-dir'));
+				dirSpan.textContent = dirPath;
+			}
+
+			// 文件名部分（主色加粗，不截断）
+			const fileSpan = append(textRow, $('span.maxian-mention-item-file'));
+			fileSpan.textContent = fileName;
+
+			// 默认高亮第一项
 			if (index === 0) {
-				item.style.backgroundColor = 'var(--vscode-list-activeSelectionBackground)';
-				item.style.color = 'var(--vscode-list-activeSelectionForeground)';
+				item.classList.add('active');
 			}
 
 			item.onmouseenter = () => {
@@ -1965,7 +2162,7 @@ export class MaxianView extends ViewPane {
 		}
 		this.mentionDropdownItems = [];
 		this.mentionDropdownIndex = -1;
-		this.mentionAtPos = -1;
+		this.mentionAtNode = null;
 		// 清除上下文键：下拉列表隐藏
 		this.maxianMentionDropdownVisibleCtx?.set(false);
 	}
@@ -1978,28 +2175,14 @@ export class MaxianView extends ViewPane {
 		const items = this.mentionDropdown.querySelectorAll<HTMLElement>('.maxian-mention-item');
 		items.forEach((item, idx) => {
 			if (idx === this.mentionDropdownIndex) {
-				item.style.backgroundColor = 'var(--vscode-list-activeSelectionBackground)';
-				item.style.color = 'var(--vscode-list-activeSelectionForeground)';
-				// 确保选中项可见
+				item.classList.add('active');
 				item.scrollIntoView({ block: 'nearest' });
 			} else {
-				item.style.backgroundColor = '';
-				item.style.color = 'var(--vscode-foreground)';
+				item.classList.remove('active');
 			}
 		});
 	}
 
-	/**
-	 * 将选中的文件路径插入到输入框中，替换 @ 触发词（inline 下拉列表使用）
-	 */
-	private insertMentionFile(file: string): void {
-		const atPos = this.mentionAtPos;
-		if (atPos === -1) {
-			this.hideMentionDropdown();
-			return;
-		}
-		this.insertMentionFileAtPos(file, atPos);
-	}
 
 	// ========== 快捷键辅助方法 ==========
 
@@ -2008,12 +2191,8 @@ export class MaxianView extends ViewPane {
 	 */
 	private handleNewLineInInput(): void {
 		if (!this.inputBox) return;
-		const start = this.inputBox.selectionStart ?? this.inputBox.value.length;
-		const end = this.inputBox.selectionEnd ?? start;
-		const value = this.inputBox.value;
-		this.inputBox.value = value.slice(0, start) + '\n' + value.slice(end);
-		this.inputBox.selectionStart = this.inputBox.selectionEnd = start + 1;
-		// 触发高度自适应
+		// contenteditable：通过 execCommand 插入换行
+		document.execCommand('insertLineBreak');
 		this.inputBox.style.height = 'auto';
 		this.inputBox.style.height = this.inputBox.scrollHeight + 'px';
 	}
@@ -2034,18 +2213,81 @@ export class MaxianView extends ViewPane {
 	}
 
 	/**
-	 * 更新输入框 placeholder（在快捷键变化时调用）
+	 * 更新输入框 placeholder 文字（在快捷键变化时调用）
 	 */
-	private updateInputPlaceholder(): void {
+	private refreshInputPlaceholderText(): void {
 		if (!this.inputBox) return;
-		// 如果当前是等待用户回答状态，不更新 placeholder
 		if (this.awaitingUserResponse) return;
-		this.inputBox.placeholder = this.getInputPlaceholder('normal');
+		this.setInputPlaceholder(this.getInputPlaceholder('normal'));
+	}
+
+	// ========== contenteditable 输入框辅助方法 ==========
+
+	/** 提取输入框纯文本（@文件名 短格式，用于显示在聊天气泡） */
+	private getInputText(): string {
+		return this.extractInputContent(false);
+	}
+
+	/** 提取输入框文本（@完整相对路径，用于发给 AI） */
+	private getInputTextExpanded(): string {
+		return this.extractInputContent(true);
+	}
+
+	private extractInputContent(expandPath: boolean): string {
+		let text = '';
+		for (const node of Array.from(this.inputBox.childNodes)) {
+			if (node.nodeType === Node.TEXT_NODE) {
+				text += node.textContent ?? '';
+			} else if (node instanceof HTMLElement) {
+				if (node.dataset['mentionPath']) {
+					// chip 节点
+					text += expandPath
+						? '@' + node.dataset['mentionPath']
+						: '@' + (node.dataset['mentionKey'] ?? node.dataset['mentionPath']);
+				} else if (node.tagName === 'BR') {
+					text += '\n';
+				} else if (node.tagName === 'DIV') {
+					// contenteditable 换行时可能产生 div
+					const inner = node.textContent ?? '';
+					text += '\n' + inner;
+				} else {
+					text += node.textContent ?? '';
+				}
+			}
+		}
+		return text;
+	}
+
+	/** 清空输入框 */
+	private clearInput(): void {
+		this.inputBox.textContent = '';
+		this.inputBox.style.height = 'auto';
+		this.updateInputPlaceholder();
+	}
+
+	/** 更新 placeholder 显示/隐藏 */
+	private updateInputPlaceholder(): void {
+		const isEmpty = this.inputBox.textContent?.trim() === ''
+			&& !this.inputBox.querySelector('[data-mention-path]');
+		if (this.inputPlaceholderEl) {
+			this.inputPlaceholderEl.style.display = isEmpty ? 'block' : 'none';
+		}
+	}
+
+	/** 设置 placeholder 文字 */
+	private setInputPlaceholder(text: string): void {
+		if (this.inputPlaceholderEl) {
+			this.inputPlaceholderEl.textContent = text;
+		}
 	}
 
 	// ========== 消息发送 ==========
 
-	private async sendMessage(message: string): Promise<void> {
+	/**
+	 * displayMessage: 显示给用户的文本（@文件名短格式）
+	 * expandedMessage: 发给 AI 的文本（@完整相对路径）
+	 */
+	private async sendMessage(displayMessage: string, expandedMessage: string = displayMessage): Promise<void> {
 		// 调用maxianService发送消息，传递当前模式
 		// maxianService会通过onMessage事件通知UI更新
 
@@ -2071,10 +2313,15 @@ export class MaxianView extends ViewPane {
 			}
 		}
 
-		await this.maxianService.sendMessage(message, this.currentMode, knowledgeBaseConfig);
+		await this.maxianService.sendMessage(expandedMessage, this.currentMode, knowledgeBaseConfig);
 	}
 
 	private handleMessageEvent(event: import('./maxianService.js').IMessageEvent): void {
+
+		// 任何服务响应事件到达时移除"等待中"气泡（用户消息事件除外）
+		if (event.type !== 'user') {
+			this.hideWaitingIndicator();
+		}
 
 		if (event.type === 'user') {
 			// 用户发送新消息时，重置AI消息元素（开始新一轮对话）
@@ -2116,15 +2363,18 @@ export class MaxianView extends ViewPane {
 			const msgContent = event.content;
 			createCopyButton(userActions, () => msgContent);
 
-			// 消息内容
+			// 消息内容（@文件名 渲染为可点击 chip）
 			const userContent = append(userMsg, $('div'));
 			userContent.style.whiteSpace = 'pre-wrap';
 			userContent.style.wordBreak = 'break-word';
 			userContent.style.color = 'var(--vscode-foreground)';
 			userContent.style.lineHeight = '1.5';
-			userContent.textContent = event.content;
+			this.renderMessageWithMentions(userContent, event.content);
 
 			this.messageArea.scrollTop = this.messageArea.scrollHeight;
+
+			// 用户消息渲染完成后，立即显示"等待中"气泡（在用户消息下方）
+			this.showWaitingIndicator();
 		} else if (event.type === 'assistant') {
 			// 如果是流式消息
 			if (event.isPartial) {
@@ -2287,7 +2537,7 @@ export class MaxianView extends ViewPane {
 		this.awaitingUserResponse = true;
 
 		// 更新输入框placeholder
-		this.inputBox.placeholder = this.getInputPlaceholder('awaiting');
+		this.setInputPlaceholder(this.getInputPlaceholder('awaiting'));
 		this.inputBox.focus();
 	}
 
@@ -2798,6 +3048,49 @@ export class MaxianView extends ViewPane {
 	}
 
 	/**
+	 * 显示"等待中"三点动画气泡（发送消息后、首个响应到达前）
+	 */
+	private showWaitingIndicator(): void {
+		this.hideWaitingIndicator();
+
+		const indicator = append(this.messageArea, $('div.maxian-message.maxian-message-ai'));
+
+		// 消息头部（与普通 AI 消息一致）
+		const header = append(indicator, $('div.maxian-message-header'));
+
+		const aiIcon = append(header, $('img.maxian-message-avatar')) as HTMLImageElement;
+		aiIcon.src = FileAccess.asBrowserUri('vs/workbench/contrib/maxian/browser/media/icons/maxian-avatar.png').toString(true);
+
+		const sender = append(header, $('span.maxian-message-sender'));
+		sender.style.color = 'var(--vscode-charts-blue)';
+		sender.textContent = '码弦';
+
+		// 三点动画内容区
+		const content = append(indicator, $('div'));
+		content.style.padding = '6px 0 10px 0';
+		content.style.display = 'flex';
+		content.style.alignItems = 'center';
+		content.style.gap = '5px';
+
+		for (let i = 0; i < 3; i++) {
+			append(content, $('span.maxian-thinking-dot'));
+		}
+
+		this.messageArea.scrollTop = this.messageArea.scrollHeight;
+		this.waitingIndicatorElement = indicator;
+	}
+
+	/**
+	 * 移除"等待中"气泡
+	 */
+	private hideWaitingIndicator(): void {
+		if (this.waitingIndicatorElement) {
+			this.waitingIndicatorElement.remove();
+			this.waitingIndicatorElement = null;
+		}
+	}
+
+	/**
 	 * 渲染用户反馈消息
 	 */
 	private renderUserFeedback(text: string, images?: string[]): void {
@@ -3135,7 +3428,7 @@ export class MaxianView extends ViewPane {
 
 		// 重置等待状态
 		this.awaitingUserResponse = false;
-		this.inputBox.placeholder = this.getInputPlaceholder('normal');
+		this.setInputPlaceholder(this.getInputPlaceholder('normal'));
 
 		// 清理所有pending的工具确认UI
 		// 查找所有带有确认按钮的工具消息并移除或标记为已取消
@@ -3256,7 +3549,7 @@ export class MaxianView extends ViewPane {
 		this.currentToolStatusElement = null;
 		this.tokenStatsElement = null;
 		this.awaitingUserResponse = false;
-		this.inputBox.placeholder = this.getInputPlaceholder('normal');
+		this.setInputPlaceholder(this.getInputPlaceholder('normal'));
 
 		// 清空消息区域 - 使用DOM API而非innerHTML（避免TrustedHTML问题）
 		while (this.messageArea.firstChild) {

@@ -36,7 +36,9 @@ import { EnvironmentContextTracker } from './EnvironmentContextTracker.js';
 import { FileContextTracker } from '../common/context-tracking/FileContextTracker.js';
 import { IRepoMapService, IRepoMapContext } from '../common/repomap/repoMapService.js';
 import { URI } from '../../../../base/common/uri.js';
-import { basename } from '../../../../base/common/path.js';
+import { basename, relative } from '../../../../base/common/path.js';
+import { QueryType } from '../../../services/search/common/search.js';
+import { CancellationTokenSource } from '../../../../base/common/cancellation.js';
 import { IAIService } from '../../../../platform/ai/common/ai.js';
 import { ISkillService } from '../../skills/common/skillService.js';
 import { ILspDiagnosticsService, globalLspDiagnosticsHandler, DiagnosticSeverity } from '../common/lsp/lspDiagnostics.js';
@@ -343,6 +345,9 @@ export interface IMaxianService {
 	 */
 	getWorkspaceFiles(query: string): Promise<string[]>;
 
+	/** 获取工作区根目录路径 */
+	getWorkspaceRoot(): string;
+
 	// ====== 快捷键触发事件（由 VSCode 命令系统触发，视图响应） ======
 
 	/** 触发发送消息（由 maxian.sendMessage 命令触发） */
@@ -597,6 +602,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		console.log('[Maxian] 码弦服务初始化...');
 
+		// 工作区变更时清除文件列表缓存
+		this._register(this.workspaceContextService.onDidChangeWorkspaceFolders(() => {
+			this._workspaceFileCache = null;
+		}));
+
 		// 获取工作区根目录
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
 		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
@@ -781,61 +791,122 @@ export class MaxianService extends Disposable implements IMaxianService {
 	 * 使用 IFileService.resolve() 递归扫描，兼容渲染进程（无需 Node.js fs 模块）
 	 * @param query 搜索关键词
 	 */
+	getWorkspaceRoot(): string {
+		const folders = this.workspaceContextService.getWorkspace().folders;
+		return folders.length > 0 ? folders[0].uri.fsPath : '';
+	}
+
+	// @mention 文件列表缓存（避免每次输入都重复扫描）
+	private _workspaceFileCache: { files: string[]; timestamp: number } | null = null;
+	private readonly _workspaceFileCacheTTL = 10_000; // 10秒
+
 	async getWorkspaceFiles(query: string): Promise<string[]> {
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
 		if (workspaceFolders.length === 0) return [];
-		const workspaceRootUri = workspaceFolders[0].uri;
-		// URI.path 始终使用正斜杠，与平台无关
-		const workspaceRootPath = workspaceRootUri.path;
 
-		const results: string[] = [];
-		const lowerQuery = query.toLowerCase();
-		const IGNORE_DIRS = new Set([
-			'node_modules', '.git', 'dist', 'out', 'build', '.next',
-			'__pycache__', '.venv', 'venv', '.idea', '.vscode', 'coverage'
-		]);
+		// 先从缓存取全量列表，再在客户端过滤
+		let allFiles = this._workspaceFileCache && (Date.now() - this._workspaceFileCache.timestamp < this._workspaceFileCacheTTL)
+			? this._workspaceFileCache.files
+			: null;
 
-		const scanDir = async (dirUri: URI, depth: number = 0): Promise<void> => {
-			if (depth > 8 || results.length >= 100) return;
-			try {
-				const stat = await this.fileService.resolve(dirUri);
-				if (!stat.children) return;
-
-				for (const child of stat.children) {
-					if (results.length >= 100) return;
-					const name = basename(child.resource.path);
-					if (name.startsWith('.') || IGNORE_DIRS.has(name)) continue;
-
-					// 相对路径：去掉工作区根路径前缀
-					const relativePath = child.resource.path.slice(workspaceRootPath.length + 1);
-
-					if (child.isDirectory) {
-						await scanDir(child.resource, depth + 1);
-					} else {
-						const lowerName = name.toLowerCase();
-						const lowerRelPath = relativePath.toLowerCase();
-						if (!query || lowerName.includes(lowerQuery) || lowerRelPath.includes(lowerQuery)) {
-							results.push(relativePath);
-						}
-					}
-				}
-			} catch {
-				return;
-			}
-		};
-
-		await scanDir(workspaceRootUri);
-
-		// 按相关性排序：文件名前缀匹配优先
-		if (query) {
-			results.sort((a, b) => {
-				const aMatch = basename(a).toLowerCase().startsWith(lowerQuery) ? 0 : 1;
-				const bMatch = basename(b).toLowerCase().startsWith(lowerQuery) ? 0 : 1;
-				return aMatch - bMatch;
-			});
+		if (!allFiles) {
+			allFiles = await this._fetchAllWorkspaceFiles(workspaceFolders);
+			this._workspaceFileCache = { files: allFiles, timestamp: Date.now() };
 		}
 
-		return results.slice(0, 50);
+		console.log('[MaxianService] getWorkspaceFiles query:', query, 'cache size:', allFiles.length);
+
+		if (!query) {
+			return allFiles.slice(0, 200);
+		}
+
+		// 客户端大小写不敏感过滤：文件名或路径包含 query 即可
+		const lowerQuery = query.toLowerCase();
+		const matched = allFiles.filter(p => {
+			const lowerPath = p.toLowerCase();
+			return lowerPath.includes(lowerQuery);
+		});
+
+		console.log('[MaxianService] getWorkspaceFiles matched:', matched.length, 'for query:', query);
+
+		// 排序：文件名前缀匹配优先，再按路径长度升序
+		matched.sort((a, b) => {
+			const aName = basename(a).toLowerCase();
+			const bName = basename(b).toLowerCase();
+			const aPrefix = aName.startsWith(lowerQuery) ? 0 : 1;
+			const bPrefix = bName.startsWith(lowerQuery) ? 0 : 1;
+			if (aPrefix !== bPrefix) return aPrefix - bPrefix;
+			return a.length - b.length;
+		});
+
+		return matched.slice(0, 200);
+	}
+
+	private async _fetchAllWorkspaceFiles(workspaceFolders: readonly { uri: URI }[]): Promise<string[]> {
+		const cts = new CancellationTokenSource();
+		const timeout = setTimeout(() => cts.cancel(), 8000);
+
+		try {
+			const allResults: string[] = [];
+
+			console.log('[MaxianService] _fetchAllWorkspaceFiles folders:', workspaceFolders.map(f => f.uri.fsPath));
+
+			for (const folder of workspaceFolders) {
+				const folderUri = folder.uri;
+				const folderFsPath = folderUri.fsPath;
+
+				// filePattern 为空字符串 → ripgrep 返回所有文件
+				const result = await this.searchService.fileSearch({
+					type: QueryType.File,
+					filePattern: '',
+					folderQueries: [{
+						folder: folderUri,
+						excludePattern: [{
+							pattern: {
+								'**/node_modules/**': true,
+								'**/.git/**': true,
+								'**/dist/**': true,
+								'**/out/**': true,
+								'**/build/**': true,
+								'**/.next/**': true,
+								'**/__pycache__/**': true,
+								'**/.venv/**': true,
+								'**/venv/**': true,
+								'**/coverage/**': true,
+								'**/.idea/**': true,
+								'**/.vscode/**': true,
+								'**/*.class': true,
+								'**/*.jar': true,
+							}
+						}]
+					}],
+					maxResults: 2000
+				}, cts.token);
+
+				console.log('[MaxianService] fileSearch result:', result?.results?.length ?? 'null', 'files for folder:', folderFsPath);
+
+				if (!result || !result.results) continue;
+
+				for (const r of result.results) {
+					const fsPath = r.resource.fsPath;
+					const relativePath = relative(folderFsPath, fsPath).replace(/\\/g, '/');
+					if (!relativePath.startsWith('..')) {
+						allResults.push(relativePath);
+					}
+				}
+			}
+
+			// 按路径长度升序（浅层文件优先）
+			allResults.sort((a, b) => a.length - b.length);
+			console.log('[MaxianService] _fetchAllWorkspaceFiles total:', allResults.length, 'sample:', allResults.slice(0, 5));
+			return allResults;
+		} catch (e) {
+			console.error('[MaxianService] _fetchAllWorkspaceFiles error:', e);
+			return [];
+		} finally {
+			clearTimeout(timeout);
+			cts.dispose();
+		}
 	}
 
 	/**
