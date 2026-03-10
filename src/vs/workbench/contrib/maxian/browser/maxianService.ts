@@ -1693,7 +1693,21 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
-			// 3. list_files - 列出文件
+			// 3. delete_file - 删除文件
+			{
+				name: 'delete_file',
+				description: '删除文件或目录。必须使用此工具删除文件，不要用 execute_command 执行 rm 命令（rm 命令无法更新 VS Code 文件系统，文件会依然显示在编辑器中）。',
+				parameters: {
+					type: 'object',
+					properties: {
+						path: { type: 'string', description: '要删除的文件或目录路径' },
+						recursive: { type: 'boolean', description: '是否递归删除目录内容，默认 false。删除非空目录时必须设为 true' }
+					},
+					required: ['path']
+				}
+			},
+
+			// 4. list_files - 列出文件
 			{
 				name: 'list_files',
 				description: '列出目录中的文件和子目录。支持递归列出、.gitignore过滤。',

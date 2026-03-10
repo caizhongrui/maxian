@@ -119,6 +119,10 @@ export class ToolExecutorImpl implements IToolExecutor {
 					result = await this.fileOperations.writeToFile(toolUse as any);
 					break;
 
+				case 'delete_file':
+					result = await this.fileOperations.deleteFile(toolUse);
+					break;
+
 				case 'list_files':
 					result = await this.fileOperations.listFiles(toolUse as any);
 					break;

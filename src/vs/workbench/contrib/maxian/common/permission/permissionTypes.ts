@@ -94,6 +94,18 @@ export const DEFAULT_PERMISSION_RULES: Record<ToolName, Record<string, Permissio
 		'*': 'allow'
 	},
 
+	// 文件删除权限（比写入更严格）
+	delete_file: {
+		'**/node_modules/**': 'deny', // 禁止删除node_modules
+		'**/.git/**': 'deny',         // 禁止删除.git
+		'*.env': 'ask',               // 环境变量文件需要确认
+		'*.env.*': 'ask',
+		'package.json': 'ask',        // 重要文件需要确认
+		'pom.xml': 'ask',
+		'build.gradle': 'ask',
+		'*': 'allow'
+	},
+
 	// 命令执行权限
 	execute_command: {
 		'rm -rf*': 'deny',            // 危险命令禁止

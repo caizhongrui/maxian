@@ -6,7 +6,7 @@
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { VSBuffer } from '../../../../../base/common/buffer.js';
-import { ReadFileToolUse, WriteToFileToolUse, ListFilesToolUse, GlobToolUse, ApplyDiffToolUse, ToolResponse } from '../../common/tools/toolTypes.js';
+import { ReadFileToolUse, WriteToFileToolUse, ListFilesToolUse, GlobToolUse, ApplyDiffToolUse, ToolResponse, ToolUse } from '../../common/tools/toolTypes.js';
 import * as glob from '../../../../../base/common/glob.js';
 import { MultiSearchReplaceDiffStrategy } from '../../common/diff/MultiSearchReplaceDiffStrategy.js';
 import { addLineNumbers, stripLineNumbers, everyLineHasLineNumbers } from '../../common/utils/lineNumbers.js';
@@ -732,6 +732,38 @@ ${assertResult.message}
 			return matches;
 		} catch {
 			return [];
+		}
+	}
+
+	/**
+	 * 删除文件或目录（使用 VS Code IFileService，避免系统 rm 命令无法更新 VS Code 文件系统缓存的问题）
+	 * @param toolUse 删除文件工具使用信息
+	 * @returns 操作结果
+	 */
+	async deleteFile(toolUse: ToolUse): Promise<ToolResponse> {
+		const filePath = toolUse.params.path;
+		const recursive = toolUse.params.recursive === 'true';
+
+		if (!filePath) {
+			return '错误: 未提供文件路径';
+		}
+
+		const absolutePath = this.resolveFilePath(filePath);
+		const uri = URI.file(absolutePath);
+
+		try {
+			const exists = await this.fileService.exists(uri);
+			if (!exists) {
+				return `错误: 文件或目录不存在: ${filePath}`;
+			}
+
+			await this.fileService.del(uri, { recursive, useTrash: false });
+
+			console.log(`[Maxian] 已删除: ${absolutePath}`);
+			return `文件已成功删除: ${filePath}`;
+		} catch (error) {
+			const errMsg = error instanceof Error ? error.message : String(error);
+			return `删除失败: ${errMsg}`;
 		}
 	}
 

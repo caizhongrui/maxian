@@ -223,6 +223,59 @@ export const API_URL = 'https://api.example.com';
 		relatedTools: ['read_file', 'edit', 'apply_diff'],
 	},
 
+	// ==================== Delete 工具 ====================
+	delete_file: {
+		name: 'delete_file',
+		summary: '删除文件或目录',
+		description: `使用 VS Code 内置文件服务删除文件或目录。
+
+**重要说明：**
+- 必须使用此工具删除文件，不要用 execute_command 执行 rm 命令
+- 使用 rm 命令删除的文件不会更新 VS Code 文件系统缓存，文件依然"存在"于编辑器中
+- 此工具使用 VS Code IFileService 确保文件系统状态同步
+
+**注意事项：**
+- 删除操作不可逆，请谨慎使用
+- 删除目录时需要将 recursive 设为 true`,
+		parameters: [
+			{
+				name: 'path',
+				type: 'string',
+				required: true,
+				description: '要删除的文件或目录路径（相对于工作区根目录或绝对路径）',
+			},
+			{
+				name: 'recursive',
+				type: 'boolean',
+				required: false,
+				description: '是否递归删除目录内容，默认 false。删除非空目录时必须设为 true',
+				default: 'false',
+			},
+		],
+		examples: [
+			{
+				title: '删除文件',
+				description: '删除单个文件',
+				xml: `<delete_file>
+<path>src/old-module.ts</path>
+</delete_file>`,
+			},
+			{
+				title: '递归删除目录',
+				description: '删除整个目录（非空目录需加 recursive）',
+				xml: `<delete_file>
+<path>src/deprecated/</path>
+<recursive>true</recursive>
+</delete_file>`,
+			},
+		],
+		tips: [
+			'删除操作不可撤销，确认路径正确后再执行',
+			'删除目录时记得设置 recursive=true，否则非空目录会报错',
+		],
+		relatedTools: ['write_to_file', 'list_files'],
+	},
+
 	// ==================== Edit 工具（核心） ====================
 	edit: {
 		name: 'edit',
