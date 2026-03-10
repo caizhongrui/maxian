@@ -10,7 +10,7 @@ import { Emitter, Event } from '../../../../../base/common/event.js';
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { IApiHandler, MessageParam, ToolDefinition, ContentBlock, ToolResultContentBlock, StreamChunk } from '../api/types.js';
 import { IToolExecutor } from '../tools/toolExecutor.js';
-import { ToolName } from '../tools/toolTypes.js';
+import { ToolName, toolNames as ALL_TOOL_NAMES } from '../tools/toolTypes.js';
 import { ToolRepetitionDetector } from '../tools/ToolRepetitionDetector.js';
 import { formatResponse } from '../prompts/formatResponse.js';
 import {
@@ -935,14 +935,9 @@ export class TaskService extends Disposable {
 
 	/**
 	 * 工具名称列表（用于XML检测和解析）
+	 * 直接引用 toolTypes 中的 toolNames，避免新增工具时忘记更新此处
 	 */
-	private readonly TOOL_NAMES = [
-		'read_file', 'write_to_file', 'list_files', 'search_files', 'codebase_search',
-		'glob', 'list_code_definition_names', 'execute_command', 'apply_diff',
-		'edit_file', 'insert_content', 'batch', 'edit', 'multiedit', 'patch',
-		'webfetch', 'lsp_hover', 'lsp_diagnostics', 'lsp_definition', 'lsp_references', 'lsp_type_definition', 'task', 'skill',
-		'ask_followup_question', 'attempt_completion', 'switch_mode', 'new_task', 'update_todo_list'
-	];
+	private readonly TOOL_NAMES: readonly string[] = ALL_TOOL_NAMES;
 
 	/**
 	 * 检测文本是否可能是XML工具调用
