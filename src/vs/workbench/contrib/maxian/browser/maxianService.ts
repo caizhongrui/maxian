@@ -1724,7 +1724,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 4. execute_command - 执行命令
 			{
 				name: 'execute_command',
-				description: '在终端执行 shell 命令并捕获输出。\n\n**最佳实践**：\n- 使用 cwd 参数指定工作目录，避免 cd && command 模式\n- 提供 description 参数（5-10字描述），如"安装依赖"、"运行测试"\n- 危险命令（删除、覆盖等）应设置 requires_approval=true\n- 长输出命令考虑添加 | head -100 或 | grep 过滤',
+				description: '在终端执行 shell 命令并捕获输出。\n\n**⛔ 严格禁止**：\n- **禁止用 rm、del、rm -rf 等命令删除文件或目录**——必须使用 delete_file 工具。原因：rm/del 命令绕过 VS Code 文件系统，编辑器缓存不会更新，文件依然显示为存在\n\n**最佳实践**：\n- 使用 cwd 参数指定工作目录，避免 cd && command 模式\n- 提供 description 参数（5-10字描述），如"安装依赖"、"运行测试"\n- 危险命令（删除、覆盖等）应设置 requires_approval=true\n- 长输出命令考虑添加 | head -100 或 | grep 过滤',
 				parameters: {
 					type: 'object',
 					properties: {
