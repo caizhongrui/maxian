@@ -466,11 +466,39 @@ export class MaxianView extends ViewPane {
 		this.inputPlaceholderEl.style.fontFamily = 'var(--vscode-font-family)';
 		this.inputPlaceholderEl.textContent = this.getInputPlaceholder('normal');
 
-		// 禁止粘贴富文本，只保留纯文本
+		// 禁止粘贴富文本，只保留纯文本（用 Selection/Range API 替代废弃的 execCommand）
 		this.inputBox.addEventListener('paste', (e) => {
 			e.preventDefault();
 			const text = e.clipboardData?.getData('text/plain') ?? '';
-			document.execCommand('insertText', false, text);
+			if (!text) return;
+
+			const selection = window.getSelection();
+			if (!selection || selection.rangeCount === 0) return;
+
+			const range = selection.getRangeAt(0);
+			range.deleteContents();
+
+			// 将纯文本按换行符分段插入，保留换行结构
+			const lines = text.split('\n');
+			const frag = document.createDocumentFragment();
+			lines.forEach((line, i) => {
+				if (i > 0) frag.appendChild(document.createElement('br'));
+				if (line) frag.appendChild(document.createTextNode(line));
+			});
+
+			// 记录最后一个节点，用于定位光标
+			const lastNode = frag.lastChild;
+			range.insertNode(frag);
+
+			// 将光标移到插入内容末尾
+			if (lastNode) {
+				const r = document.createRange();
+				r.setStartAfter(lastNode);
+				r.collapse(true);
+				selection.removeAllRanges();
+				selection.addRange(r);
+			}
+
 			this.updateInputPlaceholder();
 		});
 
@@ -2189,10 +2217,31 @@ export class MaxianView extends ViewPane {
 	 */
 	private handleNewLineInInput(): void {
 		if (!this.inputBox) return;
-		// contenteditable：通过 execCommand 插入换行
-		document.execCommand('insertLineBreak');
-		this.inputBox.style.height = 'auto';
-		this.inputBox.style.height = this.inputBox.scrollHeight + 'px';
+
+		const selection = window.getSelection();
+		if (!selection || selection.rangeCount === 0) return;
+
+		const range = selection.getRangeAt(0);
+		range.deleteContents();
+
+		const br = document.createElement('br');
+		range.insertNode(br);
+
+		// contenteditable 末尾需要额外一个 <br> 才能让光标可见地落在下一行
+		if (!br.nextSibling) {
+			const trailingBr = document.createElement('br');
+			br.after(trailingBr);
+		}
+
+		// 光标移到 br 之后
+		const r = document.createRange();
+		r.setStartAfter(br);
+		r.collapse(true);
+		selection.removeAllRanges();
+		selection.addRange(r);
+
+		this.inputBox.scrollTop = this.inputBox.scrollHeight;
+		this.updateInputPlaceholder();
 	}
 
 	/**
