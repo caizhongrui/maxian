@@ -1707,7 +1707,20 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
-			// 4. list_files - 列出文件
+			// 4. create_directory - 创建目录
+			{
+				name: 'create_directory',
+				description: '创建目录（支持多级路径自动创建）。必须使用此工具创建目录，不要用 execute_command 执行 mkdir 命令（mkdir 命令无法更新 VS Code 文件系统，目录在资源管理器中不可见）。',
+				parameters: {
+					type: 'object',
+					properties: {
+						path: { type: 'string', description: '要创建的目录路径，支持多级路径（自动 mkdir -p）' }
+					},
+					required: ['path']
+				}
+			},
+
+			// 5. list_files - 列出文件
 			{
 				name: 'list_files',
 				description: '列出目录中的文件和子目录。支持递归列出、.gitignore过滤。',

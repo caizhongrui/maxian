@@ -276,6 +276,48 @@ export const API_URL = 'https://api.example.com';
 		relatedTools: ['write_to_file', 'list_files'],
 	},
 
+	// ==================== Create Directory 工具 ====================
+	create_directory: {
+		name: 'create_directory',
+		summary: '创建目录',
+		description: `使用 VS Code 内置文件服务创建目录（支持递归创建多级目录）。
+
+**重要说明：**
+- 必须使用此工具创建目录，不要用 execute_command 执行 mkdir 命令
+- 使用 mkdir 命令创建的目录不会更新 VS Code 文件系统缓存，目录在资源管理器中不可见
+- 此工具使用 VS Code IFileService 确保文件系统状态同步
+- 自动递归创建多级父目录（等同于 mkdir -p）`,
+		parameters: [
+			{
+				name: 'path',
+				type: 'string',
+				required: true,
+				description: '要创建的目录路径（相对于工作区根目录或绝对路径），支持多级路径',
+			},
+		],
+		examples: [
+			{
+				title: '创建单级目录',
+				description: '在工作区下创建目录',
+				xml: `<create_directory>
+<path>src/utils</path>
+</create_directory>`,
+			},
+			{
+				title: '创建多级目录',
+				description: '递归创建不存在的父目录',
+				xml: `<create_directory>
+<path>src/main/java/com/example/service/impl</path>
+</create_directory>`,
+			},
+		],
+		tips: [
+			'自动创建所有不存在的父目录，无需逐级创建',
+			'如果目录已存在，会返回成功提示而非报错',
+		],
+		relatedTools: ['write_to_file', 'delete_file', 'list_files'],
+	},
+
 	// ==================== Edit 工具（核心） ====================
 	edit: {
 		name: 'edit',

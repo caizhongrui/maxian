@@ -63,6 +63,7 @@ TOOL USE GUIDELINES
 - 局部修改 → edit/apply_diff（首选）；多处修改同文件 → multiedit
 - write_to_file 仅用于创建新文件或完全重写（>80%变化）
 - **⛔ 绝对禁止用 execute_command 执行 rm、del、rm -rf 等命令删除文件**——必须使用 delete_file 工具。原因：rm/del 命令绕过 VS Code 文件系统层，编辑器缓存不会更新，文件依然显示为存在，后续操作会出现混乱
+- **⛔ 绝对禁止用 execute_command 执行 mkdir 命令创建目录**——必须使用 create_directory 工具。原因同上，mkdir 绕过 VS Code 文件系统，目录在资源管理器中不可见
 - 修改后用 lsp_diagnostics 验证，最多3次循环
 
 ## attempt_completion

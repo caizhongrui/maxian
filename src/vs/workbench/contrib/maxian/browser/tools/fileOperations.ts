@@ -768,6 +768,37 @@ ${assertResult.message}
 	}
 
 	/**
+	 * 创建目录（使用 VS Code IFileService，避免 mkdir 命令无法更新 VS Code 文件系统缓存的问题）
+	 * @param toolUse 创建目录工具使用信息
+	 * @returns 操作结果
+	 */
+	async createDirectory(toolUse: ToolUse): Promise<ToolResponse> {
+		const dirPath = toolUse.params.path;
+
+		if (!dirPath) {
+			return '错误: 未提供目录路径';
+		}
+
+		const absolutePath = this.resolveFilePath(dirPath);
+		const uri = URI.file(absolutePath);
+
+		try {
+			const exists = await this.fileService.exists(uri);
+			if (exists) {
+				return `目录已存在: ${dirPath}`;
+			}
+
+			await this.fileService.createFolder(uri);
+
+			console.log(`[Maxian] 已创建目录: ${absolutePath}`);
+			return `目录已成功创建: ${dirPath}`;
+		} catch (error) {
+			const errMsg = error instanceof Error ? error.message : String(error);
+			return `创建目录失败: ${errMsg}`;
+		}
+	}
+
+	/**
 	 * 使用Glob模式匹配文件
 	 * 优化：并行遍历，边遍历边匹配，添加超时机制
 	 * @param toolUse Glob工具使用信息

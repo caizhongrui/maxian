@@ -106,6 +106,13 @@ export const DEFAULT_PERMISSION_RULES: Record<ToolName, Record<string, Permissio
 		'*': 'allow'
 	},
 
+	// 目录创建权限
+	create_directory: {
+		'**/node_modules/**': 'deny', // 禁止在node_modules下创建
+		'**/.git/**': 'deny',         // 禁止在.git下创建
+		'*': 'allow'
+	},
+
 	// 命令执行权限
 	execute_command: {
 		'rm -rf*': 'deny',            // 危险命令禁止

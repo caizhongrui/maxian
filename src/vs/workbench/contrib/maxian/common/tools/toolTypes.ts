@@ -84,6 +84,7 @@ export const toolNames = [
 	'read_file',
 	'write_to_file',
 	'delete_file',
+	'create_directory',
 	'search_files',
 	'list_files',
 	'list_code_definition_names',
@@ -233,6 +234,7 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 	read_file: '读取文件',
 	write_to_file: '写入文件',
 	delete_file: '删除文件',
+	create_directory: '创建目录',
 	search_files: '搜索文件',
 	list_files: '列出文件',
 	list_code_definition_names: '列出代码定义',
@@ -286,7 +288,8 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 			'edit_file',
 			'edit',           // 独立edit工具
 			'write_to_file',
-			'delete_file',    // 删除文件
+			'delete_file',      // 删除文件
+			'create_directory', // 创建目录
 			'insert_content',
 			'multiedit',      // 多处编辑
 			'patch',          // 多文件补丁
