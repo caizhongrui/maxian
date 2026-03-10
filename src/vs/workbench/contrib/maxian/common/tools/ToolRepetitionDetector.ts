@@ -41,6 +41,8 @@ export class ToolRepetitionDetector {
 	private fileWriteHistory: Array<{ file: string; tool: string; timestamp: number }> = [];
 	private readonly FILE_WRITE_LOOP_THRESHOLD = 3; // 同一文件写入3次触发检测
 	private readonly WRITE_TOOLS = new Set(['apply_diff', 'edit', 'write_to_file', 'multiedit', 'patch']);
+	// 写入循环警告后已重置的文件集合（每个文件只告警一次，告警后给 AI 重试机会）
+	private fileWriteWarnedAndReset: Set<string> = new Set();
 
 	/**
 	 * Creates a new ToolRepetitionDetector
@@ -176,14 +178,6 @@ export class ToolRepetitionDetector {
 			};
 		}
 
-		// 🔥 检测重复读取同一文件的不同部分（参数不同但目标相同）
-		if (name === 'read_file') {
-			const sameFileResult = this.detectSameFileReading();
-			if (sameFileResult.detected) {
-				return sameFileResult;
-			}
-		}
-
 		// 检测工具循环模式（如A->B->A->B->A->B）
 		const patternResult = this.detectLoopPattern();
 		if (patternResult.detected) {
@@ -218,40 +212,13 @@ export class ToolRepetitionDetector {
 		);
 
 		if (previousWrites.length >= this.FILE_WRITE_LOOP_THRESHOLD) {
-			const toolNames = previousWrites.map(e => e.tool).join(' → ');
+			// 触发告警后，立即清空该文件的写入历史，给 AI 一次重试机会
+			// 避免每次写入都触发检测，导致 AI 永远无法继续
+			this.fileWriteHistory = this.fileWriteHistory.filter(e => e.file !== filePath);
+			this.fileWriteWarnedAndReset.add(filePath);
 			return {
 				detected: true,
-				message: `🔴 检测到对同一文件的重复修改！文件 "${filePath}" 在过去 ${Math.round(this.TIME_WINDOW_MS / 1000)} 秒内已被写入 ${previousWrites.length} 次（${toolNames}）。\n\n⚠️ 你陷入了"改了又改"的死循环！这通常意味着：\n1. 你的修改策略有误——已修改的内容被你重新覆盖\n2. LSP 错误并非源于这个文件，而是其他文件引用了已被删除的字段\n\n💡 立即停止修改此文件，转向：\n1. 检查引用了该文件字段的其他文件（使用 search_files 搜索字段名）\n2. 使用 read_file 确认当前文件实际内容，再决定是否需要修改\n3. 如果不确定，使用 ask_followup_question 询问用户`
-			};
-		}
-
-		return { detected: false, message: '' };
-	}
-
-	/**
-	 * 🔥 检测重复读取同一文件的不同部分
-	 * 例如：连续多次 read_file("game.js", start_line=1, end_line=100)
-	 *                  read_file("game.js", start_line=101, end_line=200)
-	 */
-	private detectSameFileReading(): { detected: boolean; message: string } {
-		const now = Date.now();
-		const windowStart = now - this.TIME_WINDOW_MS;
-
-		// 获取最近的 read_file 调用
-		const recentReadFiles = this.toolCallHistory.filter(entry =>
-			entry.timestamp >= windowStart &&
-			entry.name === 'read_file'
-		);
-
-		if (recentReadFiles.length < 3) {
-			return { detected: false, message: '' };
-		}
-
-		// 简单检测：最近 3 次以上调用都是 read_file，很可能是重复读取
-		if (recentReadFiles.length >= 3) {
-			return {
-				detected: true,
-				message: `🔴 检测到重复读取文件！你在 ${Math.round(this.TIME_WINDOW_MS / 1000)} 秒内调用了 ${recentReadFiles.length} 次 read_file。\n\n⚠️ 不要分批读取文件！应该一次性读取完整文件内容。\n\n💡 正确做法：\n1. 使用 read_file(path) 读取整个文件（不带 start_line/end_line 参数）\n2. 如果文件太大（>2000行），可以使用 start_line/end_line 读取关键部分\n3. 但不要连续多次读取同一文件的不同部分！\n\n💡 如果你需要了解文件结构，使用 list_code_definition_names 工具！`
+				message: `🔴 检测到对同一文件的重复修改！文件 "${filePath}" 已被写入 ${previousWrites.length} 次。\n\n⚠️ 你陷入了"改了又改"的死循环！这通常意味着：\n1. 你的修改策略有误——已修改的内容被你重新覆盖\n2. LSP 错误并非源于这个文件，而是其他文件引用了已被删除的字段\n\n💡 立即停止修改此文件，转向：\n1. 检查引用了该文件字段的其他文件（使用 search_files 搜索字段名）\n2. 使用 read_file 确认当前文件实际内容，再决定是否需要修改\n3. 如果不确定，使用 ask_followup_question 询问用户\n\n⚠️ 已重置该文件的写入计数，允许继续修改，但请改变策略！`
 			};
 		}
 
@@ -368,6 +335,7 @@ export class ToolRepetitionDetector {
 		this.consecutiveIdenticalToolCallCount = 0;
 		this.toolCallHistory = [];
 		this.fileWriteHistory = [];
+		this.fileWriteWarnedAndReset.clear();
 		this.doomLoopDetected = false;
 		// 不重置doomLoopCount，保留统计
 	}

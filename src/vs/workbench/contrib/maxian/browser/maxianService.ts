@@ -635,7 +635,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 			this.skillService,
-			this.commandExecutionService
+			this.commandExecutionService,
+			this.requestService
 		);
 
 		// P2优化：注入子 Agent 工厂（支持 task 工具）

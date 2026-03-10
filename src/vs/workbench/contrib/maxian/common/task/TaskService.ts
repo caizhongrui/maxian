@@ -205,6 +205,10 @@ export class TaskService extends Disposable {
 	private consecutiveBlockedRounds = 0;
 	private static readonly MAX_BLOCKED_ROUNDS = 2;
 
+	// 全局 API 轮次计数器：recursivelyMakeClineRequests 每次递归调用 +1，超过上限强制终止
+	private totalApiRounds = 0;
+	private static readonly MAX_TOTAL_API_ROUNDS = 80; // 超过80轮 API 调用，强制询问用户
+
 	// Token & Tool usage
 	private tokenUsage: TokenUsage = {
 		totalTokensIn: 0,
@@ -659,6 +663,30 @@ export class TaskService extends Disposable {
 			return true;
 		}
 
+		// 全局轮次上限：防止 AI 无限递归（无论读写，每轮 API 调用都计数）
+		this.totalApiRounds++;
+		const isLastRound = this.totalApiRounds >= TaskService.MAX_TOTAL_API_ROUNDS;
+
+		// 接近上限时（最后10轮）提前注入警告，让 AI 尽快收尾
+		if (this.totalApiRounds === TaskService.MAX_TOTAL_API_ROUNDS - 10) {
+			this.apiConversationHistory.push({
+				role: 'user',
+				content: `[SYSTEM] ⚠️ 你已进行了 ${this.totalApiRounds} 轮操作，距离最大轮次（${TaskService.MAX_TOTAL_API_ROUNDS}）还剩 10 轮。请尽快完成任务：\n- 如已完成：立即调用 attempt_completion\n- 如未完成：优先处理最关键的剩余工作，完成后调用 attempt_completion 并说明哪些工作尚未完成`
+			});
+		}
+
+		if (isLastRound) {
+			console.warn(`[TaskService] 已达到全局 API 轮次上限 ${TaskService.MAX_TOTAL_API_ROUNDS}`);
+			// 参照 OpenCode：注入 assistant 消息告知 AI 已达上限，强迫它输出文字总结而非继续调用工具
+			// 这样 AI 自然产出"完成了X，未完成Y"的总结，用户可据此决定是否继续
+			this.apiConversationHistory.push({
+				role: 'assistant' as const,
+				content: `[已达到最大操作步数 ${TaskService.MAX_TOTAL_API_ROUNDS}，工具调用已禁用]\n\n我需要停止工具调用，总结当前进展：`
+			});
+			// 继续本轮 API 调用——模型看到"自己说停了"，会输出文字总结，不再调用工具
+			// recursivelyMakeClineRequests 会因无工具调用返回 false，外层 while 循环处理 consecutiveMistakeCount
+		}
+
 		try {
 			// 调用API
 			const stream = await this.attemptApiRequest(retryAttempt);
@@ -1104,10 +1132,10 @@ export class TaskService extends Disposable {
 					toolResults.push({
 						type: 'tool_result',
 						tool_use_id: toolUse.id,
-						content: `[探索阶段结束] 已完成 ${this.consecutiveReadOnlyRounds} 轮只读探索，不允许继续读取。请立即调用 attempt_completion 给出结论（分析/问答任务）或调用 apply_diff/write_to_file 修改代码（编码任务）。`,
-						is_error: true
+						content: `[探索阶段结束] 已完成 ${this.consecutiveReadOnlyRounds} 轮只读探索，禁止继续读取文件、搜索代码或访问网页。\n\n你已掌握足够信息，请立即行动：\n- 分析/问答任务：调用 attempt_completion 给出完整结论\n- 编码任务：调用 apply_diff/write_to_file/edit 开始修改代码\n\n这不是工具错误，是系统强制要求你给出结论或开始修改。`,
+						is_error: false
 					} as ContentBlock);
-					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: true });
+					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: false });
 				}
 			} else {
 				this.consecutiveBlockedRounds = 0; // 正常执行时重置阻断计数
@@ -1354,14 +1382,15 @@ export class TaskService extends Disposable {
 				}
 			}
 
+			// 返回告警信息（is_error: false 避免 AI 误判工具失败而重试相同操作）
 			return {
 				shouldContinue: true,
 				shouldEndLoop: false,
 				toolResult: {
 					type: 'tool_result',
 					tool_use_id: toolUse.id,
-					content: repetitionCheck.askUser?.messageDetail || '工具重复调用',
-					is_error: true
+					content: repetitionCheck.askUser?.messageDetail || '工具重复调用，请调整策略',
+					is_error: false
 				}
 			};
 		}

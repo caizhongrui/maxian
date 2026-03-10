@@ -5652,12 +5652,23 @@ export class MaxianView extends ViewPane {
 			return;
 		}
 
+		// 防御性处理：确保 todos 是数组（AI 可能传入非数组格式）
+		let todos = event.todos;
+		if (!Array.isArray(todos)) {
+			console.warn('[MaxianView] handleTodoListUpdate: todos is not an array, got:', typeof todos, todos);
+			if (todos && typeof todos === 'object' && Array.isArray((todos as any).todos)) {
+				todos = (todos as any).todos;
+			} else {
+				todos = [];
+			}
+		}
+
 		// 显示容器
 		this.todoListContainer.style.display = 'block';
 
 		// 计算完成数
-		const completedCount = event.todos.filter(t => t.status === 'completed').length;
-		const totalCount = event.todos.length;
+		const completedCount = todos.filter(t => t.status === 'completed').length;
+		const totalCount = todos.length;
 
 		// 更新徽章
 		const badge = this.todoListContainer.querySelector('.todo-list-badge') as HTMLElement;
@@ -5695,7 +5706,7 @@ export class MaxianView extends ViewPane {
 		}
 
 		// 渲染任务列表
-		this.renderTodoList(event.todos);
+		this.renderTodoList(todos);
 	}
 
 	/**

@@ -19,6 +19,8 @@ import { detectDoomLoop, resetDoomLoopCount } from '../../common/agent/doomLoopD
 import { isToolEnabledForAgent, checkBashPermission } from '../../common/agent/agentConfig.js';
 import { executeEdit, validateEditParams, formatEditResponse } from '../../common/tools/editTool.js';
 import { validateUrl, processResponse, formatWebFetchResponse } from '../../common/tools/webfetchTool.js';
+import { IRequestService, asText } from '../../../../../platform/request/common/request.js';
+import { CancellationToken } from '../../../../../base/common/cancellation.js';
 import { skillTool } from '../../common/tools/skillTool.js';
 import { ISkillService } from '../../../skills/common/skillService.js';
 import { getHoverInfo } from '../../common/lsp/lspHover.js';
@@ -39,6 +41,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 	private batchExecutor: BatchToolExecutor;
 	private context: ToolExecutionContext;
 	private skillService?: ISkillService;
+	private requestService?: IRequestService;
 
 	/**
 	 * 子 Agent 运行器（由 maxianService 注入）
@@ -53,7 +56,8 @@ export class ToolExecutorImpl implements IToolExecutor {
 		ripgrepService: IRipgrepService,
 		context: ToolExecutionContext,
 		skillService?: ISkillService,
-		commandExecutionService?: ICommandExecutionService
+		commandExecutionService?: ICommandExecutionService,
+		requestService?: IRequestService
 	) {
 		this.fileOperations = new FileOperationsTool(fileService, context.workspaceRoot || '');
 		this.commandExecution = new CommandExecutionTool(terminalService);
@@ -63,6 +67,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 		this.searchTool = new SearchTool(searchService, ripgrepService, context.workspaceRoot || '');
 		this.context = context;
 		this.skillService = skillService;
+		this.requestService = requestService;
 		// P0优化：初始化批量执行器
 		this.batchExecutor = new BatchToolExecutor(this);
 	}
@@ -628,20 +633,41 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 		console.log(`[Maxian] 获取网页: ${url}`);
 
 		try {
-			// 实际的网络请求需要通过平台服务
-			// 这里提供模拟实现，实际需要集成 IDE 的网络服务
-			const response = await fetch(url, {
-				headers: {
-					'User-Agent': 'Mozilla/5.0 (compatible; MaxianIDE/1.0)',
-				},
-			});
+			let html: string;
+			let contentType: string = 'text/html';
 
-			if (!response.ok) {
-				return `网页获取失败: HTTP ${response.status} ${response.statusText}`;
+			if (this.requestService) {
+				// 使用 VS Code IRequestService（主进程发请求，无 CORS 限制）
+				const context = await this.requestService.request({
+					type: 'GET',
+					url,
+					headers: {
+						'User-Agent': 'Mozilla/5.0 (compatible; MaxianIDE/1.0)',
+						'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7',
+					},
+				}, CancellationToken.None);
+
+				if (!context.res.statusCode || context.res.statusCode < 200 || context.res.statusCode >= 300) {
+					return `网页获取失败: HTTP ${context.res.statusCode}`;
+				}
+
+				contentType = (context.res.headers as any)['content-type'] || 'text/html';
+				html = await asText(context) || '';
+			} else {
+				// 降级：直接 fetch（可能有 CORS 限制）
+				const response = await fetch(url, {
+					headers: {
+						'User-Agent': 'Mozilla/5.0 (compatible; MaxianIDE/1.0)',
+					},
+				});
+
+				if (!response.ok) {
+					return `网页获取失败: HTTP ${response.status} ${response.statusText}`;
+				}
+
+				contentType = response.headers.get('content-type') || 'text/html';
+				html = await response.text();
 			}
-
-			const contentType = response.headers.get('content-type') || 'text/html';
-			const html = await response.text();
 
 			const result = processResponse(url, html, contentType, {
 				url,
