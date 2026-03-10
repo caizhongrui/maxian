@@ -76,6 +76,7 @@ export class MaxianView extends ViewPane {
 	private waitingIndicatorElement: HTMLElement | null = null; // 发送后"等待中"三点动画气泡
 	private codeContextBar: HTMLElement | null = null; // 代码片段预览卡片容器
 	private codeContextCards: Map<string, HTMLElement> = new Map(); // relativePath → 卡片元素
+	private codePreviewPopup: HTMLElement | null = null; // 粘贴代码 chip 点击后的浮层预览
 	private tokenStatsElement: HTMLElement | null = null; // token统计元素（唯一，更新而非累加）
 	private cancelButton!: HTMLButtonElement; // 取消任务按钮
 	private clearButton!: HTMLButtonElement; // 清空对话按钮
@@ -443,7 +444,6 @@ export class MaxianView extends ViewPane {
 		this.inputBox.style.width = '100%';
 		this.inputBox.style.minHeight = '90px';
 		this.inputBox.style.padding = '8px 12px';
-		this.inputBox.style.paddingBottom = '50px';
 		this.inputBox.style.backgroundColor = 'var(--vscode-input-background)';
 		this.inputBox.style.color = 'var(--vscode-input-foreground)';
 		this.inputBox.style.border = '1px solid var(--vscode-input-border)';
@@ -478,10 +478,21 @@ export class MaxianView extends ViewPane {
 		this.inputPlaceholderEl.textContent = this.getInputPlaceholder('normal');
 
 		// 禁止粘贴富文本，只保留纯文本（用 Selection/Range API 替代废弃的 execCommand）
+		// 若粘贴内容 ≥3 行，则以代码卡片形式展示而非直接插入
 		this.inputBox.addEventListener('paste', (e) => {
 			e.preventDefault();
 			const text = e.clipboardData?.getData('text/plain') ?? '';
 			if (!text) return;
+
+			const lines = text.split('\n');
+			// 去掉末尾空行再判断行数
+			const trimmedLines = lines[lines.length - 1].trim() === '' ? lines.slice(0, -1) : lines;
+
+			if (trimmedLines.length >= 3) {
+				// 多行代码 → 显示为代码卡片
+				this.addPastedCodeCard(text);
+				return;
+			}
 
 			const selection = window.getSelection();
 			if (!selection || selection.rangeCount === 0) return;
@@ -490,7 +501,6 @@ export class MaxianView extends ViewPane {
 			range.deleteContents();
 
 			// 将纯文本按换行符分段插入，保留换行结构
-			const lines = text.split('\n');
 			const frag = document.createDocumentFragment();
 			lines.forEach((line, i) => {
 				if (i > 0) frag.appendChild(document.createElement('br'));
@@ -529,24 +539,12 @@ export class MaxianView extends ViewPane {
 			}
 		};
 
-		// 透明渐变遮罩（避免文本与底部控制区重叠）
-		const gradientOverlay = append(textAreaWrapper, $('div'));
-		gradientOverlay.style.position = 'absolute';
-		gradientOverlay.style.bottom = '1px';
-		gradientOverlay.style.left = '8px';
-		gradientOverlay.style.right = '8px';
-		gradientOverlay.style.height = '48px';
-		gradientOverlay.style.background = 'linear-gradient(to top, var(--vscode-input-background), transparent)';
-		gradientOverlay.style.pointerEvents = 'none';
-		gradientOverlay.style.zIndex = '2';
-
-		// ========== 底部控制栏（使用负边距叠加到输入框底部，类似kilocode） ==========
+		// ========== 底部控制栏（位于输入框下方，不遮挡文本内容） ==========
 		const bottomControls = append(textAreaWrapper, $('div'));
-		bottomControls.style.marginTop = '-38px'; // 负边距向上叠加（类似kilocode的marginTop: "-38px"）
-		bottomControls.style.zIndex = '10'; // 确保在输入框和渐变层之上
 		bottomControls.style.paddingLeft = '8px';
 		bottomControls.style.paddingRight = '8px';
-		bottomControls.style.paddingBottom = '2px';
+		bottomControls.style.paddingTop = '4px';
+		bottomControls.style.paddingBottom = '4px';
 		bottomControls.style.display = 'flex';
 		bottomControls.style.justifyContent = 'space-between';
 		bottomControls.style.alignItems = 'center';
@@ -2125,6 +2123,173 @@ export class MaxianView extends ViewPane {
 	}
 
 	/**
+	 * 粘贴多行代码时，以内嵌 chip 形式展示（代码存在 dataset，点击弹出浮层预览）
+	 */
+	private addPastedCodeCard(code: string): void {
+		const lineCount = code.split('\n').length;
+
+		const chip = $('span') as HTMLSpanElement;
+		chip.contentEditable = 'false';
+		chip.dataset['pastedCode'] = code;
+		chip.style.display = 'inline-flex';
+		chip.style.alignItems = 'center';
+		chip.style.gap = '3px';
+		chip.style.padding = '1px 7px 1px 5px';
+		chip.style.margin = '0 2px';
+		chip.style.borderRadius = '4px';
+		chip.style.fontSize = '12px';
+		chip.style.fontFamily = 'var(--vscode-editor-font-family)';
+		chip.style.backgroundColor = 'var(--vscode-badge-background)';
+		chip.style.color = 'var(--vscode-badge-foreground)';
+		chip.style.border = '1px solid var(--vscode-focusBorder)';
+		chip.style.cursor = 'pointer';
+		chip.style.verticalAlign = 'middle';
+		chip.style.userSelect = 'none';
+		chip.style.whiteSpace = 'nowrap';
+
+		// 压缩图标
+		const icon = $('span.codicon.codicon-file-zip') as HTMLSpanElement;
+		icon.style.fontSize = '11px';
+		icon.style.pointerEvents = 'none';
+		chip.appendChild(icon);
+
+		// 标签文本
+		const label = $('span') as HTMLSpanElement;
+		label.textContent = `代码片段 ${lineCount}行`;
+		label.style.pointerEvents = 'none';
+		chip.appendChild(label);
+
+		// 删除按钮
+		const delBtn = $('span.codicon.codicon-close') as HTMLSpanElement;
+		delBtn.style.fontSize = '10px';
+		delBtn.style.marginLeft = '3px';
+		delBtn.style.cursor = 'pointer';
+		delBtn.style.opacity = '0.7';
+		delBtn.title = '移除代码片段';
+		delBtn.onclick = (e) => {
+			e.stopPropagation();
+			this.hideCodePreviewPopup();
+			const next = chip.nextSibling;
+			if (next?.nodeType === Node.TEXT_NODE && next.textContent === '\u00A0') {
+				next.remove();
+			}
+			chip.remove();
+			this.updateInputPlaceholder();
+		};
+		chip.appendChild(delBtn);
+
+		// 点击 chip 切换代码预览浮层
+		chip.onclick = (e) => {
+			if ((e.target as HTMLElement).classList.contains('codicon-close')) return;
+			this.toggleCodePreviewPopup(chip, code);
+		};
+
+		chip.onmouseenter = () => { chip.style.opacity = '0.85'; };
+		chip.onmouseleave = () => { chip.style.opacity = '1'; };
+
+		// 在光标处插入 chip
+		this.insertChipAtCursor(chip);
+
+		// 聚焦回输入框
+		setTimeout(() => this.inputBox.focus(), 0);
+	}
+
+	/** 在 inputBox 当前光标位置插入 chip，并在后面加一个空格节点 */
+	private insertChipAtCursor(chip: HTMLElement): void {
+		const selection = window.getSelection();
+		if (selection && selection.rangeCount > 0 && this.inputBox.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+			const range = selection.getRangeAt(0);
+			range.deleteContents();
+			range.insertNode(chip);
+			// 在 chip 后插入零宽空格占位，便于光标定位
+			const space = document.createTextNode('\u00A0');
+			chip.after(space);
+			const r = document.createRange();
+			r.setStartAfter(space);
+			r.collapse(true);
+			selection.removeAllRanges();
+			selection.addRange(r);
+		} else {
+			this.inputBox.appendChild(chip);
+			const space = document.createTextNode('\u00A0');
+			this.inputBox.appendChild(space);
+		}
+		this.updateInputPlaceholder();
+	}
+
+	/** 显示/隐藏代码预览浮层 */
+	private toggleCodePreviewPopup(anchor: HTMLElement, code: string): void {
+		// 如果已有相同 anchor 的 popup，关闭它
+		if (this.codePreviewPopup && this.codePreviewPopup.dataset['anchorCode'] === code) {
+			this.hideCodePreviewPopup();
+			return;
+		}
+		this.hideCodePreviewPopup();
+
+		const popup = document.createElement('div');
+		popup.dataset['anchorCode'] = code;
+		popup.style.position = 'fixed';
+		popup.style.zIndex = '99999';
+		popup.style.border = '1px solid var(--vscode-widget-border)';
+		popup.style.borderRadius = '6px';
+		popup.style.overflow = 'hidden';
+		popup.style.boxShadow = '0 4px 16px rgba(0,0,0,0.4)';
+		popup.style.backgroundColor = 'var(--vscode-editorWidget-background, var(--vscode-editor-background, #1e1e1e))';
+		popup.style.maxWidth = '500px';
+		popup.style.minWidth = '200px';
+
+		const pre = document.createElement('pre');
+		pre.style.margin = '0';
+		pre.style.padding = '10px 12px';
+		pre.style.fontSize = '12px';
+		pre.style.lineHeight = '1.5';
+		pre.style.color = 'var(--vscode-editor-foreground, #d4d4d4)';
+		pre.style.backgroundColor = 'var(--vscode-editorWidget-background, var(--vscode-editor-background, #1e1e1e))';
+		pre.style.whiteSpace = 'pre';
+		pre.style.overflowX = 'auto';
+		pre.style.overflowY = 'auto';
+		pre.style.maxHeight = '300px';
+		pre.textContent = code;
+		popup.appendChild(pre);
+
+		// 挂到面板容器（确保能继承 VS Code CSS 变量）
+		this.container.appendChild(popup);
+		this.codePreviewPopup = popup;
+
+		// 定位：在 anchor chip 正上方（使用 fixed 定位，基于视口坐标）
+		const rect = anchor.getBoundingClientRect();
+		// 先渲染再测高，fallback 估算 300px
+		requestAnimationFrame(() => {
+			if (!this.codePreviewPopup) return;
+			const popupH = this.codePreviewPopup.getBoundingClientRect().height || 320;
+			let top = rect.top - popupH - 8;
+			if (top < 8) top = rect.bottom + 8;
+			let left = rect.left;
+			const popupW = 500;
+			if (left + popupW > window.innerWidth - 8) left = window.innerWidth - popupW - 8;
+			if (left < 8) left = 8;
+			this.codePreviewPopup.style.top = `${top}px`;
+			this.codePreviewPopup.style.left = `${left}px`;
+		});
+
+		// 点击外部关闭
+		const onOutside = (e: MouseEvent) => {
+			if (!popup.contains(e.target as Node) && e.target !== anchor) {
+				this.hideCodePreviewPopup();
+				document.removeEventListener('mousedown', onOutside, true);
+			}
+		};
+		document.addEventListener('mousedown', onOutside, true);
+	}
+
+	private hideCodePreviewPopup(): void {
+		if (this.codePreviewPopup) {
+			this.codePreviewPopup.remove();
+			this.codePreviewPopup = null;
+		}
+	}
+
+	/**
 	 * 创建文件引用 chip 元素
 	 */
 	private createMentionChip(displayName: string, relativePath: string): HTMLElement {
@@ -2435,6 +2600,10 @@ export class MaxianView extends ViewPane {
 					text += expandPath
 						? '@' + node.dataset['mentionPath']
 						: '@' + (node.dataset['mentionKey'] ?? node.dataset['mentionPath']);
+				} else if (node.dataset['pastedCode']) {
+					// 粘贴代码 chip
+					const code = node.dataset['pastedCode'];
+					text += `\n\`\`\`\n${code}\n\`\`\``;
 				} else if (node.tagName === 'BR') {
 					text += '\n';
 				} else if (node.tagName === 'DIV') {
@@ -2446,6 +2615,7 @@ export class MaxianView extends ViewPane {
 				}
 			}
 		}
+
 		return text;
 	}
 
@@ -2453,15 +2623,18 @@ export class MaxianView extends ViewPane {
 	private clearInput(): void {
 		this.inputBox.textContent = '';
 		this.inputBox.style.height = 'auto';
-		// 清除所有代码片段预览卡片
+		// 清除所有代码片段预览卡片（@mention 引用文件卡片）
 		this.codeContextCards.forEach((_, path) => this.removeCodeContextCard(path));
+		// 关闭粘贴代码预览浮层
+		this.hideCodePreviewPopup();
 		this.updateInputPlaceholder();
 	}
 
 	/** 更新 placeholder 显示/隐藏 */
 	private updateInputPlaceholder(): void {
 		const isEmpty = this.inputBox.textContent?.trim() === ''
-			&& !this.inputBox.querySelector('[data-mention-path]');
+			&& !this.inputBox.querySelector('[data-mention-path]')
+			&& !this.inputBox.querySelector('[data-pasted-code]');
 		if (this.inputPlaceholderEl) {
 			this.inputPlaceholderEl.style.display = isEmpty ? 'block' : 'none';
 		}
@@ -3286,7 +3459,7 @@ export class MaxianView extends ViewPane {
 	/**
 	 * 渲染用户反馈消息
 	 */
-	private renderUserFeedback(text: string, images?: string[]): void {
+	private renderUserFeedback(text: string, _images?: string[]): void {
 		const feedbackMsg = append(this.messageArea, $('div'));
 		feedbackMsg.style.marginBottom = '10px';
 		feedbackMsg.style.padding = '10px 15px';
@@ -4719,7 +4892,7 @@ export class MaxianView extends ViewPane {
 		}
 
 		// 添加知识库列表项
-		this.knowledgeBases.forEach((kb, index) => {
+		this.knowledgeBases.forEach((kb, _index) => {
 			const li = append(this.knowledgeBaseDropdownList, $('li')) as HTMLLIElement;
 			li.style.padding = '10px 16px';
 			li.style.cursor = 'pointer';

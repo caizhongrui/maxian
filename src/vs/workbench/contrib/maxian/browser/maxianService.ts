@@ -640,7 +640,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		// P2优化：注入子 Agent 工厂（支持 task 工具）
 		(this.toolExecutor as ToolExecutorImpl).setSubAgentRunner(
-			async (agentType: string, prompt: string, taskId?: string, taskToolId?: string): Promise<string> => {
+			async (agentType: string, prompt: string, _taskId?: string, taskToolId?: string): Promise<string> => {
 				return this.runSubAgent(agentType, prompt, workspaceRoot, taskToolId);
 			}
 		);

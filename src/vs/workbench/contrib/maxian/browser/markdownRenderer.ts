@@ -16,7 +16,7 @@ export class MarkdownRenderer {
 		let html = text;
 
 		// 代码块 ```language\ncode\n```
-		html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, language, code) => {
+		html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, (_match, language, code) => {
 			const lang = language || '';
 			return `<pre class="code-block"><code class="language-${lang}">${this.escapeHtml(code.trim())}</code></pre>`;
 		});
