@@ -348,6 +348,9 @@ export interface IMaxianService {
 	/** 获取工作区根目录路径 */
 	getWorkspaceRoot(): string;
 
+	/** 读取工作区内文件的文本内容（相对路径，最多 maxLines 行） */
+	readWorkspaceFile(relativePath: string, maxLines?: number): Promise<{ content: string; totalLines: number } | null>;
+
 	// ====== 快捷键触发事件（由 VSCode 命令系统触发，视图响应） ======
 
 	/** 触发发送消息（由 maxian.sendMessage 命令触发） */
@@ -794,6 +797,22 @@ export class MaxianService extends Disposable implements IMaxianService {
 	getWorkspaceRoot(): string {
 		const folders = this.workspaceContextService.getWorkspace().folders;
 		return folders.length > 0 ? folders[0].uri.fsPath : '';
+	}
+
+	async readWorkspaceFile(relativePath: string, maxLines: number = 100): Promise<{ content: string; totalLines: number } | null> {
+		const root = this.getWorkspaceRoot();
+		if (!root) return null;
+		try {
+			const uri = URI.file(root + '/' + relativePath);
+			const content = await this.fileService.readFile(uri);
+			const text = content.value.toString();
+			const allLines = text.split('\n');
+			const totalLines = allLines.length;
+			const preview = allLines.slice(0, maxLines).join('\n');
+			return { content: preview, totalLines };
+		} catch {
+			return null;
+		}
 	}
 
 	// @mention 文件列表缓存（避免每次输入都重复扫描）

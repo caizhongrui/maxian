@@ -74,6 +74,8 @@ export class MaxianView extends ViewPane {
 	private toolStatusElements: Map<string, HTMLElement> = new Map(); // 工具ID到状态元素的映射（支持并行工具）
 	private thinkingMessageElement: HTMLElement | null = null; // "正在思考"消息元素（避免重复显示）
 	private waitingIndicatorElement: HTMLElement | null = null; // 发送后"等待中"三点动画气泡
+	private codeContextBar: HTMLElement | null = null; // 代码片段预览卡片容器
+	private codeContextCards: Map<string, HTMLElement> = new Map(); // relativePath → 卡片元素
 	private tokenStatsElement: HTMLElement | null = null; // token统计元素（唯一，更新而非累加）
 	private cancelButton!: HTMLButtonElement; // 取消任务按钮
 	private clearButton!: HTMLButtonElement; // 清空对话按钮
@@ -427,6 +429,13 @@ export class MaxianView extends ViewPane {
 		textAreaWrapper.style.minHeight = '0';
 		textAreaWrapper.style.overflow = 'hidden';
 		textAreaWrapper.style.borderRadius = '4px';
+
+		// 代码片段预览卡片区（@mention 文件时在此展示来源代码，默认隐藏）
+		this.codeContextBar = append(textAreaWrapper, $('div.maxian-code-context-bar'));
+		this.codeContextBar.style.display = 'none';
+		this.codeContextBar.style.flexDirection = 'column';
+		this.codeContextBar.style.gap = '4px';
+		this.codeContextBar.style.padding = '4px 0 2px 0';
 
 		// 输入框（contenteditable div，支持内嵌文件 chip）
 		this.inputBox = append(textAreaWrapper, $('div')) as HTMLDivElement;
@@ -1157,6 +1166,17 @@ export class MaxianView extends ViewPane {
 		// - @mention 下拉列表导航键（硬编码，不可自定义，属于 UI 内部导航）
 		// - 发送消息和换行由 VSCode 快捷键系统（maxian.sendMessage / maxian.newLine 命令）处理
 		this.inputBox.onkeydown = (e) => {
+			// Ctrl+A / Cmd+A：选中输入框内所有内容，不让 VS Code 抢走焦点
+			if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+				e.preventDefault();
+				e.stopPropagation();
+				const range = document.createRange();
+				range.selectNodeContents(this.inputBox);
+				const sel = window.getSelection();
+				if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+				return;
+			}
+
 			// 如果 @mention 下拉列表已打开，拦截导航键（优先于快捷键命令）
 			if (this.mentionDropdown && this.mentionDropdown.style.display !== 'none') {
 				if (e.key === 'ArrowDown') {
@@ -1982,6 +2002,126 @@ export class MaxianView extends ViewPane {
 		this.inputBox.style.height = 'auto';
 		this.inputBox.style.height = this.inputBox.scrollHeight + 'px';
 		this.updateInputPlaceholder();
+
+		// 异步加载代码预览卡片
+		this.addCodeContextCard(file);
+	}
+
+	/**
+	 * 加载文件内容并在 codeContextBar 里添加代码预览卡片
+	 */
+	private addCodeContextCard(relativePath: string): void {
+		if (!this.codeContextBar) return;
+		// 同一文件不重复添加
+		if (this.codeContextCards.has(relativePath)) return;
+
+		// 创建占位卡片（loading 状态）
+		const card = append(this.codeContextBar, $('div.maxian-code-ctx-card'));
+		card.style.border = '1px solid var(--vscode-widget-border)';
+		card.style.borderRadius = '6px';
+		card.style.overflow = 'hidden';
+		card.style.fontSize = '12px';
+		card.style.fontFamily = 'var(--vscode-editor-font-family)';
+
+		// 卡片头部
+		const cardHeader = append(card, $('div'));
+		cardHeader.style.display = 'flex';
+		cardHeader.style.alignItems = 'center';
+		cardHeader.style.gap = '5px';
+		cardHeader.style.padding = '4px 8px';
+		cardHeader.style.backgroundColor = 'var(--vscode-textCodeBlock-background)';
+		cardHeader.style.borderBottom = '1px solid var(--vscode-widget-border)';
+
+		const fileIcon = append(cardHeader, $('span.codicon.codicon-file-code'));
+		fileIcon.style.fontSize = '12px';
+		fileIcon.style.color = 'var(--vscode-symbolIcon-fileForeground, var(--vscode-descriptionForeground))';
+		fileIcon.style.flexShrink = '0';
+
+		const fileInfoSpan = append(cardHeader, $('span'));
+		fileInfoSpan.style.flex = '1';
+		fileInfoSpan.style.overflow = 'hidden';
+		fileInfoSpan.style.textOverflow = 'ellipsis';
+		fileInfoSpan.style.whiteSpace = 'nowrap';
+		fileInfoSpan.style.color = 'var(--vscode-foreground)';
+
+		// 目录 + 文件名
+		const lastSlash = relativePath.lastIndexOf('/');
+		const dirPart = lastSlash >= 0 ? relativePath.slice(0, lastSlash + 1) : '';
+		const namePart = lastSlash >= 0 ? relativePath.slice(lastSlash + 1) : relativePath;
+
+		if (dirPart) {
+			const d = append(fileInfoSpan, $('span'));
+			d.style.color = 'var(--vscode-descriptionForeground)';
+			d.textContent = dirPart;
+		}
+		const n = append(fileInfoSpan, $('span'));
+		n.style.fontWeight = '500';
+		n.textContent = namePart;
+
+		// 行范围（加载后填充）
+		const lineRangeSpan = append(cardHeader, $('span'));
+		lineRangeSpan.style.fontSize = '11px';
+		lineRangeSpan.style.color = 'var(--vscode-descriptionForeground)';
+		lineRangeSpan.style.flexShrink = '0';
+		lineRangeSpan.textContent = '加载中...';
+
+		// 关闭按钮
+		const closeBtn = append(cardHeader, $('span.codicon.codicon-close'));
+		closeBtn.style.fontSize = '11px';
+		closeBtn.style.cursor = 'pointer';
+		closeBtn.style.opacity = '0.6';
+		closeBtn.style.flexShrink = '0';
+		closeBtn.onclick = () => this.removeCodeContextCard(relativePath);
+
+		// 代码内容区（折叠，最多 8 行可见，可滚动）
+		const codeWrap = append(card, $('div'));
+		codeWrap.style.maxHeight = '160px';
+		codeWrap.style.overflowY = 'auto';
+		codeWrap.style.padding = '6px 10px';
+		codeWrap.style.backgroundColor = 'var(--vscode-editor-background)';
+
+		const codePre = append(codeWrap, $('pre'));
+		codePre.style.margin = '0';
+		codePre.style.fontSize = '12px';
+		codePre.style.lineHeight = '1.5';
+		codePre.style.color = 'var(--vscode-editor-foreground)';
+		codePre.style.whiteSpace = 'pre';
+		codePre.style.overflowX = 'auto';
+		codePre.textContent = '...';
+
+		this.codeContextCards.set(relativePath, card);
+
+		// 显示 bar
+		this.codeContextBar.style.display = 'flex';
+
+		// 异步读取文件内容
+		this.maxianService.readWorkspaceFile(relativePath, 100).then(result => {
+			if (!result) {
+				lineRangeSpan.textContent = '无法读取';
+				codePre.textContent = '（文件读取失败）';
+				return;
+			}
+			const displayedLines = result.content.split('\n').length;
+			lineRangeSpan.textContent = `1-${displayedLines}${result.totalLines > displayedLines ? ` / 共 ${result.totalLines} 行` : ' 行'}`;
+			codePre.textContent = result.content;
+		}).catch(() => {
+			lineRangeSpan.textContent = '读取失败';
+		});
+	}
+
+	/**
+	 * 移除代码预览卡片
+	 */
+	private removeCodeContextCard(relativePath: string): void {
+		const card = this.codeContextCards.get(relativePath);
+		if (card) {
+			card.remove();
+			this.codeContextCards.delete(relativePath);
+		}
+		// 若无卡片则隐藏 bar
+		if (this.codeContextBar && this.codeContextCards.size === 0) {
+			this.codeContextBar.style.display = 'none';
+		}
 	}
 
 	/**
@@ -2035,6 +2175,8 @@ export class MaxianView extends ViewPane {
 				next.remove();
 			}
 			chip.remove();
+			// 同步移除对应的代码预览卡片
+			this.removeCodeContextCard(relativePath);
 			this.updateInputPlaceholder();
 		};
 		chip.appendChild(delBtn);
@@ -2307,10 +2449,12 @@ export class MaxianView extends ViewPane {
 		return text;
 	}
 
-	/** 清空输入框 */
+	/** 清空输入框（同步清除所有代码预览卡片） */
 	private clearInput(): void {
 		this.inputBox.textContent = '';
 		this.inputBox.style.height = 'auto';
+		// 清除所有代码片段预览卡片
+		this.codeContextCards.forEach((_, path) => this.removeCodeContextCard(path));
 		this.updateInputPlaceholder();
 	}
 
