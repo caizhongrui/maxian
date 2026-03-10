@@ -37,7 +37,26 @@ export class MarkdownRendererDom {
 
 			// 代码块 ```
 			if (line.startsWith('```')) {
-				const language = line.substring(3).trim();
+				// 解析 fence 信息：格式 language 或 language:filepath 或 language:filepath:startLine-endLine
+				const fenceInfo = line.substring(3).trim();
+				let language = fenceInfo;
+				let filePath = '';
+				let lineRange = '';
+
+				if (fenceInfo.includes(':')) {
+					const colonIdx = fenceInfo.indexOf(':');
+					language = fenceInfo.substring(0, colonIdx);
+					const rest = fenceInfo.substring(colonIdx + 1);
+					// 判断末尾是否为行范围 digits-digits
+					const lineRangeMatch = rest.match(/:?(\d+-\d+)$/);
+					if (lineRangeMatch) {
+						lineRange = lineRangeMatch[1];
+						filePath = rest.substring(0, rest.length - lineRangeMatch[0].length);
+					} else {
+						filePath = rest;
+					}
+				}
+
 				const codeLines: string[] = [];
 				i++; // 跳过开始标记
 
@@ -55,7 +74,7 @@ export class MarkdownRendererDom {
 				codeBlockWrapper.style.position = 'relative';
 				codeBlockWrapper.style.marginBottom = '8px';
 
-				// 代码块头部（语言标签 + 复制按钮）
+				// 代码块头部（语言标签 + 文件来源 + 复制按钮）
 				const codeHeader = append(codeBlockWrapper, $('div.code-block-header'));
 				codeHeader.style.display = 'flex';
 				codeHeader.style.alignItems = 'center';
@@ -66,12 +85,72 @@ export class MarkdownRendererDom {
 				codeHeader.style.borderTopRightRadius = '6px';
 				codeHeader.style.borderBottom = '1px solid var(--vscode-widget-border)';
 
+				// 左侧信息区（语言 + 文件来源）
+				const headerLeft = append(codeHeader, $('div'));
+				headerLeft.style.display = 'flex';
+				headerLeft.style.alignItems = 'center';
+				headerLeft.style.gap = '8px';
+				headerLeft.style.overflow = 'hidden';
+				headerLeft.style.minWidth = '0';
+
 				// 语言标签
-				const langLabel = append(codeHeader, $('span.code-language'));
+				const langLabel = append(headerLeft, $('span.code-language'));
 				langLabel.style.fontSize = '11px';
 				langLabel.style.color = 'var(--vscode-descriptionForeground)';
 				langLabel.style.textTransform = 'uppercase';
+				langLabel.style.flexShrink = '0';
 				langLabel.textContent = language || 'code';
+
+				// 文件来源（有文件路径时才显示）
+				if (filePath) {
+					const sep = append(headerLeft, $('span'));
+					sep.style.color = 'var(--vscode-widget-border)';
+					sep.style.flexShrink = '0';
+					sep.textContent = '•';
+
+					const fileIcon = append(headerLeft, $('span.codicon.codicon-file-code'));
+					fileIcon.style.fontSize = '12px';
+					fileIcon.style.color = 'var(--vscode-symbolIcon-fileForeground, var(--vscode-descriptionForeground))';
+					fileIcon.style.flexShrink = '0';
+
+					// 文件路径 + 行范围
+					const fileInfo = append(headerLeft, $('span'));
+					fileInfo.style.fontSize = '12px';
+					fileInfo.style.color = 'var(--vscode-foreground)';
+					fileInfo.style.overflow = 'hidden';
+					fileInfo.style.textOverflow = 'ellipsis';
+					fileInfo.style.whiteSpace = 'nowrap';
+
+					// 目录部分（浅色）+ 文件名部分（主色）
+					const lastSlash = filePath.lastIndexOf('/');
+					const dirPart = lastSlash >= 0 ? filePath.slice(0, lastSlash + 1) : '';
+					const namePart = lastSlash >= 0 ? filePath.slice(lastSlash + 1) : filePath;
+
+					if (dirPart) {
+						const dirSpan = append(fileInfo, $('span'));
+						dirSpan.style.color = 'var(--vscode-descriptionForeground)';
+						dirSpan.textContent = dirPart;
+					}
+					const nameSpan = append(fileInfo, $('span'));
+					nameSpan.style.fontWeight = '500';
+					nameSpan.textContent = namePart;
+
+					if (lineRange) {
+						const lineSpan = append(fileInfo, $('span'));
+						lineSpan.style.color = 'var(--vscode-descriptionForeground)';
+						lineSpan.textContent = `:${lineRange}`;
+					}
+				} else if (lineRange) {
+					// 只有行范围，没有文件路径
+					const sep = append(headerLeft, $('span'));
+					sep.style.color = 'var(--vscode-widget-border)';
+					sep.textContent = '•';
+
+					const lineSpan = append(headerLeft, $('span'));
+					lineSpan.style.fontSize = '12px';
+					lineSpan.style.color = 'var(--vscode-descriptionForeground)';
+					lineSpan.textContent = `Line ${lineRange}`;
+				}
 
 				// 复制按钮
 				const copyBtn = append(codeHeader, $('button.code-copy-btn'));

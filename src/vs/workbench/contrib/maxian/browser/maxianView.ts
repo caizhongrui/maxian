@@ -389,8 +389,9 @@ export class MaxianView extends ViewPane {
 			const delta = _dragStartY - e.clientY; // 向上拖 => delta > 0 => height 增加
 			const newHeight = Math.max(60, Math.min(500, _dragStartHeight + delta));
 			if (this.inputBox) {
+				// contenteditable 忽略 height，必须用 minHeight+maxHeight 共同固定高度
 				this.inputBox.style.minHeight = newHeight + 'px';
-				this.inputBox.style.height = newHeight + 'px';
+				this.inputBox.style.maxHeight = newHeight + 'px';
 			}
 		});
 
@@ -445,6 +446,7 @@ export class MaxianView extends ViewPane {
 		this.inputBox.style.boxSizing = 'border-box';
 		this.inputBox.style.overflowX = 'hidden';
 		this.inputBox.style.overflowY = 'auto';
+		this.inputBox.style.maxHeight = '200px'; // 防止 contenteditable 无限增长
 		this.inputBox.style.whiteSpace = 'pre-wrap';
 		this.inputBox.style.wordBreak = 'break-word';
 		this.inputBox.style.zIndex = '1';
