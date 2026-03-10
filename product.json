@@ -543,7 +543,7 @@
     },
     {
       "name": "MS-CEINTL.vscode-language-pack-zh-hans",
-      "version": "1.106.0",
+      "version": "1.108.2026021109",
       "sha256": null,
       "repo": "https://github.com/Microsoft/vscode-loc.git",
       "metadata": {
