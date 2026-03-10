@@ -195,10 +195,6 @@ export const DEFAULT_PERMISSION_RULES: Record<ToolName, Record<string, Permissio
 		'*': 'allow'
 	},
 
-	webfetch: {
-		'*': 'allow'
-	},
-
 	skill: {
 		'*': 'allow'
 	},

@@ -3559,11 +3559,6 @@ export class MaxianView extends ViewPane {
 					actionText = '搜索替换';
 					detailText = toolInfo.path || '';
 					break;
-				case 'webfetch':
-				case 'web_fetch':
-					actionText = '获取网页';
-					detailText = toolInfo.url || '';
-					break;
 				case 'websearch':
 				case 'web_search':
 					actionText = '搜索网页';

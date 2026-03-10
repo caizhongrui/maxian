@@ -528,23 +528,6 @@ export function registerBuiltinTools(): void {
 				required: ['path', 'edits'],
 			},
 		},
-		// WebFetch 工具
-		{
-			name: 'webfetch',
-			displayName: '获取网页',
-			description: '获取网页内容并转换为 Markdown',
-			group: 'web',
-			source: 'builtin',
-			inputSchema: {
-				type: 'object',
-				properties: {
-					url: { type: 'string', description: 'URL 地址' },
-					prompt: { type: 'string', description: '处理提示词' },
-					format: { type: 'string', enum: ['markdown', 'text', 'json'], description: '输出格式' },
-				},
-				required: ['url'],
-			},
-		},
 		// 控制工具
 		{
 			name: 'ask_followup_question',

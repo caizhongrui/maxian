@@ -69,8 +69,6 @@ export const toolParamNames = [
 	'subagent_type',  // task 子Agent类型参数
 	'task_id',        // task resume 参数（恢复已有子Agent会话）
 	'column',         // LSP 列号参数
-	'useCache',       // webfetch 缓存参数
-	'format',         // webfetch 输出格式参数
 	'skill_name',     // skill 工具参数
 	'requires_approval', // execute_command: 是否需要用户确认（参考Cline）
 	'options',        // ask_followup_question: 备选答案数组（参考Cline）
@@ -100,7 +98,6 @@ export const toolNames = [
 	'update_todo_list',
 	'batch',        // P0优化：批量并行执行工具
 	'multiedit',    // P1优化：单文件多处编辑
-	'webfetch',     // P0优化：网页获取工具
 	'task',         // P1优化：子Agent委托
 	'patch',        // P1优化：多文件批量操作
 	'lsp_hover',    // LSP功能：悬停信息
@@ -250,7 +247,6 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 	update_todo_list: '更新待办列表',
 	batch: '批量执行',           // P0优化
 	multiedit: '多处编辑',        // P1优化
-	webfetch: '获取网页',         // P0优化
 	task: '子任务委托',           // P1优化
 	patch: '多文件补丁',          // P1优化
 	lsp_hover: 'LSP悬停',        // LSP功能
@@ -264,7 +260,7 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 } as const;
 
 // 工具分组
-export type ToolGroup = 'read' | 'edit' | 'command' | 'web' | 'lsp' | 'agent' | 'skills';
+export type ToolGroup = 'read' | 'edit' | 'command' | 'lsp' | 'agent' | 'skills';
 
 export type ToolGroupConfig = {
 	tools: readonly string[];
@@ -297,9 +293,6 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 	},
 	command: {
 		tools: ['execute_command'],
-	},
-	web: {
-		tools: ['webfetch'],  // 网页获取
 	},
 	lsp: {
 		tools: [

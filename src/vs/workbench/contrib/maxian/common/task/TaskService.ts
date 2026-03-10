@@ -1084,7 +1084,7 @@ export class TaskService extends Disposable {
 		// ====== [Batch Monitor] 工具调用情况日志 ======
 		const toolNames = toolUses.map(t => t.name);
 		const hasBatch = toolNames.includes('batch');
-		const readOnlyToolNames = ['read_file', 'search_files', 'glob', 'list_files', 'codebase_search', 'list_code_definition_names', 'lsp_hover', 'lsp_diagnostics', 'lsp_definition', 'lsp_references', 'lsp_type_definition', 'webfetch'];
+		const readOnlyToolNames = ['read_file', 'search_files', 'glob', 'list_files', 'codebase_search', 'list_code_definition_names', 'lsp_hover', 'lsp_diagnostics', 'lsp_definition', 'lsp_references', 'lsp_type_definition'];
 		const standaloneReadCalls = toolUses.filter(t => readOnlyToolNames.includes(t.name));
 
 		let goto_skipReadOnly = false;

@@ -18,9 +18,6 @@ import { executeMultiedit, formatMultieditResponse, EditOperation } from '../../
 import { detectDoomLoop, resetDoomLoopCount } from '../../common/agent/doomLoopDetector.js';
 import { isToolEnabledForAgent, checkBashPermission } from '../../common/agent/agentConfig.js';
 import { executeEdit, validateEditParams, formatEditResponse } from '../../common/tools/editTool.js';
-import { validateUrl, processResponse, formatWebFetchResponse } from '../../common/tools/webfetchTool.js';
-import { IRequestService, asText } from '../../../../../platform/request/common/request.js';
-import { CancellationToken } from '../../../../../base/common/cancellation.js';
 import { skillTool } from '../../common/tools/skillTool.js';
 import { ISkillService } from '../../../skills/common/skillService.js';
 import { getHoverInfo } from '../../common/lsp/lspHover.js';
@@ -41,7 +38,6 @@ export class ToolExecutorImpl implements IToolExecutor {
 	private batchExecutor: BatchToolExecutor;
 	private context: ToolExecutionContext;
 	private skillService?: ISkillService;
-	private requestService?: IRequestService;
 
 	/**
 	 * 子 Agent 运行器（由 maxianService 注入）
@@ -56,8 +52,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 		ripgrepService: IRipgrepService,
 		context: ToolExecutionContext,
 		skillService?: ISkillService,
-		commandExecutionService?: ICommandExecutionService,
-		requestService?: IRequestService
+		commandExecutionService?: ICommandExecutionService
 	) {
 		this.fileOperations = new FileOperationsTool(fileService, context.workspaceRoot || '');
 		this.commandExecution = new CommandExecutionTool(terminalService);
@@ -67,7 +62,6 @@ export class ToolExecutorImpl implements IToolExecutor {
 		this.searchTool = new SearchTool(searchService, ripgrepService, context.workspaceRoot || '');
 		this.context = context;
 		this.skillService = skillService;
-		this.requestService = requestService;
 		// P0优化：初始化批量执行器
 		this.batchExecutor = new BatchToolExecutor(this);
 	}
@@ -214,11 +208,6 @@ export class ToolExecutorImpl implements IToolExecutor {
 				// P1优化：多处编辑工具
 				case 'multiedit':
 					result = await this.executeMultiedit(toolUse);
-					break;
-
-				// P0优化：网页获取工具
-				case 'webfetch':
-					result = await this.executeWebFetch(toolUse);
 					break;
 
 				// P1优化：多文件补丁
@@ -619,103 +608,6 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			return `多处编辑失败: ${errorMsg}`;
-		}
-	}
-
-	/**
-	 * P0优化：执行网页获取
-	 */
-	private async executeWebFetch(toolUse: ToolUse): Promise<ToolResponse> {
-		const { url, prompt, format } = toolUse.params;
-
-		if (!url) {
-			return '错误: webfetch 工具需要 url 参数';
-		}
-
-		// 验证 URL
-		const validation = validateUrl(url);
-		if (!validation.valid) {
-			return `错误: ${validation.error}`;
-		}
-
-		console.log(`[Maxian] 获取网页: ${url}`);
-
-		// 优先用 curl（不受 CORS 限制，在 Node.js 子进程中执行）
-		const curlResult = await this.fetchWithCurl(url);
-		if (curlResult.success) {
-			const result = processResponse(url, curlResult.body, curlResult.contentType, {
-				url,
-				prompt,
-				format: format as 'markdown' | 'text' | 'json',
-			});
-			return formatWebFetchResponse(result);
-		}
-
-		console.warn(`[Maxian] curl 失败 (${curlResult.error})，尝试 IRequestService`);
-
-		// curl 不可用时降级到 IRequestService
-		try {
-			let html: string;
-			let contentType: string = 'text/html';
-
-			if (this.requestService) {
-				const context = await this.requestService.request({
-					type: 'GET',
-					url,
-					headers: {
-						'User-Agent': 'Mozilla/5.0 (compatible; MaxianIDE/1.0)',
-						'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7',
-					},
-				}, CancellationToken.None);
-
-				if (!context.res.statusCode || context.res.statusCode < 200 || context.res.statusCode >= 300) {
-					return `网页获取失败: HTTP ${context.res.statusCode}`;
-				}
-
-				contentType = (context.res.headers as any)['content-type'] || 'text/html';
-				html = await asText(context) || '';
-			} else {
-				return `网页获取失败: curl 不可用且 IRequestService 未注入`;
-			}
-
-			const result = processResponse(url, html, contentType, {
-				url,
-				prompt,
-				format: format as 'markdown' | 'text' | 'json',
-			});
-			return formatWebFetchResponse(result);
-		} catch (error) {
-			const errorMsg = error instanceof Error ? error.message : String(error);
-			return `网页获取失败: ${errorMsg}`;
-		}
-	}
-
-	/**
-	 * 使用 curl 命令获取网页（绕过渲染进程 CORS 限制）
-	 */
-	private async fetchWithCurl(url: string): Promise<{ success: boolean; body: string; contentType: string; error?: string }> {
-		try {
-			// curl -s 静默，-L 跟随重定向，--max-time 15 超时，-A 设置 UA，-D - 输出响应头到 stdout
-			const command = `curl -s -L --max-time 15 -A "Mozilla/5.0 (compatible; MaxianIDE/1.0)" -w "\\nCONTENT_TYPE:%{content_type}" "${url.replace(/"/g, '\\"')}"`;
-			const result = await this.commandExecution.executeCommandSilent(command);
-
-			if (result.exitCode !== 0 || !result.stdout) {
-				return { success: false, body: '', contentType: '', error: result.stderr || 'curl 返回非零退出码' };
-			}
-
-			// 末尾有 CONTENT_TYPE:xxx，分离出来
-			const marker = '\nCONTENT_TYPE:';
-			const markerIdx = result.stdout.lastIndexOf(marker);
-			let body = result.stdout;
-			let contentType = 'text/html';
-			if (markerIdx !== -1) {
-				contentType = result.stdout.slice(markerIdx + marker.length).trim();
-				body = result.stdout.slice(0, markerIdx);
-			}
-
-			return { success: true, body, contentType };
-		} catch (e) {
-			return { success: false, body: '', contentType: '', error: String(e) };
 		}
 	}
 

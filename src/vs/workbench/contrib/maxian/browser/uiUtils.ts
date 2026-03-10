@@ -391,7 +391,6 @@ export const TOOL_ICONS: Record<string, string> = {
 	'command': 'codicon-terminal',
 
 	// Web 类
-	'webfetch': 'codicon-globe',
 	'websearch': 'codicon-search',
 	'browser_action': 'codicon-browser',
 

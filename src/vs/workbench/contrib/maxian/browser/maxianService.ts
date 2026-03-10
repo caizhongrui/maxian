@@ -635,8 +635,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 			this.skillService,
-			this.commandExecutionService,
-			this.requestService
+			this.commandExecutionService
 		);
 
 		// P2优化：注入子 Agent 工厂（支持 task 工具）
@@ -1932,22 +1931,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
-			// 20. webfetch - 网页获取
-			{
-				name: 'webfetch',
-				description: '获取网页内容并转换为Markdown格式。支持缓存、自动处理重定向。适合获取API文档、读取网页内容。',
-				parameters: {
-					type: 'object',
-					properties: {
-						url: { type: 'string', description: '要获取的网页URL' },
-						useCache: { type: 'boolean', description: '是否使用缓存（默认true，15分钟有效）' },
-						format: { type: 'string', enum: ['markdown', 'text', 'html'], description: '输出格式（默认markdown）' }
-					},
-					required: ['url']
-				}
-			},
-
-			// 21. lsp_hover - LSP悬停信息
+			// 20. lsp_hover - LSP悬停信息
 			{
 				name: 'lsp_hover',
 				description: '获取代码位置的LSP悬停信息，包括类型、函数签名、文档等。',

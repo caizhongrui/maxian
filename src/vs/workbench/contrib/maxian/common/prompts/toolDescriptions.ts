@@ -243,21 +243,6 @@ const TOOL_DESCRIPTIONS: Partial<Record<ToolName, string>> = {
 - content: 文件内容（create/modify）
 - new_path: 新路径（rename）`,
 
-	// P0优化：网页获取
-	webfetch: `## webfetch
-获取网页内容并转换为Markdown
-
-**使用**：
-- 获取API文档
-- 读取网页内容
-- 获取外部资源
-
-**要点**：
-- 自动HTML转Markdown
-- 支持缓存（useCache参数）
-- 自动处理重定向
-
-**参数**：url（网址）、useCache(可选)、format(可选)`,
 
 	// LSP功能：Hover信息
 	lsp_hover: `## lsp_hover

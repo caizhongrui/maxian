@@ -128,7 +128,6 @@ export const BATCH_CONFIG = {
 		'search_files',
 		'codebase_search',
 		'glob',
-		'webfetch',
 		'lsp_hover',
 		'lsp_diagnostics',
 		'lsp_definition',
