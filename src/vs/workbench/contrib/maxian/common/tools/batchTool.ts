@@ -89,23 +89,34 @@ export interface BatchToolResult {
 
 /**
  * Batch 工具配置
- * 对齐 OpenCode：batch 本身是唯一禁止的工具，write 类工具可以在 batch 中并行执行
  */
 export const BATCH_CONFIG = {
 	/** 最大并行工具数 */
 	MAX_PARALLEL_TOOLS: 25,
 
 	/**
-	 * 禁止在 batch 中执行的工具（对齐 OpenCode：只禁止 batch 自身和交互类工具）
-	 * - batch: 禁止嵌套（防止无限递归）
-	 * - ask_followup_question: 需要用户输入，batch 并行执行无法等待
-	 * - attempt_completion: 任务完成信号，不应并行
-	 * - write 类工具允许！对齐 OpenCode，让 AI 可以批量创建/修改多个文件
+	 * 禁止在 batch 中执行的工具
 	 */
 	DISALLOWED_TOOLS: new Set([
 		'batch',                    // 禁止嵌套batch（防止无限递归）
 		'ask_followup_question',    // 需要用户输入，并行无意义
 		'attempt_completion',       // 任务完成标志
+	]),
+
+	/**
+	 * 写操作工具集合
+	 * 同一文件的写操作必须串行执行，避免并发修改导致 diff 冲突
+	 */
+	WRITE_TOOLS: new Set([
+		'write_to_file',
+		'apply_diff',
+		'edit',
+		'multiedit',
+		'patch',
+		'delete_file',
+		'create_directory',
+		'insert_content',
+		'edit_file',
 	]),
 
 	/**
@@ -215,16 +226,15 @@ export class BatchToolExecutor {
 			tools: string[];
 		};
 	}> {
-		// 限制最多 10 个工具
+		// 限制最多 25 个工具
 		const validCalls = toolCalls.slice(0, BATCH_CONFIG.MAX_PARALLEL_TOOLS);
 		const discardedCalls = toolCalls.slice(BATCH_CONFIG.MAX_PARALLEL_TOOLS);
 
 		console.log(`[BatchTool] 开始执行 ${validCalls.length} 个工具 (丢弃 ${discardedCalls.length} 个)`);
 
-		// 并行执行所有工具
-		const results = await Promise.all(
-			validCalls.map(call => this.executeCall(call))
-		);
+		// 同文件写操作串行，其他操作并行
+		// 原因：apply_diff/edit 等写操作并发修改同一文件时，后续 diff 找不到已变更的原始内容，导致失败→AI重试→死循环
+		const results = await this.executeMixed(validCalls);
 
 		// 为丢弃的调用添加错误结果
 		const now = Date.now();
@@ -258,6 +268,82 @@ export class BatchToolExecutor {
 				tools: toolCalls.map(c => c.tool),
 			},
 		};
+	}
+
+	/**
+	 * 混合执行策略：
+	 * - 同一文件的写操作串行（保证顺序）
+	 * - 不同文件的写操作、所有只读操作并行
+	 */
+	private async executeMixed(calls: BatchToolCall[]): Promise<BatchToolResult[]> {
+		// 结果数组，按原始顺序填充
+		const results: (BatchToolResult | null)[] = new Array(calls.length).fill(null);
+
+		// 提取目标文件路径（写操作才需要串行保护）
+		const getFilePath = (call: BatchToolCall): string | null => {
+			if (!BATCH_CONFIG.WRITE_TOOLS.has(call.tool)) return null;
+			return call.parameters?.path || call.parameters?.target_file || null;
+		};
+
+		// 按文件路径分组写操作，收集每个文件的调用索引（有序）
+		const fileGroups = new Map<string, number[]>(); // filePath -> [index...]
+		const parallelIndices: number[] = [];           // 可并行执行的索引
+
+		for (let i = 0; i < calls.length; i++) {
+			const filePath = getFilePath(calls[i]);
+			if (filePath) {
+				// 写操作：按文件分组
+				if (!fileGroups.has(filePath)) {
+					fileGroups.set(filePath, []);
+				}
+				fileGroups.get(filePath)!.push(i);
+			} else {
+				parallelIndices.push(i);
+			}
+		}
+
+		// 1. 并行执行所有只读操作 + 单个文件只有一次写操作的情况
+		const parallelPromises: Promise<void>[] = [];
+
+		// 只读操作：全部并行
+		for (const idx of parallelIndices) {
+			parallelPromises.push(
+				this.executeCall(calls[idx]).then(r => { results[idx] = r; })
+			);
+		}
+
+		// 每个文件组：内部串行，不同文件组之间并行
+		for (const [filePath, indices] of fileGroups) {
+			if (indices.length === 1) {
+				// 该文件只有一次写操作，可以并行
+				const idx = indices[0];
+				parallelPromises.push(
+					this.executeCall(calls[idx]).then(r => { results[idx] = r; })
+				);
+			} else {
+				// 该文件有多次写操作，必须串行
+				console.log(`[BatchTool] 文件 "${filePath}" 有 ${indices.length} 次写操作，改为串行执行`);
+				parallelPromises.push(
+					(async () => {
+						for (const idx of indices) {
+							results[idx] = await this.executeCall(calls[idx]);
+						}
+					})()
+				);
+			}
+		}
+
+		await Promise.all(parallelPromises);
+
+		// 确保所有结果都有值（防御性）
+		const now = Date.now();
+		return results.map((r, i) => r ?? {
+			tool: calls[i].tool,
+			success: false,
+			error: '内部错误：未执行',
+			startTime: now,
+			endTime: now,
+		});
 	}
 
 	/**

@@ -640,12 +640,25 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 
 		console.log(`[Maxian] 获取网页: ${url}`);
 
+		// 优先用 curl（不受 CORS 限制，在 Node.js 子进程中执行）
+		const curlResult = await this.fetchWithCurl(url);
+		if (curlResult.success) {
+			const result = processResponse(url, curlResult.body, curlResult.contentType, {
+				url,
+				prompt,
+				format: format as 'markdown' | 'text' | 'json',
+			});
+			return formatWebFetchResponse(result);
+		}
+
+		console.warn(`[Maxian] curl 失败 (${curlResult.error})，尝试 IRequestService`);
+
+		// curl 不可用时降级到 IRequestService
 		try {
 			let html: string;
 			let contentType: string = 'text/html';
 
 			if (this.requestService) {
-				// 使用 VS Code IRequestService（主进程发请求，无 CORS 限制）
 				const context = await this.requestService.request({
 					type: 'GET',
 					url,
@@ -662,19 +675,7 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 				contentType = (context.res.headers as any)['content-type'] || 'text/html';
 				html = await asText(context) || '';
 			} else {
-				// 降级：直接 fetch（可能有 CORS 限制）
-				const response = await fetch(url, {
-					headers: {
-						'User-Agent': 'Mozilla/5.0 (compatible; MaxianIDE/1.0)',
-					},
-				});
-
-				if (!response.ok) {
-					return `网页获取失败: HTTP ${response.status} ${response.statusText}`;
-				}
-
-				contentType = response.headers.get('content-type') || 'text/html';
-				html = await response.text();
+				return `网页获取失败: curl 不可用且 IRequestService 未注入`;
 			}
 
 			const result = processResponse(url, html, contentType, {
@@ -682,11 +683,39 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 				prompt,
 				format: format as 'markdown' | 'text' | 'json',
 			});
-
 			return formatWebFetchResponse(result);
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			return `网页获取失败: ${errorMsg}`;
+		}
+	}
+
+	/**
+	 * 使用 curl 命令获取网页（绕过渲染进程 CORS 限制）
+	 */
+	private async fetchWithCurl(url: string): Promise<{ success: boolean; body: string; contentType: string; error?: string }> {
+		try {
+			// curl -s 静默，-L 跟随重定向，--max-time 15 超时，-A 设置 UA，-D - 输出响应头到 stdout
+			const command = `curl -s -L --max-time 15 -A "Mozilla/5.0 (compatible; MaxianIDE/1.0)" -w "\\nCONTENT_TYPE:%{content_type}" "${url.replace(/"/g, '\\"')}"`;
+			const result = await this.commandExecution.executeCommandSilent(command);
+
+			if (result.exitCode !== 0 || !result.stdout) {
+				return { success: false, body: '', contentType: '', error: result.stderr || 'curl 返回非零退出码' };
+			}
+
+			// 末尾有 CONTENT_TYPE:xxx，分离出来
+			const marker = '\nCONTENT_TYPE:';
+			const markerIdx = result.stdout.lastIndexOf(marker);
+			let body = result.stdout;
+			let contentType = 'text/html';
+			if (markerIdx !== -1) {
+				contentType = result.stdout.slice(markerIdx + marker.length).trim();
+				body = result.stdout.slice(0, markerIdx);
+			}
+
+			return { success: true, body, contentType };
+		} catch (e) {
+			return { success: false, body: '', contentType: '', error: String(e) };
 		}
 	}
 
