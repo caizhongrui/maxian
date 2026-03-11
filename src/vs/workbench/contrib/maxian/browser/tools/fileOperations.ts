@@ -6,6 +6,7 @@
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { VSBuffer } from '../../../../../base/common/buffer.js';
+import { IModelService } from '../../../../../editor/common/services/model.js';
 import { ReadFileToolUse, WriteToFileToolUse, ListFilesToolUse, GlobToolUse, ApplyDiffToolUse, ToolResponse, ToolUse } from '../../common/tools/toolTypes.js';
 import * as glob from '../../../../../base/common/glob.js';
 import { MultiSearchReplaceDiffStrategy } from '../../common/diff/MultiSearchReplaceDiffStrategy.js';
@@ -14,6 +15,17 @@ import { normalizeString } from '../../common/utils/textNormalization.js';
 import * as path from '../../../../../base/common/path.js';
 import { trackFileRead, assertFileWritable, withFileLock, updateFileAfterWrite } from '../../common/file/fileTimeTracker.js';
 import { getDiagnosticsAfterEdit } from '../../common/lsp/lspDiagnostics.js';
+
+/**
+ * apply_diff 工具专用错误类
+ * 抛出此错误 → TaskService catch → is_error: true → Qwen 知道真正失败，停止重试
+ */
+export class DiffApplicationError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'DiffApplicationError';
+	}
+}
 
 /**
  * 检测文件是否为二进制文件（基于扩展名）
@@ -114,10 +126,11 @@ export class FileOperationsTool {
 	constructor(
 		private readonly fileService: IFileService,
 		private readonly workspaceRoot: string = '',
-		sessionId?: string
+		sessionId?: string,
+		private readonly modelService?: IModelService
 	) {
 		// 初始化Diff策略（完整Kilocode实现）
-		this.diffStrategy = new MultiSearchReplaceDiffStrategy(1.0, 40); // 100%匹配阈值，40行缓冲
+		this.diffStrategy = new MultiSearchReplaceDiffStrategy(0.9, 40); // 90%匹配阈值，40行缓冲（对齐 OpenCode 容错策略）
 		// P1-8: 会话ID用于文件时间戳追踪
 		this.sessionId = sessionId || 'default';
 	}
@@ -408,7 +421,16 @@ ${assertResult.message}
 				try {
 					if (exists) {
 						// 文件存在，更新内容
+						// 1. 直接写磁盘（快速路径，与 diffViewProvider.saveAndClose 行为一致）
 						await this.fileService.writeFile(uri, buffer);
+						// 2. 如果文件在编辑器中已打开（有内存模型），同步更新模型内容
+						//    避免编辑器仍显示旧内容（不重新读磁盘，直接更新内存，无额外 I/O）
+						if (this.modelService) {
+							const model = this.modelService.getModel(uri);
+							if (model) {
+								model.setValue(processedContent);
+							}
+						}
 					} else {
 						// 文件不存在，创建新文件（包括目录）
 						await this.fileService.createFile(uri, buffer, { overwrite: false });
@@ -1014,11 +1036,10 @@ ${assertResult.message}
 					});
 				}
 
-				// Diff应用失败
+				// Diff应用完全失败 → throw DiffApplicationError → TaskService catch → is_error: true
 				let formattedError = '';
 
 				if (diffResult.failParts && diffResult.failParts.length > 0) {
-					// 有部分失败的Diff块
 					for (const failPart of diffResult.failParts) {
 						if (failPart.success) {
 							continue;
@@ -1026,19 +1047,26 @@ ${assertResult.message}
 						formattedError += `<error_details>\n${failPart.error}\n</error_details>\n\n`;
 					}
 				} else {
-					// 完全失败
 					formattedError = `无法应用diff到文件: ${absolutePath}\n\n<error_details>\n${diffResult.error}\n</error_details>`;
 				}
 
-				return formattedError;
+				formattedError += `\n\n` + (diffResult.error && diffResult.error.includes('found in your diff content')
+					? `**根因：REPLACE块中包含diff格式标记字符串（<<<<<<< SEARCH / >>>>>>> REPLACE），请改用 edit 工具（old_string/new_string格式）代替 apply_diff。**`
+					: `请使用 read_file 查看文件当前内容，然后重新构造正确的SEARCH块（必须与文件内容完全匹配）。`);
+				throw new DiffApplicationError(formattedError);
 			}
 
 			// Diff应用成功，检查是否有实际变化
 			const newContent = diffResult.content!;
 
-			// 🔥 防止重复修改：如果内容没有变化，说明修改已经存在
+			// 内容未变化 → throw DiffApplicationError → is_error: true → Qwen 停止重试
 			if (newContent === originalContent) {
-				return `⚠️ 文件内容未发生变化: ${absolutePath}\n\n这通常意味着：\n1. 修改已经存在于文件中\n2. 或者SEARCH块没有匹配到任何内容\n\n💡 建议：\n- 使用 read_file 查看当前文件状态\n- 如果问题已解决，使用 attempt_completion 完成任务\n- 如果问题未解决，使用不同的SEARCH内容重新尝试\n\n⚠️ 请不要重复应用相同的diff，这会浪费时间和资源！`;
+				throw new DiffApplicationError(
+					`apply_diff 未产生任何修改: ${absolutePath}\n\n` +
+					`最可能的原因：修改已存在于文件中（幂等）。\n\n` +
+					`请使用 read_file 确认当前文件状态。如果目标修改已存在，直接调用 attempt_completion 完成任务；` +
+					`如果未存在，请重新 read_file 获取精确内容后再构造 SEARCH 块。`
+				);
 			}
 
 			// 检查是否只有单个SEARCH/REPLACE块（提前计算，在锁外）
@@ -1064,7 +1092,12 @@ ${assertResult.message}
 				if (diffResult.failParts && diffResult.failParts.length > 0) {
 					const failedCount = diffResult.failParts.filter(p => !p.success).length;
 					if (failedCount > 0) {
-						partialFailureHint = `注意: ${failedCount} 个diff块未能应用。请使用 read_file 检查文件内容并重新尝试。\n\n`;
+						const failedDetails = diffResult.failParts
+							.filter(p => !p.success)
+							.map(p => `  - ${p.error}`)
+							.join('\n');
+						partialFailureHint = `注意: ${failedCount} 个diff块未能应用（其余块已成功写入）：\n${failedDetails}\n\n` +
+							`⚠️ 只需重试上述失败的块，不要重新提交已成功应用的块。\n\n`;
 					}
 				}
 
@@ -1078,6 +1111,10 @@ ${assertResult.message}
 				return `${partialFailureHint}成功应用diff到文件: ${absolutePath}\n\n已应用 ${searchBlockCount} 个diff块${singleBlockNotice}${diagnosticsAppendix}`;
 			});
 		} catch (error) {
+			// DiffApplicationError 穿透 → TaskService catch → is_error: true
+			if (error instanceof DiffApplicationError) {
+				throw error;
+			}
 			return `应用diff失败: ${error instanceof Error ? error.message : String(error)}`;
 		}
 	}

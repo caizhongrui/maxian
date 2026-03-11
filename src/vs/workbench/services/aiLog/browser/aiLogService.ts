@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
-import { IAILogService, AICallLogData } from '../../../../platform/aiLog/common/aiLog.js';
+import { IAILogService, AICallLogData, AskHistoryItem } from '../../../../platform/aiLog/common/aiLog.js';
 import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
@@ -127,6 +127,41 @@ export class AILogService extends Disposable implements IAILogService {
 		const minutes = String(date.getMinutes()).padStart(2, '0');
 		const seconds = String(date.getSeconds()).padStart(2, '0');
 		return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+	}
+
+	/**
+	 * 查询当前用户的问答历史
+	 */
+	async getAskHistory(limit: number = 50): Promise<AskHistoryItem[]> {
+		try {
+			const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
+			if (!apiUrl) return [];
+
+			const credentials = this.loadAuthCredentials();
+			if (!credentials) return [];
+
+			const baseUrl = apiUrl.replace(/\/+$/, '');
+			const url = `${baseUrl}/ai/call-log/my-ask-history?limit=${limit}`;
+
+			const response = await fetch(url, {
+				method: 'GET',
+				headers: {
+					'username': credentials.username,
+					'password': credentials.password
+				}
+			});
+
+			if (!response.ok) {
+				console.error('[AILogService] 查询问答历史失败:', response.status);
+				return [];
+			}
+
+			const result = await response.json();
+			return result.data ?? [];
+		} catch (error) {
+			console.error('[AILogService] 查询问答历史失败:', error);
+			return [];
+		}
 	}
 
 	/**

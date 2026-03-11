@@ -16,6 +16,7 @@ import { IThemeService } from '../../../../platform/theme/common/themeService.js
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { IMaxianService, type ITokenUsageEvent, type ITaskProgressEvent, type IToolInputStreamingEvent, type IToolCompletedEvent, type ITodoListEvent, type ITodoItem } from './maxianService.js';
+import { type AskHistoryItem } from '../../../../platform/aiLog/common/aiLog.js';
 import { $, append, clearNode } from '../../../../base/browser/dom.js';
 import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
 import { getAllModes, DEFAULT_MODE, type Mode } from '../common/modes/modeTypes.js';
@@ -99,6 +100,8 @@ export class MaxianView extends ViewPane {
 	private continuousConversationCheckbox!: HTMLInputElement; // 连续对话复选框
 	private continuousConversationWrapper!: HTMLLabelElement; // 连续对话复选框容器
 	private knowledgeBaseSelectorWrapper!: HTMLDivElement; // 知识库选择器包装容器（仅ask模式显示）
+	private historyButton!: HTMLButtonElement; // 问答历史按钮（仅ask模式显示）
+	private historyPanel: HTMLElement | null = null; // 问答历史面板
 	// Reasoning 思考过程相关
 	private currentReasoningElement: HTMLElement | null = null; // 当前思考过程元素
 	private currentReasoningText: string = ''; // 累积的思考文本
@@ -1077,6 +1080,38 @@ export class MaxianView extends ViewPane {
 		keybindingButton.onclick = () => {
 			// 打开 VSCode 键盘快捷方式编辑器，并预先过滤到天和·码弦命令
 			this.commandService.executeCommand('workbench.action.openGlobalKeybindings', '天和·码弦');
+		};
+
+		// 问答历史按钮（仅ask模式显示）
+		this.historyButton = append(rightControls, $('button.codicon.codicon-history')) as HTMLButtonElement;
+		this.historyButton.title = '查看问答历史';
+		this.historyButton.style.padding = '6px';
+		this.historyButton.style.minWidth = '28px';
+		this.historyButton.style.minHeight = '28px';
+		this.historyButton.style.backgroundColor = 'transparent';
+		this.historyButton.style.color = 'var(--vscode-descriptionForeground)';
+		this.historyButton.style.border = 'none';
+		this.historyButton.style.borderRadius = '4px';
+		this.historyButton.style.cursor = 'pointer';
+		this.historyButton.style.fontSize = '16px';
+		this.historyButton.style.display = this.currentMode === 'ask' ? 'inline-flex' : 'none';
+		this.historyButton.style.alignItems = 'center';
+		this.historyButton.style.justifyContent = 'center';
+		this.historyButton.style.transition = 'all 0.15s';
+		this.historyButton.style.opacity = '0.6';
+
+		this.historyButton.onmouseenter = () => {
+			this.historyButton.style.opacity = '1';
+			this.historyButton.style.color = 'var(--vscode-foreground)';
+			this.historyButton.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+		};
+		this.historyButton.onmouseleave = () => {
+			this.historyButton.style.opacity = '0.6';
+			this.historyButton.style.color = 'var(--vscode-descriptionForeground)';
+			this.historyButton.style.backgroundColor = 'transparent';
+		};
+		this.historyButton.onclick = () => {
+			this.toggleAskHistoryPanel();
 		};
 
 		this.sendButton = append(rightControls, $('button.codicon.codicon-send')) as HTMLButtonElement;
@@ -2762,13 +2797,51 @@ export class MaxianView extends ViewPane {
 			const msgContent = event.content;
 			createCopyButton(userActions, () => msgContent);
 
-			// 消息内容（@文件名 渲染为可点击 chip）
+			// 消息内容（@文件名 渲染为可点击 chip），长消息支持折叠
+			const FOLD_THRESHOLD = 200; // 超过此字符数时折叠
+			const isLong = event.content.length > FOLD_THRESHOLD;
+
 			const userContent = append(userMsg, $('div'));
 			userContent.style.whiteSpace = 'pre-wrap';
 			userContent.style.wordBreak = 'break-word';
 			userContent.style.color = 'var(--vscode-foreground)';
 			userContent.style.lineHeight = '1.5';
-			this.renderMessageWithMentions(userContent, event.content);
+
+			if (isLong) {
+				// 折叠态：只显示前 200 个字符
+				let collapsed = true;
+				const previewText = event.content.substring(0, FOLD_THRESHOLD);
+
+				const previewEl = append(userContent, $('span'));
+				previewEl.style.whiteSpace = 'pre-wrap';
+				previewEl.style.wordBreak = 'break-word';
+				previewEl.textContent = previewText + '...';
+
+				const fullEl = append(userContent, $('span'));
+				fullEl.style.whiteSpace = 'pre-wrap';
+				fullEl.style.wordBreak = 'break-word';
+				fullEl.style.display = 'none';
+				this.renderMessageWithMentions(fullEl, event.content);
+
+				const toggleBtn = append(userContent, $('span'));
+				toggleBtn.style.cssText = `
+					display: inline-block;
+					margin-top: 4px;
+					cursor: pointer;
+					color: var(--vscode-textLink-foreground);
+					font-size: 12px;
+					user-select: none;
+				`;
+				toggleBtn.textContent = '展开全文';
+				toggleBtn.onclick = () => {
+					collapsed = !collapsed;
+					previewEl.style.display = collapsed ? '' : 'none';
+					fullEl.style.display = collapsed ? 'none' : '';
+					toggleBtn.textContent = collapsed ? '展开全文' : '收起';
+				};
+			} else {
+				this.renderMessageWithMentions(userContent, event.content);
+			}
 
 			this.messageArea.scrollTop = this.messageArea.scrollHeight;
 
@@ -3562,9 +3635,16 @@ export class MaxianView extends ViewPane {
 					break;
 				case 'applyDiff':
 				case 'apply_diff':
-				case 'edit':
 					actionText = '应用差异';
 					detailText = toolInfo.path || toolInfo.file_path || '';
+					break;
+				case 'edit':
+					actionText = '编辑文件';
+					detailText = toolInfo.path || '';
+					break;
+				case 'multiedit':
+					actionText = '多处编辑';
+					detailText = toolInfo.path || '';
 					break;
 				case 'executeCommand':
 				case 'execute_command':
@@ -3760,6 +3840,11 @@ export class MaxianView extends ViewPane {
 						diagnosticsContainer.style.marginBottom = '10px';
 						createDiagnosticsSummary(diagnosticsContainer, diagnostics);
 					}
+				}
+
+				// 渲染持久化 diff 块（edit/multiedit 工具完成时）
+				if (status === 'completed' && (toolInfo.tool === 'edit' || toolInfo.tool === 'multiedit')) {
+					this.renderEditDiffBlock(toolInfo);
 				}
 
 				// 🔥 工具完成后，1秒后自动移除状态卡片（缩短延迟以便快速看到效果）
@@ -4553,6 +4638,25 @@ export class MaxianView extends ViewPane {
 					operationInfo.textContent = `共 ${toolInfo.operationCount || 0} 个替换操作`;
 					// 没有diff视图，更新提示信息
 					infoLabel.textContent = '💡 请查看上方的变更详情';
+				} else if (toolInfo.tool === 'edit' || toolInfo.tool === 'multiedit') {
+					// edit/multiedit：在 VS Code diff 编辑器中打开对比视图（git diff 方式）
+					const ti = toolInfo as any;
+					const isSingleEdit = toolInfo.tool === 'edit';
+					const editOps: Array<{ oldString: string; newString: string }> = isSingleEdit
+						? [{ oldString: ti.oldString || '', newString: ti.newString || '' }]
+						: (ti.edits || []);
+					this.maxianService.openEditPreviewDiff(filePath, editOps).then(success => {
+						if (success) {
+							infoLabel.textContent = '💡 差异视图已在左侧编辑器中打开（git diff 方式）';
+						} else {
+							// 降级：在确认卡片内显示内联 diff
+							infoLabel.style.display = 'none';
+							this.renderInlineEditDiff(contentArea, toolInfo);
+						}
+					}).catch(() => {
+						infoLabel.style.display = 'none';
+						this.renderInlineEditDiff(contentArea, toolInfo);
+					});
 				} else {
 					// 没有diff相关内容，隐藏提示
 					infoLabel.style.display = 'none';
@@ -4591,6 +4695,8 @@ export class MaxianView extends ViewPane {
 			approveButton.textContent = '正在保存...';
 
 			try {
+				// 所有工具统一：saveDiffAndClose 保存文件并关闭 diff 视图
+				// edit/multiedit 的 executeEdit/executeMultiedit 会通过 consumePathSavedByDiff 检测并跳过重复写入
 				await this.maxianService.saveDiffAndClose();
 				this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
 			} finally {
@@ -5194,6 +5300,13 @@ export class MaxianView extends ViewPane {
 				}
 				// 控制知识库选择器的显示（仅ask模式显示）
 				this.knowledgeBaseSelectorWrapper.style.display = this.currentMode === 'ask' ? '' : 'none';
+				// 控制历史按钮的显示（仅ask模式显示）
+				this.historyButton.style.display = this.currentMode === 'ask' ? 'inline-flex' : 'none';
+				// 切换模式时关闭历史面板
+				if (this.historyPanel) {
+					this.historyPanel.remove();
+					this.historyPanel = null;
+				}
 
 				// 更新所有列表项的选中状态
 				Array.from(this.modeDropdownList.children).forEach((item, idx) => {
@@ -5237,6 +5350,253 @@ export class MaxianView extends ViewPane {
 
 		// 根据当前模式更新知识库选择器显示状态
 		this.knowledgeBaseSelectorWrapper.style.display = this.currentMode === 'ask' ? '' : 'none';
+	}
+
+	/**
+	 * 切换问答历史面板（ask模式专用）
+	 */
+	private async toggleAskHistoryPanel(): Promise<void> {
+		// 如果已打开，关闭它
+		if (this.historyPanel) {
+			this.historyPanel.remove();
+			this.historyPanel = null;
+			return;
+		}
+
+		// 创建面板覆盖层
+		const panel = $('div.maxian-history-panel');
+		panel.style.position = 'absolute';
+		panel.style.top = '0';
+		panel.style.left = '0';
+		panel.style.right = '0';
+		panel.style.bottom = '0';
+		panel.style.backgroundColor = 'var(--vscode-sideBar-background)';
+		panel.style.zIndex = '100';
+		panel.style.display = 'flex';
+		panel.style.flexDirection = 'column';
+		panel.style.overflow = 'hidden';
+
+		// 面板头部
+		const header = append(panel, $('div.maxian-history-header'));
+		header.style.display = 'flex';
+		header.style.alignItems = 'center';
+		header.style.justifyContent = 'space-between';
+		header.style.padding = '12px 16px';
+		header.style.borderBottom = '1px solid var(--vscode-widget-border)';
+		header.style.flexShrink = '0';
+
+		const title = append(header, $('span'));
+		title.textContent = '问答历史';
+		title.style.fontWeight = '600';
+		title.style.fontSize = '13px';
+		title.style.color = 'var(--vscode-foreground)';
+
+		const closeBtn = append(header, $('button.codicon.codicon-close')) as HTMLButtonElement;
+		closeBtn.title = '关闭';
+		closeBtn.style.background = 'transparent';
+		closeBtn.style.border = 'none';
+		closeBtn.style.cursor = 'pointer';
+		closeBtn.style.padding = '4px';
+		closeBtn.style.color = 'var(--vscode-descriptionForeground)';
+		closeBtn.style.fontSize = '14px';
+		closeBtn.style.display = 'inline-flex';
+		closeBtn.style.alignItems = 'center';
+		closeBtn.style.justifyContent = 'center';
+		closeBtn.style.borderRadius = '4px';
+		closeBtn.onmouseenter = () => {
+			closeBtn.style.backgroundColor = 'rgba(255,255,255,0.08)';
+			closeBtn.style.color = 'var(--vscode-foreground)';
+		};
+		closeBtn.onmouseleave = () => {
+			closeBtn.style.backgroundColor = 'transparent';
+			closeBtn.style.color = 'var(--vscode-descriptionForeground)';
+		};
+		closeBtn.onclick = () => {
+			panel.remove();
+			this.historyPanel = null;
+		};
+
+		// 内容区域（滚动，支持选择）
+		const content = append(panel, $('div.maxian-history-content'));
+		content.style.flex = '1';
+		content.style.overflowY = 'auto';
+		content.style.padding = '8px 0';
+		content.style.userSelect = 'text';
+		content.style.webkitUserSelect = 'text';
+
+		// 加载中状态
+		const loadingEl = append(content, $('div'));
+		loadingEl.style.padding = '24px 16px';
+		loadingEl.style.textAlign = 'center';
+		loadingEl.style.color = 'var(--vscode-descriptionForeground)';
+		loadingEl.style.fontSize = '12px';
+		loadingEl.textContent = '加载中...';
+
+		// 挂载面板到容器
+		this.container.style.position = 'relative';
+		this.container.appendChild(panel);
+		this.historyPanel = panel;
+
+		// 异步加载历史数据
+		try {
+			const history: AskHistoryItem[] = await this.maxianService.getAskHistory(50);
+			loadingEl.remove();
+
+			if (history.length === 0) {
+				const emptyEl = append(content, $('div'));
+				emptyEl.style.padding = '24px 16px';
+				emptyEl.style.textAlign = 'center';
+				emptyEl.style.color = 'var(--vscode-descriptionForeground)';
+				emptyEl.style.fontSize = '12px';
+				emptyEl.textContent = '暂无问答历史记录';
+				return;
+			}
+
+			for (const item of history) {
+				const card = append(content, $('div.maxian-history-item'));
+				card.style.margin = '0 12px 8px 12px';
+				card.style.borderRadius = '6px';
+				card.style.border = '1px solid var(--vscode-widget-border, rgba(255,255,255,0.08))';
+				card.style.backgroundColor = 'var(--vscode-editor-background)';
+				card.style.overflow = 'hidden';
+
+				// ── 折叠头部（始终可见，点击展开/折叠）──
+				const cardHeader = append(card, $('div'));
+				cardHeader.style.display = 'flex';
+				cardHeader.style.alignItems = 'flex-start';
+				cardHeader.style.gap = '6px';
+				cardHeader.style.padding = '8px 10px';
+				cardHeader.style.cursor = 'pointer';
+				cardHeader.style.userSelect = 'none';
+				cardHeader.style.webkitUserSelect = 'none';
+
+				cardHeader.onmouseenter = () => { cardHeader.style.backgroundColor = 'var(--vscode-list-hoverBackground)'; };
+				cardHeader.onmouseleave = () => { cardHeader.style.backgroundColor = 'transparent'; };
+
+				// 折叠箭头
+				const arrow = append(cardHeader, $('span.codicon.codicon-chevron-right'));
+				arrow.style.fontSize = '12px';
+				arrow.style.color = 'var(--vscode-descriptionForeground)';
+				arrow.style.flexShrink = '0';
+				arrow.style.marginTop = '2px';
+				arrow.style.transition = 'transform 0.15s';
+
+				// 头部右侧：时间 + 问题首行预览
+				const headerRight = append(cardHeader, $('div'));
+				headerRight.style.flex = '1';
+				headerRight.style.minWidth = '0';
+
+				// 元信息行：时间 + 模型 + 知识库
+				const metaRow = append(headerRight, $('div'));
+				metaRow.style.display = 'flex';
+				metaRow.style.alignItems = 'center';
+				metaRow.style.gap = '6px';
+				metaRow.style.flexWrap = 'wrap';
+				metaRow.style.marginBottom = '3px';
+
+				const ts = item.startTime;
+				const date = new Date(typeof ts === 'number' && ts < 1e12 ? ts * 1000 : ts);
+				const timeEl = append(metaRow, $('span'));
+				timeEl.style.fontSize = '11px';
+				timeEl.style.color = 'var(--vscode-descriptionForeground)';
+				timeEl.textContent = date.toLocaleString('zh-CN', {
+					month: '2-digit', day: '2-digit',
+					hour: '2-digit', minute: '2-digit'
+				});
+
+				if (item.model) {
+					const modelTag = append(metaRow, $('span'));
+					modelTag.style.padding = '0 5px';
+					modelTag.style.fontSize = '10px';
+					modelTag.style.borderRadius = '3px';
+					modelTag.style.backgroundColor = 'var(--vscode-badge-background)';
+					modelTag.style.color = 'var(--vscode-badge-foreground)';
+					modelTag.textContent = item.model;
+				}
+
+				if (item.knowledgeBaseName) {
+					const kbTag = append(metaRow, $('span'));
+					kbTag.style.padding = '0 5px';
+					kbTag.style.fontSize = '10px';
+					kbTag.style.borderRadius = '3px';
+					kbTag.style.backgroundColor = 'rgba(0,122,204,0.2)';
+					kbTag.style.color = 'var(--vscode-textLink-foreground)';
+					kbTag.textContent = `📚 ${item.knowledgeBaseName}`;
+				}
+
+				// 问题预览（首行，最多80字）
+				const preview = append(headerRight, $('div'));
+				preview.style.fontSize = '12px';
+				preview.style.color = 'var(--vscode-foreground)';
+				preview.style.overflow = 'hidden';
+				preview.style.textOverflow = 'ellipsis';
+				preview.style.whiteSpace = 'nowrap';
+				const previewText = (item.requestSummary || '').split('\n')[0].substring(0, 80);
+				preview.textContent = previewText;
+
+				// ── 展开内容区（默认隐藏）──
+				const expandArea = append(card, $('div'));
+				expandArea.style.display = 'none';
+				expandArea.style.borderTop = '1px solid var(--vscode-widget-border, rgba(255,255,255,0.06))';
+				expandArea.style.userSelect = 'text';
+				expandArea.style.webkitUserSelect = 'text';
+
+				// 问题完整内容
+				if (item.requestSummary) {
+					const qSection = append(expandArea, $('div'));
+					qSection.style.padding = '10px 12px';
+					qSection.style.borderBottom = item.responseSummary
+						? '1px solid var(--vscode-widget-border, rgba(255,255,255,0.06))'
+						: 'none';
+
+					const qLabel = append(qSection, $('div'));
+					qLabel.style.fontSize = '11px';
+					qLabel.style.fontWeight = '600';
+					qLabel.style.color = 'var(--vscode-textLink-foreground)';
+					qLabel.style.marginBottom = '6px';
+					qLabel.textContent = '问';
+
+					const qContent = append(qSection, $('div'));
+					qContent.style.fontSize = '12px';
+					qContent.style.lineHeight = '1.6';
+					qContent.style.userSelect = 'text';
+					qContent.style.webkitUserSelect = 'text';
+					MarkdownRendererDom.renderMarkdown(item.requestSummary, qContent);
+				}
+
+				// 回答完整内容
+				if (item.responseSummary) {
+					const aSection = append(expandArea, $('div'));
+					aSection.style.padding = '10px 12px';
+					aSection.style.backgroundColor = 'rgba(255,255,255,0.02)';
+
+					const aLabel = append(aSection, $('div'));
+					aLabel.style.fontSize = '11px';
+					aLabel.style.fontWeight = '600';
+					aLabel.style.color = 'var(--vscode-charts-green, #4ec9b0)';
+					aLabel.style.marginBottom = '6px';
+					aLabel.textContent = '答';
+
+					const aContent = append(aSection, $('div'));
+					aContent.style.fontSize = '12px';
+					aContent.style.lineHeight = '1.6';
+					aContent.style.userSelect = 'text';
+					aContent.style.webkitUserSelect = 'text';
+					MarkdownRendererDom.renderMarkdown(item.responseSummary, aContent);
+				}
+
+				// 点击折叠头部切换展开状态
+				let expanded = false;
+				cardHeader.onclick = () => {
+					expanded = !expanded;
+					expandArea.style.display = expanded ? 'block' : 'none';
+					arrow.style.transform = expanded ? 'rotate(90deg)' : 'none';
+				};
+			}
+		} catch (err) {
+			loadingEl.textContent = '加载失败，请重试';
+			console.error('[MaxianView] 加载问答历史失败:', err);
+		}
 	}
 
 	/**
@@ -5517,57 +5877,211 @@ export class MaxianView extends ViewPane {
 			return;
 		}
 
-		// 🔧 如果是成功完成（非错误），自动移除工具卡片
-		if (!event.isError) {
-			// 🔥 所有工具成功后都自动移除（用户反馈不需要保留显示）
-			// 短暂显示完成状态，然后自动移除
-			toolStatusElement.classList.remove('tool-running');
-			toolStatusElement.classList.add('tool-completed');
+		// 所有工具完成后（不管成功还是失败）都自动消失，不保留卡片
+		toolStatusElement.classList.remove('tool-running');
+		toolStatusElement.classList.add(event.isError ? 'tool-error' : 'tool-completed');
 
-			// 添加淡出动画
-			toolStatusElement.style.transition = 'opacity 0.5s ease-out';
-			setTimeout(() => {
-				toolStatusElement.style.opacity = '0';
-			}, 1000); // 1秒后开始淡出
-
-			// 1.5秒后移除元素
-			setTimeout(() => {
-				toolStatusElement.remove();
-				this.toolStatusElements.delete(event.toolId);
-			}, 1500);
-			return;
-		}
-
-		// 🔧 如果是错误，保留显示错误状态
-		const finalStatus = 'error';
-		const statusText = '失败';
-
-		// 更新卡片状态类
-		toolStatusElement.classList.remove('tool-running', 'tool-completed', 'tool-error');
-		toolStatusElement.classList.add(`tool-${finalStatus}`);
-
-		// 停止图标旋转动画
+		// 停止旋转动画
 		const iconElement = toolStatusElement.querySelector('.tool-status-icon') as HTMLElement;
 		if (iconElement) {
 			iconElement.classList.remove('codicon-modifier-spin');
 		}
-
-		// 隐藏加载动画
 		const loadingDots = toolStatusElement.querySelector('.tool-loading-dots') as HTMLElement;
 		if (loadingDots) {
 			loadingDots.style.display = 'none';
 		}
 
-		// 显示并更新状态标签
-		const statusBadge = toolStatusElement.querySelector('.tool-status-badge') as HTMLElement;
-		if (statusBadge) {
-			statusBadge.textContent = statusText;
-			statusBadge.style.display = 'inline-block';
-			statusBadge.classList.remove('maxian-tool-status-running', 'maxian-tool-status-completed', 'maxian-tool-status-error');
-			statusBadge.classList.add(`maxian-tool-status-${finalStatus}`);
+		// 淡出并移除
+		toolStatusElement.style.transition = 'opacity 0.5s ease-out';
+		setTimeout(() => {
+			toolStatusElement.style.opacity = '0';
+		}, 1000);
+		setTimeout(() => {
+			toolStatusElement.remove();
+			this.toolStatusElements.delete(event.toolId);
+		}, 1500);
 		}
 
+	/**
+	 * 在工具确认卡片内渲染内联 diff（edit/multiedit 确认时使用）
+	 */
+	private renderInlineEditDiff(container: HTMLElement, toolInfo: any): void {
+		const isSingleEdit = toolInfo.tool === 'edit';
+		const edits: Array<{ oldString: string; newString: string }> = isSingleEdit
+			? [{ oldString: toolInfo.oldString || '', newString: toolInfo.newString || '' }]
+			: (toolInfo.edits || []);
+
+		if (edits.length === 0 || !edits.some((e: any) => e.oldString || e.newString)) {
+			return;
 		}
+
+		const diffWrapper = append(container, $('div'));
+		diffWrapper.style.cssText = `
+			margin: 0 0 8px 0;
+			border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3));
+			border-radius: 4px;
+			overflow: hidden;
+			font-family: var(--vscode-editor-font-family, monospace);
+			font-size: 12px;
+			max-height: 300px;
+			overflow-y: auto;
+		`;
+
+		for (const edit of edits) {
+			if (!edit.oldString && !edit.newString) { continue; }
+			const oldLines = (edit.oldString || '').split('\n');
+			const newLines = (edit.newString || '').split('\n');
+
+			for (const line of oldLines) {
+				const row = append(diffWrapper, $('div'));
+				row.style.cssText = `padding: 1px 8px; background: var(--vscode-diffEditor-removedLineBackground, rgba(255,0,0,0.1)); color: var(--vscode-gitDecoration-deletedResourceForeground, #f14c4c); white-space: pre-wrap; word-break: break-all;`;
+				row.textContent = '- ' + line;
+			}
+			for (const line of newLines) {
+				const row = append(diffWrapper, $('div'));
+				row.style.cssText = `padding: 1px 8px; background: var(--vscode-diffEditor-insertedLineBackground, rgba(0,255,0,0.1)); color: var(--vscode-gitDecoration-addedResourceForeground, #73c991); white-space: pre-wrap; word-break: break-all;`;
+				row.textContent = '+ ' + line;
+			}
+			if (edits.length > 1) {
+				const sep = append(diffWrapper, $('div'));
+				sep.style.cssText = `height: 1px; background: var(--vscode-panel-border, rgba(128,128,128,0.3)); margin: 2px 0;`;
+			}
+		}
+	}
+
+	/**
+	 * 渲染 edit/multiedit 工具的持久化 diff 块（类似 git diff）
+	 * 在工具卡片消失后，在消息区域保留一个永久的 diff 视图
+	 */
+	private renderEditDiffBlock(toolInfo: any): void {
+		const path: string = toolInfo.path || '';
+		const isSingleEdit = toolInfo.tool === 'edit';
+
+		// 构建 diff 数据：单处 edit 或多处 edit（multiedit）
+		const edits: Array<{ oldString: string; newString: string }> = isSingleEdit
+			? [{ oldString: toolInfo.oldString || '', newString: toolInfo.newString || '' }]
+			: (toolInfo.edits || []);
+
+		if (edits.length === 0 || !edits.some((e: any) => e.oldString || e.newString)) {
+			return; // 没有 diff 内容，不渲染
+		}
+
+		// 外层容器（持久化，不会消失）
+		const diffBlock = append(this.messageArea, $('div.maxian-diff-block'));
+		diffBlock.style.cssText = `
+			margin: 4px 0 8px 0;
+			border: 1px solid var(--vscode-diffEditor-removedLineBackground, rgba(255,0,0,0.15));
+			border-radius: 6px;
+			overflow: hidden;
+			font-family: var(--vscode-editor-font-family, monospace);
+			font-size: 12px;
+		`;
+
+		// 头部：文件路径 + 折叠按钮
+		const diffHeader = append(diffBlock, $('div.maxian-diff-header'));
+		diffHeader.style.cssText = `
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			padding: 5px 10px;
+			background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-editor-background));
+			border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.2));
+			cursor: pointer;
+			user-select: none;
+		`;
+
+		const diffIcon = append(diffHeader, $('span.codicon.codicon-diff'));
+		diffIcon.style.cssText = `color: var(--vscode-icon-foreground); font-size: 13px;`;
+
+		const diffPath = append(diffHeader, $('span'));
+		diffPath.textContent = path;
+		diffPath.style.cssText = `
+			flex: 1;
+			color: var(--vscode-foreground);
+			font-family: var(--vscode-editor-font-family, monospace);
+			font-size: 12px;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		`;
+
+		const toggleBtn = append(diffHeader, $('span.codicon.codicon-chevron-down'));
+		toggleBtn.style.cssText = `color: var(--vscode-icon-foreground); font-size: 11px; transition: transform 0.2s;`;
+
+		// diff 内容区域（可折叠）
+		const diffContent = append(diffBlock, $('div.maxian-diff-content'));
+		diffContent.style.cssText = `max-height: 400px; overflow-y: auto;`;
+
+		// 渲染每组 edit 的 diff 行
+		for (let i = 0; i < edits.length; i++) {
+			const { oldString, newString } = edits[i];
+			if (!oldString && !newString) { continue; }
+
+			// multiedit 多组之间加分隔线
+			if (i > 0) {
+				const sep = append(diffContent, $('div'));
+				sep.style.cssText = `height: 1px; background: var(--vscode-panel-border, rgba(128,128,128,0.2));`;
+			}
+
+			// 渲染 old 行（红色，"-"）
+			if (oldString) {
+				for (const line of oldString.split('\n')) {
+					const row = append(diffContent, $('div.maxian-diff-row-del'));
+					row.style.cssText = `
+						display: flex;
+						padding: 0 10px;
+						background: var(--vscode-diffEditor-removedLineBackground, rgba(255,0,0,0.08));
+						color: var(--vscode-diffEditor-removedTextForeground, #f97583);
+						white-space: pre;
+						line-height: 20px;
+					`;
+					const prefix = append(row, $('span'));
+					prefix.textContent = '-';
+					prefix.style.cssText = `
+						min-width: 16px;
+						margin-right: 8px;
+						color: var(--vscode-diffEditor-removedTextForeground, #f97583);
+						user-select: none;
+					`;
+					const text = append(row, $('span'));
+					text.textContent = line;
+				}
+			}
+
+			// 渲染 new 行（绿色，"+"）
+			if (newString) {
+				for (const line of newString.split('\n')) {
+					const row = append(diffContent, $('div.maxian-diff-row-add'));
+					row.style.cssText = `
+						display: flex;
+						padding: 0 10px;
+						background: var(--vscode-diffEditor-insertedLineBackground, rgba(0,255,0,0.08));
+						color: var(--vscode-diffEditor-insertedTextForeground, #85e89d);
+						white-space: pre;
+						line-height: 20px;
+					`;
+					const prefix = append(row, $('span'));
+					prefix.textContent = '+';
+					prefix.style.cssText = `
+						min-width: 16px;
+						margin-right: 8px;
+						color: var(--vscode-diffEditor-insertedTextForeground, #85e89d);
+						user-select: none;
+					`;
+					const text = append(row, $('span'));
+					text.textContent = line;
+				}
+			}
+		}
+
+		// 折叠/展开交互
+		let collapsed = false;
+		diffHeader.addEventListener('click', () => {
+			collapsed = !collapsed;
+			diffContent.style.display = collapsed ? 'none' : 'block';
+			toggleBtn.style.transform = collapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+		});
+	}
 
 	// ========== 任务列表（Todo List）相关方法 ==========
 
@@ -5680,11 +6194,18 @@ export class MaxianView extends ViewPane {
 			return;
 		}
 
-		// 防御性处理：确保 todos 是数组（AI 可能传入非数组格式）
+		// 防御性处理：确保 todos 是数组（AI 可能传入 JSON 字符串或非数组格式）
 		let todos = event.todos;
 		if (!Array.isArray(todos)) {
 			console.warn('[MaxianView] handleTodoListUpdate: todos is not an array, got:', typeof todos, todos);
-			if (todos && typeof todos === 'object' && Array.isArray((todos as any).todos)) {
+			if (typeof todos === 'string') {
+				try {
+					const parsed = JSON.parse(todos);
+					todos = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.todos) ? parsed.todos : []);
+				} catch {
+					todos = [];
+				}
+			} else if (todos && typeof todos === 'object' && Array.isArray((todos as any).todos)) {
 				todos = (todos as any).todos;
 			} else {
 				todos = [];

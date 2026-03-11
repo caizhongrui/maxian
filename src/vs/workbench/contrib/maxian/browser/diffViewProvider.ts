@@ -13,6 +13,7 @@ import { basename, dirname } from '../../../../base/common/resources.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { isAbsolute, join } from '../../../../base/common/path.js';
+import { MultiSearchReplaceDiffStrategy } from '../common/diff/MultiSearchReplaceDiffStrategy.js';
 
 /**
  * Maxian Diff视图URI方案
@@ -45,6 +46,26 @@ export function clearStoredOriginalContent(uriKey: string): void {
 }
 
 /**
+ * 模块级 Set：记录已由 diff confirm 保存的文件绝对路径
+ * 用途：让后续的 executeEdit/executeMultiedit 知道文件已保存，跳过重复写入
+ */
+const _savedByDiffPaths = new Set<string>();
+
+/** 标记某路径已由 diff confirm 保存 */
+export function markPathSavedByDiff(path: string): void {
+	_savedByDiffPaths.add(path);
+}
+
+/** 检查并消费标记（调用后标记被清除） */
+export function consumePathSavedByDiff(path: string): boolean {
+	if (_savedByDiffPaths.has(path)) {
+		_savedByDiffPaths.delete(path);
+		return true;
+	}
+	return false;
+}
+
+/**
  * DiffViewProvider - 管理文件差异视图
  * 参考Kilocode的DiffViewProvider实现，使用VSCode内置Diff Editor
  */
@@ -53,6 +74,7 @@ export class DiffViewProvider extends Disposable {
 	private modifiedContent: string = '';
 	private filePath: string = '';
 	private isNewFile: boolean = false;
+	private readonly diffStrategy: MultiSearchReplaceDiffStrategy;
 
 	constructor(
 		@IEditorService private readonly editorService: IEditorService,
@@ -61,6 +83,7 @@ export class DiffViewProvider extends Disposable {
 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService
 	) {
 		super();
+		this.diffStrategy = new MultiSearchReplaceDiffStrategy(0.9, 40);
 	}
 
 	/**
@@ -232,139 +255,45 @@ export class DiffViewProvider extends Disposable {
 			const content = await this.fileService.readFile(fileUri);
 			const originalContent = content.value.toString();
 
-			// 解析并应用SEARCH/REPLACE块
-			const newContent = this.applySearchReplace(originalContent, diff);
-			if (newContent === null) {
-				console.error('[Maxian] 应用SEARCH/REPLACE失败');
-				return false;
-			}
-
-			// 如果返回undefined，说明没有SEARCH/REPLACE块，尝试解析git unified diff格式
-			if (newContent === undefined) {
-				const gitDiffResult = this.applyGitUnifiedDiff(originalContent, diff);
-				if (gitDiffResult !== null) {
-					console.log('[Maxian] 检测到git unified diff格式，已成功应用');
-					return await this.openDiff(resolvedPath, gitDiffResult);
+			// 检测是否含有 SEARCH/REPLACE 块
+			if (/<<<<<<< SEARCH/.test(diff)) {
+				// 使用与 fileOperations.ts 相同的 MultiSearchReplaceDiffStrategy（4层级联 + 9种策略）
+				const diffResult = await this.diffStrategy.applyDiff(originalContent, diff);
+				if (diffResult.success && diffResult.content) {
+					return await this.openDiff(resolvedPath, diffResult.content);
 				}
-				// 既不是SEARCH/REPLACE也不是git diff，返回错误
-				console.error('[Maxian] diff格式不识别，既无SEARCH/REPLACE块也不是git unified diff格式');
+				// 可视化失败不显示 error（diff 格式问题由 fileOperations.ts 反馈给 AI 处理）
+				console.warn('[Maxian] applyDiff: 可视化失败', String(diffResult.error).substring(0, 100));
 				return false;
 			}
 
-			// 打开diff视图（注意：这里传递已解析的路径）
-			return await this.openDiff(resolvedPath, newContent);
+			// 尝试解析git unified diff格式
+			const gitDiffResult = this.applyGitUnifiedDiff(originalContent, diff);
+			if (gitDiffResult !== null) {
+				console.log('[Maxian] 检测到git unified diff格式，已成功应用');
+				return await this.openDiff(resolvedPath, gitDiffResult);
+			}
+
+			// 既不是SEARCH/REPLACE也不是git diff，兜底：将diff内容作为新文件内容直接展示diff视图
+			console.log('[Maxian] diff格式不识别，兜底将内容作为新文件内容展示diff视图');
+			return await this.openDiff(resolvedPath, diff);
 		} catch (error) {
 			console.error('[Maxian] applyDiff失败:', error);
 			return false;
 		}
 	}
 
-	/**
-	 * 解析并应用SEARCH/REPLACE块
-	 * @param originalContent 原始文件内容
-	 * @param diff 差异内容（SEARCH/REPLACE格式或直接新内容）
-	 * @returns 新内容，如果没有SEARCH/REPLACE块则返回undefined表示应直接使用diff作为新内容
-	 */
-	private applySearchReplace(originalContent: string, diff: string): string | null | undefined {
-		// 解析SEARCH/REPLACE块
-		// 兼容AI生成的两种格式：
-		// 标准格式: <<<<<<< SEARCH\n内容\n=======\n替换内容\n>>>>>>> REPLACE
-		// 无换行格式: <<<<<<< SEARCH\n内容}=======\n替换内容}>>>>>>> REPLACE（=======和>>>>>>> REPLACE前无换行）
-		const searchReplaceRegex = /<<<<<<< SEARCH\r?\n([\s\S]*?)\r?\n?=======\r?\n([\s\S]*?)\r?\n?>>>>>>> REPLACE/g;
-
-		let result = originalContent;
-		let match;
-		let hasMatch = false;
-
-		while ((match = searchReplaceRegex.exec(diff)) !== null) {
-			hasMatch = true;
-			const searchText = match[1];
-			const replaceText = match[2];
-
-			// 策略1: 精确匹配
-			const searchIndex = result.indexOf(searchText);
-			if (searchIndex !== -1) {
-				result = result.substring(0, searchIndex) + replaceText + result.substring(searchIndex + searchText.length);
-				continue;
-			}
-
-			console.warn('[Maxian] 未找到SEARCH文本（尝试回退策略）:', searchText.substring(0, 50) + '...');
-
-			// 策略2: 标准化行尾后匹配（CRLF -> LF），并在标准化后的内容上执行替换
-			const normalizedResult = result.replace(/\r\n/g, '\n');
-			const normalizedSearch = searchText.replace(/\r\n/g, '\n');
-			const normalizedIndex = normalizedResult.indexOf(normalizedSearch);
-			if (normalizedIndex !== -1) {
-				result = normalizedResult.substring(0, normalizedIndex) + replaceText + normalizedResult.substring(normalizedIndex + normalizedSearch.length);
-				continue;
-			}
-
-			// 策略3: 逐行匹配（忽略每行行尾空白）
-			const lineRange = this.findByLines(result, searchText);
-			if (lineRange !== null) {
-				result = result.substring(0, lineRange.start) + replaceText + result.substring(lineRange.end);
-				continue;
-			}
-
-			// 策略4: 标准化缩进（制表符 ↔ 4空格）后逐行匹配
-			const normalizeIndent = (s: string) => s.replace(/\t/g, '    ');
-			const normalizedResultForIndent = normalizeIndent(result.replace(/\r\n/g, '\n'));
-			const normalizedSearchForIndent = normalizeIndent(searchText.replace(/\r\n/g, '\n'));
-			const indentRange = this.findByLines(normalizedResultForIndent, normalizedSearchForIndent);
-			if (indentRange !== null) {
-				// 对标准化后的内容执行替换，同步标准化 replaceText 的缩进
-				const normalizedReplace = normalizeIndent(replaceText);
-				result = normalizedResultForIndent.substring(0, indentRange.start) + normalizedReplace + normalizedResultForIndent.substring(indentRange.end);
-				continue;
-			}
-
-			// 策略5: 忽略所有行首缩进（只比较内容），找到后用原文件的缩进
-			const trimAllIndent = (s: string) => s.replace(/^[ \t]+/gm, '');
-			const strippedResult = trimAllIndent(result.replace(/\r\n/g, '\n'));
-			const strippedSearch = trimAllIndent(normalizedSearchForIndent);
-			const strippedRange = this.findByLines(strippedResult, strippedSearch);
-			if (strippedRange !== null) {
-				// 使用原始位置在未截断内容上做替换（按行数定位）
-				const linesBefore = strippedResult.substring(0, strippedRange.start).split('\n').length - 1;
-				const searchLineCount = strippedSearch.split('\n').length;
-				const originalLines = result.replace(/\r\n/g, '\n').split('\n');
-				const beforeLines = originalLines.slice(0, linesBefore);
-				const afterLines = originalLines.slice(linesBefore + searchLineCount);
-				result = [...beforeLines, replaceText, ...afterLines].join('\n');
-				continue;
-			}
-
-			// 所有策略均失败
-			console.warn('[Maxian] 未找到SEARCH文本（精确/CRLF/逐行/缩进均失败）:', searchText.substring(0, 50) + '...');
-			return null;
-		}
-
-		if (!hasMatch) {
-			console.warn('[Maxian] 未找到SEARCH/REPLACE块，将diff内容作为新文件内容处理');
-			// 返回undefined表示没有SEARCH/REPLACE块，调用者应直接使用diff作为新内容
-			return undefined;
-		}
-
-		return result;
-	}
-
-	/**
-	 * 解析并应用 git unified diff 格式
-	 * 支持 @@ -X,Y +X,Y @@ hunk 格式
-	 * @returns 应用后的新内容，如果不是git diff格式则返回 null
-	 */
 	private applyGitUnifiedDiff(originalContent: string, diff: string): string | null {
 		// 检测是否为git unified diff格式（含有 @@ -数字 ... @@ 的hunk头）
-		if (!/^@@[ 	]+-\d+/m.test(diff)) {
+		if (!/^@@[ \t]+-\d+/m.test(diff)) {
 			return null;
 		}
 
 		const resultLines = originalContent.split('\n');
 		const diffLines = diff.split('\n');
 		let i = 0;
-		let lineOffset = 0; // 累积行偏移（前面hunk的增删差值）
+		let lineOffset = 0;
 
-		// 跳过文件头行（--- a/...  +++ b/...  diff --git ...  index ...）
 		while (i < diffLines.length &&
 			(diffLines[i].startsWith('--- ') || diffLines[i].startsWith('+++ ') ||
 			diffLines[i].startsWith('diff ') || diffLines[i].startsWith('index '))) {
@@ -372,74 +301,27 @@ export class DiffViewProvider extends Disposable {
 		}
 
 		while (i < diffLines.length) {
-			// 解析 hunk 头：@@ -origStart,origCount +newStart,newCount @@
-			const hunkMatch = diffLines[i].match(/^@@[ 	]+-(\d+)(?:,(\d+))?[ 	]\+(\d+)(?:,(\d+))?[ 	]@@/);
-			if (!hunkMatch) {
-				i++;
-				continue;
-			}
+			const hunkMatch = diffLines[i].match(/^@@[ \t]+-([\d]+)(?:,([\d]+))?[ \t]\+([\d]+)(?:,([\d]+))?[ \t]@@/);
+			if (!hunkMatch) { i++; continue; }
 
-			const origStart = parseInt(hunkMatch[1]) - 1; // 转为 0-based 索引
+			const origStart = parseInt(hunkMatch[1]) - 1;
 			const origCount = hunkMatch[2] !== undefined ? parseInt(hunkMatch[2]) : 1;
-			i++; // 跳过 hunk 头
+			i++;
 
-			// 从 hunk 行中提取新内容（context 行 + added 行）
 			const insertLines: string[] = [];
-			while (i < diffLines.length && !diffLines[i].match(/^@@[ 	]+-\d+/)) {
+			while (i < diffLines.length && !diffLines[i].match(/^@@[ \t]+-[\d]+/)) {
 				const line = diffLines[i];
-				if (line.startsWith('+')) {
-					insertLines.push(line.substring(1));
-				} else if (line.startsWith('-')) {
-					// 删除的行，不加入 insertLines
-				} else if (line.startsWith(' ')) {
-					insertLines.push(line.substring(1)); // 上下文行
-				} else if (line.startsWith('\\')) {
-					// \ No newline at end of file，忽略
-				}
-				// 其他行（空行、文件头残留等）忽略
+				if (line.startsWith('+')) { insertLines.push(line.substring(1)); }
+				else if (line.startsWith(' ')) { insertLines.push(line.substring(1)); }
 				i++;
 			}
 
-			// 将 resultLines 中从 startInResult 开始的 origCount 行替换为 insertLines
 			const startInResult = origStart + lineOffset;
 			resultLines.splice(startInResult, origCount, ...insertLines);
 			lineOffset += insertLines.length - origCount;
 		}
 
 		return resultLines.join('\n');
-	}
-
-	/**
-	 * 通过逐行比较（忽略行尾空白）在 content 中定位 searchText 对应的字符范围
-	 */
-	private findByLines(content: string, searchText: string): { start: number; end: number } | null {
-		const searchLines = searchText.split('\n').map(l => l.trimEnd());
-		const contentLines = content.split('\n');
-
-		for (let i = 0; i <= contentLines.length - searchLines.length; i++) {
-			let allMatch = true;
-			for (let j = 0; j < searchLines.length; j++) {
-				if (contentLines[i + j].trimEnd() !== searchLines[j]) {
-					allMatch = false;
-					break;
-				}
-			}
-			if (allMatch) {
-				// 计算 start：前 i 行的总字符数（含换行符）
-				let start = 0;
-				for (let k = 0; k < i; k++) {
-					start += contentLines[k].length + 1; // +1 for '\n'
-				}
-				// 计算 end：start + 匹配行的总字符数（行间含换行符，最后一行不含）
-				let end = start;
-				for (let k = i; k < i + searchLines.length - 1; k++) {
-					end += contentLines[k].length + 1;
-				}
-				end += contentLines[i + searchLines.length - 1].length;
-				return { start, end };
-			}
-		}
-		return null;
 	}
 
 	/**
@@ -530,6 +412,16 @@ export class DiffViewProvider extends Disposable {
 			// 1. 保存修改内容
 			await this.fileService.writeFile(fileUri, VSBuffer.fromString(this.modifiedContent));
 			console.log('[Maxian] 文件已保存:', this.filePath);
+
+
+			// 立即同步内存中的编辑器模型（避免编辑器显示旧内容）
+			const realModel = this.modelService.getModel(fileUri);
+			if (realModel) {
+				realModel.setValue(this.modifiedContent);
+			}
+
+			// 标记此路径已由 diff confirm 保存（供后续 executeEdit/executeMultiedit 跳过重复写入）
+			markPathSavedByDiff(this.filePath);
 
 			// 2. 获取当前活动的 diff 编辑器并关闭它
 			const activePane = this.editorService.activeEditorPane;

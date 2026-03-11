@@ -215,13 +215,14 @@ export function executeMultiedit(content: string, edits: EditOperation[]): Multi
  */
 export function formatMultieditResponse(result: MultieditResult, filePath: string): ToolResponse {
 	if (result.success) {
-		const editSummary = result.details
-			.map(d => `  ${d.index + 1}. 替换了 ${d.matchCount} 处匹配`)
-			.join('\n');
-
-		return `文件 ${filePath} 多处编辑成功！\n\n执行了 ${result.successCount} 个编辑操作：\n${editSummary}`;
+		return `Edit applied successfully.`;
 	} else {
-		return `文件 ${filePath} 多处编辑失败！\n\n错误: ${result.error}\n\n已完成 ${result.successCount}/${result.totalCount} 个编辑`;
+		// 对齐 OpenCode 失败消息风格
+		const failedEdit = result.details.find(d => !d.success);
+		if (failedEdit?.error?.includes('multiple matches') || failedEdit?.error?.includes('多处匹配')) {
+			return `Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.`;
+		}
+		return `oldString not found in content\n\nFailed edit #${(result.details.find(d => !d.success)?.index ?? 0) + 1}: "${result.details.find(d => !d.success)?.oldString}"`;
 	}
 }
 

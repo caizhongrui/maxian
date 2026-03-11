@@ -42,6 +42,7 @@ interface AiProxyRequest {
 	messages: AiProxyMessage[];
 	maxTokens?: number;
 	temperature?: number;
+	top_p?: number;
 	stream?: boolean;
 	tools?: AiProxyTool[];
 	toolChoice?: any;
@@ -484,7 +485,8 @@ export class AiProxyHandler implements IApiHandler {
 				requestId: this.currentRequestId,
 				messages: aiProxyMessages,
 				maxTokens: 8192,  // 必须设置有效的 max_tokens，千问API要求范围 [1, 32768]
-				temperature: 0.15,
+				temperature: 0.55,  // Qwen 最优温度（参考 OpenCode transform.ts，0.55 比 0.15 减少重复重试）
+				top_p: 1,           // Qwen 专属配置（参考 OpenCode transform.ts）
 				stream: true,
 				apiType: 'chat',  // 重要：指定为 chat 模式，否则后端默认使用 completions 模式
 				...(aiProxyTools && aiProxyTools.length > 0 ? {
@@ -836,7 +838,7 @@ export class AiProxyHandler implements IApiHandler {
 									type: 'tool_use',
 									id: toolData.id,
 									name: toolData.name,
-									input: toolData.arguments
+									input: sanitizeToolArguments(toolData.arguments)
 								};
 								yield toolUseChunk;
 							}
@@ -951,5 +953,43 @@ export class AiProxyHandler implements IApiHandler {
 	 */
 	getCurrentRequestId(): string | null {
 		return this.currentRequestId;
+	}
+}
+
+/**
+ * 清理 Qwen 流式 API 返回的工具参数字符串
+ * Qwen API 有时会在完整 JSON 末尾多发一个 `}` 字符，导致 JSON.parse 失败
+ * 使用括号匹配算法提取第一个完整的 JSON 对象
+ */
+function sanitizeToolArguments(args: string): string {
+	const trimmed = args.trim();
+	if (!trimmed.startsWith('{')) {
+		return trimmed;
+	}
+	try {
+		JSON.parse(trimmed);
+		return trimmed; // 已经是合法JSON，直接返回
+	} catch {
+		// 括号匹配：找到第一个完整的 JSON 对象结尾
+		let depth = 0;
+		let inString = false;
+		let escape = false;
+		for (let i = 0; i < trimmed.length; i++) {
+			const c = trimmed[i];
+			if (escape) { escape = false; continue; }
+			if (c === '\\' && inString) { escape = true; continue; }
+			if (c === '"') { inString = !inString; continue; }
+			if (inString) { continue; }
+			if (c === '{') { depth++; }
+			else if (c === '}') {
+				depth--;
+				if (depth === 0) {
+					const cleaned = trimmed.substring(0, i + 1);
+					console.warn(`[Maxian] sanitizeToolArguments: 截取合法JSON (${i + 1}/${trimmed.length})`);
+					return cleaned;
+				}
+			}
+		}
+		return trimmed; // 找不到完整JSON，返回原始值交给调用方处理
 	}
 }

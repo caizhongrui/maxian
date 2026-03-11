@@ -10,6 +10,7 @@ import { CommandExecutionTool } from './commandExecution.js';
 import { SearchTool } from './searchTools.js';
 import { TodoStore, parseTodos, formatTodoList, IRawTodoInput } from '../../common/tools/todoStore.js';
 import { IFileService } from '../../../../../platform/files/common/files.js';
+import { IModelService } from '../../../../../editor/common/services/model.js';
 import { ITerminalService } from '../../../terminal/browser/terminal.js';
 import { ISearchService } from '../../../../services/search/common/search.js';
 import { IRipgrepService } from '../../../../services/ripgrep/common/ripgrep.js';
@@ -26,6 +27,7 @@ import { getDefinition } from '../../common/lsp/lspDefinition.js';
 import { getReferences } from '../../common/lsp/lspReferences.js';
 import { getTypeDefinition } from '../../common/lsp/lspTypeDefinition.js';
 import { ICommandExecutionService } from '../../common/services/commandExecutionService.js';
+import { consumePathSavedByDiff } from '../diffViewProvider.js';
 
 /**
  * 工具执行器实现类
@@ -40,6 +42,12 @@ export class ToolExecutorImpl implements IToolExecutor {
 	private skillService?: ISkillService;
 
 	/**
+	 * 文件读取计数器：记录每个文件在当前 Agent 生命周期中被 read_file 读取的次数
+	 * key: 绝对路径, value: 读取次数
+	 */
+	private fileReadCount: Map<string, number> = new Map();
+
+	/**
 	 * 子 Agent 运行器（由 maxianService 注入）
 	 * 接受 agentType 和 prompt，返回子 Agent 的完成结果
 	 */
@@ -52,9 +60,10 @@ export class ToolExecutorImpl implements IToolExecutor {
 		ripgrepService: IRipgrepService,
 		context: ToolExecutionContext,
 		skillService?: ISkillService,
-		commandExecutionService?: ICommandExecutionService
+		commandExecutionService?: ICommandExecutionService,
+		modelService?: IModelService
 	) {
-		this.fileOperations = new FileOperationsTool(fileService, context.workspaceRoot || '');
+		this.fileOperations = new FileOperationsTool(fileService, context.workspaceRoot || '', undefined, modelService);
 		this.commandExecution = new CommandExecutionTool(terminalService);
 		if (commandExecutionService) {
 			this.commandExecution.setCommandExecutionService(commandExecutionService);
@@ -105,13 +114,44 @@ export class ToolExecutorImpl implements IToolExecutor {
 
 			switch (toolUse.name) {
 				// 文件操作工具
-				case 'read_file':
-					result = await this.fileOperations.readFile(toolUse as any);
-					break;
+				case 'read_file': {
+					const readFilePath = toolUse.params?.path as string || '';
+					const resolvedReadPath = readFilePath ? this.fileOperations.resolveFilePath(readFilePath) : readFilePath;
+					const prevCount = this.fileReadCount.get(resolvedReadPath) || 0;
+					const newCount = prevCount + 1;
+					this.fileReadCount.set(resolvedReadPath, newCount);
 
-				case 'write_to_file':
+					if (newCount === 2) {
+						// 第2次读取同一文件：执行但附加警告
+						result = await this.fileOperations.readFile(toolUse as any);
+						const warnMsg = `\n\n⚠️ [DUPLICATE_READ 警告] 这是第 ${newCount} 次读取 "${readFilePath}"。\n` +
+							`规则：已读取过的文件请直接使用上下文中的内容，无需重复 read_file。\n` +
+							`若文件已被 @mentions 引用（<file_content> 标签），禁止再次调用 read_file。`;
+						result = (typeof result === 'string' ? result : String(result)) + warnMsg;
+					} else if (newCount >= 3) {
+						// 第3次及以上：强制错误，阻止继续浪费 token
+						console.warn(`[Maxian] DUPLICATE_READ FATAL: "${resolvedReadPath}" 已读取 ${newCount} 次`);
+						throw new Error(
+							`[DUPLICATE_READ FATAL] 文件 "${readFilePath}" 已读取 ${newCount} 次，强制停止。\n\n` +
+							`根本原因分析：\n` +
+							`1. 若用户消息含 <file_content path="${readFilePath}"> 标签，说明文件已在上下文中，直接使用，禁止 read_file\n` +
+							`2. 若已有之前的 read_file 结果，直接使用那次的内容，无需重读\n` +
+							`3. 仅当确认文件已被其他 edit/write 工具修改后，才允许重新 read_file\n\n` +
+							`⛔ 请直接使用已有的文件内容继续完成任务，或调用 attempt_completion 结束。`
+						);
+					} else {
+						result = await this.fileOperations.readFile(toolUse as any);
+					}
+					break;
+				}
+
+				case 'write_to_file': {
+					const writePath = toolUse.params?.path as string || '';
+					const resolvedWritePath = writePath ? this.fileOperations.resolveFilePath(writePath) : writePath;
+					this.fileReadCount.delete(resolvedWritePath);
 					result = await this.fileOperations.writeToFile(toolUse as any);
 					break;
+				}
 
 				case 'delete_file':
 					result = await this.fileOperations.deleteFile(toolUse);
@@ -191,14 +231,20 @@ export class ToolExecutorImpl implements IToolExecutor {
 					break;
 
 				// 编辑工具
-				case 'apply_diff':
+				case 'apply_diff': {
+					const diffPath = toolUse.params?.path as string || '';
+					if (diffPath) { this.fileReadCount.delete(this.fileOperations.resolveFilePath(diffPath)); }
 					result = await this.fileOperations.applyDiff(toolUse as any);
 					break;
+				}
 
 				// 独立 edit 工具（P0优化：基于 fuzzyMatch 的容错替换）
-				case 'edit':
+				case 'edit': {
+					const editPath = toolUse.params?.path as string || '';
+					if (editPath) { this.fileReadCount.delete(this.fileOperations.resolveFilePath(editPath)); }
 					result = await this.executeEdit(toolUse);
 					break;
+				}
 
 				// P0优化：批量执行工具
 				case 'batch':
@@ -206,9 +252,12 @@ export class ToolExecutorImpl implements IToolExecutor {
 					break;
 
 				// P1优化：多处编辑工具
-				case 'multiedit':
+				case 'multiedit': {
+					const multieditPath = toolUse.params?.path as string || '';
+					if (multieditPath) { this.fileReadCount.delete(this.fileOperations.resolveFilePath(multieditPath)); }
 					result = await this.executeMultiedit(toolUse);
 					break;
+				}
 
 				// P1优化：多文件补丁
 				case 'patch':
@@ -521,6 +570,17 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 </error>`;
 		}
 
+		// 检查是否已由 diff confirm 直接保存（跳过重复写入）
+		const resolvedEditPath = this.fileOperations.resolveFilePath(editParams.path);
+		if (consumePathSavedByDiff(resolvedEditPath)) {
+			let output = '✅ 文件已通过 diff 确认保存';
+			try {
+				const diagnostics = await getDiagnosticsAfterEdit(editParams.path);
+				if (diagnostics) { output += diagnostics; }
+			} catch { /* LSP 失败不影响主流程 */ }
+			return output;
+		}
+
 		try {
 			// 读取文件原始内容（不带行号和XML包装，避免字符串替换失败）
 			const content = await this.fileOperations.readRawFileContent(editParams.path);
@@ -540,7 +600,13 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 				partial: false,
 			} as any);
 
-			return formatEditResponse(result);
+			// 写入后追加 LSP 诊断（对齐 OpenCode edit.ts 行为）
+			let output = formatEditResponse(result);
+			try {
+				const diagnostics = await getDiagnosticsAfterEdit(editParams.path);
+				if (diagnostics) output += diagnostics;
+			} catch { /* LSP 失败不影响主流程 */ }
+			return output;
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			return `编辑失败: ${errorMsg}`;
@@ -562,15 +628,31 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			return '错误: multiedit 工具需要 edits 参数';
 		}
 
+		// 检查是否已由 diff confirm 直接保存（跳过重复写入）
+		const resolvedMultieditPath = this.fileOperations.resolveFilePath(path);
+		if (consumePathSavedByDiff(resolvedMultieditPath)) {
+			let output = '✅ 文件已通过 diff 确认保存';
+			try {
+				const diagnostics = await getDiagnosticsAfterEdit(path);
+				if (diagnostics) { output += diagnostics; }
+			} catch { /* LSP 失败不影响主流程 */ }
+			return output;
+		}
+
 		let editOperations: EditOperation[];
 		try {
-			editOperations = typeof edits === 'string'
-				? JSON.parse(edits)
-				: edits;
+			const rawEdits = typeof edits === 'string' ? JSON.parse(edits) : edits;
 
-			if (!Array.isArray(editOperations)) {
+			if (!Array.isArray(rawEdits)) {
 				return '错误: edits 必须是数组';
 			}
+
+			// 兼容 schema 下划线命名（old_string/new_string）和驼峰命名（oldString/newString）
+			editOperations = rawEdits.map((e: any) => ({
+				oldString: e.oldString ?? e.old_string ?? '',
+				newString: e.newString ?? e.new_string ?? '',
+				replaceAll: e.replaceAll ?? e.replace_all ?? false,
+			}));
 		} catch (e) {
 			return `错误: edits 参数解析失败: ${e}`;
 		}
@@ -603,8 +685,13 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 				partial: false,
 			} as any);
 
-
-			return formatMultieditResponse(result, path);
+			// 写入后追加 LSP 诊断（对齐 OpenCode 行为）
+			let output = formatMultieditResponse(result, path);
+			try {
+				const diagnostics = await getDiagnosticsAfterEdit(path);
+				if (diagnostics) output += diagnostics;
+			} catch { /* LSP 失败不影响主流程 */ }
+			return output;
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			return `多处编辑失败: ${errorMsg}`;

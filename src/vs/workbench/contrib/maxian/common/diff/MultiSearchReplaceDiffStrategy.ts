@@ -338,7 +338,7 @@ Only use a single line of '=======' between search and replacement content, beca
 
 				case State.AFTER_SEARCH:
 					if (SEARCH_PATTERN.test(marker)) {
-						return reportInvalidDiffError(SEARCH_PATTERN.source, SEP);
+						return reportInvalidDiffError(marker, SEP);
 					}
 					if (marker.startsWith(SEARCH_PREFIX)) {
 						return reportMergeConflictError(marker, SEARCH);
@@ -356,7 +356,7 @@ Only use a single line of '=======' between search and replacement content, beca
 
 				case State.AFTER_SEPARATOR:
 					if (SEARCH_PATTERN.test(marker)) {
-						return reportInvalidDiffError(SEARCH_PATTERN.source, REPLACE);
+						return reportInvalidDiffError(marker, REPLACE);
 					}
 					if (marker.startsWith(SEARCH_PREFIX)) {
 						return reportMergeConflictError(marker, REPLACE);

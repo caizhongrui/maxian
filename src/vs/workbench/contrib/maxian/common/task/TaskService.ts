@@ -171,7 +171,7 @@ export class TaskService extends Disposable {
 
 	// P0优化：重复文件读取检测（借鉴Cline）
 	private readonly fileReadTracker: Map<string, number> = new Map();
-	private readonly DUPLICATE_READ_THRESHOLD = 1; // 超过1次即为重复
+	private readonly DUPLICATE_READ_THRESHOLD = 1; // 超过1次即为重复（第2次返回警告，第3次返回错误）
 
 	// P0优化：上下文压缩器
 	private readonly contextCompactor: ContextCompactor;
@@ -891,8 +891,42 @@ export class TaskService extends Disposable {
 							input = {};
 						}
 					} else {
-						// 其他工具解析失败时设为空对象
-						input = {};
+						// 尝试截取合法 JSON 部分（"Unexpected non-whitespace character after JSON" 类错误）
+						if (typeof chunk.input === 'string') {
+							const trimmed = chunk.input.trim();
+							if (trimmed.startsWith('{')) {
+								let depth = 0;
+								let inString = false;
+								let escape = false;
+								let endIdx = -1;
+								for (let i = 0; i < trimmed.length; i++) {
+									const c = trimmed[i];
+									if (escape) { escape = false; continue; }
+									if (c === '\\' && inString) { escape = true; continue; }
+									if (c === '"') { inString = !inString; continue; }
+									if (inString) { continue; }
+									if (c === '{') { depth++; }
+									else if (c === '}') {
+										depth--;
+										if (depth === 0) { endIdx = i; break; }
+									}
+								}
+								if (endIdx > 0) {
+									try {
+										input = JSON.parse(trimmed.substring(0, endIdx + 1));
+										console.warn(`[TaskService] 截取合法JSON成功 (工具:${chunk.name}, 截取至:${endIdx + 1}/${trimmed.length})`);
+									} catch {
+										input = {};
+									}
+								} else {
+									input = {};
+								}
+							} else {
+								input = {};
+							}
+						} else {
+							input = {};
+						}
 					}
 				}
 
@@ -1252,30 +1286,36 @@ export class TaskService extends Disposable {
 				// 优先检查缓存（缓存命中直接返回内容，避免重复检测误拦截导致AI拿不到内容）
 				const cachedResult = this.toolCache.get(toolUse.name, toolUse.input);
 				if (cachedResult !== null) {
-					// 缓存命中时也检查重复读取，给AI添加警告，防止AI陷入无限重复读取同一文件的死循环
-					const duplicateNoticeOnCacheHit = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
-					// 如果是重复读取，只返回简短通知，不返回完整内容，防止 context 继续增长
-					const cachedContent = duplicateNoticeOnCacheHit ? duplicateNoticeOnCacheHit : cachedResult;
-					// 触发工具完成事件（缓存命中也需要通知UI移除工具卡片）
+					// 缓存命中时检查重复读取：第2次给警告(is_error:false)，第3次给错误(is_error:true)
+					const duplicateCheck = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
+					if (duplicateCheck) {
+						this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: duplicateCheck.isError });
+						return {
+							type: 'tool_result' as const,
+							tool_use_id: toolUse.id,
+							content: duplicateCheck.message,
+							is_error: duplicateCheck.isError
+						};
+					}
+					// 首次从缓存命中，正常返回
 					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: false });
 					return {
 						type: 'tool_result' as const,
 						tool_use_id: toolUse.id,
-						content: cachedContent,
+						content: cachedResult,
 						is_error: false
 					};
 				}
 
 				// 检查重复文件读取（缓存未命中时检查并记录首次读取）
-				const duplicateNotice = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
-				if (duplicateNotice) {
-					// 触发工具完成事件（即使是重复检测，也需要通知UI移除工具卡片）
-					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: false });
+				const duplicateCheck = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
+				if (duplicateCheck) {
+					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: duplicateCheck.isError });
 					return {
 						type: 'tool_result' as const,
 						tool_use_id: toolUse.id,
-						content: duplicateNotice,
-						is_error: false
+						content: duplicateCheck.message,
+						is_error: duplicateCheck.isError
 					};
 				}
 
@@ -1416,9 +1456,22 @@ export class TaskService extends Disposable {
 		// P0优化：对只读工具检查缓存（与 executeToolsInParallel 保持一致）
 		const cachedResult = this.toolCache.get(toolUse.name, toolUse.input);
 		if (cachedResult !== null) {
-			// 检查是否是重复读取：重复时只返回简短通知，不返回完整内容
-			const duplicateNotice = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
-			const content = duplicateNotice ? duplicateNotice : cachedResult;
+			// 检查重复读取：第2次警告(is_error:false)，第3次错误(is_error:true)
+			const duplicateCheck = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
+			if (duplicateCheck) {
+				this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: duplicateCheck.isError });
+				return {
+					shouldContinue: true,
+					shouldEndLoop: false,
+					toolResult: {
+						type: 'tool_result',
+						tool_use_id: toolUse.id,
+						content: duplicateCheck.message,
+						is_error: duplicateCheck.isError
+					}
+				};
+			}
+			// 首次从缓存命中，正常返回
 			this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: false });
 			return {
 				shouldContinue: true,
@@ -1426,7 +1479,7 @@ export class TaskService extends Disposable {
 				toolResult: {
 					type: 'tool_result',
 					tool_use_id: toolUse.id,
-					content: content,
+					content: cachedResult,
 					is_error: false
 				}
 			};
@@ -1562,10 +1615,15 @@ export class TaskService extends Disposable {
 
 			// P0优化：如果是 update_todo_list 工具，更新 FocusChain 清单并触发UI更新
 			if ((toolUse.name === 'update_todo_list' || toolUse.name === 'todowrite') && toolUse.input && toolUse.input.todos) {
-				this.focusChainManager.updateChecklist(toolUse.input.todos);
+				// AI 有时将数组序列化为 JSON 字符串传入，需在此处解析为数组
+				let parsedTodos = toolUse.input.todos;
+				if (typeof parsedTodos === 'string') {
+					try { parsedTodos = JSON.parse(parsedTodos); } catch { /* keep as string, UI handles it */ }
+				}
+				this.focusChainManager.updateChecklist(parsedTodos);
 
 				// 触发任务列表更新事件，通知UI更新
-				this._onTodoListUpdated.fire({ todos: toolUse.input.todos });
+				this._onTodoListUpdated.fire({ todos: parsedTodos });
 			}
 
 			// 🔧 触发工具完成事件
@@ -1846,9 +1904,11 @@ export class TaskService extends Disposable {
 	/**
 	 * P0优化：检测并处理重复文件读取
 	 * 借鉴Cline的实现：跟踪文件读取次数，对重复读取返回简化通知
-	 * @returns 如果是重复读取，返回简化的通知；否则返回null
+	 * - 第2次：返回警告（is_error: false），提醒AI不要再读
+	 * - 第3次及以上：返回错误（is_error: true），强制AI停止循环
+	 * @returns { message, isError } 或 null（允许正常读取）
 	 */
-	private checkDuplicateFileRead(toolName: string, params: any): string | null {
+	private checkDuplicateFileRead(toolName: string, params: any): { message: string; isError: boolean } | null {
 		// 只对 read_file 工具进行检测
 		if (toolName !== 'read_file') {
 			return null;
@@ -1867,11 +1927,21 @@ export class TaskService extends Disposable {
 			return null;
 		}
 
-		// 重复读取，返回简化通知（不返回文件内容，防止 context 增长）
 		console.log(`[TaskService] 检测到重复文件读取: ${filePath} (第${readCount + 1}次)`);
-		return `[DUPLICATE_READ] 文件 "${filePath}" 已读取过 ${readCount + 1} 次，内容已在对话历史中。
 
-⛔ 请勿继续重复读取此文件。你已经掌握了该文件的内容。请直接使用已有信息完成任务，或调用 attempt_completion 总结已了解的内容。`;
+		// 第2次：警告（is_error: false）——内容已在历史中，不返回内容节省 context
+		if (readCount === this.DUPLICATE_READ_THRESHOLD) {
+			return {
+				message: `[DUPLICATE_READ] 文件 "${filePath}" 已读取过，内容已在对话历史中，无需再次读取。请直接使用已有内容完成任务。`,
+				isError: false,
+			};
+		}
+
+		// 第3次及以上：错误（is_error: true）——强制AI停止循环
+		return {
+			message: `[FATAL] 文件 "${filePath}" 已被重复读取 ${readCount + 1} 次。这是一个错误——你陷入了循环。\n\n**立即停止读取文件，直接根据对话历史中已有的内容执行修改操作。** 如果确实需要修改文件，请直接调用 edit 或 multiedit 工具。`,
+			isError: true,
+		};
 	}
 
 	/**
@@ -2004,7 +2074,27 @@ export class TaskService extends Disposable {
 				});
 			}
 
-			case 'execute_command':
+			case 'edit':
+				return JSON.stringify({
+					tool: 'edit',
+					path: params.path,
+					oldString: typeof params.old_string === 'string' ? params.old_string : '',
+					newString: typeof params.new_string === 'string' ? params.new_string : '',
+				});
+
+			case 'multiedit': {
+				let multieditEdits: Array<{ oldString: string; newString: string }> = [];
+				try {
+					const rawEdits = params.edits ? (typeof params.edits === 'string' ? JSON.parse(params.edits) : params.edits) : [];
+					multieditEdits = rawEdits.map((e: any) => ({
+						oldString: typeof e.oldString === 'string' ? e.oldString : '',
+						newString: typeof e.newString === 'string' ? e.newString : '',
+					}));
+				} catch { /* ignore */ }
+				return JSON.stringify({ tool: 'multiedit', path: params.path, edits: multieditEdits });
+			}
+
+case 'execute_command':
 				// 命令直接显示命令文本
 				return params.command;
 
@@ -2062,6 +2152,32 @@ export class TaskService extends Disposable {
 					tool: 'newFileCreated',
 					path: params.path
 				});
+
+			case 'edit':
+				return JSON.stringify({
+					toolId,
+					tool: 'edit',
+					path: params.path,
+					oldString: typeof params.old_string === 'string' ? params.old_string.substring(0, 2000) : '',
+					newString: typeof params.new_string === 'string' ? params.new_string.substring(0, 2000) : '',
+				});
+
+			case 'multiedit': {
+				let multieditEdits: Array<{ oldString: string; newString: string }> = [];
+				try {
+					const rawEdits = params.edits ? (typeof params.edits === 'string' ? JSON.parse(params.edits) : params.edits) : [];
+					multieditEdits = rawEdits.map((e: any) => ({
+						oldString: typeof e.oldString === 'string' ? e.oldString.substring(0, 1000) : '',
+						newString: typeof e.newString === 'string' ? e.newString.substring(0, 1000) : '',
+					}));
+				} catch { /* ignore */ }
+				return JSON.stringify({
+					toolId,
+					tool: 'multiedit',
+					path: params.path,
+					edits: multieditEdits,
+				});
+			}
 
 			case 'apply_diff':
 				return JSON.stringify({

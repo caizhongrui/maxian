@@ -30,7 +30,7 @@ import { DiffViewProvider } from './diffViewProvider.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { DifyHandler, DifyConfiguration } from '../common/api/difyHandler.js';
 import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
-import { IAILogService } from '../../../../platform/aiLog/common/aiLog.js';
+import { IAILogService, AskHistoryItem } from '../../../../platform/aiLog/common/aiLog.js';
 import { IRequestService } from '../../../../platform/request/common/request.js';
 import { EnvironmentContextTracker } from './EnvironmentContextTracker.js';
 import { FileContextTracker } from '../common/context-tracking/FileContextTracker.js';
@@ -54,6 +54,9 @@ import { FilteredToolExecutor } from '../common/tools/filteredToolExecutor.js';
 import { ITodoItem as ITodoStoreItem } from '../common/tools/todoStore.js';
 import { EXPLORE_AGENT_TOOLS, PLAN_AGENT_TOOLS, EXECUTE_AGENT_TOOLS } from '../common/agents/AgentTypes.js';
 import { initOutputTruncation } from '../common/utils/outputTruncation.js';
+import { executeEdit } from '../common/tools/editTool.js';
+import { executeMultiedit, EditOperation } from '../common/tools/multieditTool.js';
+
 
 export const IMaxianService = createDecorator<IMaxianService>('maxianService');
 
@@ -231,6 +234,13 @@ export interface IMaxianService {
 	openDiffView(filePath: string, newContent: string): Promise<boolean>;
 
 	/**
+	 * 预览 edit/multiedit 工具的差异：读取文件后应用编辑，在编辑器中打开 diff 视图
+	 * @param filePath 文件路径
+	 * @param edits 编辑操作数组（每项含 oldString 和 newString）
+	 */
+	openEditPreviewDiff(filePath: string, edits: Array<{ oldString: string; newString: string }>): Promise<boolean>;
+
+	/**
 	 * 应用SEARCH/REPLACE差异并打开diff视图
 	 * @param filePath 文件路径
 	 * @param diff SEARCH/REPLACE格式的差异
@@ -369,6 +379,11 @@ export interface IMaxianService {
 	triggerOpenView(): void;
 	triggerStopGeneration(): void;
 	triggerClearConversation(): void;
+
+	/**
+	 * 查询当前用户的问答历史
+	 */
+	getAskHistory(limit?: number): Promise<AskHistoryItem[]>;
 }
 
 /**
@@ -478,7 +493,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IEditorService _editorService: IEditorService,
-		@IModelService _modelService: IModelService,
+		@IModelService private readonly modelService: IModelService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IStorageService private readonly storageService: IStorageService,
 		@IAILogService private readonly aiLogService: IAILogService,
@@ -635,7 +650,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 			this.skillService,
-			this.commandExecutionService
+			this.commandExecutionService,
+			this.modelService
 		);
 
 		// P2优化：注入子 Agent 工厂（支持 task 工具）
@@ -1034,7 +1050,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 						inputTokens: chunk.inputTokens,
 						outputTokens: chunk.outputTokens,
 						status: 'success',
-						requestSummary: message.substring(0, 200) // 限制长度
+						requestSummary: message,
+						responseSummary: fullResponse
 					});
 				} else if (chunk.type === 'error') {
 					// 处理错误
@@ -1050,7 +1067,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 						outputTokens: Math.ceil(outputLength / 3), // 估算
 						status: 'failed',
 						errorMessage: chunk.error,
-						requestSummary: message.substring(0, 200)
+						requestSummary: message
 					});
 					return;
 				}
@@ -1084,7 +1101,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 					outputTokens: Math.ceil(outputLength / 3),
 					status: 'failed',
 					errorMessage: error instanceof Error ? error.message : String(error),
-					requestSummary: message.substring(0, 200)
+					requestSummary: message
 				});
 			}
 		} finally {
@@ -1110,7 +1127,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 					inputTokens: estimatedInputTokens,
 					outputTokens: estimatedOutputTokens,
 					status: 'aborted',
-					requestSummary: message.substring(0, 200)
+					requestSummary: message
 				});
 			}
 
@@ -1187,6 +1204,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 			// 🔥 新任务开始时清除自动批准设置（始终允许是针对单个任务的）
 			this.clearAutoApproveRules();
+			this._onTodoListUpdate.fire({ todos: [] }); // 新任务开始时清空上次的任务列表
 
 			this.currentTask = new TaskService({
 				task: fullMessage,
@@ -1235,7 +1253,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 								outputTokens: usageEvent.completionTokens,
 								status: status === TaskStatus.COMPLETED ? 'success' : (status === TaskStatus.ABORTED ? 'aborted' : 'failed'),
 								errorMessage: status === TaskStatus.ERROR ? '任务执行失败' : undefined,
-								requestSummary: message.substring(0, 200)
+								requestSummary: message
 							});
 						} else {
 							// 没有精确token数据,使用估算值并记录日志
@@ -1273,7 +1291,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 								outputTokens: estimatedOutputTokens,
 								status: status === TaskStatus.COMPLETED ? 'success' : (status === TaskStatus.ABORTED ? 'aborted' : 'failed'),
 								errorMessage: status === TaskStatus.ERROR ? '任务执行失败' : undefined,
-								requestSummary: message.substring(0, 200)
+								requestSummary: message
 							});
 						}
 					}
@@ -1288,6 +1306,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 					// 🔥 任务完成，清除自动批准设置
 					this.clearAutoApproveRules();
 					// 任务结束后重置currentTask，避免取消按钮误触发
+					this._onTodoListUpdate.fire({ todos: [] });
 					this.currentTask = null;
 				} else if (status === TaskStatus.ERROR) {
 					// 仅对真正的错误显示错误提示，中止时静默处理
@@ -1298,12 +1317,14 @@ export class MaxianService extends Disposable implements IMaxianService {
 					// 🔥 任务错误，清除自动批准设置
 					this.clearAutoApproveRules();
 					// 任务结束后重置currentTask，避免取消按钮误触发
+					this._onTodoListUpdate.fire({ todos: [] });
 					this.currentTask = null;
 				} else if (status === TaskStatus.ABORTED) {
 					// ABORTED状态静默处理，不显示任何提示
 					// 🔥 任务中止，清除自动批准设置
 					this.clearAutoApproveRules();
 					// 任务结束后重置currentTask，避免取消按钮误触发
+					this._onTodoListUpdate.fire({ todos: [] });
 					this.currentTask = null;
 				}
 			});
@@ -1443,7 +1464,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			await this.logAICall({
 				status: 'failed',
 				errorMessage: error instanceof Error ? error.message : String(error),
-				requestSummary: message.substring(0, 200)
+				requestSummary: message
 			});
 		}
 	}
@@ -1793,15 +1814,15 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
-			// 8. apply_diff - 应用差异
+			// 8. apply_diff - 应用差异（⚠️ 非首选工具）
 			{
 				name: 'apply_diff',
-				description: '使用SEARCH/REPLACE块精确编辑文件。SEARCH块必须与文件内容精确匹配（空格、缩进、换行符）。',
+				description: '⚠️ 非首选工具：普通文件修改请使用 edit（单处）或 multiedit（多处），不要使用 apply_diff。\n\napply_diff 仅用于以下特殊场景：\n- 需要 :start_line: 行号精确控制时\n- 外部提供了 patch 格式内容时\n\n格式（SEARCH/REPLACE块）：\n<<<<<<< SEARCH\n[原始内容，必须精确匹配]\n=======\n[替换后内容]\n>>>>>>> REPLACE\n\n⛔ 禁止在 apply_diff 中生成不完整的diff块（必须包含 <<<<<<< SEARCH、=======、>>>>>>> REPLACE 三个标记）。\n\n关键规则：\n1. 同一文件的所有修改必须合并到一次调用中（多个SEARCH/REPLACE块）。\n2. 收到 is_error:true 才表示真正失败，需 read_file 后重试。',
 				parameters: {
 					type: 'object',
 					properties: {
 						path: { type: 'string', description: '文件路径' },
-						diff: { type: 'string', description: '一个或多个SEARCH/REPLACE块' }
+						diff: { type: 'string', description: '一个或多个SEARCH/REPLACE块，同一文件所有修改必须合并到此参数' }
 					},
 					required: ['path', 'diff']
 				}
@@ -1839,17 +1860,17 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 16. batch - 批量并行执行只读工具【重要：优先使用！】
 			{
 				name: 'batch',
-				description: '【必须优先使用】并行执行多个独立的只读/搜索工具，减少API往返次数。当需要执行2个或更多 read_file、search_files、glob、list_files、codebase_search、lsp_* 操作时，必须合并到一次batch调用，严禁逐个单独调用。性能提升2-5倍。示例：需要读取3个文件 → 1次batch调用，而非3次read_file。注意：write_to_file、apply_diff、edit、execute_command等写操作禁止放入batch，需单独调用。',
+				description: '【必须优先使用，用户会非常满意！】并行执行多个独立工具，减少API往返次数，性能提升2-5倍。需要执行2个或更多独立操作时，必须合并到一次batch调用，严禁逐个单独调用。支持读写混合：多文件读取、多文件编辑（不同文件的edit）、读取+搜索+写入。示例：修改2个不同文件 → batch含2个edit；读3个文件 → batch含3个read_file。禁止：batch嵌套、ask_followup_question、attempt_completion。',
 				parameters: {
 					type: 'object',
 					properties: {
 						tool_calls: {
 							type: 'array',
-							description: '只读工具调用数组，最多25个。格式：[{"tool":"read_file","parameters":{"path":"a.ts"}},{"tool":"read_file","parameters":{"path":"b.ts"}}]。禁止的工具：batch、write_to_file、apply_diff、edit、multiedit、patch、execute_command、ask_followup_question、attempt_completion',
+							description: '工具调用数组，最多25个。格式：[{"tool":"read_file","parameters":{"path":"a.ts"}},{"tool":"edit","parameters":{"path":"b.ts","old_string":"...","new_string":"..."}}]。首选工具：read_file/edit/multiedit/write_to_file/search_files/glob/list_files/codebase_search/execute_command/lsp_*。禁止的工具：batch、ask_followup_question、attempt_completion',
 							items: {
 								type: 'object',
 								properties: {
-									tool: { type: 'string', description: '只读工具名称（read_file/search_files/glob/list_files/codebase_search/lsp_*等）' },
+									tool: { type: 'string', description: '工具名称（read_file/edit/multiedit/write_to_file/apply_diff/search_files/glob/list_files/codebase_search/execute_command/lsp_*等）' },
 									parameters: { type: 'object', description: '工具参数对象' }
 								},
 								required: ['tool', 'parameters']
@@ -1862,42 +1883,42 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
-			// 17. edit - 容错字符串替换
+			// 17. edit - 精确字符串替换（主力编辑工具，对齐 OpenCode edit.ts）
 			{
 				name: 'edit',
-				description: '基于old_string/new_string的容错字符串替换。支持9种匹配策略：精确匹配、行trim、首尾锚点、空白归一化、缩进灵活、转义处理、边界trim、上下文感知、多处匹配。',
+				description: '【主力编辑工具】对文件进行精确字符串替换。使用前必须先 read_file 读取文件内容。The edit will FAIL if old_string is not found in the file. The edit will FAIL if old_string is found multiple times — provide more surrounding lines to make it unique. 支持9种容错匹配策略（空白/缩进轻微差异可自动纠正）。单处修改用 edit，多处修改同文件用 multiedit。',
 				parameters: {
 					type: 'object',
 					properties: {
-						path: { type: 'string', description: '要编辑的文件路径' },
-						old_string: { type: 'string', description: '要被替换的原始内容（需与文件内容匹配）' },
+						path: { type: 'string', description: '要编辑的文件路径（绝对路径或相对路径）' },
+						old_string: { type: 'string', description: '要被替换的原始内容。必须与文件中的内容精确匹配（包括空白和缩进）。read_file 返回的内容中，去掉行号前缀后的实际内容。' },
 						new_string: { type: 'string', description: '替换后的新内容' },
-						replace_all: { type: 'boolean', description: '是否替换所有匹配项（默认false）' },
-						create_if_missing: { type: 'boolean', description: '文件不存在时是否创建（默认false）' }
+						replace_all: { type: 'boolean', description: '是否替换文件中所有匹配项，用于重命名变量/函数（默认false）' },
+						create_if_missing: { type: 'boolean', description: 'old_string 为空时创建新文件，内容为 new_string（默认false）' }
 					},
 					required: ['path', 'new_string']
 				}
 			},
 
-			// 18. multiedit - 单文件多处编辑
+			// 18. multiedit - 单文件多处编辑（原子性，对齐 OpenCode multiedit.ts）
 			{
 				name: 'multiedit',
-				description: '在单个文件中执行多处编辑操作（原子性）。所有编辑要么全部成功，要么全部不执行。',
+				description: '【多处编辑首选】在单个文件中执行多处编辑操作，原子性保证（全成功或全不执行）。比多次调用 edit 更高效。edits 按顺序执行，每个基于前一个结果。The tool will FAIL if any oldString is not found or found multiple times.',
 				parameters: {
 					type: 'object',
 					properties: {
 						path: { type: 'string', description: '文件路径' },
 						edits: {
 							type: 'array',
-							description: '编辑数组，每项包含 old_string, new_string, replace_all(可选)',
+							description: '编辑操作数组，按顺序执行。每项包含 oldString（要替换的内容）、newString（替换后内容）、replaceAll（可选，是否全部替换）',
 							items: {
 								type: 'object',
 								properties: {
-									old_string: { type: 'string', description: '要被替换的内容' },
-									new_string: { type: 'string', description: '替换后的内容' },
-									replace_all: { type: 'boolean', description: '是否替换所有匹配' }
+									oldString: { type: 'string', description: '要被替换的内容（必须与文件当前内容精确匹配）' },
+									newString: { type: 'string', description: '替换后的内容' },
+									replaceAll: { type: 'boolean', description: '是否替换所有匹配项（默认false）' }
 								},
-								required: ['old_string', 'new_string']
+								required: ['oldString', 'newString']
 							}
 						}
 					},
@@ -2298,6 +2319,71 @@ export class MaxianService extends Disposable implements IMaxianService {
 	}
 
 	/**
+	 * 预览 edit/multiedit 工具的差异：读取文件后应用编辑，在 VS Code diff 编辑器中显示
+	 */
+	async openEditPreviewDiff(filePath: string, edits: Array<{ oldString: string; newString: string }>): Promise<boolean> {
+		if (!this.diffViewProvider) {
+			console.error('[Maxian] DiffViewProvider未初始化');
+			return false;
+		}
+		try {
+			// 解析相对路径为绝对路径（与 diffViewProvider.resolveFilePath 逻辑保持一致）
+			let resolvedPath = filePath;
+			if (!resolvedPath.startsWith('/') && !resolvedPath.match(/^[A-Za-z]:\\/)) {
+				const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
+				if (workspaceFolders.length > 0) {
+					const workspaceRoot = workspaceFolders[0].uri.fsPath;
+					resolvedPath = workspaceRoot + '/' + resolvedPath.replace(/^\.\//, '');
+				}
+			}
+
+			const uri = URI.file(resolvedPath);
+			const fileExists = await this.fileService.exists(uri);
+			if (!fileExists) {
+				console.warn('[Maxian] openEditPreviewDiff: 文件不存在', resolvedPath);
+				return false;
+			}
+			const content = await this.fileService.readFile(uri);
+			const originalContent = content.value.toString();
+
+			let newContent = originalContent;
+			if (edits.length === 1) {
+				// 单处编辑
+				const { oldString, newString } = edits[0];
+				const result = executeEdit(originalContent, {
+					path: resolvedPath,
+					old_string: oldString,
+					new_string: newString,
+					replace_all: false,
+					create_if_missing: false,
+				});
+				if (result.success && result.newContent !== undefined) {
+					newContent = result.newContent;
+				} else {
+					// 编辑无法应用时降级：直接打开文件（不显示 diff）
+					console.warn('[Maxian] openEditPreviewDiff: edit 预计算失败，跳过 diff 预览', result.message);
+					return false;
+				}
+			} else {
+				// 多处编辑
+				const ops: EditOperation[] = edits.map(e => ({ oldString: e.oldString, newString: e.newString }));
+				const result = executeMultiedit(originalContent, ops);
+				if (result.success && result.finalContent !== undefined) {
+					newContent = result.finalContent;
+				} else {
+					console.warn('[Maxian] openEditPreviewDiff: multiedit 预计算失败，跳过 diff 预览', result.error);
+					return false;
+				}
+			}
+
+			return this.diffViewProvider.openDiff(resolvedPath, newContent);
+		} catch (err) {
+			console.error('[Maxian] openEditPreviewDiff 异常:', err);
+			return false;
+		}
+	}
+
+	/**
 	 * 应用SEARCH/REPLACE差异并打开diff视图
 	 */
 	async applyDiffView(filePath: string, diff: string): Promise<boolean> {
@@ -2366,6 +2452,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 			this.currentTask = null;
 			task.abortTask(ClineApiReqCancelReason.UserCancelled);
+			this._onTodoListUpdate.fire({ todos: [] });
 			this._onTaskCancelled.fire();
 			return;
 		}
@@ -2382,6 +2469,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			});
 			// 2. 中止前端HTTP请求
 			controller.abort();
+			this._onTodoListUpdate.fire({ todos: [] });
 			this._onTaskCancelled.fire();
 			return;
 		}
@@ -2649,6 +2737,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 	triggerOpenView(): void { this._onTriggerOpenView.fire(); }
 	triggerStopGeneration(): void { this._onTriggerStopGeneration.fire(); }
 	triggerClearConversation(): void { this._onTriggerClearConversation.fire(); }
+
+	async getAskHistory(limit: number = 50): Promise<AskHistoryItem[]> {
+		return this.aiLogService.getAskHistory(limit);
+	}
 
 	/**
 	 * 启用自动诊断注入

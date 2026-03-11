@@ -19,6 +19,24 @@ export interface IAILogService {
 	 * @returns 记录ID
 	 */
 	logAICall(logData: AICallLogData): Promise<number | null>;
+
+	/**
+	 * 查询当前用户的问答历史
+	 * @param limit 最多返回条数
+	 */
+	getAskHistory(limit?: number): Promise<AskHistoryItem[]>;
+}
+
+/**
+ * 问答历史记录条目
+ */
+export interface AskHistoryItem {
+	id: string;
+	startTime: number;            // epoch毫秒
+	requestSummary?: string;      // 问题摘要
+	responseSummary?: string;     // 回答摘要
+	knowledgeBaseName?: string;   // 知识库名称
+	model?: string;               // 模型
 }
 
 /**

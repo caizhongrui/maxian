@@ -54,6 +54,7 @@ interface QwenChatRequest {
 	model: string;
 	messages: QwenMessage[];
 	temperature?: number;
+	top_p?: number;
 	max_tokens?: number;
 	stream?: boolean;
 	tools?: QwenTool[];
@@ -190,8 +191,9 @@ export class QwenHandler implements IApiHandler {
 			const requestBody: QwenChatRequest = {
 				model: this.config.model,
 				messages: qwenMessages,
-				temperature: this.config.temperature ?? 0.15,
-				max_tokens: this.config.maxTokens ?? 1000,
+				temperature: this.config.temperature ?? 0.55,  // Qwen 最优温度（参考 OpenCode）
+				top_p: 1,                                       // Qwen 专属配置（参考 OpenCode transform.ts）
+				max_tokens: this.config.maxTokens ?? 8192,
 				stream: true,
 				...(qwenTools && qwenTools.length > 0 ? { tools: qwenTools } : {})
 			};
@@ -331,7 +333,7 @@ export class QwenHandler implements IApiHandler {
 									type: 'tool_use',
 									id: toolData.id,
 									name: toolData.name,
-									input: toolData.arguments
+									input: sanitizeToolArguments(toolData.arguments)
 								};
 								yield toolUseChunk;
 							}
@@ -501,5 +503,40 @@ export class QwenHandler implements IApiHandler {
 
 		// 中英文混合，使用平均值
 		return Math.ceil(totalChars * 0.4);
+	}
+}
+
+/**
+ * 清理 Qwen 流式 API 返回的工具参数字符串
+ * Qwen API 有时会在完整 JSON 末尾多发一个 `}` 字符，导致 JSON.parse 失败
+ */
+function sanitizeToolArguments(args: string): string {
+	const trimmed = args.trim();
+	if (!trimmed.startsWith('{')) {
+		return trimmed;
+	}
+	try {
+		JSON.parse(trimmed);
+		return trimmed;
+	} catch {
+		let depth = 0;
+		let inString = false;
+		let escape = false;
+		for (let i = 0; i < trimmed.length; i++) {
+			const c = trimmed[i];
+			if (escape) { escape = false; continue; }
+			if (c === '\\' && inString) { escape = true; continue; }
+			if (c === '"') { inString = !inString; continue; }
+			if (inString) { continue; }
+			if (c === '{') { depth++; }
+			else if (c === '}') {
+				depth--;
+				if (depth === 0) {
+					console.warn(`[Maxian] sanitizeToolArguments: 截取合法JSON (${i + 1}/${trimmed.length})`);
+					return trimmed.substring(0, i + 1);
+				}
+			}
+		}
+		return trimmed;
 	}
 }

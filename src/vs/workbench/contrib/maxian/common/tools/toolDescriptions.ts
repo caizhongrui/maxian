@@ -863,15 +863,20 @@ import { useQuery } from 'react-query';</new_string>
 	// ==================== apply_diff 工具 ====================
 	apply_diff: {
 		name: 'apply_diff',
-		summary: '应用统一diff格式的补丁',
-		description: `应用统一 diff 格式的补丁到文件。
+		summary: '应用SEARCH/REPLACE格式补丁（非首选，优先用edit/multiedit）',
+		description: `⚠️ 非首选工具：普通文件修改请使用 edit（单处）或 multiedit（多处），不要使用 apply_diff。
 
-**适用场景：**
-- 精确的多处修改
-- 行号敏感的编辑
-- 标准 diff 格式输入
+**仅限特殊场景使用：**
+- 需要 :start_line: 行号精确控制时
+- 外部提供了 patch 格式内容时
 
-**注意：** 对于简单编辑，推荐使用 edit 工具。`,
+**格式（SEARCH/REPLACE块）：**
+每个块必须包含完整的三个标记，缺一不可：
+<<<<<<< SEARCH
+[原始内容]
+=======
+[替换内容]
+>>>>>>> REPLACE`,
 		parameters: [
 			{
 				name: 'path',
