@@ -439,7 +439,7 @@ export class MaxianView extends ViewPane {
 		this.codeContextBar.style.padding = '4px 0 2px 0';
 
 		// 输入框（contenteditable div，支持内嵌文件 chip）
-		this.inputBox = append(textAreaWrapper, $('div')) as HTMLDivElement;
+		this.inputBox = append(textAreaWrapper, $('div.maxian-input-box')) as HTMLDivElement;
 		this.inputBox.contentEditable = 'true';
 		this.inputBox.style.width = '100%';
 		this.inputBox.style.minHeight = '90px';
@@ -574,21 +574,21 @@ export class MaxianView extends ViewPane {
 		this.modeSelector.style.position = 'relative';
 		this.modeSelector.style.display = 'flex';
 		this.modeSelector.style.alignItems = 'center';
-		this.modeSelector.style.height = '34px';
-		this.modeSelector.style.padding = '0 28px 0 10px';
+		this.modeSelector.style.minHeight = '28px';
+		this.modeSelector.style.padding = '4px 22px 4px 8px';
 		this.modeSelector.style.fontSize = '12px';
 		this.modeSelector.style.fontWeight = '400';
-		this.modeSelector.style.borderRadius = '8px';
-		this.modeSelector.style.backgroundColor = 'var(--vscode-input-background)';
-		this.modeSelector.style.color = 'var(--vscode-input-foreground)';
-		this.modeSelector.style.border = '1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
+		this.modeSelector.style.borderRadius = '4px';
+		this.modeSelector.style.backgroundColor = 'transparent';
+		this.modeSelector.style.color = 'var(--vscode-descriptionForeground)';
+		this.modeSelector.style.border = 'none';
 		this.modeSelector.style.cursor = 'pointer';
 		this.modeSelector.style.userSelect = 'none';
 		this.modeSelector.style.whiteSpace = 'nowrap';
 		this.modeSelector.style.overflow = 'hidden';
 		this.modeSelector.style.textOverflow = 'ellipsis';
-		this.modeSelector.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.12)';
-		this.modeSelector.style.transition = 'all 0.2s ease';
+		this.modeSelector.style.opacity = '0.7';
+		this.modeSelector.style.transition = 'all 0.15s';
 		this.modeSelector.title = '选择模式';
 
 		// 文本显示span
@@ -677,8 +677,8 @@ export class MaxianView extends ViewPane {
 					this.modeDropdown.style.transform = 'translateY(0)';
 				}, 10);
 				this.modeSelectorArrow.style.transform = 'rotate(180deg)';
-				this.modeSelector.style.borderColor = 'var(--vscode-focusBorder, #007ACC)';
-				this.modeSelector.style.boxShadow = '0 0 0 2px rgba(0, 122, 204, 0.25)';
+				this.modeSelector.style.opacity = '1';
+				this.modeSelector.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
 			} else {
 				this.closeModeDropdown();
 			}
@@ -695,16 +695,16 @@ export class MaxianView extends ViewPane {
 		// Hover效果
 		this.modeSelector.onmouseenter = () => {
 			if (!this.isModeDropdownOpen) {
-				this.modeSelector.style.borderColor = 'var(--vscode-focusBorder, #007ACC)';
-				this.modeSelector.style.backgroundColor = 'var(--vscode-list-hoverBackground, rgba(90, 93, 94, 0.31))';
-				this.modeSelector.style.boxShadow = '0 2px 8px rgba(0, 122, 204, 0.15)';
+				this.modeSelector.style.opacity = '1';
+				this.modeSelector.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+				this.modeSelector.style.color = 'var(--vscode-foreground)';
 			}
 		};
 		this.modeSelector.onmouseleave = () => {
 			if (!this.isModeDropdownOpen) {
-				this.modeSelector.style.borderColor = 'var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
-				this.modeSelector.style.backgroundColor = 'var(--vscode-input-background)';
-				this.modeSelector.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.12)';
+				this.modeSelector.style.opacity = '0.7';
+				this.modeSelector.style.backgroundColor = 'transparent';
+				this.modeSelector.style.color = 'var(--vscode-descriptionForeground)';
 			}
 		};
 
@@ -723,18 +723,18 @@ export class MaxianView extends ViewPane {
 		this.knowledgeBaseSelector.style.position = 'relative';
 		this.knowledgeBaseSelector.style.display = 'flex';
 		this.knowledgeBaseSelector.style.alignItems = 'center';
-		this.knowledgeBaseSelector.style.height = '34px';
-		this.knowledgeBaseSelector.style.padding = '0 32px 0 36px';
-		this.knowledgeBaseSelector.style.backgroundColor = 'var(--vscode-input-background)';
-		this.knowledgeBaseSelector.style.color = 'var(--vscode-input-foreground)';
-		this.knowledgeBaseSelector.style.border = '1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
-		this.knowledgeBaseSelector.style.borderRadius = '8px';
+		this.knowledgeBaseSelector.style.minHeight = '28px';
+		this.knowledgeBaseSelector.style.padding = '4px 22px 4px 30px';
+		this.knowledgeBaseSelector.style.backgroundColor = 'transparent';
+		this.knowledgeBaseSelector.style.color = 'var(--vscode-descriptionForeground)';
+		this.knowledgeBaseSelector.style.border = 'none';
+		this.knowledgeBaseSelector.style.borderRadius = '4px';
 		this.knowledgeBaseSelector.style.fontFamily = 'var(--vscode-font-family)';
 		this.knowledgeBaseSelector.style.fontSize = '12px';
 		this.knowledgeBaseSelector.style.fontWeight = '400';
 		this.knowledgeBaseSelector.style.cursor = 'pointer';
-		this.knowledgeBaseSelector.style.transition = 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)';
-		this.knowledgeBaseSelector.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.12)';
+		this.knowledgeBaseSelector.style.transition = 'all 0.15s';
+		this.knowledgeBaseSelector.style.opacity = '0.7';
 		this.knowledgeBaseSelector.style.userSelect = 'none';
 		this.knowledgeBaseSelector.title = '点击选择知识库';
 
@@ -846,8 +846,8 @@ export class MaxianView extends ViewPane {
 					this.knowledgeBaseDropdown.style.transform = 'translateY(0)';
 				});
 				this.knowledgeBaseSelectorArrow.style.transform = 'rotate(180deg)';
-				this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-focusBorder, #007ACC)';
-				this.knowledgeBaseSelector.style.boxShadow = '0 0 0 2px rgba(0, 122, 204, 0.25)';
+				this.knowledgeBaseSelector.style.opacity = '1';
+				this.knowledgeBaseSelector.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
 			} else {
 				this.closeKnowledgeBaseDropdown();
 			}
@@ -864,18 +864,18 @@ export class MaxianView extends ViewPane {
 		// Hover效果
 		this.knowledgeBaseSelector.onmouseenter = () => {
 			if (!this.isKnowledgeBaseDropdownOpen) {
-				this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-focusBorder, #007ACC)';
-				this.knowledgeBaseSelector.style.backgroundColor = 'var(--vscode-list-hoverBackground, rgba(90, 93, 94, 0.31))';
-				this.knowledgeBaseSelector.style.boxShadow = '0 2px 8px rgba(0, 122, 204, 0.15)';
+				this.knowledgeBaseSelector.style.opacity = '1';
+				this.knowledgeBaseSelector.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+				this.knowledgeBaseSelector.style.color = 'var(--vscode-foreground)';
 			}
 			kbIcon.style.color = 'var(--vscode-focusBorder, #007ACC)';
 			kbIcon.style.transform = 'scale(1.05)';
 		};
 		this.knowledgeBaseSelector.onmouseleave = () => {
 			if (!this.isKnowledgeBaseDropdownOpen) {
-				this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
-				this.knowledgeBaseSelector.style.backgroundColor = 'var(--vscode-input-background)';
-				this.knowledgeBaseSelector.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.12)';
+				this.knowledgeBaseSelector.style.opacity = '0.7';
+				this.knowledgeBaseSelector.style.backgroundColor = 'transparent';
+				this.knowledgeBaseSelector.style.color = 'var(--vscode-descriptionForeground)';
 			}
 			kbIcon.style.color = 'var(--vscode-charts-blue, #007ACC)';
 			kbIcon.style.transform = 'scale(1)';
@@ -1905,6 +1905,39 @@ export class MaxianView extends ViewPane {
 			}
 			.maxian-thinking-dot:nth-child(2) { animation-delay: 0.2s; }
 			.maxian-thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+			/* 输入框滚动条美化（Windows Chromium 支持 webkit 滚动条） */
+			.maxian-input-box::-webkit-scrollbar {
+				width: 4px;
+			}
+			.maxian-input-box::-webkit-scrollbar-track {
+				background: transparent;
+			}
+			.maxian-input-box::-webkit-scrollbar-thumb {
+				background: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, 0.4));
+				border-radius: 2px;
+			}
+			.maxian-input-box::-webkit-scrollbar-thumb:hover {
+				background: var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, 0.7));
+			}
+			.maxian-input-box::-webkit-scrollbar-thumb:active {
+				background: var(--vscode-scrollbarSlider-activeBackground, rgba(191, 191, 191, 0.4));
+			}
+
+			/* 对话区域滚动条美化 */
+			.maxian-messages::-webkit-scrollbar {
+				width: 4px;
+			}
+			.maxian-messages::-webkit-scrollbar-track {
+				background: transparent;
+			}
+			.maxian-messages::-webkit-scrollbar-thumb {
+				background: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, 0.4));
+				border-radius: 2px;
+			}
+			.maxian-messages::-webkit-scrollbar-thumb:hover {
+				background: var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, 0.7));
+			}
 		`;
 		this.container.appendChild(style);
 	}
@@ -5019,8 +5052,8 @@ export class MaxianView extends ViewPane {
 			this.knowledgeBaseDropdown.style.display = 'none';
 		}, 200);
 		this.knowledgeBaseSelectorArrow.style.transform = 'rotate(0deg)';
-		this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
-		this.knowledgeBaseSelector.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.12)';
+		this.knowledgeBaseSelector.style.opacity = '0.7';
+		this.knowledgeBaseSelector.style.backgroundColor = 'transparent';
 	}
 
 	/**
@@ -5034,8 +5067,8 @@ export class MaxianView extends ViewPane {
 			this.modeDropdown.style.display = 'none';
 		}, 200);
 		this.modeSelectorArrow.style.transform = 'rotate(0deg)';
-		this.modeSelector.style.borderColor = 'var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
-		this.modeSelector.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.12)';
+		this.modeSelector.style.opacity = '0.7';
+		this.modeSelector.style.backgroundColor = 'transparent';
 	}
 
 	/**
