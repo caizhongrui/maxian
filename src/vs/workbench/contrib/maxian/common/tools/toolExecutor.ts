@@ -5,6 +5,7 @@
 
 import { ToolUse, ToolResponse, ToolName } from './toolTypes.js';
 import { ITodoItem } from './todoStore.js';
+import { BehaviorReporter } from '../../browser/behaviorReporter.js';
 
 /**
  * 工具执行器接口
@@ -43,6 +44,8 @@ export interface ToolExecutionContext {
 	agentName?: string; // P2-9: Agent名称，用于工具过滤
 	/** P2优化：待办列表更新回调（由 maxianService 注入，用于触发 UI 更新） */
 	onTodoListUpdate?: (todos: ITodoItem[]) => void;
+	/** 行为埋点上报器（由 maxianService 注入） */
+	behaviorReporter?: BehaviorReporter;
 }
 
 /**

@@ -56,6 +56,7 @@ import { EXPLORE_AGENT_TOOLS, PLAN_AGENT_TOOLS, EXECUTE_AGENT_TOOLS } from '../c
 import { initOutputTruncation } from '../common/utils/outputTruncation.js';
 import { executeEdit } from '../common/tools/editTool.js';
 import { executeMultiedit, EditOperation } from '../common/tools/multieditTool.js';
+import { BehaviorReporter } from './behaviorReporter.js';
 
 
 export const IMaxianService = createDecorator<IMaxianService>('maxianService');
@@ -485,6 +486,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 	// 📋 Steering 服务（P1优化 - 项目/团队级别规范注入）
 	private steeringService: SteeringService | null = null;
 
+	// 📊 行为埋点上报器
+	public behaviorReporter: BehaviorReporter | null = null;
+
 	constructor(
 		@IFileService private readonly fileService: IFileService,
 		@ITerminalService private readonly terminalService: ITerminalService,
@@ -620,6 +624,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		console.log('[Maxian] 码弦服务初始化...');
 
+		// 初始化行为埋点上报器（使用 zhikai.auth.apiUrl 作为 baseUrl）
+		const behaviorBaseUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl') || '';
+		this.behaviorReporter = new BehaviorReporter(behaviorBaseUrl);
+
 		// 工作区变更时清除文件列表缓存
 		this._register(this.workspaceContextService.onDidChangeWorkspaceFolders(() => {
 			this._workspaceFileCache = null;
@@ -647,7 +655,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 						activeForm: t.status === 'in_progress' ? t.content : ''
 					}));
 					this._onTodoListUpdate.fire({ todos: uiTodos });
-				}
+				},
+				// 注入行为埋点上报器
+				behaviorReporter: this.behaviorReporter ?? undefined,
 			},
 			this.skillService,
 			this.commandExecutionService,
@@ -675,6 +685,21 @@ export class MaxianService extends Disposable implements IMaxianService {
 		// 从StorageService读取认证凭据（与authService使用相同的key）
 		const credentials = this.loadAuthCredentials();
 
+		// 注入 accessToken 到行为埋点上报器（从存储中读取 JWT accessToken）
+		if (this.behaviorReporter) {
+			try {
+				const storedAuth = this.storageService.get('zhikai.auth.credentials', StorageScope.APPLICATION);
+				if (storedAuth) {
+					const parsedAuth = JSON.parse(storedAuth);
+					if (parsedAuth?.accessToken) {
+						this.behaviorReporter.setToken(parsedAuth.accessToken);
+					}
+				}
+			} catch {
+				// 静默失败，不影响主流程
+			}
+		}
+
 		// 初始化API Handler（优先使用代理服务）
 		const validation = this.apiFactory.validateConfiguration();
 		if (!validation.valid) {
@@ -690,6 +715,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		this._initialized = true;
 		console.log('[Maxian] 码弦服务初始化完成');
+
+		// 埋点：会话开始（初始化完成后触发）
+		this.behaviorReporter?.reportSessionStart();
 	}
 
 	async sendMessage(message: string, mode: Mode = DEFAULT_MODE, knowledgeBaseConfig?: IKnowledgeBaseConfig): Promise<void> {
@@ -1214,7 +1242,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 				getToolDefinitions: () => this.getToolDefinitions(),
 				workspaceRoot,
 				consecutiveMistakeLimit: 3,
-				currentMode: this.currentMode
+				currentMode: this.currentMode,
+				behaviorReporter: this.behaviorReporter ?? undefined,
 			});
 
 			// 连接TaskService事件
@@ -3192,6 +3221,8 @@ ${preloadedCode}
 
 	override dispose(): void {
 		console.log('[Maxian] 码弦服务正在销毁');
+		// 埋点：会话结束
+		this.behaviorReporter?.reportSessionEnd();
 		// 释放 SteeringService 资源
 		if (this.steeringService) {
 			this.steeringService.dispose();

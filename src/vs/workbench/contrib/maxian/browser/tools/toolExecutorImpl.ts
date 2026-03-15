@@ -112,6 +112,9 @@ export class ToolExecutorImpl implements IToolExecutor {
 		try {
 			let result: ToolResponse;
 
+			// 埋点：工具使用事件（在分发前统一上报，使用可选链静默处理）
+			this.context.behaviorReporter?.reportToolUse(toolUse.name);
+
 			switch (toolUse.name) {
 				// 文件操作工具
 				case 'read_file': {

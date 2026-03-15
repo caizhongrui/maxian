@@ -82,6 +82,7 @@ export interface TaskServiceOptions extends CreateTaskOptions {
 	consecutiveMistakeLimit?: number;
 	currentMode?: string; // 当前模式，用于特殊处理（如ask模式）
 	agentConfig?: Partial<AgentConfig>; // Agent 配置
+	behaviorReporter?: import('../../browser/behaviorReporter.js').BehaviorReporter; // 行为埋点上报器
 }
 
 /**
@@ -223,6 +224,12 @@ export class TaskService extends Disposable {
 	private totalSteps: number = 0;
 	private currentStepDescription: string = '';
 
+	// 行为埋点上报器（由 maxianService 注入）
+	private behaviorReporter?: import('../../browser/behaviorReporter.js').BehaviorReporter;
+
+	// AI 调用计时（用于 AI_CALL 延迟统计）
+	private _aiCallStartTime: number = 0;
+
 	// 步骤更新事件
 	private readonly _onStepUpdated = this._register(new Emitter<{
 		current: number;
@@ -253,6 +260,7 @@ export class TaskService extends Disposable {
 		this.consecutiveMistakeLimit = options.consecutiveMistakeLimit || MAX_CONSECUTIVE_MISTAKES;
 		this.currentMode = options.currentMode || 'code';
 		this.workspaceRoot = options.workspaceRoot || '.';
+		this.behaviorReporter = options.behaviorReporter;
 
 		// 初始化 Agent 配置
 		this.agentConfig = { ...DEFAULT_AGENT_CONFIG, ...options.agentConfig };
@@ -599,6 +607,9 @@ export class TaskService extends Disposable {
 
 		this.setStatus(TaskStatus.PROCESSING);
 
+		// 埋点：任务开始
+		this.behaviorReporter?.reportTaskStart(this.taskId);
+
 		// 🎯 参考OpenCode设计：简化流程，移除强制explore-planning阶段
 		// AI通过task tool自主决定何时需要探索代码库
 		this.setTotalSteps(3); // 简化流程：分析 -> 执行 -> 完成
@@ -612,10 +623,14 @@ export class TaskService extends Disposable {
 			// 任务完成
 			this.updateStep('任务已完成', 'completed');
 			this.setStatus(TaskStatus.COMPLETED);
+			// 埋点：任务成功结束
+			this.behaviorReporter?.reportTaskEnd(this.taskId, 'success');
 		} catch (error) {
 			console.error('[TaskService] 任务执行错误:', error);
 			this.updateStep('任务执行出错', 'error');
 			this.setStatus(TaskStatus.ERROR);
+			// 埋点：任务失败
+			this.behaviorReporter?.reportTaskEnd(this.taskId, 'failed');
 		}
 	}
 
@@ -813,6 +828,9 @@ export class TaskService extends Disposable {
 		// P0优化：增加 API 调用计数（用于FocusChain提醒）
 		this.focusChainManager.incrementApiCallCount();
 
+		// 埋点：记录 AI 调用开始时间
+		this._aiCallStartTime = Date.now();
+
 		return this.apiHandler.createMessage(systemPrompt, conversationHistoryForRequest, toolDefinitions);
 	}
 
@@ -941,6 +959,19 @@ export class TaskService extends Disposable {
 				toolUses.push({ id: chunk.id, name: chunk.name, input });
 			} else if (chunk.type === 'usage') {
 				this.updateTokenUsage(chunk);
+				// 埋点：AI 调用 usage 事件（包含本次 token 和延迟）
+				if (this.behaviorReporter) {
+					const latencyMs = this._aiCallStartTime > 0 ? Date.now() - this._aiCallStartTime : 0;
+					const modelInfo = this.apiHandler.getModel();
+					this.behaviorReporter.reportAiCall(
+						modelInfo.name || 'unknown',
+						chunk.inputTokens || 0,
+						chunk.outputTokens || 0,
+						this.tokenUsage.totalCost || 0,
+						latencyMs,
+						true
+					);
+				}
 			} else if (chunk.type === 'error') {
 				console.error('[TaskService] API错误:', chunk.error);
 				hasError = true;
@@ -2399,6 +2430,8 @@ case 'execute_command':
 		this.abort = true;
 		this.abortReason = reason;
 		this.setStatus(TaskStatus.ABORTED);
+		// 埋点：任务中止
+		this.behaviorReporter?.reportTaskEnd(this.taskId, 'aborted');
 		// 立即中止当前 API 请求（通过 AbortController 取消 fetch）
 		if (this.apiHandler && typeof (this.apiHandler as any).stopCurrentRequest === 'function') {
 			(this.apiHandler as any).stopCurrentRequest().catch(() => { /* ignore */ });
