@@ -539,3 +539,33 @@
 .monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab:first-child.drop-target-right::before {
 	width: 2px;
 }
+
+/* ===== Trae-style Tab Improvements ===== */
+
+/* Rounded top corners on all tabs for a modern pill-like appearance */
+.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab {
+	border-radius: 5px 5px 0 0;
+	margin: 0 1px;
+	transition: background-color 0.1s ease;
+}
+
+/* Remove extra left/right margin for first/last tab */
+.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab:first-child {
+	margin-left: 0;
+}
+.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab:last-child {
+	margin-right: 0;
+}
+
+/* Active tab: subtle top shadow for elevated "floating" card effect */
+.monaco-workbench .part.editor > .content .editor-group-container.active > .title .tabs-container > .tab.active {
+	box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.18);
+}
+
+/* Dark theme: inactive tabs are more transparent to let active tab stand out */
+.monaco-workbench.vs-dark .part.editor > .content .editor-group-container > .title .tabs-container > .tab:not(.active) {
+	opacity: 0.82;
+}
+.monaco-workbench.vs-dark .part.editor > .content .editor-group-container > .title .tabs-container > .tab:not(.active):hover {
+	opacity: 1;
+}

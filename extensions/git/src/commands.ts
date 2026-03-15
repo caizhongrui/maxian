@@ -170,6 +170,19 @@ class TagDeleteItem extends RefItem {
 	}
 }
 
+class RemoteBranchDeleteItem extends RefItem {
+
+	override get description(): string {
+		return l10n.t('Remote branch at {0}', this.shortCommit);
+	}
+
+	async run(repository: Repository, remote: string): Promise<void> {
+		if (this.ref.name) {
+			await repository.deleteRemoteBranch(remote, this.ref.name);
+		}
+	}
+}
+
 class RemoteTagDeleteItem extends RefItem {
 
 	override get description(): string {
@@ -2990,6 +3003,44 @@ export class CommandCenter {
 
 		if (choice instanceof TagDeleteItem) {
 			await choice.run(repository);
+		}
+	}
+
+	@command('git.deleteRemoteBranch', { repository: true })
+	async deleteRemoteBranch(repository: Repository): Promise<void> {
+		const remotePicks = repository.remotes
+			.filter(r => r.pushUrl !== undefined)
+			.map(r => new RemoteItem(repository, r));
+
+		if (remotePicks.length === 0) {
+			window.showErrorMessage(l10n.t("Your repository has no remotes configured to push to."));
+			return;
+		}
+
+		let remoteName = remotePicks[0].remoteName;
+		if (remotePicks.length > 1) {
+			const remotePickPlaceholder = l10n.t('Select a remote to delete a branch from');
+			const remotePick = await window.showQuickPick(remotePicks, { placeHolder: remotePickPlaceholder });
+
+			if (!remotePick) {
+				return;
+			}
+
+			remoteName = remotePick.remoteName;
+		}
+
+		const remoteBranchPicks = async (): Promise<RemoteBranchDeleteItem[] | QuickPickItem[]> => {
+			const remoteBranches = await repository.getRemoteRefs(remoteName, { heads: true });
+			return remoteBranches.length === 0
+				? [{ label: l10n.t('$(info) Remote "{0}" has no branches.', remoteName) }]
+				: remoteBranches.map(ref => new RemoteBranchDeleteItem(ref));
+		};
+
+		const branchPickPlaceholder = l10n.t('Select a remote branch to delete');
+		const remoteBranchPick = await window.showQuickPick<RemoteBranchDeleteItem | QuickPickItem>(remoteBranchPicks(), { placeHolder: branchPickPlaceholder });
+
+		if (remoteBranchPick instanceof RemoteBranchDeleteItem) {
+			await remoteBranchPick.run(repository, remoteName);
 		}
 	}
 

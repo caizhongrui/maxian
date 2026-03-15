@@ -25,7 +25,6 @@ import { FileAccess } from '../../../../base/common/network.js';
 import { URI } from '../../../../base/common/uri.js';
 import { ClineMessage } from '../common/task/taskTypes.js';
 import { IAuthService } from '../../auth/common/authService.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import {
 	renderDiffStats,
 	calculateSearchReplaceDiffStats,
@@ -100,7 +99,6 @@ export class MaxianView extends ViewPane {
 	private continuousConversationCheckbox!: HTMLInputElement; // 连续对话复选框
 	private continuousConversationWrapper!: HTMLLabelElement; // 连续对话复选框容器
 	private knowledgeBaseSelectorWrapper!: HTMLDivElement; // 知识库选择器包装容器（仅ask模式显示）
-	private historyButton!: HTMLButtonElement; // 问答历史按钮（仅ask模式显示）
 	private historyPanel: HTMLElement | null = null; // 问答历史面板
 	// Reasoning 思考过程相关
 	private currentReasoningElement: HTMLElement | null = null; // 当前思考过程元素
@@ -141,8 +139,7 @@ export class MaxianView extends ViewPane {
 		@IHoverService hoverService: IHoverService,
 		@IMaxianService private readonly maxianService: IMaxianService,
 		@IAuthService private readonly authService: IAuthService,
-		@IStorageService private readonly storageService: IStorageService,
-		@ICommandService private readonly commandService: ICommandService
+		@IStorageService private readonly storageService: IStorageService
 	) {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, telemetryService, hoverService);
 	}
@@ -254,7 +251,7 @@ export class MaxianView extends ViewPane {
 
 		this.messageArea.style.flex = '1';
 		this.messageArea.style.overflowY = 'auto';
-		this.messageArea.style.padding = '16px';
+		this.messageArea.style.padding = '8px 12px';
 		this.messageArea.style.backgroundColor = 'var(--vscode-editor-background)';
 
 		// 欢迎消息
@@ -265,112 +262,61 @@ export class MaxianView extends ViewPane {
 		welcome.style.alignItems = 'center';
 		welcome.style.justifyContent = 'center';
 		welcome.style.height = '100%';
-		welcome.style.padding = '40px 24px';
-		welcome.style.color = 'var(--vscode-descriptionForeground)';
+		welcome.style.padding = '0 24px';
+		welcome.style.userSelect = 'none';
+		welcome.style.gap = '16px';
 
-		// 图标（保持原始比例）
-		const welcomeIcon = append(welcome, $('img')) as HTMLImageElement;
+		// 头像
+		const avatarRing = append(welcome, $('div'));
+		avatarRing.style.width = '72px';
+		avatarRing.style.height = '72px';
+		avatarRing.style.borderRadius = '20px';
+		avatarRing.style.padding = '2px';
+		avatarRing.style.background = 'var(--vscode-focusBorder, #007acc)';
+		avatarRing.style.boxShadow = '0 4px 20px rgba(0,0,0,0.15)';
+		avatarRing.style.flexShrink = '0';
+
+		const avatarInner = append(avatarRing, $('div'));
+		avatarInner.style.width = '100%';
+		avatarInner.style.height = '100%';
+		avatarInner.style.borderRadius = '18px';
+		avatarInner.style.overflow = 'hidden';
+		avatarInner.style.background = 'var(--vscode-editor-background)';
+
+		const welcomeIcon = append(avatarInner, $('img')) as HTMLImageElement;
 		welcomeIcon.src = FileAccess.asBrowserUri('vs/workbench/contrib/maxian/browser/media/icons/maxian-avatar.png').toString(true);
-		welcomeIcon.style.maxWidth = '96px';
-		welcomeIcon.style.marginBottom = '24px';
-		welcomeIcon.style.borderRadius = '12px';
+		welcomeIcon.style.width = '100%';
+		welcomeIcon.style.height = '100%';
+		welcomeIcon.style.objectFit = 'cover';
 		welcomeIcon.style.display = 'block';
 
-		// 主标题
+		// 标题
 		const welcomeTitle = append(welcome, $('div'));
-		welcomeTitle.textContent = '欢迎使用码弦';
-		welcomeTitle.style.fontSize = '24px';
-		welcomeTitle.style.fontWeight = '700';
-		welcomeTitle.style.marginBottom = '12px';
+		welcomeTitle.textContent = '码弦';
+		welcomeTitle.style.fontSize = '22px';
+		welcomeTitle.style.fontWeight = '600';
+		welcomeTitle.style.letterSpacing = '3px';
 		welcomeTitle.style.color = 'var(--vscode-foreground)';
-		welcomeTitle.style.letterSpacing = '0.5px';
+		welcomeTitle.style.textAlign = 'center';
 
 		// 副标题
 		const welcomeSubtitle = append(welcome, $('div'));
-		welcomeSubtitle.textContent = 'AI 驱动的智能编程助手';
-		welcomeSubtitle.style.fontSize = '15px';
-		welcomeSubtitle.style.marginBottom = '32px';
+		welcomeSubtitle.textContent = 'AI 编程助手';
+		welcomeSubtitle.style.fontSize = '12px';
 		welcomeSubtitle.style.color = 'var(--vscode-descriptionForeground)';
-		welcomeSubtitle.style.opacity = '0.9';
+		welcomeSubtitle.style.opacity = '0.5';
+		welcomeSubtitle.style.letterSpacing = '1px';
+		welcomeSubtitle.style.textAlign = 'center';
 
-		// 特性卡片容器
-		const featuresContainer = append(welcome, $('div'));
-		featuresContainer.style.display = 'flex';
-		featuresContainer.style.flexDirection = 'column';
-		featuresContainer.style.gap = '12px';
-		featuresContainer.style.width = '100%';
-		featuresContainer.style.maxWidth = '360px';
-		featuresContainer.style.marginBottom = '24px';
-
-		// 特性列表
-		const features = [
-			{ icon: '💬', title: '智能对话', desc: '自然语言交互，理解你的意图' },
-			{ icon: '⚡', title: '代码生成', desc: '快速生成高质量代码片段' },
-			{ icon: '🔧', title: '工具集成', desc: '支持文件操作、命令执行等' },
-			{ icon: '🎯', title: '多种模式', desc: '代码、架构、调试等多种工作模式' }
-		];
-
-		features.forEach(feature => {
-			const card = append(featuresContainer, $('div'));
-			card.style.display = 'flex';
-			card.style.alignItems = 'flex-start';
-			card.style.gap = '12px';
-			card.style.padding = '12px 16px';
-			card.style.backgroundColor = 'var(--vscode-editor-inactiveSelectionBackground)';
-			card.style.border = '1px solid var(--vscode-widget-border)';
-			card.style.borderRadius = '8px';
-			card.style.transition = 'all 0.2s ease';
-			card.style.cursor = 'default';
-
-			// 悬停效果
-			card.onmouseenter = () => {
-				card.style.backgroundColor = 'var(--vscode-list-hoverBackground)';
-				card.style.transform = 'translateX(4px)';
-			};
-			card.onmouseleave = () => {
-				card.style.backgroundColor = 'var(--vscode-editor-inactiveSelectionBackground)';
-				card.style.transform = 'translateX(0)';
-			};
-
-			const iconBox = append(card, $('div'));
-			iconBox.textContent = feature.icon;
-			iconBox.style.fontSize = '20px';
-			iconBox.style.lineHeight = '1';
-			iconBox.style.flexShrink = '0';
-
-			const textBox = append(card, $('div'));
-			textBox.style.flex = '1';
-
-			const featureTitle = append(textBox, $('div'));
-			featureTitle.textContent = feature.title;
-			featureTitle.style.fontSize = '13px';
-			featureTitle.style.fontWeight = '600';
-			featureTitle.style.marginBottom = '4px';
-			featureTitle.style.color = 'var(--vscode-foreground)';
-
-			const featureDesc = append(textBox, $('div'));
-			featureDesc.textContent = feature.desc;
-			featureDesc.style.fontSize = '12px';
-			featureDesc.style.color = 'var(--vscode-descriptionForeground)';
-			featureDesc.style.lineHeight = '1.4';
-		});
-
-		// 提示文本
-		const hintText = append(welcome, $('div'));
-		hintText.textContent = '💡 在下方输入框中开始对话';
-		hintText.style.fontSize = '13px';
-		hintText.style.color = 'var(--vscode-descriptionForeground)';
-		hintText.style.opacity = '0.7';
-		hintText.style.marginTop = '8px';
 
 		// ========== 创建输入区域容器（类似 kilocode 的 ChatTextArea） ==========
 		const inputContainer = append(this.container, $('div.maxian-input-container'));
 		inputContainer.style.display = 'flex';
 		inputContainer.style.flexDirection = 'column';
 		inputContainer.style.gap = '4px';
-		inputContainer.style.borderTop = '1px solid var(--vscode-widget-border)';
+		inputContainer.style.borderTop = '1px solid var(--vscode-widget-border, rgba(128,128,128,0.2))';
 		inputContainer.style.backgroundColor = 'var(--vscode-editor-background)';
-		inputContainer.style.padding = '8px 12px';
+		inputContainer.style.padding = '10px 12px 8px 12px';
 		inputContainer.style.position = 'relative';
 
 		// ========== 拖拽把手（在输入区顶部，拖动调整输入区高度） ==========
@@ -445,16 +391,16 @@ export class MaxianView extends ViewPane {
 		this.inputBox = append(textAreaWrapper, $('div.maxian-input-box')) as HTMLDivElement;
 		this.inputBox.contentEditable = 'true';
 		this.inputBox.style.width = '100%';
-		this.inputBox.style.minHeight = '90px';
-		this.inputBox.style.padding = '8px 12px';
+		this.inputBox.style.minHeight = '80px';
+		this.inputBox.style.padding = '10px 12px';
 		this.inputBox.style.backgroundColor = 'var(--vscode-input-background)';
 		this.inputBox.style.color = 'var(--vscode-input-foreground)';
-		this.inputBox.style.border = '1px solid var(--vscode-input-border)';
-		this.inputBox.style.borderRadius = '4px';
+		this.inputBox.style.border = '1px solid var(--vscode-widget-border, rgba(128,128,128,0.35))';
+		this.inputBox.style.borderRadius = '6px';
 		this.inputBox.style.fontFamily = 'var(--vscode-font-family)';
 		this.inputBox.style.fontSize = '13px';
 		this.inputBox.style.outline = 'none';
-		this.inputBox.style.lineHeight = '1.5';
+		this.inputBox.style.lineHeight = '1.6';
 		this.inputBox.style.boxSizing = 'border-box';
 		this.inputBox.style.overflowX = 'hidden';
 		this.inputBox.style.overflowY = 'auto';
@@ -529,12 +475,14 @@ export class MaxianView extends ViewPane {
 		// 输入框聚焦效果
 		this.inputBox.onfocus = () => {
 			this.inputBox.style.borderColor = 'var(--vscode-focusBorder)';
-			this.inputBox.style.outline = '1px solid var(--vscode-focusBorder)';
+			this.inputBox.style.outline = 'none';
+			this.inputBox.style.boxShadow = '0 0 0 1px var(--vscode-focusBorder)';
 			this.maxianInputFocusedCtx?.set(true);
 		};
 		this.inputBox.onblur = (e) => {
-			this.inputBox.style.borderColor = 'var(--vscode-input-border)';
+			this.inputBox.style.borderColor = 'var(--vscode-widget-border, rgba(128,128,128,0.35))';
 			this.inputBox.style.outline = 'none';
+			this.inputBox.style.boxShadow = 'none';
 			this.maxianInputFocusedCtx?.set(false);
 			const related = (e as FocusEvent).relatedTarget as HTMLElement | null;
 			if (!related || !this.mentionDropdown?.contains(related)) {
@@ -565,8 +513,8 @@ export class MaxianView extends ViewPane {
 		// 模式选择器包装器
 		const modeSelectorWrapper = append(leftControls, $('div'));
 		modeSelectorWrapper.style.flexShrink = '1';
-		modeSelectorWrapper.style.minWidth = '90px';
-		modeSelectorWrapper.style.maxWidth = '130px';
+		modeSelectorWrapper.style.minWidth = '60px';
+		modeSelectorWrapper.style.maxWidth = '110px';
 		modeSelectorWrapper.style.position = 'relative';
 		modeSelectorWrapper.style.display = 'flex';
 		modeSelectorWrapper.style.alignItems = 'center';
@@ -575,13 +523,13 @@ export class MaxianView extends ViewPane {
 		// 模式选择器显示框（自定义div）
 		this.modeSelector = append(modeSelectorWrapper, $('div')) as HTMLDivElement;
 		this.modeSelector.style.position = 'relative';
-		this.modeSelector.style.display = 'flex';
+		this.modeSelector.style.display = 'inline-flex';
 		this.modeSelector.style.alignItems = 'center';
-		this.modeSelector.style.minHeight = '28px';
-		this.modeSelector.style.padding = '4px 22px 4px 8px';
-		this.modeSelector.style.fontSize = '12px';
+		this.modeSelector.style.height = '22px';
+		this.modeSelector.style.padding = '0 18px 0 7px';
+		this.modeSelector.style.fontSize = '11px';
 		this.modeSelector.style.fontWeight = '400';
-		this.modeSelector.style.borderRadius = '4px';
+		this.modeSelector.style.borderRadius = '11px';
 		this.modeSelector.style.backgroundColor = 'transparent';
 		this.modeSelector.style.color = 'var(--vscode-descriptionForeground)';
 		this.modeSelector.style.border = 'none';
@@ -590,7 +538,6 @@ export class MaxianView extends ViewPane {
 		this.modeSelector.style.whiteSpace = 'nowrap';
 		this.modeSelector.style.overflow = 'hidden';
 		this.modeSelector.style.textOverflow = 'ellipsis';
-		this.modeSelector.style.opacity = '0.7';
 		this.modeSelector.style.transition = 'all 0.15s';
 		this.modeSelector.title = '选择模式';
 
@@ -602,8 +549,8 @@ export class MaxianView extends ViewPane {
 		// 下拉箭头
 		this.modeSelectorArrow = append(this.modeSelector, $('span.codicon.codicon-chevron-down')) as HTMLSpanElement;
 		this.modeSelectorArrow.style.position = 'absolute';
-		this.modeSelectorArrow.style.right = '8px';
-		this.modeSelectorArrow.style.fontSize = '14px';
+		this.modeSelectorArrow.style.right = '5px';
+		this.modeSelectorArrow.style.fontSize = '10px';
 		this.modeSelectorArrow.style.transition = 'transform 0.2s ease';
 		this.modeSelectorArrow.style.pointerEvents = 'none';
 
@@ -680,8 +627,8 @@ export class MaxianView extends ViewPane {
 					this.modeDropdown.style.transform = 'translateY(0)';
 				}, 10);
 				this.modeSelectorArrow.style.transform = 'rotate(180deg)';
-				this.modeSelector.style.opacity = '1';
-				this.modeSelector.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+				this.modeSelector.style.backgroundColor = 'rgba(128, 128, 128, 0.1)';
+				this.modeSelector.style.color = 'var(--vscode-foreground)';
 			} else {
 				this.closeModeDropdown();
 			}
@@ -698,14 +645,12 @@ export class MaxianView extends ViewPane {
 		// Hover效果
 		this.modeSelector.onmouseenter = () => {
 			if (!this.isModeDropdownOpen) {
-				this.modeSelector.style.opacity = '1';
-				this.modeSelector.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+				this.modeSelector.style.backgroundColor = 'rgba(128, 128, 128, 0.1)';
 				this.modeSelector.style.color = 'var(--vscode-foreground)';
 			}
 		};
 		this.modeSelector.onmouseleave = () => {
 			if (!this.isModeDropdownOpen) {
-				this.modeSelector.style.opacity = '0.7';
 				this.modeSelector.style.backgroundColor = 'transparent';
 				this.modeSelector.style.color = 'var(--vscode-descriptionForeground)';
 			}
@@ -716,37 +661,36 @@ export class MaxianView extends ViewPane {
 		// 自定义知识库选择器
 		this.knowledgeBaseSelectorWrapper = append(leftControls, $('div')) as HTMLDivElement;
 		this.knowledgeBaseSelectorWrapper.style.flexShrink = '1';
-		this.knowledgeBaseSelectorWrapper.style.minWidth = '160px';
-		this.knowledgeBaseSelectorWrapper.style.maxWidth = '220px';
+		this.knowledgeBaseSelectorWrapper.style.minWidth = '100px';
+		this.knowledgeBaseSelectorWrapper.style.maxWidth = '180px';
 		this.knowledgeBaseSelectorWrapper.style.position = 'relative';
 		this.knowledgeBaseSelectorWrapper.style.zIndex = '100'; // 确保高于其他元素
 
 		// 知识库选择器显示框
 		this.knowledgeBaseSelector = append(this.knowledgeBaseSelectorWrapper, $('div')) as HTMLDivElement;
 		this.knowledgeBaseSelector.style.position = 'relative';
-		this.knowledgeBaseSelector.style.display = 'flex';
+		this.knowledgeBaseSelector.style.display = 'inline-flex';
 		this.knowledgeBaseSelector.style.alignItems = 'center';
-		this.knowledgeBaseSelector.style.minHeight = '28px';
-		this.knowledgeBaseSelector.style.padding = '4px 22px 4px 30px';
+		this.knowledgeBaseSelector.style.height = '22px';
+		this.knowledgeBaseSelector.style.padding = '0 18px 0 24px';
 		this.knowledgeBaseSelector.style.backgroundColor = 'transparent';
 		this.knowledgeBaseSelector.style.color = 'var(--vscode-descriptionForeground)';
 		this.knowledgeBaseSelector.style.border = 'none';
-		this.knowledgeBaseSelector.style.borderRadius = '4px';
+		this.knowledgeBaseSelector.style.borderRadius = '11px';
 		this.knowledgeBaseSelector.style.fontFamily = 'var(--vscode-font-family)';
-		this.knowledgeBaseSelector.style.fontSize = '12px';
+		this.knowledgeBaseSelector.style.fontSize = '11px';
 		this.knowledgeBaseSelector.style.fontWeight = '400';
 		this.knowledgeBaseSelector.style.cursor = 'pointer';
 		this.knowledgeBaseSelector.style.transition = 'all 0.15s';
-		this.knowledgeBaseSelector.style.opacity = '0.7';
 		this.knowledgeBaseSelector.style.userSelect = 'none';
 		this.knowledgeBaseSelector.title = '点击选择知识库';
 
 		// 知识库图标
 		const kbIcon = append(this.knowledgeBaseSelector, $('span.codicon.codicon-database'));
 		kbIcon.style.position = 'absolute';
-		kbIcon.style.left = '12px';
-		kbIcon.style.color = 'var(--vscode-charts-blue, #007ACC)';
-		kbIcon.style.fontSize = '16px';
+		kbIcon.style.left = '8px';
+		kbIcon.style.color = 'var(--vscode-descriptionForeground)';
+		kbIcon.style.fontSize = '12px';
 		kbIcon.style.transition = 'all 0.2s ease';
 
 		// 文本显示span
@@ -761,8 +705,8 @@ export class MaxianView extends ViewPane {
 		// 下拉箭头
 		this.knowledgeBaseSelectorArrow = append(this.knowledgeBaseSelector, $('span.codicon.codicon-chevron-down')) as HTMLSpanElement;
 		this.knowledgeBaseSelectorArrow.style.position = 'absolute';
-		this.knowledgeBaseSelectorArrow.style.right = '10px';
-		this.knowledgeBaseSelectorArrow.style.fontSize = '14px';
+		this.knowledgeBaseSelectorArrow.style.right = '6px';
+		this.knowledgeBaseSelectorArrow.style.fontSize = '10px';
 		this.knowledgeBaseSelectorArrow.style.color = 'var(--vscode-descriptionForeground)';
 		this.knowledgeBaseSelectorArrow.style.transition = 'transform 0.2s ease';
 
@@ -849,8 +793,8 @@ export class MaxianView extends ViewPane {
 					this.knowledgeBaseDropdown.style.transform = 'translateY(0)';
 				});
 				this.knowledgeBaseSelectorArrow.style.transform = 'rotate(180deg)';
-				this.knowledgeBaseSelector.style.opacity = '1';
-				this.knowledgeBaseSelector.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+				this.knowledgeBaseSelector.style.backgroundColor = 'rgba(128, 128, 128, 0.1)';
+				this.knowledgeBaseSelector.style.color = 'var(--vscode-foreground)';
 			} else {
 				this.closeKnowledgeBaseDropdown();
 			}
@@ -867,21 +811,17 @@ export class MaxianView extends ViewPane {
 		// Hover效果
 		this.knowledgeBaseSelector.onmouseenter = () => {
 			if (!this.isKnowledgeBaseDropdownOpen) {
-				this.knowledgeBaseSelector.style.opacity = '1';
-				this.knowledgeBaseSelector.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+				this.knowledgeBaseSelector.style.backgroundColor = 'rgba(128, 128, 128, 0.1)';
 				this.knowledgeBaseSelector.style.color = 'var(--vscode-foreground)';
 			}
-			kbIcon.style.color = 'var(--vscode-focusBorder, #007ACC)';
-			kbIcon.style.transform = 'scale(1.05)';
+			kbIcon.style.color = 'var(--vscode-foreground)';
 		};
 		this.knowledgeBaseSelector.onmouseleave = () => {
 			if (!this.isKnowledgeBaseDropdownOpen) {
-				this.knowledgeBaseSelector.style.opacity = '0.7';
 				this.knowledgeBaseSelector.style.backgroundColor = 'transparent';
 				this.knowledgeBaseSelector.style.color = 'var(--vscode-descriptionForeground)';
 			}
-			kbIcon.style.color = 'var(--vscode-charts-blue, #007ACC)';
-			kbIcon.style.transform = 'scale(1)';
+			kbIcon.style.color = 'var(--vscode-descriptionForeground)';
 		};
 
 		// 加载知识库列表
@@ -1049,71 +989,6 @@ export class MaxianView extends ViewPane {
 			this.maxianService.clearConversation();
 		};
 
-		// 快捷键配置按钮：点击打开 VSCode 键盘快捷方式编辑器并过滤到码弦命令
-		const keybindingButton = append(rightControls, $('button.codicon.codicon-keyboard')) as HTMLButtonElement;
-		keybindingButton.title = '配置码弦快捷键（打开键盘快捷方式编辑器）';
-		keybindingButton.style.padding = '6px';
-		keybindingButton.style.minWidth = '28px';
-		keybindingButton.style.minHeight = '28px';
-		keybindingButton.style.backgroundColor = 'transparent';
-		keybindingButton.style.color = 'var(--vscode-descriptionForeground)';
-		keybindingButton.style.border = 'none';
-		keybindingButton.style.borderRadius = '4px';
-		keybindingButton.style.cursor = 'pointer';
-		keybindingButton.style.fontSize = '16px';
-		keybindingButton.style.display = 'inline-flex';
-		keybindingButton.style.alignItems = 'center';
-		keybindingButton.style.justifyContent = 'center';
-		keybindingButton.style.transition = 'all 0.15s';
-		keybindingButton.style.opacity = '0.6';
-
-		keybindingButton.onmouseenter = () => {
-			keybindingButton.style.opacity = '1';
-			keybindingButton.style.color = 'var(--vscode-foreground)';
-			keybindingButton.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
-		};
-		keybindingButton.onmouseleave = () => {
-			keybindingButton.style.opacity = '0.6';
-			keybindingButton.style.color = 'var(--vscode-descriptionForeground)';
-			keybindingButton.style.backgroundColor = 'transparent';
-		};
-		keybindingButton.onclick = () => {
-			// 打开 VSCode 键盘快捷方式编辑器，并预先过滤到天和·码弦命令
-			this.commandService.executeCommand('workbench.action.openGlobalKeybindings', '天和·码弦');
-		};
-
-		// 问答历史按钮（仅ask模式显示）
-		this.historyButton = append(rightControls, $('button.codicon.codicon-history')) as HTMLButtonElement;
-		this.historyButton.title = '查看问答历史';
-		this.historyButton.style.padding = '6px';
-		this.historyButton.style.minWidth = '28px';
-		this.historyButton.style.minHeight = '28px';
-		this.historyButton.style.backgroundColor = 'transparent';
-		this.historyButton.style.color = 'var(--vscode-descriptionForeground)';
-		this.historyButton.style.border = 'none';
-		this.historyButton.style.borderRadius = '4px';
-		this.historyButton.style.cursor = 'pointer';
-		this.historyButton.style.fontSize = '16px';
-		this.historyButton.style.display = this.currentMode === 'ask' ? 'inline-flex' : 'none';
-		this.historyButton.style.alignItems = 'center';
-		this.historyButton.style.justifyContent = 'center';
-		this.historyButton.style.transition = 'all 0.15s';
-		this.historyButton.style.opacity = '0.6';
-
-		this.historyButton.onmouseenter = () => {
-			this.historyButton.style.opacity = '1';
-			this.historyButton.style.color = 'var(--vscode-foreground)';
-			this.historyButton.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
-		};
-		this.historyButton.onmouseleave = () => {
-			this.historyButton.style.opacity = '0.6';
-			this.historyButton.style.color = 'var(--vscode-descriptionForeground)';
-			this.historyButton.style.backgroundColor = 'transparent';
-		};
-		this.historyButton.onclick = () => {
-			this.toggleAskHistoryPanel();
-		};
-
 		this.sendButton = append(rightControls, $('button.codicon.codicon-send')) as HTMLButtonElement;
 		this.sendButton.title = '发送消息';
 		this.sendButton.style.padding = '6px';
@@ -1155,22 +1030,25 @@ export class MaxianView extends ViewPane {
 
 				// 检查是否在等待用户回答AI的问题
 				if (this.awaitingUserResponse) {
-					// 显示用户的回答
-					const userMsg = append(this.messageArea, $('div'));
-					userMsg.style.marginBottom = '10px';
-					userMsg.style.padding = '10px 15px';
-					userMsg.style.backgroundColor = 'var(--vscode-textCodeBlock-background)';
-					userMsg.style.borderRadius = '6px';
-					userMsg.style.borderLeft = '3px solid var(--vscode-textLink-foreground)';
+					// 显示用户的回答 - 右侧布局
+					const userReplyRow = append(this.messageArea, $('div.maxian-message-row.row-user'));
 
-					const userLabel = append(userMsg, $('div'));
-					userLabel.style.fontWeight = '600';
-					userLabel.style.marginBottom = '6px';
-					userLabel.style.color = 'var(--vscode-textLink-foreground)';
-					userLabel.style.fontSize = '13px';
-					userLabel.textContent = '👤 你的回答';
+					const userReplyAvatarWrap = append(userReplyRow, $('div.maxian-message-avatar-wrap'));
+					userReplyAvatarWrap.style.background = 'var(--vscode-inputOption-activeBackground, rgba(0,122,204,0.3))';
+					const userReplyIcon = append(userReplyAvatarWrap, $('span.codicon.codicon-account'));
+					userReplyIcon.style.color = 'var(--vscode-foreground)';
+					userReplyIcon.style.fontSize = '14px';
 
-					const userContent = append(userMsg, $('div'));
+					const userMsg = append(userReplyRow, $('div.maxian-message.maxian-message-user'));
+
+					const userReplyHeader = append(userMsg, $('div.maxian-message-header'));
+					const userReplyTime = append(userReplyHeader, $('span.maxian-message-time'));
+					userReplyTime.textContent = formatTime(Date.now());
+					const userReplyLabel = append(userReplyHeader, $('span.maxian-message-sender'));
+					const currentUserReply = this.authService.currentUser;
+					userReplyLabel.textContent = currentUserReply?.displayName || currentUserReply?.username || '你';
+
+					const userContent = append(userMsg, $('div.maxian-message-text'));
 					userContent.style.whiteSpace = 'pre-wrap';
 					userContent.style.wordBreak = 'break-word';
 					userContent.style.color = 'var(--vscode-foreground)';
@@ -1259,6 +1137,30 @@ export class MaxianView extends ViewPane {
 	 * 添加Markdown和代码高亮样式
 	 */
 	private addStyles(): void {
+		// 全局样式注入到 document.head，确保能覆盖 pane 标题栏（在 renderBody container 之外）
+		const globalStyle = document.createElement('style');
+		globalStyle.setAttribute('data-maxian-global', '1');
+		globalStyle.textContent = `
+			/* Replace robot codicon with MAXIAN text in auxiliary bar composite-bar tab */
+			.part.auxiliarybar .composite-bar .action-item .action-label.codicon-robot {
+				width: auto !important;
+				min-width: 58px !important;
+				padding: 0 6px !important;
+			}
+			.part.auxiliarybar .composite-bar .action-item .action-label.codicon-robot::before {
+				content: 'MAXIAN' !important;
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+				font-size: 11px !important;
+				font-weight: 700 !important;
+				letter-spacing: 1.5px !important;
+				position: static !important;
+				left: auto !important;
+			}
+		`;
+		if (!document.head.querySelector('[data-maxian-global]')) {
+			document.head.appendChild(globalStyle);
+		}
+
 		const style = document.createElement('style');
 		style.textContent = `
 			/* 允许选择和复制 */
@@ -1496,71 +1398,136 @@ export class MaxianView extends ViewPane {
 				background-color: var(--vscode-editor-inactiveSelectionBackground);
 			}
 
-			/* ========== 优化：消息气泡样式 ========== */
-			.maxian-message {
+			/* ========== 优化：消息气泡样式（左右布局） ========== */
+
+			/* 消息行容器：控制左右对齐 */
+			.maxian-message-row {
+				display: flex;
 				margin-bottom: 12px;
-				padding: 12px 16px;
+				gap: 8px;
+				align-items: flex-start;
+			}
+
+			.maxian-message-row.row-user {
+				flex-direction: row-reverse;
+			}
+
+			.maxian-message-row.row-ai {
+				flex-direction: row;
+			}
+
+			/* 头像容器（在气泡外侧） */
+			.maxian-message-avatar-wrap {
+				flex-shrink: 0;
+				width: 28px;
+				height: 28px;
+				border-radius: 50%;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				margin-top: 2px;
+				overflow: hidden;
+			}
+
+			.maxian-message-avatar-wrap img {
+				width: 28px;
+				height: 28px;
+				border-radius: 50%;
+				object-fit: cover;
+			}
+
+			.maxian-message-avatar-wrap .codicon {
+				font-size: 14px;
+			}
+
+			/* 气泡本体 */
+			.maxian-message {
+				max-width: 85%;
+				padding: 10px 14px;
 				border-radius: 12px;
 				position: relative;
-				transition: box-shadow 0.2s ease;
+				transition: opacity 0.15s ease;
+				min-width: 0;
 			}
 
-			.maxian-message:hover {
-				box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-			}
-
+			/* AI消息：左侧，圆角偏左 */
 			.maxian-message-ai {
-				background: linear-gradient(135deg,
-					var(--vscode-editor-inactiveSelectionBackground) 0%,
-					rgba(var(--vscode-charts-blue-rgb, 66, 133, 244), 0.08) 100%);
-				border-left: 4px solid var(--vscode-charts-blue);
+				background: var(--vscode-editorWidget-background, var(--vscode-editor-inactiveSelectionBackground));
+				border-top-left-radius: 4px;
+				border: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.2));
 			}
 
+			/* 用户消息：右侧，圆角偏右，与主题融合的微蓝色 */
 			.maxian-message-user {
-				background: linear-gradient(135deg,
-					var(--vscode-textCodeBlock-background) 0%,
-					rgba(var(--vscode-textLink-foreground-rgb, 66, 133, 244), 0.08) 100%);
-				border-left: 4px solid var(--vscode-textLink-foreground);
+				background: var(--vscode-inputOption-activeBackground, rgba(0,122,204,0.18));
+				border-top-right-radius: 4px;
+				border: 1px solid var(--vscode-inputOption-activeBorder, rgba(0,122,204,0.3));
 			}
 
-			/* 消息头部 */
+			.maxian-message-user .maxian-message-sender {
+				color: var(--vscode-foreground);
+				opacity: 0.9;
+			}
+
+			.maxian-message-user .maxian-message-time {
+				color: var(--vscode-descriptionForeground);
+				opacity: 0.6;
+			}
+
+			.maxian-message-user .markdown-content,
+			.maxian-message-user .maxian-message-text {
+				color: var(--vscode-foreground);
+			}
+
+			/* 消息头部（名称+时间+操作按钮） */
 			.maxian-message-header {
 				display: flex;
 				align-items: center;
-				gap: 8px;
-				margin-bottom: 8px;
+				gap: 6px;
+				margin-bottom: 5px;
+			}
+
+			.row-user .maxian-message-header {
+				flex-direction: row-reverse;
 			}
 
 			.maxian-message-avatar {
-				width: 24px;
-				height: 24px;
-				border-radius: 6px;
+				width: 28px;
+				height: 28px;
+				border-radius: 50%;
 				object-fit: contain;
 				flex-shrink: 0;
 			}
 
 			.maxian-message-sender {
 				font-weight: 600;
-				font-size: 13px;
-				flex: 1;
+				font-size: 12px;
+				color: var(--vscode-foreground);
+				opacity: 0.85;
+				white-space: nowrap;
 			}
 
 			.maxian-message-time {
-				font-size: 10px;
+				font-size: 11px;
 				color: var(--vscode-descriptionForeground);
-				opacity: 0;
+				opacity: 0.5;
 				transition: opacity 0.2s ease;
+				flex: 1;
+			}
+
+			.row-user .maxian-message-time {
+				text-align: right;
 			}
 
 			.maxian-message:hover .maxian-message-time {
-				opacity: 1;
+				opacity: 0.85;
 			}
 
 			.maxian-message-actions {
 				display: flex;
-				gap: 4px;
+				gap: 2px;
 				opacity: 0;
-				transition: opacity 0.2s ease;
+				transition: opacity 0.15s ease;
 			}
 
 			.maxian-message:hover .maxian-message-actions {
@@ -1571,15 +1538,27 @@ export class MaxianView extends ViewPane {
 				background: transparent;
 				border: none;
 				cursor: pointer;
-				padding: 4px;
+				padding: 3px 5px;
 				border-radius: 4px;
 				color: var(--vscode-descriptionForeground);
 				transition: all 0.15s ease;
+				display: flex;
+				align-items: center;
 			}
 
 			.maxian-action-btn:hover {
 				background: var(--vscode-toolbar-hoverBackground);
 				color: var(--vscode-foreground);
+			}
+
+			.maxian-message-user .maxian-action-btn {
+				color: var(--vscode-button-foreground);
+				opacity: 0.7;
+			}
+
+			.maxian-message-user .maxian-action-btn:hover {
+				background: rgba(255,255,255,0.15);
+				opacity: 1;
 			}
 
 			/* ========== 优化：工具状态卡片 ========== */
@@ -2764,44 +2743,41 @@ export class MaxianView extends ViewPane {
 			this.currentStreamingMessageElement = null;
 			this.currentToolStatusElement = null;
 
-			// 显示用户消息 - 使用优化后的样式
-			const userMsg = append(this.messageArea, $('div.maxian-message.maxian-message-user'));
+			// 显示用户消息 - 左右布局：用户消息在右侧
+			const userRow = append(this.messageArea, $('div.maxian-message-row.row-user'));
 
-			// 消息头部
-			const userHeader = append(userMsg, $('div.maxian-message-header'));
-
-			// 用户头像（使用 codicon）
-			const userAvatar = append(userHeader, $('div'));
-			userAvatar.style.width = '24px';
-			userAvatar.style.height = '24px';
-			userAvatar.style.borderRadius = '6px';
-			userAvatar.style.background = 'var(--vscode-textLink-foreground)';
-			userAvatar.style.display = 'flex';
-			userAvatar.style.alignItems = 'center';
-			userAvatar.style.justifyContent = 'center';
-			const userIcon = append(userAvatar, $('span.codicon.codicon-account'));
-			userIcon.style.color = 'var(--vscode-button-foreground)';
+			// 右侧头像
+			const userAvatarWrap = append(userRow, $('div.maxian-message-avatar-wrap'));
+			userAvatarWrap.style.background = 'var(--vscode-inputOption-activeBackground, rgba(0,122,204,0.3))';
+			const userIcon = append(userAvatarWrap, $('span.codicon.codicon-account'));
+			userIcon.style.color = 'var(--vscode-foreground)';
 			userIcon.style.fontSize = '14px';
 
-			// 发送者名称
-			const userSender = append(userHeader, $('span.maxian-message-sender'));
-			userSender.style.color = 'var(--vscode-textLink-foreground)';
-			userSender.textContent = '你';
+			// 气泡
+			const userMsg = append(userRow, $('div.maxian-message.maxian-message-user'));
+
+			// 消息头部（右侧布局：名称在右，时间在左）
+			const userHeader = append(userMsg, $('div.maxian-message-header'));
+
+			// 操作按钮（最左）
+			const userActions = append(userHeader, $('div.maxian-message-actions'));
+			const msgContent = event.content;
+			createCopyButton(userActions, () => msgContent);
 
 			// 时间戳
 			const userTime = append(userHeader, $('span.maxian-message-time'));
 			userTime.textContent = formatTime(Date.now());
 
-			// 操作按钮区域
-			const userActions = append(userHeader, $('div.maxian-message-actions'));
-			const msgContent = event.content;
-			createCopyButton(userActions, () => msgContent);
+			// 发送者名称（最右）
+			const userSender = append(userHeader, $('span.maxian-message-sender'));
+			const currentUser = this.authService.currentUser;
+			userSender.textContent = currentUser?.displayName || currentUser?.username || '你';
 
 			// 消息内容（@文件名 渲染为可点击 chip），长消息支持折叠
 			const FOLD_THRESHOLD = 200; // 超过此字符数时折叠
 			const isLong = event.content.length > FOLD_THRESHOLD;
 
-			const userContent = append(userMsg, $('div'));
+			const userContent = append(userMsg, $('div.maxian-message-text'));
 			userContent.style.whiteSpace = 'pre-wrap';
 			userContent.style.wordBreak = 'break-word';
 			userContent.style.color = 'var(--vscode-foreground)';
@@ -2858,19 +2834,23 @@ export class MaxianView extends ViewPane {
 						this.currentStreamingMessageElement = null;
 					}
 
-					// 创建新的AI消息元素（与renderTextMessage使用一致的CSS类样式，避免视觉差异）
-					const aiMsg = append(this.messageArea, $('div.maxian-message.maxian-message-ai'));
+					// 创建新的AI消息元素 - 左右布局：AI消息在左侧
+					const aiRow = append(this.messageArea, $('div.maxian-message-row.row-ai'));
+
+					// 左侧头像
+					const aiAvatarWrap = append(aiRow, $('div.maxian-message-avatar-wrap'));
+					const aiAvatarImg = append(aiAvatarWrap, $('img')) as HTMLImageElement;
+					aiAvatarImg.src = FileAccess.asBrowserUri('vs/workbench/contrib/maxian/browser/media/icons/maxian-avatar.png').toString(true);
+
+					// 气泡
+					const aiMsg = append(aiRow, $('div.maxian-message.maxian-message-ai'));
 
 					// 消息头部
 					const aiHeader = append(aiMsg, $('div.maxian-message-header'));
 
-					// 头像
-					const aiIcon = append(aiHeader, $('img.maxian-message-avatar')) as HTMLImageElement;
-					aiIcon.src = FileAccess.asBrowserUri('vs/workbench/contrib/maxian/browser/media/icons/maxian-avatar.png').toString(true);
-
 					// 发送者名称
 					const aiSender = append(aiHeader, $('span.maxian-message-sender'));
-					aiSender.style.color = 'var(--vscode-charts-blue)';
+					aiSender.style.color = 'var(--vscode-foreground)';
 					aiSender.textContent = '码弦';
 
 					// 时间戳
@@ -2892,8 +2872,8 @@ export class MaxianView extends ViewPane {
 					MarkdownRendererDom.renderMarkdown(this.currentAiMessageText, aiContent);
 
 					this.currentAiMessageElement = aiContent;
-					// 记录外层容器，供renderTextMessage在完整消息到达时移除旧的流式气泡
-					this.currentStreamingMessageElement = aiMsg;
+					// 记录外层容器（row），供renderTextMessage在完整消息到达时移除旧的流式气泡
+					this.currentStreamingMessageElement = aiRow;
 				} else {
 					// 累积内容
 					this.currentAiMessageText += event.content;
@@ -3191,19 +3171,23 @@ export class MaxianView extends ViewPane {
 				this.currentStreamingMessageElement.remove();
 				this.currentStreamingMessageElement = null;
 			}
-			// 创建新的AI消息元素 - 使用优化后的样式
-			const aiMsg = append(this.messageArea, $('div.maxian-message.maxian-message-ai'));
+			// 创建新的AI消息元素 - 左右布局：AI消息在左侧
+			const aiRow = append(this.messageArea, $('div.maxian-message-row.row-ai'));
+
+			// 左侧头像
+			const aiAvatarWrap = append(aiRow, $('div.maxian-message-avatar-wrap'));
+			const aiAvatarImg = append(aiAvatarWrap, $('img')) as HTMLImageElement;
+			aiAvatarImg.src = FileAccess.asBrowserUri('vs/workbench/contrib/maxian/browser/media/icons/maxian-avatar.png').toString(true);
+
+			// 气泡
+			const aiMsg = append(aiRow, $('div.maxian-message.maxian-message-ai'));
 
 			// 消息头部
 			const aiHeader = append(aiMsg, $('div.maxian-message-header'));
 
-			// 头像
-			const aiIcon = append(aiHeader, $('img.maxian-message-avatar')) as HTMLImageElement;
-			aiIcon.src = FileAccess.asBrowserUri('vs/workbench/contrib/maxian/browser/media/icons/maxian-avatar.png').toString(true);
-
 			// 发送者名称
 			const aiSender = append(aiHeader, $('span.maxian-message-sender'));
-			aiSender.style.color = 'var(--vscode-charts-blue)';
+			aiSender.style.color = 'var(--vscode-foreground)';
 			aiSender.textContent = '码弦';
 
 			// 时间戳
@@ -3525,13 +3509,14 @@ export class MaxianView extends ViewPane {
 	private showWaitingIndicator(): void {
 		this.hideWaitingIndicator();
 
-		const indicator = append(this.messageArea, $('div.maxian-message.maxian-message-ai'));
+		const indicatorRow = append(this.messageArea, $('div.maxian-message-row.row-ai'));
+		const indicatorAvatarWrap = append(indicatorRow, $('div.maxian-message-avatar-wrap'));
+		const indicatorAvatarImg = append(indicatorAvatarWrap, $('img')) as HTMLImageElement;
+		indicatorAvatarImg.src = FileAccess.asBrowserUri('vs/workbench/contrib/maxian/browser/media/icons/maxian-avatar.png').toString(true);
+		const indicator = append(indicatorRow, $('div.maxian-message.maxian-message-ai'));
 
 		// 消息头部（与普通 AI 消息一致）
 		const header = append(indicator, $('div.maxian-message-header'));
-
-		const aiIcon = append(header, $('img.maxian-message-avatar')) as HTMLImageElement;
-		aiIcon.src = FileAccess.asBrowserUri('vs/workbench/contrib/maxian/browser/media/icons/maxian-avatar.png').toString(true);
 
 		const sender = append(header, $('span.maxian-message-sender'));
 		sender.style.color = 'var(--vscode-charts-blue)';
@@ -3549,7 +3534,7 @@ export class MaxianView extends ViewPane {
 		}
 
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;
-		this.waitingIndicatorElement = indicator;
+		this.waitingIndicatorElement = indicatorRow;
 	}
 
 	/**
@@ -5158,8 +5143,8 @@ export class MaxianView extends ViewPane {
 			this.knowledgeBaseDropdown.style.display = 'none';
 		}, 200);
 		this.knowledgeBaseSelectorArrow.style.transform = 'rotate(0deg)';
-		this.knowledgeBaseSelector.style.opacity = '0.7';
 		this.knowledgeBaseSelector.style.backgroundColor = 'transparent';
+		this.knowledgeBaseSelector.style.color = 'var(--vscode-descriptionForeground)';
 	}
 
 	/**
@@ -5173,8 +5158,8 @@ export class MaxianView extends ViewPane {
 			this.modeDropdown.style.display = 'none';
 		}, 200);
 		this.modeSelectorArrow.style.transform = 'rotate(0deg)';
-		this.modeSelector.style.opacity = '0.7';
 		this.modeSelector.style.backgroundColor = 'transparent';
+		this.modeSelector.style.color = 'var(--vscode-descriptionForeground)';
 	}
 
 	/**
@@ -5300,8 +5285,6 @@ export class MaxianView extends ViewPane {
 				}
 				// 控制知识库选择器的显示（仅ask模式显示）
 				this.knowledgeBaseSelectorWrapper.style.display = this.currentMode === 'ask' ? '' : 'none';
-				// 控制历史按钮的显示（仅ask模式显示）
-				this.historyButton.style.display = this.currentMode === 'ask' ? 'inline-flex' : 'none';
 				// 切换模式时关闭历史面板
 				if (this.historyPanel) {
 					this.historyPanel.remove();
@@ -5355,7 +5338,7 @@ export class MaxianView extends ViewPane {
 	/**
 	 * 切换问答历史面板（ask模式专用）
 	 */
-	private async toggleAskHistoryPanel(): Promise<void> {
+	public async toggleAskHistoryPanel(): Promise<void> {
 		// 如果已打开，关闭它
 		if (this.historyPanel) {
 			this.historyPanel.remove();

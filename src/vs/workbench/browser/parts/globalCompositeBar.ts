@@ -52,7 +52,6 @@ export class GlobalCompositeBar extends Disposable {
 
 	readonly element: HTMLElement;
 
-	private readonly globalActivityAction = this._register(new Action(GLOBAL_ACTIVITY_ID));
 	private readonly accountAction = this._register(new Action(ACCOUNTS_ACTIVITY_ID));
 	private readonly globalActivityActionBar: ActionBar;
 
@@ -102,12 +101,7 @@ export class GlobalCompositeBar extends Disposable {
 			preventLoopNavigation: true
 		}));
 
-		if (this.accountsVisibilityPreference) {
-			this.globalActivityActionBar.push(this.accountAction, { index: GlobalCompositeBar.ACCOUNTS_ACTION_INDEX });
-		}
-
-		this.globalActivityActionBar.push(this.globalActivityAction);
-
+		// accounts 和 manage(gear) 均已移至标题栏右上角，activity bar 底部不再显示
 		this.registerListeners();
 	}
 
@@ -699,7 +693,7 @@ function simpleActivityContextMenuActions(storageService: IStorageService, isAcc
 }
 
 export function isAccountsActionVisible(storageService: IStorageService): boolean {
-	return storageService.getBoolean(AccountsActivityActionViewItem.ACCOUNTS_VISIBILITY_PREFERENCE_KEY, StorageScope.PROFILE, true);
+	return storageService.getBoolean(AccountsActivityActionViewItem.ACCOUNTS_VISIBILITY_PREFERENCE_KEY, StorageScope.PROFILE, false);
 }
 
 function setAccountsActionVisible(storageService: IStorageService, visible: boolean) {

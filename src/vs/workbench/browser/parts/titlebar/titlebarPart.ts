@@ -16,7 +16,7 @@ import { DisposableStore, IDisposable } from '../../../../base/common/lifecycle.
 import { IBrowserWorkbenchEnvironmentService } from '../../../services/environment/browser/environmentService.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
-import { TITLE_BAR_ACTIVE_BACKGROUND, TITLE_BAR_ACTIVE_FOREGROUND, TITLE_BAR_INACTIVE_FOREGROUND, TITLE_BAR_INACTIVE_BACKGROUND, TITLE_BAR_BORDER, WORKBENCH_BACKGROUND } from '../../../common/theme.js';
+import { TITLE_BAR_ACTIVE_BACKGROUND, TITLE_BAR_ACTIVE_FOREGROUND, TITLE_BAR_INACTIVE_FOREGROUND, TITLE_BAR_INACTIVE_BACKGROUND, WORKBENCH_BACKGROUND } from '../../../common/theme.js';
 import { isMacintosh, isWindows, isLinux, isWeb, isNative, platformLocale } from '../../../../base/common/platform.js';
 import { Color } from '../../../../base/common/color.js';
 import { EventType, EventHelper, Dimension, append, $, addDisposableListener, prepend, reset, getWindow, getWindowId, isAncestor, getActiveDocument, isHTMLElement } from '../../../../base/browser/dom.js';
@@ -39,7 +39,7 @@ import { ACCOUNTS_ACTIVITY_ID, GLOBAL_ACTIVITY_ID } from '../../../common/activi
 import { AccountsActivityActionViewItem, isAccountsActionVisible, SimpleAccountActivityActionViewItem, SimpleGlobalActivityActionViewItem } from '../globalCompositeBar.js';
 import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
 import { IEditorGroupsContainer, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
-import { ActionRunner, IAction } from '../../../../base/common/actions.js';
+import { ActionRunner, IAction, Separator } from '../../../../base/common/actions.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { ActionsOrientation, IActionViewItem, prepareActions } from '../../../../base/browser/ui/actionbar/actionbar.js';
 import { EDITOR_CORE_NAVIGATION_COMMANDS } from '../editor/editorCommands.js';
@@ -55,7 +55,11 @@ import { IView } from '../../../../base/browser/ui/grid/grid.js';
 import { createInstantHoverDelegate } from '../../../../base/browser/ui/hover/hoverDelegateFactory.js';
 import { IBaseActionViewItemOptions } from '../../../../base/browser/ui/actionbar/actionViewItems.js';
 import { IHoverDelegate } from '../../../../base/browser/ui/hover/hoverDelegate.js';
-import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
+import { CommandsRegistry, ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IWorkspacesService, isRecentFolder, isRecentWorkspace } from '../../../../platform/workspaces/common/workspaces.js';
+import { ILabelService, Verbosity } from '../../../../platform/label/common/label.js';
+import { Action } from '../../../../base/common/actions.js';
+import { basename } from '../../../../base/common/path.js';
 
 export interface ITitleVariable {
 	readonly name: string;
@@ -263,6 +267,9 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 	protected menubar?: HTMLElement;
 	private lastLayoutDimensions: Dimension | undefined;
 
+	private workspaceButton: HTMLElement | undefined;
+	private workspaceButtonLabel: HTMLElement | undefined;
+
 	private actionToolBar!: WorkbenchToolBar;
 	private readonly actionToolBarDisposable = this._register(new DisposableStore());
 	private readonly editorActionsChangeDisposable = this._register(new DisposableStore());
@@ -302,7 +309,10 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 		@IEditorGroupsService private readonly editorGroupService: IEditorGroupsService,
 		@IEditorService editorService: IEditorService,
 		@IMenuService private readonly menuService: IMenuService,
-		@IKeybindingService private readonly keybindingService: IKeybindingService
+		@IKeybindingService private readonly keybindingService: IKeybindingService,
+		@ICommandService private readonly commandService: ICommandService,
+		@IWorkspacesService private readonly workspacesService: IWorkspacesService,
+		@ILabelService private readonly labelService: ILabelService
 	) {
 		super(id, { hasTitle: false }, themeService, storageService, layoutService);
 
@@ -397,6 +407,81 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 		this.customMenubar.create(this.menubar);
 	}
 
+	private updateWorkspaceButton(): void {
+		if (!this.workspaceButtonLabel) {
+			return;
+		}
+		const name = this.windowTitle.workspaceName;
+		this.workspaceButtonLabel.textContent = name || 'Open Folder';
+	}
+
+	private async showWorkspacePicker(): Promise<void> {
+		if (!this.workspaceButton) {
+			return;
+		}
+
+		const recentlyOpened = await this.workspacesService.getRecentlyOpened();
+		const actions: IAction[] = [];
+
+		// Add recent workspaces/folders (max 10)
+		const recents = recentlyOpened.workspaces.slice(0, 10);
+		for (const recent of recents) {
+			let label: string;
+			let openable: { folderUri: import('../../../../base/common/uri.js').URI } | { workspaceUri: import('../../../../base/common/uri.js').URI };
+
+			if (isRecentFolder(recent)) {
+				const fullLabel = recent.label || this.labelService.getWorkspaceLabel(recent.folderUri, { verbose: Verbosity.LONG });
+				label = basename(fullLabel) || fullLabel;
+				openable = { folderUri: recent.folderUri };
+			} else if (isRecentWorkspace(recent)) {
+				const fullLabel = recent.label || this.labelService.getWorkspaceLabel(recent.workspace, { verbose: Verbosity.LONG });
+				label = basename(fullLabel) || fullLabel;
+				openable = { workspaceUri: recent.workspace.configPath };
+			} else {
+				continue;
+			}
+
+			const action = new Action(
+				'workspace.open.' + label,
+				label,
+				undefined,
+				true,
+				() => this.hostService.openWindow([openable as any], { forceReuseWindow: true })
+			);
+			actions.push(action);
+		}
+
+		if (actions.length === 0) {
+			actions.push(new Action('workspace.empty', 'No recent folders', undefined, false));
+		}
+
+		// Separator + "Open Folder..."
+		actions.push({
+			id: 'workspace.separator',
+			label: '',
+			tooltip: '',
+			class: undefined,
+			enabled: false,
+			checked: false,
+			run: () => Promise.resolve()
+		});
+		actions.push(new Action(
+			'workspace.openFolder',
+			'Open Folder...',
+			undefined,
+			true,
+			() => this.commandService.executeCommand('workbench.action.files.openFolder')
+		));
+
+		const button = this.workspaceButton;
+		this.contextMenuService.showContextMenu({
+			getAnchor: () => button,
+			getActions: () => actions,
+			anchorAlignment: AnchorAlignment.LEFT,
+			onHide: () => actions.forEach(a => (a as any).dispose?.())
+		});
+	}
+
 	private uninstallMenubar(): void {
 		this.customMenubar?.dispose();
 		this.customMenubar = undefined;
@@ -463,6 +548,26 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 			this.currentMenubarVisibility !== 'compact'
 		) {
 			this.installMenubar();
+		}
+
+		// Workspace selector button (Trae-style project picker)
+		if (!this.isAuxiliary) {
+			this.workspaceButton = append(this.leftContent, $('a.workspace-selector'));
+			this.workspaceButton.setAttribute('role', 'button');
+			this.workspaceButton.setAttribute('tabindex', '0');
+			this.workspaceButton.style.setProperty('-webkit-app-region', 'no-drag');
+
+			append(this.workspaceButton, $('span.workspace-icon.codicon.codicon-folder'));
+			this.workspaceButtonLabel = append(this.workspaceButton, $('span.workspace-label'));
+			append(this.workspaceButton, $('span.workspace-arrow.codicon.codicon-chevron-down'));
+
+			this.updateWorkspaceButton();
+
+			this._register(addDisposableListener(this.workspaceButton, EventType.CLICK, () => {
+				this.showWorkspacePicker();
+			}));
+
+			this._register(this.windowTitle.onDidChange(() => this.updateWorkspaceButton()));
 		}
 
 		// Title
@@ -649,16 +754,26 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 					this.layoutToolbarMenu,
 					{},
 					actions,
-					() => !this.editorActionsEnabled // Layout Actions in overflow menu when editor actions enabled in title bar
+					() => !this.editorActionsEnabled, // Layout Actions in overflow menu when editor actions enabled in title bar
+					undefined, // shouldInlineSubmenu
+					true // useSeparatorsInPrimaryActions: add separators between groups (e.g. navigation | layout toggles)
 				);
 			}
 
 			// --- Activity Actions
+			const activityStartIndex = actions.primary.length;
 			if (this.activityActionsEnabled) {
 				if (isAccountsActionVisible(this.storageService)) {
 					actions.primary.push(ACCOUNTS_ACTIVITY_TILE_ACTION);
 				}
+			}
+			// 始终在标题栏右侧显示设置齿轮按钮（无论 activity bar 位置）
+			if (!this.isAuxiliary) {
 				actions.primary.push(GLOBAL_ACTIVITY_TITLE_ACTION);
+			}
+			// Add separator before activity actions if there are layout actions before them
+			if (actions.primary.length > activityStartIndex && activityStartIndex > 0) {
+				actions.primary.splice(activityStartIndex, 0, new Separator());
 			}
 
 			this.actionToolBar.setActions(prepareActions(actions.primary), prepareActions(actions.secondary));
@@ -741,8 +856,8 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 			const titleForeground = this.getColor(this.isInactive ? TITLE_BAR_INACTIVE_FOREGROUND : TITLE_BAR_ACTIVE_FOREGROUND);
 			this.element.style.color = titleForeground || '';
 
-			const titleBorder = this.getColor(TITLE_BAR_BORDER);
-			this.element.style.borderBottom = titleBorder ? `1px solid ${titleBorder}` : '';
+			// 始终移除标题栏底部分割线
+			this.element.style.borderBottom = '';
 		}
 	}
 
@@ -861,8 +976,11 @@ export class MainBrowserTitlebarPart extends BrowserTitlebarPart {
 		@IEditorService editorService: IEditorService,
 		@IMenuService menuService: IMenuService,
 		@IKeybindingService keybindingService: IKeybindingService,
+		@ICommandService commandService: ICommandService,
+		@IWorkspacesService workspacesService: IWorkspacesService,
+		@ILabelService labelService: ILabelService,
 	) {
-		super(Parts.TITLEBAR_PART, mainWindow, 'main', contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorGroupService, editorService, menuService, keybindingService);
+		super(Parts.TITLEBAR_PART, mainWindow, 'main', contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorGroupService, editorService, menuService, keybindingService, commandService, workspacesService, labelService);
 	}
 }
 
@@ -894,9 +1012,12 @@ export class AuxiliaryBrowserTitlebarPart extends BrowserTitlebarPart implements
 		@IEditorService editorService: IEditorService,
 		@IMenuService menuService: IMenuService,
 		@IKeybindingService keybindingService: IKeybindingService,
+		@ICommandService commandService: ICommandService,
+		@IWorkspacesService workspacesService: IWorkspacesService,
+		@ILabelService labelService: ILabelService,
 	) {
 		const id = AuxiliaryBrowserTitlebarPart.COUNTER++;
-		super(`workbench.parts.auxiliaryTitle.${id}`, getWindow(container), editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorGroupService, editorService, menuService, keybindingService);
+		super(`workbench.parts.auxiliaryTitle.${id}`, getWindow(container), editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorGroupService, editorService, menuService, keybindingService, commandService, workspacesService, labelService);
 	}
 
 	override get preventZoom(): boolean {

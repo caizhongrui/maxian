@@ -33,7 +33,7 @@ export class SashSettingsController implements IWorkbenchContribution, IDisposab
 
 	private onDidChangeSize(): void {
 		const configuredSize = this.configurationService.getValue<number>('workbench.sash.size');
-		const size = clamp(configuredSize, 4, 20);
+		const size = clamp(configuredSize, 1, 20);
 		const hoverSize = clamp(configuredSize, 1, 8);
 
 		this.layoutService.mainContainer.style.setProperty('--vscode-sash-size', size + 'px');

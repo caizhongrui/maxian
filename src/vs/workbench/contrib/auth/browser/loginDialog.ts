@@ -102,8 +102,8 @@ export class LoginDialog extends Disposable {
 				this.dialogElement = $('.login-dialog');
 				this.dialogElement.style.backgroundColor = 'var(--vscode-editor-background)';
 				this.dialogElement.style.border = '1px solid var(--vscode-widget-border)';
-				this.dialogElement.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05)';
-				this.dialogElement.style.borderRadius = '8px';
+				this.dialogElement.style.boxShadow = '0 24px 64px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.04)';
+				this.dialogElement.style.borderRadius = '12px';
 				this.dialogElement.style.overflow = 'hidden';
 				this.dialogElement.style.transform = 'scale(0.95) translateY(-20px)';
 				this.dialogElement.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';

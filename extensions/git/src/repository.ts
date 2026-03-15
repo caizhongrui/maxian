@@ -1603,6 +1603,10 @@ export class Repository implements Disposable {
 		await this.run(Operation.DeleteTag, () => this.repository.deleteTag(name));
 	}
 
+	async deleteRemoteBranch(remoteName: string, branchName: string): Promise<void> {
+		await this.run(Operation.DeleteRemoteBranch, () => this.repository.deleteRemoteBranch(remoteName, branchName));
+	}
+
 	async deleteRemoteTag(remoteName: string, tagName: string): Promise<void> {
 		await this.run(Operation.DeleteRemoteTag, () => this.repository.deleteRemoteTag(remoteName, tagName));
 	}

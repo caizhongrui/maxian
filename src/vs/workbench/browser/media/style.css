@@ -321,3 +321,104 @@ body.web {
 	outline: 1px dashed var(--vscode-toolbar-hoverOutline);
 	outline-offset: -1px;
 }
+
+/* ===== Trae-style Floating Card Regions ===== */
+
+/* Workbench background acts as the visual "gap" between floating regions.
+   Adjacent parts have border-radius, so their corners reveal this background color,
+   creating the appearance of separated card-like panels. */
+.monaco-workbench.vs-dark {
+	background-color: #0f1117;
+}
+
+.monaco-workbench.vs {
+	background-color: #c0c4cc;
+}
+
+.monaco-workbench.hc-black {
+	background-color: #000000;
+}
+
+.monaco-workbench.hc-light {
+	background-color: #b0b0b0;
+}
+
+/* Each main region appears as a floating card with rounded corners and gaps.
+   The border color matches the workbench background, so it looks like
+   physical spacing between regions. Adjacent parts each contribute 1px,
+   creating a combined 2px visual gap at meeting points. */
+.monaco-workbench .part.activitybar,
+.monaco-workbench .part.sidebar,
+.monaco-workbench .part.editor,
+.monaco-workbench .part.panel,
+.monaco-workbench .part.auxiliarybar {
+	border: 2px solid #0f1117 !important;
+	border-radius: 8px !important;
+	overflow: hidden;
+}
+
+/* Light theme gap color */
+.monaco-workbench.vs .part.activitybar,
+.monaco-workbench.vs .part.sidebar,
+.monaco-workbench.vs .part.editor,
+.monaco-workbench.vs .part.panel,
+.monaco-workbench.vs .part.auxiliarybar {
+	border: 1px solid #c0c4cc !important;
+}
+
+/* Status bar spans full width at bottom - no rounded corners */
+.monaco-workbench .part.statusbar {
+	border-radius: 0;
+}
+
+/* Title bar at top - no rounded corners, background matches workbench */
+.monaco-workbench.vs-dark .part.titlebar {
+	border-radius: 0;
+	background-color: #0f1117 !important;
+}
+
+.monaco-workbench.vs .part.titlebar {
+	border-radius: 0;
+	background-color: #c0c4cc !important;
+}
+
+.monaco-workbench.hc-black .part.titlebar {
+	border-radius: 0;
+	background-color: #000000 !important;
+}
+
+.monaco-workbench.hc-light .part.titlebar {
+	border-radius: 0;
+	background-color: #b0b0b0 !important;
+}
+
+/* Hide accounts (user) icon and manage (gear) icon from activity bar bottom */
+.monaco-workbench .activitybar .action-item[title="Accounts"],
+.monaco-workbench .activitybar .action-item .action-label.codicon-account {
+	display: none !important;
+}
+
+/* Hide manage/gear button from activity bar (moved to title bar top-right) */
+.monaco-workbench .part.activitybar .codicon-settings-gear,
+.monaco-workbench .part.activitybar .action-label.codicon-settings-gear,
+.monaco-workbench .part.activitybar .codicon-settings-view-bar-icon,
+.monaco-workbench .part.activitybar .action-item[aria-label="Manage"],
+.monaco-workbench .part.activitybar .action-item[title*="Manage"] {
+	display: none !important;
+}
+
+/* Replace robot codicon with MAXIAN text in the auxiliary bar composite-bar tab */
+.monaco-workbench .part.auxiliarybar .composite-bar .action-item .action-label.codicon-robot {
+	width: auto !important;
+	min-width: 58px !important;
+	padding: 0 6px !important;
+}
+.monaco-workbench .part.auxiliarybar .composite-bar .action-item .action-label.codicon-robot::before {
+	content: 'MAXIAN' !important;
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+	font-size: 11px !important;
+	font-weight: 700 !important;
+	letter-spacing: 1.5px !important;
+	position: static !important;
+	left: auto !important;
+}

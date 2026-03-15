@@ -10,6 +10,7 @@ import { InputBox } from '../../../../base/browser/ui/inputbox/inputBox.js';
 import { Checkbox } from '../../../../base/browser/ui/toggle/toggle.js';
 import { IContextViewService } from '../../../../platform/contextview/browser/contextView.js';
 import { defaultButtonStyles, defaultInputBoxStyles, defaultCheckboxStyles } from '../../../../platform/theme/browser/defaultStyles.js';
+import { FileAccess } from '../../../../base/common/network.js';
 
 export interface ILoginFormData {
 	apiUrl: string;
@@ -44,198 +45,193 @@ export class LoginFormView extends Disposable {
 
 	private render(): void {
 		this.container.style.padding = '0';
-		this.container.style.minWidth = '480px';
-		this.container.style.maxWidth = '480px';
-		this.container.style.borderRadius = '8px';
+		this.container.style.minWidth = '440px';
+		this.container.style.maxWidth = '440px';
+		this.container.style.borderRadius = '12px';
 		this.container.style.overflow = 'hidden';
 
-		// 顶部装饰条
-		const headerDecor = append(this.container, $('div.login-header-decor'));
-		headerDecor.style.height = '4px';
-		headerDecor.style.background = 'linear-gradient(90deg, #007ACC, #00BCF2, #00D4FF)';
+		// ── 顶部渐变条 ──
+		const topBar = append(this.container, $('div'));
+		topBar.style.height = '3px';
+		topBar.style.background = 'var(--vscode-focusBorder, #007acc)';
 
-		// 头部区域
-		const header = append(this.container, $('div.login-header'));
-		header.style.padding = '32px 40px 24px';
+		// ── Hero 头部 ──
+		const header = append(this.container, $('div'));
+		header.style.padding = '36px 40px 28px';
 		header.style.textAlign = 'center';
-		header.style.background = 'var(--vscode-editor-background)';
+		header.style.background = 'var(--vscode-sideBar-background, var(--vscode-editor-background))';
+		header.style.borderBottom = '1px solid var(--vscode-widget-border, rgba(128,128,128,0.2))';
 
-		// Logo/图标
-		const icon = append(header, $('div.login-icon'));
-		icon.textContent = '🔐';
-		icon.style.fontSize = '48px';
-		icon.style.marginBottom = '16px';
-		icon.style.opacity = '0.9';
+		// 头像渐变环
+		const avatarRing = append(header, $('div'));
+		avatarRing.style.width = '72px';
+		avatarRing.style.height = '72px';
+		avatarRing.style.borderRadius = '18px';
+		avatarRing.style.padding = '2px';
+		avatarRing.style.background = 'var(--vscode-focusBorder, #007acc)';
+		avatarRing.style.boxShadow = '0 8px 28px rgba(0,0,0,0.2)';
+		avatarRing.style.margin = '0 auto 18px';
+		avatarRing.style.display = 'inline-block';
 
-		// 标题
-		const title = append(header, $('h2'));
-		title.textContent = '欢迎使用码弦 IDE';
-		title.style.margin = '0';
-		title.style.fontSize = '24px';
-		title.style.fontWeight = '600';
-		title.style.color = 'var(--vscode-foreground)';
-		title.style.marginBottom = '8px';
+		const avatarInner = append(avatarRing, $('div'));
+		avatarInner.style.width = '100%';
+		avatarInner.style.height = '100%';
+		avatarInner.style.borderRadius = '16px';
+		avatarInner.style.overflow = 'hidden';
+		avatarInner.style.background = 'var(--vscode-editor-background)';
 
-		// 副标题
-		const subtitle = append(header, $('p.login-subtitle'));
-		subtitle.textContent = '请登录以继续';
-		subtitle.style.margin = '0';
-		subtitle.style.fontSize = '14px';
-		subtitle.style.color = 'var(--vscode-descriptionForeground)';
-		subtitle.style.opacity = '0.8';
+		const logoImg = append(avatarInner, $('img')) as HTMLImageElement;
+		logoImg.src = FileAccess.asBrowserUri('vs/workbench/contrib/maxian/browser/media/icons/maxian-avatar.png').toString(true);
+		logoImg.style.width = '100%';
+		logoImg.style.height = '100%';
+		logoImg.style.objectFit = 'cover';
+		logoImg.style.display = 'block';
 
-		// 表单容器
-		const formContainer = append(this.container, $('div.login-form'));
-		formContainer.style.padding = '24px 40px 32px';
-		formContainer.style.background = 'var(--vscode-editor-background)';
+		// 品牌标题
+		const brandTitle = append(header, $('div'));
+		brandTitle.textContent = '码弦';
+		brandTitle.style.fontSize = '28px';
+		brandTitle.style.fontWeight = '700';
+		brandTitle.style.letterSpacing = '3px';
+		brandTitle.style.marginBottom = '6px';
+		brandTitle.style.lineHeight = '1';
+		brandTitle.style.color = 'var(--vscode-foreground)';
 
-		// API 地址
-		const apiUrlGroup = append(formContainer, $('div.form-group'));
-		apiUrlGroup.style.marginBottom = '20px';
+		const brandSub = append(header, $('div'));
+		brandSub.textContent = '智能 AI 编程助手';
+		brandSub.style.fontSize = '12px';
+		brandSub.style.color = 'var(--vscode-descriptionForeground)';
+		brandSub.style.opacity = '0.6';
+		brandSub.style.letterSpacing = '0.8px';
 
-		const apiUrlLabelWrapper = append(apiUrlGroup, $('div.label-wrapper'));
-		apiUrlLabelWrapper.style.display = 'flex';
-		apiUrlLabelWrapper.style.alignItems = 'center';
-		apiUrlLabelWrapper.style.marginBottom = '8px';
+		// ── 表单区域 ──
+		const form = append(this.container, $('div'));
+		form.style.padding = '28px 40px 32px';
+		form.style.background = 'var(--vscode-editor-background)';
+		form.style.display = 'flex';
+		form.style.flexDirection = 'column';
+		form.style.gap = '16px';
 
-		const apiUrlIcon = append(apiUrlLabelWrapper, $('span.field-icon'));
-		apiUrlIcon.textContent = '🌐';
-		apiUrlIcon.style.marginRight = '6px';
-		apiUrlIcon.style.fontSize = '14px';
+		// 通用 label 创建函数
+		const makeLabel = (parent: HTMLElement, iconClass: string, text: string) => {
+			const label = append(parent, $('div'));
+			label.style.display = 'flex';
+			label.style.alignItems = 'center';
+			label.style.gap = '5px';
+			label.style.marginBottom = '6px';
+			label.style.fontSize = '11px';
+			label.style.fontWeight = '600';
+			label.style.color = 'var(--vscode-descriptionForeground)';
+			label.style.letterSpacing = '0.8px';
+			label.style.textTransform = 'uppercase';
+			label.style.opacity = '0.8';
 
-		const apiUrlLabel = append(apiUrlLabelWrapper, $('label'));
-		apiUrlLabel.textContent = '后端 API 地址';
-		apiUrlLabel.style.fontWeight = '500';
-		apiUrlLabel.style.fontSize = '13px';
-		apiUrlLabel.style.color = 'var(--vscode-foreground)';
+			const icon = append(label, $(`span.codicon.${iconClass}`));
+			icon.style.fontSize = '12px';
 
-		this.apiUrlInput = this._register(new InputBox(apiUrlGroup, this.contextViewService, {
+			const span = append(label, $('span'));
+			span.textContent = text;
+		};
+
+		// ── API 地址 ──
+		const apiGroup = append(form, $('div'));
+		makeLabel(apiGroup, 'codicon-server', '后端 API 地址');
+		this.apiUrlInput = this._register(new InputBox(apiGroup, this.contextViewService, {
 			placeholder: '例如: http://10.205.81.162/api',
 			inputBoxStyles: defaultInputBoxStyles
 		}));
 		this.apiUrlInput.value = 'http://10.205.81.162/api';
 		this.apiUrlInput.inputElement.style.fontSize = '13px';
 
-		// 用户名
-		const usernameGroup = append(formContainer, $('div.form-group'));
-		usernameGroup.style.marginBottom = '20px';
-
-		const usernameLabelWrapper = append(usernameGroup, $('div.label-wrapper'));
-		usernameLabelWrapper.style.display = 'flex';
-		usernameLabelWrapper.style.alignItems = 'center';
-		usernameLabelWrapper.style.marginBottom = '8px';
-
-		const usernameIcon = append(usernameLabelWrapper, $('span.field-icon'));
-		usernameIcon.textContent = '👤';
-		usernameIcon.style.marginRight = '6px';
-		usernameIcon.style.fontSize = '14px';
-
-		const usernameLabel = append(usernameLabelWrapper, $('label'));
-		usernameLabel.textContent = '用户名';
-		usernameLabel.style.fontWeight = '500';
-		usernameLabel.style.fontSize = '13px';
-		usernameLabel.style.color = 'var(--vscode-foreground)';
-
-		this.usernameInput = this._register(new InputBox(usernameGroup, this.contextViewService, {
+		// ── 用户名 ──
+		const userGroup = append(form, $('div'));
+		makeLabel(userGroup, 'codicon-person', '用户名');
+		this.usernameInput = this._register(new InputBox(userGroup, this.contextViewService, {
 			placeholder: '请输入用户名',
 			inputBoxStyles: defaultInputBoxStyles
 		}));
 		this.usernameInput.inputElement.style.fontSize = '13px';
 
-		// 密码
-		const passwordGroup = append(formContainer, $('div.form-group'));
-		passwordGroup.style.marginBottom = '24px';
-
-		const passwordLabelWrapper = append(passwordGroup, $('div.label-wrapper'));
-		passwordLabelWrapper.style.display = 'flex';
-		passwordLabelWrapper.style.alignItems = 'center';
-		passwordLabelWrapper.style.marginBottom = '8px';
-
-		const passwordIcon = append(passwordLabelWrapper, $('span.field-icon'));
-		passwordIcon.textContent = '🔑';
-		passwordIcon.style.marginRight = '6px';
-		passwordIcon.style.fontSize = '14px';
-
-		const passwordLabel = append(passwordLabelWrapper, $('label'));
-		passwordLabel.textContent = '密码';
-		passwordLabel.style.fontWeight = '500';
-		passwordLabel.style.fontSize = '13px';
-		passwordLabel.style.color = 'var(--vscode-foreground)';
-
-		this.passwordInput = this._register(new InputBox(passwordGroup, this.contextViewService, {
+		// ── 密码 ──
+		const passGroup = append(form, $('div'));
+		makeLabel(passGroup, 'codicon-lock', '密码');
+		this.passwordInput = this._register(new InputBox(passGroup, this.contextViewService, {
 			placeholder: '请输入密码',
 			type: 'password',
 			inputBoxStyles: defaultInputBoxStyles
 		}));
 		this.passwordInput.inputElement.style.fontSize = '13px';
 
-		// 记住我
-		const rememberGroup = append(formContainer, $('div.form-group'));
-		rememberGroup.style.marginBottom = '28px';
-		rememberGroup.style.display = 'flex';
-		rememberGroup.style.alignItems = 'center';
-		rememberGroup.style.padding = '8px 0';
+		// ── 记住我 ──
+		const rememberRow = append(form, $('div'));
+		rememberRow.style.display = 'flex';
+		rememberRow.style.alignItems = 'center';
+		rememberRow.style.gap = '8px';
+		rememberRow.style.padding = '2px 0';
 
-		this.rememberMeCheckbox = this._register(new Checkbox(
-			'记住登录状态',
-			true,
-			defaultCheckboxStyles
-		));
-		append(rememberGroup, this.rememberMeCheckbox.domNode);
+		this.rememberMeCheckbox = this._register(new Checkbox('记住登录状态', true, defaultCheckboxStyles));
+		append(rememberRow, this.rememberMeCheckbox.domNode);
 
-		const rememberLabel = append(rememberGroup, $('span'));
+		const rememberLabel = append(rememberRow, $('span'));
 		rememberLabel.textContent = '记住登录状态';
-		rememberLabel.style.marginLeft = '10px';
-		rememberLabel.style.cursor = 'pointer';
 		rememberLabel.style.fontSize = '13px';
 		rememberLabel.style.color = 'var(--vscode-foreground)';
+		rememberLabel.style.cursor = 'pointer';
 		rememberLabel.style.userSelect = 'none';
+		rememberLabel.style.opacity = '0.8';
 
-		// 按钮组
-		const buttonGroup = append(formContainer, $('div.button-group'));
-		buttonGroup.style.display = 'flex';
-		buttonGroup.style.gap = '12px';
-		buttonGroup.style.marginTop = '8px';
+		// ── 按钮区 ──
+		const btnArea = append(form, $('div'));
+		btnArea.style.display = 'flex';
+		btnArea.style.flexDirection = 'column';
+		btnArea.style.gap = '10px';
+		btnArea.style.marginTop = '4px';
 
-		this.cancelButton = this._register(new Button(buttonGroup, {
-			...defaultButtonStyles,
-			secondary: true
-		}));
+		// 登录按钮（全宽渐变）
+		this.loginButton = this._register(new Button(btnArea, defaultButtonStyles));
+		this.loginButton.label = '登  录';
+		this.loginButton.element.style.width = '100%';
+		this.loginButton.element.style.height = '38px';
+		this.loginButton.element.style.fontSize = '14px';
+		this.loginButton.element.style.fontWeight = '600';
+		this.loginButton.element.style.letterSpacing = '2px';
+		this.loginButton.element.style.borderRadius = '6px';
+		this.loginButton.element.style.border = 'none';
+		this.loginButton.element.style.background = 'var(--vscode-button-background)';
+		this.loginButton.element.style.color = 'var(--vscode-button-foreground)';
+		this.loginButton.element.style.cursor = 'pointer';
+		this.loginButton.element.style.transition = 'opacity 0.15s, transform 0.1s';
+		this.loginButton.element.onmouseenter = () => {
+			this.loginButton.element.style.opacity = '0.9';
+			this.loginButton.element.style.transform = 'translateY(-1px)';
+		};
+		this.loginButton.element.onmouseleave = () => {
+			this.loginButton.element.style.opacity = '1';
+			this.loginButton.element.style.transform = 'translateY(0)';
+		};
+		this._register(this.loginButton.onDidClick(() => this.handleSubmit()));
+
+		// 取消按钮（幽灵样式）
+		this.cancelButton = this._register(new Button(btnArea, { ...defaultButtonStyles, secondary: true }));
 		this.cancelButton.label = '取消';
-		this.cancelButton.element.style.minWidth = '100px';
+		this.cancelButton.element.style.width = '100%';
 		this.cancelButton.element.style.height = '32px';
+		this.cancelButton.element.style.fontSize = '13px';
+		this.cancelButton.element.style.borderRadius = '6px';
+		this.cancelButton.element.style.opacity = '0.6';
 		this._register(this.cancelButton.onDidClick(() => {
-			if (this.onCancelCallback) {
-				this.onCancelCallback();
-			}
+			if (this.onCancelCallback) { this.onCancelCallback(); }
 		}));
 
-		this.loginButton = this._register(new Button(buttonGroup, defaultButtonStyles));
-		this.loginButton.label = '登 录';
-		this.loginButton.element.style.minWidth = '140px';
-		this.loginButton.element.style.height = '32px';
-		this.loginButton.element.style.fontWeight = '500';
-		this._register(this.loginButton.onDidClick(() => {
-			this.handleSubmit();
-		}));
-
-		// 回车提交
-		this._register(this.passwordInput.onDidChange(() => {
-			// Can handle enter key here if needed
-		}));
-
-		// 底部提示
-		const footer = append(formContainer, $('div.login-footer'));
-		footer.style.marginTop = '20px';
-		footer.style.paddingTop = '20px';
-		footer.style.borderTop = '1px solid var(--vscode-widget-border)';
+		// ── 底部提示 ──
+		const footer = append(form, $('div'));
 		footer.style.textAlign = 'center';
 		footer.style.fontSize = '12px';
 		footer.style.color = 'var(--vscode-descriptionForeground)';
-		footer.style.opacity = '0.7';
-
-		const footerText = append(footer, $('span'));
-		footerText.textContent = '首次登录？请联系管理员获取账号';
+		footer.style.opacity = '0.5';
+		footer.style.paddingTop = '4px';
+		footer.style.borderTop = '1px solid rgba(128,128,128,0.1)';
+		footer.textContent = '首次登录？请联系管理员获取账号';
 	}
 
 	private handleSubmit(): void {
@@ -245,30 +241,26 @@ export class LoginFormView extends Disposable {
 
 		if (!apiUrl) {
 			this.apiUrlInput.focus();
-			this.apiUrlInput.showMessage({ content: '请输入后端 API 地址', type: 3 /* Error */ });
+			this.apiUrlInput.showMessage({ content: '请输入后端 API 地址', type: 3 });
 			return;
 		}
-
 		if (!username) {
 			this.usernameInput.focus();
-			this.usernameInput.showMessage({ content: '请输入用户名', type: 3 /* Error */ });
+			this.usernameInput.showMessage({ content: '请输入用户名', type: 3 });
 			return;
 		}
-
 		if (!password) {
 			this.passwordInput.focus();
-			this.passwordInput.showMessage({ content: '请输入密码', type: 3 /* Error */ });
+			this.passwordInput.showMessage({ content: '请输入密码', type: 3 });
 			return;
 		}
-
-		const rememberMeChecked = this.rememberMeCheckbox.checked;
 
 		if (this.onSubmitCallback) {
 			this.onSubmitCallback({
 				apiUrl,
 				username,
 				password,
-				rememberMe: rememberMeChecked
+				rememberMe: this.rememberMeCheckbox.checked
 			});
 		}
 	}
@@ -282,13 +274,10 @@ export class LoginFormView extends Disposable {
 	}
 
 	public setError(message: string): void {
-		// Show error near login button or in a dedicated error area
-		// For now, we can show it on the first input
-		this.apiUrlInput.showMessage({ content: message, type: 3 /* Error */ });
+		this.apiUrlInput.showMessage({ content: message, type: 3 });
 	}
 
 	public focus(): void {
-		// Focus on username if API is filled, otherwise API URL
 		if (this.apiUrlInput.value) {
 			this.usernameInput.focus();
 		} else {

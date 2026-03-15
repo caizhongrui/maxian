@@ -26,6 +26,9 @@ import { NativeMenubarControl } from './menubarControl.js';
 import { IEditorGroupsContainer, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IWorkspacesService } from '../../../../platform/workspaces/common/workspaces.js';
+import { ILabelService } from '../../../../platform/label/common/label.js';
 import { CodeWindow, mainWindow } from '../../../../base/browser/window.js';
 
 export class NativeTitlebarPart extends BrowserTitlebarPart {
@@ -74,9 +77,12 @@ export class NativeTitlebarPart extends BrowserTitlebarPart {
 		@IEditorGroupsService editorGroupService: IEditorGroupsService,
 		@IEditorService editorService: IEditorService,
 		@IMenuService menuService: IMenuService,
-		@IKeybindingService keybindingService: IKeybindingService
+		@IKeybindingService keybindingService: IKeybindingService,
+		@ICommandService commandService: ICommandService,
+		@IWorkspacesService workspacesService: IWorkspacesService,
+		@ILabelService labelService: ILabelService
 	) {
-		super(id, targetWindow, editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorGroupService, editorService, menuService, keybindingService);
+		super(id, targetWindow, editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorGroupService, editorService, menuService, keybindingService, commandService, workspacesService, labelService);
 
 		this.bigSurOrNewer = isBigSurOrNewer(environmentService.os.release);
 	}
@@ -287,9 +293,12 @@ export class MainNativeTitlebarPart extends NativeTitlebarPart {
 		@IEditorGroupsService editorGroupService: IEditorGroupsService,
 		@IEditorService editorService: IEditorService,
 		@IMenuService menuService: IMenuService,
-		@IKeybindingService keybindingService: IKeybindingService
+		@IKeybindingService keybindingService: IKeybindingService,
+		@ICommandService commandService: ICommandService,
+		@IWorkspacesService workspacesService: IWorkspacesService,
+		@ILabelService labelService: ILabelService
 	) {
-		super(Parts.TITLEBAR_PART, mainWindow, 'main', contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, nativeHostService, editorGroupService, editorService, menuService, keybindingService);
+		super(Parts.TITLEBAR_PART, mainWindow, 'main', contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, nativeHostService, editorGroupService, editorService, menuService, keybindingService, commandService, workspacesService, labelService);
 	}
 }
 
@@ -316,10 +325,13 @@ export class AuxiliaryNativeTitlebarPart extends NativeTitlebarPart implements I
 		@IEditorGroupsService editorGroupService: IEditorGroupsService,
 		@IEditorService editorService: IEditorService,
 		@IMenuService menuService: IMenuService,
-		@IKeybindingService keybindingService: IKeybindingService
+		@IKeybindingService keybindingService: IKeybindingService,
+		@ICommandService commandService: ICommandService,
+		@IWorkspacesService workspacesService: IWorkspacesService,
+		@ILabelService labelService: ILabelService
 	) {
 		const id = AuxiliaryNativeTitlebarPart.COUNTER++;
-		super(`workbench.parts.auxiliaryTitle.${id}`, getWindow(container), editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, nativeHostService, editorGroupService, editorService, menuService, keybindingService);
+		super(`workbench.parts.auxiliaryTitle.${id}`, getWindow(container), editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, nativeHostService, editorGroupService, editorService, menuService, keybindingService, commandService, workspacesService, labelService);
 	}
 
 	override get preventZoom(): boolean {

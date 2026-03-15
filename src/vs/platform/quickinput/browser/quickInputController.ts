@@ -733,7 +733,21 @@ export class QuickInputController extends Disposable {
 			const style = this.ui.container.style;
 			const width = Math.min(this.dimension!.width * 0.62 /* golden cut */, QuickInputController.MAX_WIDTH);
 			style.width = width + 'px';
-			style.marginLeft = '-' + (width / 2) + 'px';
+
+			// Try to align quick pick with the command center search box
+			const commandCenter = this._container.ownerDocument.querySelector('.command-center .command-center-center') as HTMLElement | null;
+			if (commandCenter) {
+				const containerRect = this._container.getBoundingClientRect();
+				const commandRect = commandCenter.getBoundingClientRect();
+				const leftOffset = commandRect.left - containerRect.left;
+				// Ensure the panel doesn't overflow the right edge
+				const maxLeft = this.dimension!.width - width - 8;
+				style.left = Math.min(leftOffset, maxLeft) + 'px';
+				style.marginLeft = '0';
+			} else {
+				style.left = '50%';
+				style.marginLeft = '-' + (width / 2) + 'px';
+			}
 
 			this.ui.inputBox.layout();
 			this.ui.list.layout(this.dimension && this.dimension.height * 0.4);

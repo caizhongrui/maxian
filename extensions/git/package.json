@@ -520,6 +520,12 @@
         "enablement": "!operationInProgress"
       },
       {
+        "command": "git.deleteRemoteBranch",
+        "title": "%command.deleteRemoteBranch%",
+        "category": "Git",
+        "enablement": "!operationInProgress"
+      },
+      {
         "command": "git.deleteRemoteTag",
         "title": "%command.deleteRemoteTag%",
         "category": "Git",
@@ -1250,6 +1256,10 @@
         },
         {
           "command": "git.deleteTag",
+          "when": "config.git.enabled && !git.missing && gitOpenRepositoryCount != 0"
+        },
+        {
+          "command": "git.deleteRemoteBranch",
           "when": "config.git.enabled && !git.missing && gitOpenRepositoryCount != 0"
         },
         {
@@ -2357,6 +2367,10 @@
         {
           "command": "git.deleteBranch",
           "group": "3_modify@2"
+        },
+        {
+          "command": "git.deleteRemoteBranch",
+          "group": "3_modify@3"
         },
         {
           "command": "git.publish",

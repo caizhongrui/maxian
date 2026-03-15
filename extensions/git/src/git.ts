@@ -1831,6 +1831,11 @@ export class Repository {
 		await this.exec(args);
 	}
 
+	async deleteRemoteBranch(remoteName: string, branchName: string): Promise<void> {
+		const args = ['push', '--delete', remoteName, branchName];
+		await this.exec(args);
+	}
+
 	async deleteRemoteTag(remoteName: string, tagName: string): Promise<void> {
 		const args = ['push', '--delete', remoteName, tagName];
 		await this.exec(args);

@@ -19,7 +19,7 @@ import { IModelService } from '../../../../editor/common/services/model.js';
 import { ITextModel } from '../../../../editor/common/model.js';
 import { URI } from '../../../../base/common/uri.js';
 import { MAXIAN_DIFF_VIEW_URI_SCHEME, getStoredOriginalContent } from './diffViewProvider.js';
-import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
+import { CommandsRegistry, ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IAIService } from '../../../../platform/ai/common/ai.js';
 import { ILspDiagnosticsService } from '../common/lsp/lspDiagnostics.js';
 import { LspDiagnosticsService } from './lspDiagnosticsService.js';
@@ -31,7 +31,7 @@ import { ILspReferencesService } from '../common/lsp/lspReferences.js';
 import { LspReferencesService } from './lspReferencesService.js';
 import { ILspTypeDefinitionService } from '../common/lsp/lspTypeDefinition.js';
 import { LspTypeDefinitionService } from './lspTypeDefinitionService.js';
-import { registerAction2, Action2 } from '../../../../platform/actions/common/actions.js';
+import { registerAction2, Action2, MenuId } from '../../../../platform/actions/common/actions.js';
 import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
@@ -68,14 +68,14 @@ registerSingleton(ILspTypeDefinitionService, LspTypeDefinitionService, Instantia
 
 // 定义视图容器ID和视图ID
 const MAXIAN_VIEW_CONTAINER_ID = 'workbench.view.maxian';
-const MAXIAN_VIEW_ID = 'workbench.view.maxian.mainView';
+export const MAXIAN_VIEW_ID = 'workbench.view.maxian.mainView';
 
 // 注册视图容器到右侧辅助栏（AuxiliaryBar）
 const viewContainerRegistry = Registry.as<IViewContainersRegistry>(ViewExtensions.ViewContainersRegistry);
 export const VIEW_CONTAINER = viewContainerRegistry.registerViewContainer({
 	id: MAXIAN_VIEW_CONTAINER_ID,
-	title: localize2('maxian.viewContainer.title', '码弦 Agent'),
-	icon: Codicon.robot,
+	title: localize2('maxian.viewContainer.title', 'MAXIAN'),
+	icon: Codicon.commentDiscussion,
 	order: 11,
 	ctorDescriptor: new SyncDescriptor(ViewPaneContainer, [MAXIAN_VIEW_CONTAINER_ID, { mergeViewWithContainerWhenSingleView: true }]),
 	storageId: MAXIAN_VIEW_CONTAINER_ID,
@@ -337,5 +337,54 @@ registerAction2(class ClearConversationAction extends Action2 {
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {
 		accessor.get(IMaxianService).triggerClearConversation();
+	}
+});
+
+// ====== 标题栏快捷按钮 ======
+
+/**
+ * 问答历史 - 显示在标题栏（关闭按钮左侧）
+ */
+registerAction2(class ToggleHistoryAction extends Action2 {
+	constructor() {
+		super({
+			id: 'maxian.toggleHistory',
+			title: localize2('maxian.history', 'History'),
+			icon: Codicon.history,
+			menu: [{
+				id: MenuId.ViewTitle,
+				group: 'navigation',
+				order: 2,
+				when: ContextKeyExpr.equals('view', MAXIAN_VIEW_ID)
+			}]
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const view = accessor.get(IViewsService).getActiveViewWithId<MaxianView>(MAXIAN_VIEW_ID);
+		if (view) {
+			await view.toggleAskHistoryPanel();
+		}
+	}
+});
+
+/**
+ * 配置快捷键 - 显示在标题栏（关闭按钮左侧）
+ */
+registerAction2(class OpenKeybindingsAction extends Action2 {
+	constructor() {
+		super({
+			id: 'maxian.openKeybindings',
+			title: localize2('maxian.keybindings', 'Configure Keybindings'),
+			icon: Codicon.keyboard,
+			menu: [{
+				id: MenuId.ViewTitle,
+				group: 'navigation',
+				order: 1,
+				when: ContextKeyExpr.equals('view', MAXIAN_VIEW_ID)
+			}]
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		accessor.get(ICommandService).executeCommand('workbench.action.openGlobalKeybindings', '天和·码弦');
 	}
 });

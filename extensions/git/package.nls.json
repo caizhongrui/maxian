@@ -75,6 +75,7 @@
 	"command.rebase": "Rebase Branch...",
 	"command.createTag": "Create Tag...",
 	"command.deleteTag": "Delete Tag...",
+	"command.deleteRemoteBranch": "Delete Remote Branch...",
 	"command.deleteRemoteTag": "Delete Remote Tag...",
 	"command.fetch": "Fetch",
 	"command.fetchPrune": "Fetch (Prune)",
