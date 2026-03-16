@@ -852,6 +852,9 @@ export class TaskService extends Disposable {
 		let hasError = false;
 		let firstTokenReceived = false;
 		let xmlDetected = false; // XML检测标志
+		let xmlToolName = ''; // XML工具调用时检测到的工具名
+		let xmlStreamingFired = false; // 是否已经发出过XML流式事件
+		const XML_STREAM_ID = 'xml-stream-preview'; // 固定ID用于更新同一元素
 
 		for await (const chunk of stream) {
 			// 检查是否已中止，如果是则停止处理流
@@ -872,13 +875,41 @@ export class TaskService extends Disposable {
 				// 🔒 检测是否可能是XML工具调用
 				if (!xmlDetected && this.mightBeXmlToolCall(assistantMessage)) {
 					xmlDetected = true;
+					// 提取工具名，用于显示给用户
+					for (const toolName of this.TOOL_NAMES) {
+						if (assistantMessage.includes(`<${toolName}>`) || assistantMessage.includes(`<${toolName} `)) {
+							xmlToolName = toolName;
+							break;
+						}
+					}
 				}
 
 				// 只有在未检测到XML时才进行流式显示
 				if (!xmlDetected) {
 					this._onStreamChunk.fire({ text: chunk.text, isPartial: true });
+				} else {
+					// XML工具调用期间：将正在生成的内容展示给用户，避免界面看起来"卡住"
+					// 直接传完整内容，UI 侧只显示字符数，不展示原始内容
+					this._onToolInputStreaming.fire({
+						toolId: XML_STREAM_ID,
+						toolName: xmlToolName || 'tool',
+						input: assistantMessage,
+						isPartial: true,
+					});
+					xmlStreamingFired = true;
 				}
 			} else if (chunk.type === 'tool_use') {
+				// 进度片段：只更新 UI，不加入 toolUses
+				if (chunk.isPartial) {
+					this._onToolInputStreaming.fire({
+						toolId: chunk.id || chunk.name,
+						toolName: chunk.name,
+						input: chunk.input,
+						isPartial: true,
+					});
+					continue;
+				}
+
 				let input: any;
 				try {
 					input = typeof chunk.input === 'string' ? JSON.parse(chunk.input) : chunk.input;
@@ -988,6 +1019,16 @@ export class TaskService extends Disposable {
 				// 前端通过检测hasXmlTag已经阻止了XML文本的显示，这里无需特殊处理
 				assistantMessage = '';
 			}
+		}
+
+		// XML流式预览结束：fire isPartial:false，触发UI 1.5秒后自动清理
+		if (xmlStreamingFired) {
+			this._onToolInputStreaming.fire({
+				toolId: XML_STREAM_ID,
+				toolName: xmlToolName || 'tool',
+				input: {},
+				isPartial: false,
+			});
 		}
 
 		if (!this.abort && (assistantMessage || toolUses.length > 0)) {

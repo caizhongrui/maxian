@@ -110,6 +110,8 @@ export class MaxianView extends ViewPane {
 	private taskProgressStep: HTMLElement | null = null; // 当前步骤描述
 	// 工具输入流式显示相关
 	private toolInputStreamingElements: Map<string, HTMLElement> = new Map(); // 工具ID到显示元素的映射
+	private toolInputThrottleTimers: Map<string, number> = new Map(); // 节流定时器
+	private toolInputPendingEvents: Map<string, IToolInputStreamingEvent> = new Map(); // 待渲染的最新事件
 	// 任务列表相关
 	private todoListContainer: HTMLElement | null = null; // 任务列表容器
 	private todoListContent: HTMLElement | null = null; // 任务列表内容区域
@@ -5718,121 +5720,184 @@ export class MaxianView extends ViewPane {
 	 * 实时显示工具调用的参数信息
 	 */
 	private handleToolInputStreaming(event: IToolInputStreamingEvent): void {
+		// 节流：将事件存为 pending，300ms 内只渲染一次
+		this.toolInputPendingEvents.set(event.toolId, event);
 
+		if (!this.toolInputThrottleTimers.has(event.toolId)) {
+			const timer = window.setTimeout(() => {
+				this.toolInputThrottleTimers.delete(event.toolId);
+				const latestEvent = this.toolInputPendingEvents.get(event.toolId);
+				if (latestEvent) {
+					this.toolInputPendingEvents.delete(event.toolId);
+					this._renderToolInputStreaming(latestEvent);
+				}
+			}, 300);
+			this.toolInputThrottleTimers.set(event.toolId, timer);
+		}
+
+		// isPartial=false（完成事件）需要立即渲染，不能再等
+		if (!event.isPartial) {
+			const existingTimer = this.toolInputThrottleTimers.get(event.toolId);
+			if (existingTimer !== undefined) {
+				window.clearTimeout(existingTimer);
+				this.toolInputThrottleTimers.delete(event.toolId);
+			}
+			this.toolInputPendingEvents.delete(event.toolId);
+			this._renderToolInputStreaming(event);
+		}
+	}
+
+	private _renderToolInputStreaming(event: IToolInputStreamingEvent): void {
 		// 获取或创建显示元素
 		let streamingElement = this.toolInputStreamingElements.get(event.toolId);
 
 		if (!streamingElement) {
-			// 创建新的流式显示元素
 			streamingElement = $('div.tool-input-streaming');
 			streamingElement.style.cssText = `
-				padding: 8px 12px;
-				margin: 4px 0;
-				background: var(--vscode-inputValidation-infoBackground, rgba(0, 127, 255, 0.1));
-				border-left: 3px solid var(--vscode-inputValidation-infoBorder, #007acc);
-				border-radius: 4px;
-				font-size: 12px;
-				font-family: var(--vscode-editor-font-family, monospace);
+				margin: 6px 0;
+				background: var(--vscode-editor-background);
+				border: 1px solid var(--vscode-inputValidation-infoBorder, #007acc);
+				border-radius: 6px;
 				overflow: hidden;
+				font-size: 12px;
 			`;
 
-			// 创建标题行
-			const headerRow = $('div.tool-input-header');
-			headerRow.style.cssText = `
+			// 标题栏
+			const header = $('div.tool-streaming-header');
+			header.style.cssText = `
 				display: flex;
 				align-items: center;
-				gap: 8px;
-				margin-bottom: 4px;
-				color: var(--vscode-foreground);
+				gap: 6px;
+				padding: 6px 10px;
+				background: var(--vscode-inputValidation-infoBackground, rgba(0,127,255,0.08));
+				border-bottom: 1px solid var(--vscode-inputValidation-infoBorder, #007acc);
 			`;
 
-			// 工具图标
 			const iconSpan = $('span.tool-icon');
 			iconSpan.textContent = getToolIcon(event.toolName as any);
-			headerRow.appendChild(iconSpan);
+			iconSpan.style.fontSize = '14px';
+			header.appendChild(iconSpan);
 
-			// 工具名称
 			const nameSpan = $('span.tool-name');
 			nameSpan.textContent = event.toolName;
-			nameSpan.style.fontWeight = '600';
-			headerRow.appendChild(nameSpan);
+			nameSpan.style.cssText = `font-weight: 600; color: var(--vscode-foreground); flex: 1;`;
+			header.appendChild(nameSpan);
 
-			// 流式指示器
-			const streamingIndicator = $('span.streaming-indicator');
-			streamingIndicator.textContent = '⏳ 接收参数中...';
-			streamingIndicator.style.cssText = `
-				font-size: 11px;
-				color: var(--vscode-descriptionForeground);
-				margin-left: auto;
-			`;
-			headerRow.appendChild(streamingIndicator);
+			const indicator = $('span.streaming-indicator');
+			indicator.style.cssText = `font-size: 11px; color: var(--vscode-charts-blue, #007acc);`;
+			header.appendChild(indicator);
 
-			streamingElement.appendChild(headerRow);
+			streamingElement.appendChild(header);
 
-			// 创建参数显示区域
-			const inputArea = $('div.tool-input-content');
-			inputArea.style.cssText = `
-				max-height: 150px;
+			// 内容区
+			const contentArea = $('div.tool-streaming-content');
+			contentArea.style.cssText = `
+				padding: 8px 10px;
+				max-height: 120px;
 				overflow-y: auto;
-				white-space: pre-wrap;
-				word-break: break-all;
-				color: var(--vscode-editor-foreground);
-				opacity: 0.9;
-				padding: 4px 0;
+				color: var(--vscode-descriptionForeground);
+				font-family: var(--vscode-editor-font-family, monospace);
+				font-size: 11px;
 			`;
-			streamingElement.appendChild(inputArea);
+			streamingElement.appendChild(contentArea);
 
-			// 将元素添加到消息区域
 			this.messageArea.appendChild(streamingElement);
 			this.toolInputStreamingElements.set(event.toolId, streamingElement);
-
-			// 自动滚动到底部
 			this.messageArea.scrollTop = this.messageArea.scrollHeight;
 		}
 
-		// 更新参数内容
-		const inputArea = streamingElement.querySelector('.tool-input-content') as HTMLElement;
-		if (inputArea && event.input) {
-			try {
-				// 格式化输入参数
-				let inputText: string;
-				if (typeof event.input === 'string') {
-					inputText = event.input;
-				} else {
-					inputText = JSON.stringify(event.input, null, 2);
-				}
+		const indicator = streamingElement.querySelector('.streaming-indicator') as HTMLElement;
+		const contentArea = streamingElement.querySelector('.tool-streaming-content') as HTMLElement;
 
-				// 截断过长的输入
-				if (inputText.length > 500) {
-					inputText = inputText.substring(0, 500) + '\n... (已截断)';
-				}
-
-				inputArea.textContent = inputText;
-			} catch (e) {
-				inputArea.textContent = String(event.input);
+		if (event.isPartial) {
+			// 流式进行中：只显示字符数进度，不显示原始内容
+			if (indicator) {
+				indicator.textContent = '⠋ 生成中...';
+				indicator.style.color = 'var(--vscode-charts-blue, #007acc)';
 			}
+			if (contentArea) {
+				const rawLen = typeof event.input === 'string'
+					? event.input.length
+					: JSON.stringify(event.input || '').length;
+				contentArea.textContent = `已生成 ${rawLen.toLocaleString()} 字符...`;
+			}
+		} else {
+			// 完成：解析 JSON 提取关键信息，用 markdown 渲染
+			if (indicator) {
+				indicator.textContent = '✓ 完成';
+				indicator.style.color = 'var(--vscode-charts-green, #89d185)';
+			}
+			if (contentArea) {
+				const mdText = this._formatToolInputAsMarkdown(event.toolName, event.input);
+				contentArea.style.cssText = `
+					padding: 8px 10px;
+					max-height: 200px;
+					overflow-y: auto;
+					font-size: 12px;
+				`;
+				MarkdownRendererDom.renderMarkdown(mdText, contentArea);
+			}
+
+			// 1.5秒后移除（工具结果会替代它）
+			setTimeout(() => {
+				const element = this.toolInputStreamingElements.get(event.toolId);
+				if (element && element.parentNode) {
+					element.parentNode.removeChild(element);
+					this.toolInputStreamingElements.delete(event.toolId);
+				}
+			}, 1500);
+		}
+	}
+
+	/** 将工具 input JSON 格式化为可读的 Markdown 摘要 */
+	private _formatToolInputAsMarkdown(toolName: string, input: any): string {
+		let parsed: any = null;
+		try {
+			parsed = typeof input === 'string' ? JSON.parse(input) : input;
+		} catch {
+			// 解析失败，展示截断的原始内容
+			const raw = String(input || '');
+			return `\`\`\`\n${raw.substring(0, 300)}${raw.length > 300 ? '\n...' : ''}\n\`\`\``;
+		}
+		if (!parsed) return '';
+
+		const lines: string[] = [];
+
+		// 根据工具名提取关键字段
+		if (parsed.path) {
+			lines.push(`📄 \`${parsed.path}\``);
+		}
+		if (parsed.command) {
+			lines.push(`\`\`\`bash\n${parsed.command}\n\`\`\``);
+		}
+		if (parsed.content !== undefined) {
+			const content = String(parsed.content);
+			const preview = content.length > 400 ? content.substring(0, 400) + '\n...' : content;
+			// 猜测语言
+			const ext = (parsed.path || '').split('.').pop() || '';
+			const langMap: Record<string, string> = { ts: 'typescript', js: 'javascript', py: 'python', java: 'java', go: 'go', rs: 'rust', md: 'markdown', json: 'json', css: 'css', html: 'html' };
+			const lang = langMap[ext] || '';
+			lines.push(`\`\`\`${lang}\n${preview}\n\`\`\``);
+		}
+		if (parsed.old_string !== undefined) {
+			lines.push(`**替换内容** (${String(parsed.old_string).length} 字符 → ${String(parsed.new_string || '').length} 字符)`);
+		}
+		if (parsed.query) {
+			lines.push(`🔍 \`${parsed.query}\``);
+		}
+		if (parsed.url) {
+			lines.push(`🌐 ${parsed.url}`);
+		}
+		// 如果没有提取到任何信息，显示简要的 JSON 摘要
+		if (lines.length === 0) {
+			const keys = Object.keys(parsed).slice(0, 3);
+			keys.forEach(k => {
+				const v = String(parsed[k]);
+				lines.push(`**${k}**: ${v.length > 80 ? v.substring(0, 80) + '...' : v}`);
+			});
 		}
 
-		// 更新流式指示器
-		const streamingIndicator = streamingElement.querySelector('.streaming-indicator') as HTMLElement;
-		if (streamingIndicator) {
-			if (event.isPartial) {
-				streamingIndicator.textContent = '⏳ 接收参数中...';
-				streamingIndicator.style.color = 'var(--vscode-charts-blue, #007acc)';
-			} else {
-				streamingIndicator.textContent = '✓ 参数已完成';
-				streamingIndicator.style.color = 'var(--vscode-charts-green, #89d185)';
-
-				// 完成后2秒移除流式显示（工具结果会替代它）
-				setTimeout(() => {
-					const element = this.toolInputStreamingElements.get(event.toolId);
-					if (element && element.parentNode) {
-						element.parentNode.removeChild(element);
-						this.toolInputStreamingElements.delete(event.toolId);
-					}
-				}, 1500);
-			}
-		}
+		return lines.join('\n\n');
 	}
 
 	/**

@@ -100,6 +100,8 @@ export interface ToolUseStreamChunk {
 	id: string;
 	name: string;
 	input: string; // JSON字符串
+	/** 是否为进度片段（true=仍在积累参数中，false=参数已完整） */
+	isPartial?: boolean;
 }
 
 /**

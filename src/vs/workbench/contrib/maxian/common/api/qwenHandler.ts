@@ -323,6 +323,17 @@ export class QwenHandler implements IApiHandler {
 									existing.name = toolName;
 								}
 								existing.arguments += argsFragment;
+
+								// 实时 yield 进度 chunk，让 UI 显示工具参数正在生成中
+								if (existing.name && argsFragment) {
+									yield {
+										type: 'tool_use',
+										id: existing.id,
+										name: existing.name,
+										input: existing.arguments,
+										isPartial: true,
+									} as ToolUseStreamChunk;
+								}
 							}
 						}
 
