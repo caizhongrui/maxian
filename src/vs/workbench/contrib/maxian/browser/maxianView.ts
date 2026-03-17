@@ -3093,6 +3093,11 @@ export class MaxianView extends ViewPane {
 				// 🔧 系统内部消息 - 静默处理，不显示在UI（避免系统提示泄露）
 				break;
 
+			case 'file_changes':
+				// 任务完成后的文件变更汇总
+				this.renderFileChangesSummary(message.text || '');
+				break;
+
 			default:
 				// 未处理的say消息类型
 				break;
@@ -3441,6 +3446,106 @@ export class MaxianView extends ViewPane {
 		resultContent.style.lineHeight = '1.6';
 		// 🔧 使用MarkdownRendererDom渲染markdown内容
 		MarkdownRendererDom.renderMarkdown(result, resultContent);
+
+		this.messageArea.scrollTop = this.messageArea.scrollHeight;
+	}
+
+	/**
+	 * 渲染文件变更汇总（任务完成后显示）
+	 */
+	private renderFileChangesSummary(text: string): void {
+		let changes: { written: string[]; deleted: string[] };
+		try {
+			changes = JSON.parse(text);
+		} catch {
+			return;
+		}
+
+		if (changes.written.length === 0 && changes.deleted.length === 0) {
+			return;
+		}
+
+		const container = append(this.messageArea, $('div.file-changes-summary'));
+		container.style.margin = '8px 0 12px 0';
+		container.style.borderRadius = '6px';
+		container.style.border = '1px solid var(--vscode-panel-border)';
+		container.style.overflow = 'hidden';
+		container.style.fontSize = '12px';
+
+		// 标题行
+		const header = append(container, $('div'));
+		header.style.padding = '6px 10px';
+		header.style.backgroundColor = 'var(--vscode-editor-inactiveSelectionBackground)';
+		header.style.display = 'flex';
+		header.style.alignItems = 'center';
+		header.style.gap = '6px';
+		header.style.fontWeight = '600';
+		header.style.color = 'var(--vscode-foreground)';
+
+		const icon = append(header, $('span.codicon.codicon-diff'));
+		icon.style.fontSize = '13px';
+		const title = append(header, $('span'));
+		const total = changes.written.length + changes.deleted.length;
+		title.textContent = `文件变更汇总 · ${total} 个文件`;
+
+		// 内容区
+		const body = append(container, $('div'));
+		body.style.padding = '6px 10px';
+		body.style.backgroundColor = 'var(--vscode-editor-background)';
+
+		// 渲染一组文件列表
+		const renderGroup = (label: string, iconClass: string, color: string, files: string[]) => {
+			if (files.length === 0) { return; }
+			const group = append(body, $('div'));
+			group.style.marginBottom = '4px';
+
+			const groupLabel = append(group, $('div'));
+			groupLabel.style.display = 'flex';
+			groupLabel.style.alignItems = 'center';
+			groupLabel.style.gap = '4px';
+			groupLabel.style.color = 'var(--vscode-descriptionForeground)';
+			groupLabel.style.marginBottom = '2px';
+			const gIcon = append(groupLabel, $(`span.codicon.${iconClass}`));
+			gIcon.style.color = color;
+			gIcon.style.fontSize = '11px';
+			const gText = append(groupLabel, $('span'));
+			gText.textContent = `${label} (${files.length})`;
+			gText.style.fontSize = '11px';
+			gText.style.fontWeight = '600';
+
+			for (const filePath of files) {
+				const row = append(group, $('div'));
+				row.style.display = 'flex';
+				row.style.alignItems = 'center';
+				row.style.gap = '4px';
+				row.style.padding = '1px 0 1px 4px';
+				row.style.cursor = 'pointer';
+				row.style.borderRadius = '3px';
+				row.style.color = 'var(--vscode-foreground)';
+
+				const dotIcon = append(row, $(`span.codicon.${iconClass}`));
+				dotIcon.style.color = color;
+				dotIcon.style.fontSize = '10px';
+				dotIcon.style.flexShrink = '0';
+
+				const pathSpan = append(row, $('span'));
+				// 只显示最后两段路径（更可读）
+				const parts = filePath.replace(/\\/g, '/').split('/');
+				const displayPath = parts.length > 2 ? `.../${parts.slice(-2).join('/')}` : filePath;
+				pathSpan.textContent = displayPath;
+				pathSpan.title = filePath;
+				pathSpan.style.overflow = 'hidden';
+				pathSpan.style.textOverflow = 'ellipsis';
+				pathSpan.style.whiteSpace = 'nowrap';
+				pathSpan.style.fontFamily = 'var(--vscode-editor-font-family)';
+
+				row.onmouseenter = () => { row.style.backgroundColor = 'var(--vscode-list-hoverBackground)'; };
+				row.onmouseleave = () => { row.style.backgroundColor = ''; };
+			}
+		};
+
+		renderGroup('修改/创建', 'codicon-edit', 'var(--vscode-charts-green)', changes.written);
+		renderGroup('删除', 'codicon-trash', 'var(--vscode-charts-red)', changes.deleted);
 
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;
 	}
@@ -4458,10 +4563,9 @@ export class MaxianView extends ViewPane {
 			toolInfo = null;
 		}
 
-		// 如果工具已设置为自动批准，直接执行批准操作
+		// 如果已设置全局自动批准（始终允许），直接执行批准操作
 		const toolName = toolInfo?.tool || '';
-		if (toolName && this.maxianService.isToolAutoApproved(toolName)) {
-			// 直接执行批准操作
+		if (this.maxianService.isToolAutoApproved('*') || (toolName && this.maxianService.isToolAutoApproved(toolName))) {
 			this.maxianService.saveDiffAndClose().then(() => {
 				this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
 			});
@@ -4737,9 +4841,8 @@ export class MaxianView extends ViewPane {
 			alwaysAllowIcon.className = 'codicon codicon-loading codicon-modifier-spin';
 			alwaysAllowText.textContent = '设置中...';
 
-			if (currentToolName) {
-				this.maxianService.setToolAutoApprove(currentToolName, true);
-			}
+			// 始终允许：对本次任务会话中所有工具类型生效（通配符 '*'）
+			this.maxianService.setToolAutoApprove('*', true);
 
 			try {
 				await this.maxianService.saveDiffAndClose();

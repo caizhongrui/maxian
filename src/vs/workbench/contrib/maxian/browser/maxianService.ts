@@ -1332,6 +1332,22 @@ export class MaxianService extends Disposable implements IMaxianService {
 						content: '',
 						isPartial: false
 					});
+
+					// 📝 发出文件变更汇总消息
+					if (this.currentTask) {
+						const changes = this.currentTask.getFileChanges();
+						if (changes.written.length > 0 || changes.deleted.length > 0) {
+							this._onClineMessage.fire({
+								message: {
+									ts: Date.now(),
+									type: 'say',
+									say: 'file_changes',
+									text: JSON.stringify(changes)
+								}
+							});
+						}
+					}
+
 					// 🔥 任务完成，清除自动批准设置
 					this.clearAutoApproveRules();
 					// 任务结束后重置currentTask，避免取消按钮误触发

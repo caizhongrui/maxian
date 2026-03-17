@@ -73,6 +73,7 @@ export type ClineSay =
 	| 'condense_context_error'
 	| 'codebase_search_result'
 	| 'user_edit_todos'
+	| 'file_changes'    // 任务完成后的文件变更汇总
 	| 'system_internal'; // 🔧 系统内部消息，不显示在UI（避免系统提示泄露）
 
 /**

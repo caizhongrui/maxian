@@ -197,6 +197,10 @@ export class TaskService extends Disposable {
 	private apiConversationHistory: MessageParam[] = [];
 	clineMessages: ClineMessage[] = [];
 
+	// 文件变更追踪
+	private readonly fileChangesWritten: Set<string> = new Set();  // 写入/创建/修改的文件
+	private readonly fileChangesDeleted: Set<string> = new Set();  // 删除的文件
+
 	// 效率优化：连续单工具调用计数器，用于自动注入batch提醒
 	private consecutiveSingleReadToolCount = 0;
 	// 效率优化：连续只读轮数计数器（包括batch只读），超过阈值强制要求开始写代码
@@ -1698,6 +1702,9 @@ export class TaskService extends Disposable {
 				this._onTodoListUpdated.fire({ todos: parsedTodos });
 			}
 
+				// 🔧 追踪文件变更（仅记录成功执行的写操作）
+			this.trackFileChange(toolUse);
+
 			// 🔧 触发工具完成事件
 			this._onToolCompleted.fire({
 				toolId: toolUse.id,
@@ -1953,6 +1960,39 @@ export class TaskService extends Disposable {
 			default:
 				return [];
 		}
+	}
+
+	/**
+	 * 追踪文件变更（write/delete工具执行成功后调用）
+	 */
+	private trackFileChange(toolUse: { name: string; input: any }): void {
+		const params = toolUse.input;
+		if (!params) { return; }
+
+		if (toolUse.name === 'delete_file') {
+			const path = params.path as string;
+			if (path) {
+				this.fileChangesDeleted.add(path);
+				this.fileChangesWritten.delete(path); // 先创建后删除 → 只保留删除
+			}
+		} else if (TaskService.WRITE_TOOLS.has(toolUse.name)) {
+			const paths = this.extractWriteToolFilePaths(toolUse);
+			for (const p of paths) {
+				if (p) {
+					this.fileChangesWritten.add(p);
+				}
+			}
+		}
+	}
+
+	/**
+	 * 获取本次任务的文件变更汇总
+	 */
+	public getFileChanges(): { written: string[]; deleted: string[] } {
+		return {
+			written: Array.from(this.fileChangesWritten),
+			deleted: Array.from(this.fileChangesDeleted)
+		};
 	}
 
 	private invalidateCacheForWriteTool(toolUse: { id: string; name: string; input: any }): void {
