@@ -484,7 +484,7 @@ export class AiProxyHandler implements IApiHandler {
 				password: this.config.password,
 				requestId: this.currentRequestId,
 				messages: aiProxyMessages,
-				maxTokens: 8192,  // 必须设置有效的 max_tokens，千问API要求范围 [1, 32768]
+				maxTokens: 16384, // 提高上限，避免生成大文件/长回复时被截断导致重试
 				temperature: 0.55,  // Qwen 最优温度（参考 OpenCode transform.ts，0.55 比 0.15 减少重复重试）
 				top_p: 1,           // Qwen 专属配置（参考 OpenCode transform.ts）
 				stream: true,

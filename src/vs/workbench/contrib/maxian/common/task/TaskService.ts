@@ -40,7 +40,6 @@ import { ModelContextTracker } from '../context-tracking/ModelContextTracker.js'
 import { ContextManager } from '../context/ContextManager.js';
 import { StateMutex } from '../utils/StateMutex.js';
 import { CheckpointManager } from '../checkpoints/CheckpointManager.js';
-import { getDiagnosticsAfterEdit } from '../lsp/lspDiagnostics.js';
 
 const MAX_CONSECUTIVE_MISTAKES = 3; // 最大连续错误次数
 
@@ -1667,23 +1666,8 @@ export class TaskService extends Disposable {
 			// 写入工具执行成功后，使相关缓存失效
 			this.invalidateCacheForWriteTool(toolUse);
 
-			// LSP 诊断注入（参考 OpenCode tool/write.ts）
-			// 写入类工具执行后自动获取 LSP 诊断，AI 强制感知类型/语法错误，形成自我修正回路
-			if (TaskService.WRITE_TOOLS.has(toolUse.name)) {
-				try {
-					const filePaths = this.extractWriteToolFilePaths(toolUse);
-					if (filePaths.length > 0) {
-						const diagnosticsTexts = await Promise.all(filePaths.map(fp => getDiagnosticsAfterEdit(fp)));
-						const diagnosticsAppendix = diagnosticsTexts.filter(d => d.length > 0).join('\n');
-						if (diagnosticsAppendix) {
-							truncatedContent = truncatedContent + '\n' + diagnosticsAppendix;
-							console.log('[TaskService] LSP 诊断已注入工具结果:', toolUse.name, filePaths);
-						}
-					}
-				} catch (diagError) {
-					console.warn('[TaskService] LSP 诊断注入失败:', diagError);
-				}
-			}
+			// LSP 诊断由 AI 主动调用 lsp_diagnostics 工具获取，不再自动注入
+			// 避免每次 edit 后阻塞等待 LSP（0.5-2s），提升任务执行速度
 
 			// 更新工具使用统计
 			this.toolUsage[toolUse.name] = (this.toolUsage[toolUse.name] || 0) + 1;
