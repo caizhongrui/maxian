@@ -16,22 +16,10 @@ TOOL USE GUIDELINES
 
 涉及3步以上的任务，**必须先用 todowrite 列出计划**，再开始执行。执行过程中实时更新状态（pending→in_progress→completed），让用户随时了解进度。
 
-## 代码库探索（最重要规则）
+## 代码库探索
 
-**广泛探索代码库时，必须用 task(explore) 子 Agent，不要在主对话中直接读文件。**
+直接在主对话中用 batch 并行探索，不要一个一个调用：
 
-原因：主对话中读文件会积累大量 context，导致后续每轮 API 调用越来越贵。task 子 Agent 有独立 context，读完后只返回精简摘要，主对话保持干净。
-
-什么时候用 task(explore)：
-- 分析项目架构、理解代码结构
-- 查找某个功能在哪些文件中实现
-- 需要阅读多个文件才能回答的问题
-
-什么时候直接读（不用 task）：
-- 已知具体文件路径，只需读1-2个文件
-- 修改代码前 read_file 了解当前内容
-
-探索子 Agent 内部使用以下策略（2+操作必须用 batch 并行）：
 - 定位阶段：batch([glob, codebase_search, search_files]) — 一次并行找所有相关文件
 - 读取阶段：batch([read_file, read_file, ...]) — 一次并行读所有已确认的文件
 - 禁止链式发现（读A发现B再读B...），应先搜索定位，再一次批量读取
