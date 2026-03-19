@@ -108,49 +108,11 @@ ${isGitBash ? '- Git Bash 不支持 Windows 原生 GUI 程序调用' : '- 运行
 操作系统: macOS (${systemInfo.platform})
 Shell: ${systemInfo.shell}
 
-⚠️ 当前是 macOS 系统，必须使用 Unix/macOS 命令，严禁使用 Windows 命令（del、rmdir /s、type、copy、move、dir、cls 等）。
-
-【常用命令】
-- 删除文件        → rm <file>
-- 删除目录        → rm -rf <dir>
-- 列出文件        → ls / ls -la
-- 查看文件内容    → cat <file>
-- 复制文件        → cp <src> <dst>
-- 移动/重命名     → mv <src> <dst>
-- 创建目录        → mkdir -p <dir>
-- 创建空文件      → touch <file>
-- 搜索内容        → grep -r "pattern" <dir>
-- 查找文件        → find <dir> -name "pattern"
-- 当前目录        → pwd
-- 清屏            → clear
-- 安装软件包      → brew install <pkg>
-
-【路径规范】
-- 路径使用正斜杠 /
-- 可使用 ~ 表示用户主目录
-- 命令链接使用 && 或 ||` : `
+⚠️ 当前是 macOS 系统，使用标准 Unix/macOS 命令，严禁使用 Windows 命令（del、rmdir /s、type、copy、move、dir、cls 等）。路径使用正斜杠 /，可用 ~ 表示主目录，命令链接用 && 或 ||` : `
 操作系统: Linux (${systemInfo.platform})
 Shell: ${systemInfo.shell}
 
-⚠️ 当前是 Linux 系统，必须使用 Unix/Linux 命令，严禁使用 Windows 命令。
-
-【常用命令】
-- 删除文件        → rm <file>
-- 删除目录        → rm -rf <dir>
-- 列出文件        → ls / ls -la
-- 查看文件内容    → cat <file>
-- 复制文件        → cp <src> <dst>
-- 移动/重命名     → mv <src> <dst>
-- 创建目录        → mkdir -p <dir>
-- 创建空文件      → touch <file>
-- 搜索内容        → grep -r "pattern" <dir>
-- 查找文件        → find <dir> -name "pattern"
-- 安装软件包      → apt/yum/dnf install <pkg>
-
-【路径规范】
-- 路径使用正斜杠 /
-- 可使用 ~ 表示用户主目录
-- 命令链接使用 && 或 ||`;
+⚠️ 当前是 Linux 系统，使用标准 Unix/Linux 命令，严禁使用 Windows 命令。路径使用正斜杠 /，可用 ~ 表示主目录，命令链接用 && 或 ||。包管理器：apt/yum/dnf install <pkg>`;
 
 	return `====
 
