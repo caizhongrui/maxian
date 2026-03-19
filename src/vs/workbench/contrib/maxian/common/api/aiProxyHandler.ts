@@ -484,9 +484,9 @@ export class AiProxyHandler implements IApiHandler {
 				password: this.config.password,
 				requestId: this.currentRequestId,
 				messages: aiProxyMessages,
-				maxTokens: 16384, // 提高上限，避免生成大文件/长回复时被截断导致重试
-				temperature: 0.55,  // Qwen 最优温度（参考 OpenCode transform.ts，0.55 比 0.15 减少重复重试）
-				top_p: 1,           // Qwen 专属配置（参考 OpenCode transform.ts）
+				maxTokens: 32768, // qwen3-coder-plus/flash 最大支持 65536，32768 足够覆盖大文件生成
+				temperature: 0.7,   // qwen3-coder 官方推荐 0.7~1.0，0.55 过于保守会导致重复输出
+				top_p: 0.95,        // qwen3-coder 官方推荐值（原为 1，过高会增加随机性）
 				stream: true,
 				apiType: 'chat',  // 重要：指定为 chat 模式，否则后端默认使用 completions 模式
 				...(aiProxyTools && aiProxyTools.length > 0 ? {
