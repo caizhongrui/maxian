@@ -38,15 +38,18 @@ export class ApiFactory {
 
 			// 根据模式映射businessCode
 			let businessCode: string | undefined;
+			let flashBusinessCode: string | undefined;
 			if (mode) {
 				businessCode = this.getBusinessCodeForMode(mode);
+				flashBusinessCode = this.getFlashBusinessCodeForMode(mode);
 			}
 
 			const config: AiProxyConfiguration = {
 				apiUrl,
 				username: btoa(username), // Base64编码
 				password: btoa(password), // Base64编码
-				businessCode  // 使用businessCode，后端会自动选择对应的provider和model
+				businessCode,       // 高质量模型（代码生成）
+				flashBusinessCode,  // 快速模型（探索加速，未配置时自动回退到 businessCode）
 			};
 
 			// 如果没有businessCode，使用传统方式（向后兼容）
@@ -79,7 +82,7 @@ export class ApiFactory {
 	}
 
 	/**
-	 * 根据模式获取对应的businessCode
+	 * 根据模式获取对应的businessCode（高质量模型，用于代码生成）
 	 */
 	private getBusinessCodeForMode(mode: string): string {
 		const modeMap: Record<string, string> = {
@@ -90,6 +93,19 @@ export class ApiFactory {
 			'orchestrator': 'IDE_CHAT_ORCHESTRATOR'
 		};
 		return modeMap[mode] || 'IDE_CHAT_CODE';  // 默认使用编码模式
+	}
+
+	/**
+	 * 根据模式获取对应的 flash businessCode（快速模型，用于探索阶段）
+	 * 未配置时返回 undefined，AiProxyHandler 会自动回退到 businessCode
+	 */
+	private getFlashBusinessCodeForMode(mode: string): string | undefined {
+		// 目前只有 code/debug 模式有探索阶段，其他模式无需 flash
+		const flashModeMap: Record<string, string> = {
+			'code': 'IDE_CHAT_CODE_FAST',
+			'debug': 'IDE_CHAT_DEBUG_FAST',
+		};
+		return flashModeMap[mode];
 	}
 
 	/**

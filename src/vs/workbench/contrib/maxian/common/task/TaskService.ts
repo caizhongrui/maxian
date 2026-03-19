@@ -748,6 +748,9 @@ export class TaskService extends Disposable {
 			// 执行工具
 			const { shouldContinue, shouldEndLoop } = await this.executeTools(toolUses);
 
+			// 混合模型调度：根据本轮工具类型决定下一轮用 flash（探索）还是 plus（生成）
+			this.updateModelTierForNextRound(toolUses);
+
 			if (shouldEndLoop) {
 				return true;
 			}
@@ -1163,6 +1166,28 @@ export class TaskService extends Disposable {
 	 */
 	private isReadOnlyTool(toolName: string): boolean {
 		return this.READ_ONLY_TOOLS.has(toolName);
+	}
+
+	/**
+	 * 混合模型调度：分析本轮工具调用，更新下一轮的模型档位
+	 * - 本轮全是探索类工具（读文件/搜索/LSP查询）→ 下一轮用 flash（快速）
+	 * - 本轮有写入/执行类工具 → 下一轮用 plus（高质量）
+	 */
+	private readonly FLASH_MODEL_TOOLS = new Set([
+		'read_file', 'list_files', 'search_files', 'list_code_definition_names',
+		'codebase_search', 'glob', 'lsp_hover', 'lsp_diagnostics',
+		'lsp_definition', 'lsp_references', 'lsp_type_definition',
+		'todoread', 'batch'
+	]);
+
+	private updateModelTierForNextRound(toolUses: Array<{ id: string; name: string; input: any }>): void {
+		if (typeof (this.apiHandler as any).setModelTier !== 'function') {
+			return; // handler 不支持档位切换，跳过
+		}
+
+		const allFastTools = toolUses.length > 0 && toolUses.every(t => this.FLASH_MODEL_TOOLS.has(t.name));
+		const tier = allFastTools ? 'flash' : 'plus';
+		(this.apiHandler as any).setModelTier(tier);
 	}
 
 	/**

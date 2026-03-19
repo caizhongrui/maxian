@@ -24,7 +24,8 @@ export interface AiProxyConfiguration {
 	apiUrl: string;      // 码弦 API 地址
 	username: string;    // 用户名（Base64编码）
 	password: string;    // 密码（Base64编码）
-	businessCode?: string;  // 业务场景代码（推荐使用，后端会根据此代码自动选择模型）
+	businessCode?: string;       // 业务场景代码（推荐使用，后端会根据此代码自动选择模型）
+	flashBusinessCode?: string;  // 快速模型的 businessCode（用于探索阶段，速度优先）
 	provider?: string;   // AI提供商标识（可选，不使用businessCode时才需要）
 	model?: string;      // 模型名称（可选，不使用businessCode时才需要）
 }
@@ -131,6 +132,8 @@ export class AiProxyHandler implements IApiHandler {
 	private modelInfo: ModelInfo;
 	private currentAbortController: AbortController | null = null;
 	private userAborted = false;
+	/** 混合模型调度：当前使用的模型档位（plus=高质量，flash=快速探索） */
+	private currentModelTier: 'plus' | 'flash' = 'plus';
 
 	// 🚀 超时和重试配置
 	private readonly REQUEST_TIMEOUT = 120000; // 120秒超时（流式响应需要较长时间）
@@ -449,6 +452,18 @@ export class AiProxyHandler implements IApiHandler {
 	}
 
 	/**
+	 * 混合模型调度：设置下一次请求使用的模型档位
+	 * - 'plus'：高质量模型（代码生成、修改），默认值
+	 * - 'flash'：快速模型（文件读取、搜索探索），速度约 3x
+	 */
+	setModelTier(tier: 'plus' | 'flash'): void {
+		if (this.currentModelTier !== tier) {
+			this.currentModelTier = tier;
+			console.log(`[Maxian] 模型档位切换: ${tier === 'flash' ? '⚡ flash（探索加速）' : '🧠 plus（代码生成）'}`);
+		}
+	}
+
+	/**
 	 * 创建消息并返回流式响应
 	 * 实现 IApiHandler 接口
 	 */
@@ -497,9 +512,13 @@ export class AiProxyHandler implements IApiHandler {
 				} : {})
 			};
 
-		// 优先使用businessCode，如果没有则使用provider/model（向后兼容）
-		if (this.config.businessCode) {
-			requestBody.businessCode = this.config.businessCode;
+		// 混合模型调度：根据当前档位选择 businessCode
+		// flash 档位优先用 flashBusinessCode，未配置时回退到 businessCode
+		if (this.config.businessCode || this.config.flashBusinessCode) {
+			const selectedCode = (this.currentModelTier === 'flash' && this.config.flashBusinessCode)
+				? this.config.flashBusinessCode
+				: this.config.businessCode;
+			requestBody.businessCode = selectedCode;
 		} else {
 			requestBody.provider = this.config.provider || 'qwen';
 			requestBody.model = this.config.model;
