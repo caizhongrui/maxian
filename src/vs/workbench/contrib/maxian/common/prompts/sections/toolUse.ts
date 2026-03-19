@@ -23,22 +23,22 @@ TOOL USE
 <path>src/main/java/com/example/UserController.java</path>
 </read_file>
 
-示例（搜索代码）：
-<codebase_search>
-<query>password validation</query>
-</codebase_search>
+示例（精确替换，主力编辑工具）：
+<edit>
+<path>src/main/java/com/example/UserService.java</path>
+<old_string>    public void saveUser(User user) {
+        userRepo.save(user);
+    }</old_string>
+<new_string>    public User saveUser(User user) {
+        return userRepo.save(user);
+    }</new_string>
+</edit>
 
-示例（应用修改）：
-<apply_diff>
-<path>src/main/java/com/example/UserController.java</path>
-<diff>
-<<<<<<< SEARCH
-old code
-=======
-new code
->>>>>>> REPLACE
-</diff>
-</apply_diff>
+示例（执行命令）：
+<execute_command>
+<command>npm run build</command>
+<requires_approval>false</requires_approval>
+</execute_command>
 
 **重要**：必须使用工具的真实名称和真实参数名，绝不能使用占位符。参数值可以是多行文本。`;
 }
