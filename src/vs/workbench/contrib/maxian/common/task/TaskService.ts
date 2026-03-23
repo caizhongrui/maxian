@@ -928,18 +928,33 @@ export class TaskService extends Disposable {
 					console.error('[TaskService] 参数内容预览 (后500字符):', inputStr.substring(Math.max(0, inputLength - 500)));
 
 					// 🔧 修复：对于batch工具，尝试手动解析JSON（可能被大内容影响）
-					if (chunk.name === 'batch' && typeof chunk.input === 'string') {
+					// chunk.name 可能因模型流式响应分块问题为空，同时通过 input 内容检测是否是 batch 调用
+					const isBatchCall = chunk.name === 'batch' || (typeof chunk.input === 'string' && chunk.input.includes('"tool_calls"'));
+					if (isBatchCall && typeof chunk.input === 'string') {
+						if (!chunk.name) { console.warn('[TaskService] batch 调用 chunk.name 为空，通过 input 内容识别'); }
 						try {
-							// 尝试提取 tool_calls 内容（可能是XML格式）
-							const toolCallsMatch = chunk.input.match(/<tool_calls>([\s\S]*?)<\/tool_calls>/);
-							if (toolCallsMatch) {
-								const toolCallsStr = toolCallsMatch[1].trim();
+							const trimmedBatchInput = chunk.input.trim();
+							// Step 1: 截断修复 —— 模型输出 {"tool_calls": "..."} 但缺少结尾 }
+							if (trimmedBatchInput.startsWith('{') && !trimmedBatchInput.endsWith('}')) {
+								const repaired = trimmedBatchInput + '}';
+								input = JSON.parse(repaired);
+								console.log('[TaskService] batch JSON 截断修复成功（补全结尾}）');
+							} else {
+								// Step 2: XML 格式
+								const toolCallsMatch = chunk.input.match(/<tool_calls>([\s\S]*?)<\/tool_calls>/);
+								if (toolCallsMatch) {
+									const toolCallsStr = toolCallsMatch[1].trim();
 									const toolCalls = JSON.parse(toolCallsStr);
-								input = { tool_calls: toolCalls };
+									input = { tool_calls: toolCalls };
 								} else {
-								// 如果不是XML格式，尝试直接解析为对象
-								input = typeof chunk.input === 'object' ? chunk.input : {};
-								console.warn('[TaskService] 未找到tool_calls标签，使用原始input或空对象');
+									// Step 3: 直接尝试再次解析（兜底）
+									try {
+										input = JSON.parse(trimmedBatchInput);
+									} catch {
+										input = {};
+										console.warn('[TaskService] batch 所有修复策略均失败，使用空对象');
+									}
+								}
 							}
 						} catch (e2) {
 							console.error('[TaskService] 手动解析也失败:', e2);

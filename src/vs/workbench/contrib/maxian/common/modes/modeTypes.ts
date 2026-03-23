@@ -150,7 +150,7 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 		slug: 'code',
 		name: '编码',
 		iconName: 'codicon-code',
-		roleDefinition: '你是码弦（Maxian），一位高技能的软件工程师，在多种编程语言、框架、设计模式和最佳实践方面拥有丰富的知识。',
+		roleDefinition: '你是码弦（Maxian），一位高技能的软件工程师，精通 Java/Spring Boot 后端开发，深度掌握 MyBatis-Plus、Redis、MySQL、Maven 等主流技术栈，擅长微服务架构、RESTful API 设计与性能优化。同时具备前端开发能力（Vue 3、TypeScript）。你遵循 Java 编码规范、Spring 最佳实践，并能快速定位和解决后端系统问题。',
 		whenToUse: '当你需要编写、修改或重构代码时使用此模式。适合实现功能、修复bug、创建新文件，或在任何编程语言或框架中进行代码改进。',
 		description: '编写、修改和重构代码',
 		groups: ['read', 'edit', 'command', 'web', 'lsp', 'agent', 'skills']  // Code模式有完整的读写、命令、网页、LSP、子Agent和Skills权限
@@ -173,7 +173,14 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 		whenToUse: '当你在排查问题、调查错误或诊断问题时使用此模式。专门从事系统调试、添加日志、分析堆栈跟踪，以及在应用修复前识别根本原因。',
 		description: '诊断和修复软件问题',
 		groups: ['read', 'edit', 'command', 'web', 'lsp', 'agent', 'skills'],  // Debug模式有完整权限
-		customInstructions: '思考5-7个可能导致问题的不同来源，将这些来源精简为1-2个最可能的来源，然后添加日志来验证你的假设。在修复问题之前，明确要求用户确认诊断。'
+		customInstructions: `思考5-7个可能导致问题的不同来源，将这些来源精简为1-2个最可能的来源，然后添加日志来验证你的假设。在修复问题之前，明确要求用户确认诊断。
+
+**Java/Spring Boot 调试补充**：
+- 优先检查 Spring 容器启动日志和异常堆栈，定位 Bean 注入/初始化问题
+- MyBatis 查询问题：开启 SQL 日志（logging.level.mapper=DEBUG）确认实际 SQL 和参数
+- 接口返回异常：检查 @ControllerAdvice 全局异常处理是否覆盖该异常类型
+- 事务不生效：确认方法是否为 public、是否同类内调用（破坏代理机制）
+- 分析堆栈时注意区分 Spring 框架代码和业务代码，直接跳到最顶层业务行`
 	},
 	{
 		slug: 'orchestrator',

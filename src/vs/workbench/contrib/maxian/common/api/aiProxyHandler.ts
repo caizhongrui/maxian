@@ -864,10 +864,25 @@ export class AiProxyHandler implements IApiHandler {
 						// 在finish_reason为tool_calls时，输出所有累积的工具调用（与QwenHandler一致）
 						if (event.choices?.[0]?.finish_reason === 'tool_calls') {
 							for (const [_, toolData] of toolCallsMap.entries()) {
+								// 跳过空条目（name 和 arguments 均为空，是模型偶发的幽灵 tool_call，无法执行）
+								if (!toolData.name && !toolData.arguments.trim()) {
+									console.warn('[Maxian] 跳过空工具调用条目 (name和arguments均为空)');
+									continue;
+								}
+								// 如果 name 为空但 arguments 包含 tool_calls，说明是 batch 调用（模型流式分块导致 name 字段丢失）
+								let resolvedName = toolData.name;
+								if (!resolvedName && toolData.arguments.includes('"tool_calls"')) {
+									resolvedName = 'batch';
+									console.warn('[Maxian] 工具名为空，通过 arguments 内容自动识别为 batch');
+								}
+								// 原始参数诊断（排查 batch 参数格式问题）
+								if (resolvedName === 'batch') {
+									console.log('[Maxian] batch 原始 arguments (' + toolData.arguments.length + '字符):', JSON.stringify(toolData.arguments));
+								}
 								const toolUseChunk: ToolUseStreamChunk = {
 									type: 'tool_use',
 									id: toolData.id,
-									name: toolData.name,
+									name: resolvedName,
 									input: sanitizeToolArguments(toolData.arguments)
 								};
 								yield toolUseChunk;
