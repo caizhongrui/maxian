@@ -126,6 +126,8 @@ import { IRepoMapService } from '../../workbench/contrib/maxian/common/repomap/r
 import { RepoMapService } from '../../workbench/contrib/maxian/node/repomap/repoMapServiceImpl.js';
 import { ICommandExecutionService } from '../../workbench/contrib/maxian/common/services/commandExecutionService.js';
 import { CommandExecutionServiceImpl } from '../../workbench/contrib/maxian/node/commandExecutionServiceImpl.js';
+import { IVectorSearchService } from '../../workbench/contrib/maxian/common/vector/IVectorSearchService.js';
+import { VectorSearchServiceImpl } from '../../workbench/contrib/maxian/node/vectorSearchServiceImpl.js';
 import { ISkillService } from '../../workbench/contrib/skills/common/skillService.js';
 import { SkillServiceImpl } from '../../workbench/contrib/skills/node/skillServiceImpl.js';
 
@@ -1137,6 +1139,9 @@ export class CodeApplication extends Disposable {
 		// 码弦 Agent 命令执行服务
 		services.set(ICommandExecutionService, new CommandExecutionServiceImpl());
 
+		// 码弦 向量搜索服务（语义搜索，需要 Node.js 环境）
+		services.set(IVectorSearchService, new VectorSearchServiceImpl());
+
 		// Skills System
 		services.set(ISkillService, new SyncDescriptor(SkillServiceImpl, undefined, true));
 
@@ -1279,6 +1284,10 @@ export class CodeApplication extends Disposable {
 		// 码弦 Agent 命令执行
 		const maxianCommandExecutionChannel = ProxyChannel.fromService(accessor.get(ICommandExecutionService), disposables);
 		mainProcessElectronServer.registerChannel('maxianCommandExecution', maxianCommandExecutionChannel);
+
+		// 码弦 向量搜索（语义搜索）
+		const maxianVectorSearchChannel = ProxyChannel.fromService(accessor.get(IVectorSearchService), disposables);
+		mainProcessElectronServer.registerChannel('maxianVectorSearch', maxianVectorSearchChannel);
 
 		// Skills System
 		this.logService.info('[App] Getting ISkillService...');

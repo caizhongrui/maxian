@@ -51,6 +51,7 @@ import { AutoDiagnosticInjector, IDiagnosticInjectionEvent } from './lspIntegrat
 import { SteeringService } from '../common/steering/SteeringService.js';
 import { MemoryService } from '../common/services/memoryService.js';
 import { ICommandExecutionService } from '../common/services/commandExecutionService.js';
+import { IVectorSearchService } from '../common/vector/IVectorSearchService.js';
 import { FilteredToolExecutor } from '../common/tools/filteredToolExecutor.js';
 import { ITodoItem as ITodoStoreItem } from '../common/tools/todoStore.js';
 import { EXPLORE_AGENT_TOOLS, PLAN_AGENT_TOOLS, EXECUTE_AGENT_TOOLS } from '../common/agents/AgentTypes.js';
@@ -538,7 +539,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 		@ILspTypeDefinitionService private readonly lspTypeDefinitionService: ILspTypeDefinitionService,
 		@ITextFileService private readonly textFileService: ITextFileService,
 		@ITerminalProfileService private readonly terminalProfileService: ITerminalProfileService,
-		@ICommandExecutionService private readonly commandExecutionService: ICommandExecutionService
+		@ICommandExecutionService private readonly commandExecutionService: ICommandExecutionService,
+		@IVectorSearchService private readonly vectorSearchService: IVectorSearchService
 	) {
 		super();
 		this.apiFactory = new ApiFactory(this.configurationService);
@@ -687,7 +689,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 			},
 			this.skillService,
 			this.commandExecutionService,
-			this.modelService
+			this.modelService,
+			this.vectorSearchService
 		);
 
 		// P2优化：注入子 Agent 工厂（支持 task 工具）

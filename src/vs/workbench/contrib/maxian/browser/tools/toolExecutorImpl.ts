@@ -30,7 +30,7 @@ import { ICommandExecutionService } from '../../common/services/commandExecution
 import { consumePathSavedByDiff } from '../diffViewProvider.js';
 import { prReviewTool } from '../../common/tools/prReviewTool.js';
 import { generateTestsTool } from '../../common/tools/generateTestsTool.js';
-import { SemanticSearchService } from '../../common/vector/semanticSearchService.js';
+import { IVectorSearchService } from '../../common/vector/IVectorSearchService.js';
 
 /**
  * 工具执行器实现类
@@ -56,6 +56,8 @@ export class ToolExecutorImpl implements IToolExecutor {
 	 */
 	private subAgentRunner?: (agentType: string, prompt: string, taskId?: string, taskToolId?: string) => Promise<string>;
 
+	private vectorSearchService?: IVectorSearchService;
+
 	constructor(
 		fileService: IFileService,
 		terminalService: ITerminalService,
@@ -64,7 +66,8 @@ export class ToolExecutorImpl implements IToolExecutor {
 		context: ToolExecutionContext,
 		skillService?: ISkillService,
 		commandExecutionService?: ICommandExecutionService,
-		modelService?: IModelService
+		modelService?: IModelService,
+		vectorSearchService?: IVectorSearchService
 	) {
 		this.fileOperations = new FileOperationsTool(fileService, context.workspaceRoot || '', undefined, modelService);
 		this.commandExecution = new CommandExecutionTool(terminalService);
@@ -74,6 +77,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 		this.searchTool = new SearchTool(searchService, ripgrepService, context.workspaceRoot || '');
 		this.context = context;
 		this.skillService = skillService;
+		this.vectorSearchService = vectorSearchService;
 		// P0优化：初始化批量执行器
 		this.batchExecutor = new BatchToolExecutor(this);
 	}
@@ -203,12 +207,11 @@ export class ToolExecutorImpl implements IToolExecutor {
 					const semanticCwd = semanticPath || this.context.workspaceRoot || '';
 					// 优先尝试语义向量搜索，失败时 fallback 到 ripgrep 关键字搜索
 					let semanticUsed = false;
-					if (semanticQuery && semanticCwd) {
+					if (semanticQuery && semanticCwd && this.vectorSearchService) {
 						try {
-							const semanticService = SemanticSearchService.getInstance();
-							const semanticResults = await semanticService.semanticSearch(semanticQuery, semanticCwd, 10);
-							if (semanticResults.length > 0) {
-								result = semanticService.formatResults(semanticResults, semanticQuery);
+							const semanticResults = await this.vectorSearchService.semanticSearch(semanticQuery, semanticCwd, 10);
+						if (semanticResults.length > 0) {
+								result = this.vectorSearchService.formatResults(semanticResults, semanticQuery);
 								semanticUsed = true;
 							}
 						} catch (semanticError) {

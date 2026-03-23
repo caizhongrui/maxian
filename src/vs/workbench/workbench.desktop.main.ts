@@ -215,6 +215,9 @@ import './contrib/maxian/electron-sandbox/repoMapService.js';
 // 码弦 Agent 命令执行服务（IPC 代理注册）
 import './contrib/maxian/electron-sandbox/commandExecutionService.js';
 
+// 码弦 向量搜索服务（IPC 代理注册，需要 Node.js 主进程运行）
+import './contrib/maxian/electron-sandbox/vectorSearchService.js';
+
 // Skills System (按需加载专业领域知识)
 import './contrib/skills/electron-sandbox/skills.contribution.js';
 
