@@ -38,6 +38,7 @@ import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextke
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { MAXIAN_INPUT_FOCUSED, MAXIAN_MENTION_DROPDOWN_VISIBLE } from './maxianContextKeys.js';
 import { ICommandExecutionService, ICommandExecutionResult, ICommandExecutionOptions } from '../common/services/commandExecutionService.js';
+import { IVectorSearchService, ISemanticSearchResult } from '../common/vector/IVectorSearchService.js';
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
@@ -58,6 +59,20 @@ class BrowserCommandExecutionService implements ICommandExecutionService {
 	async cancel(_commandId: string): Promise<void> { }
 }
 registerSingleton(ICommandExecutionService, BrowserCommandExecutionService, InstantiationType.Delayed);
+
+// 注册向量搜索服务浏览器降级实现
+// 在 Electron desktop 环境中，此注册会被 electron-sandbox/vectorSearchService.ts 中的
+// registerMainProcessRemoteService 覆盖，使用主进程 Node.js 实现
+class BrowserVectorSearchService implements IVectorSearchService {
+	readonly _serviceBrand: undefined;
+	async semanticSearch(_query: string, _cwd: string, _maxResults: number): Promise<ISemanticSearchResult[]> {
+		return []; // web 环境不支持向量搜索，返回空，由 toolExecutorImpl fallback 到 ripgrep
+	}
+	formatResults(_results: ISemanticSearchResult[], _query: string): string {
+		return '';
+	}
+}
+registerSingleton(IVectorSearchService, BrowserVectorSearchService, InstantiationType.Delayed);
 
 // 注册码弦服务
 registerSingleton(IMaxianService, MaxianService, InstantiationType.Delayed);
