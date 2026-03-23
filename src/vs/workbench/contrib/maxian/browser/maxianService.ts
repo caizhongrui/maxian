@@ -49,6 +49,7 @@ import { ILspTypeDefinitionService, globalLspTypeDefinitionHandler } from '../co
 import { ITextFileService } from '../../../services/textfile/common/textfiles.js';
 import { AutoDiagnosticInjector, IDiagnosticInjectionEvent } from './lspIntegration/AutoDiagnosticInjector.js';
 import { SteeringService } from '../common/steering/SteeringService.js';
+import { MemoryService } from '../common/services/memoryService.js';
 import { ICommandExecutionService } from '../common/services/commandExecutionService.js';
 import { FilteredToolExecutor } from '../common/tools/filteredToolExecutor.js';
 import { ITodoItem as ITodoStoreItem } from '../common/tools/todoStore.js';
@@ -159,7 +160,7 @@ export interface ITodoListEvent {
  */
 export interface ITodoItem {
 	content: string;           // 任务内容
-	status: 'pending' | 'in_progress' | 'completed';  // 任务状态
+	status: 'pending' | 'in_progress' | 'completed' | 'failed';  // 任务状态
 	activeForm: string;        // 进行中状态的描述文本
 }
 
@@ -362,6 +363,17 @@ export interface IMaxianService {
 	/** 读取工作区内文件的文本内容（相对路径，最多 maxLines 行） */
 	readWorkspaceFile(relativePath: string, maxLines?: number): Promise<{ content: string; totalLines: number } | null>;
 
+	/**
+	 * 获取当前工作区的 git diff（git diff HEAD）
+	 * @returns diff 字符串，如果没有变更或不是 git 仓库则返回 null
+	 */
+	getGitDiff(): Promise<string | null>;
+
+	/**
+	 * 获取 MemoryService 实例（供外部调用保存记忆）
+	 */
+	getMemoryService(): import('../common/services/memoryService.js').MemoryService | null;
+
 	// ====== 快捷键触发事件（由 VSCode 命令系统触发，视图响应） ======
 
 	/** 触发发送消息（由 maxian.sendMessage 命令触发） */
@@ -385,6 +397,17 @@ export interface IMaxianService {
 	 * 查询当前用户的问答历史
 	 */
 	getAskHistory(limit?: number): Promise<AskHistoryItem[]>;
+
+	/**
+	 * 回滚到当前任务的最后一个 checkpoint
+	 * （功能1: Checkpoint 完善）
+	 */
+	rollbackToLastCheckpoint(): Promise<{ success: boolean; message: string }>;
+
+	/**
+	 * 获取当前任务的所有 checkpoint 列表
+	 */
+	getCheckpoints(): any[];
 }
 
 /**
@@ -485,6 +508,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	// 📋 Steering 服务（P1优化 - 项目/团队级别规范注入）
 	private steeringService: SteeringService | null = null;
+
+	// 🧠 Memory 服务（跨会话记忆增强）
+	private memoryService: MemoryService | null = null;
 
 	// 📊 行为埋点上报器
 	public behaviorReporter: BehaviorReporter | null = null;
@@ -672,13 +698,15 @@ export class MaxianService extends Disposable implements IMaxianService {
 		);
 
 
-		// P1优化：并行初始化 RepoMapService 和 SteeringService
+		// P1优化：并行初始化 RepoMapService、SteeringService 和 MemoryService
 		if (workspaceRoot) {
 			this.repoMapService = this._repoMapService;
 			this.steeringService = new SteeringService(workspaceRoot, this.fileService);
+			this.memoryService = new MemoryService(workspaceRoot, this.fileService);
 			await Promise.all([
 				this.repoMapService.initialize(workspaceRoot),
-				this.steeringService.initialize()
+				this.steeringService.initialize(),
+				this.memoryService.ensureInitialized()
 			]);
 		}
 
@@ -857,6 +885,37 @@ export class MaxianService extends Disposable implements IMaxianService {
 		} catch {
 			return null;
 		}
+	}
+
+	/**
+	 * 获取当前工作区的 git diff（git diff HEAD）
+	 */
+	async getGitDiff(): Promise<string | null> {
+		const workspaceRoot = this.getWorkspaceRoot();
+		if (!workspaceRoot) return null;
+
+		try {
+			if (!this.commandExecutionService) return null;
+			const result = await this.commandExecutionService.execute('git diff HEAD', { cwd: workspaceRoot, timeout: 10000 });
+			const diff = (result.stdout || '').trim();
+			if (!diff) {
+				// 尝试获取staged的diff
+				const stagedResult = await this.commandExecutionService.execute('git diff --cached', { cwd: workspaceRoot, timeout: 10000 });
+				const stagedDiff = (stagedResult.stdout || '').trim();
+				return stagedDiff || null;
+			}
+			return diff;
+		} catch (error) {
+			console.error('[MaxianService] getGitDiff 失败:', error);
+			return null;
+		}
+	}
+
+	/**
+	 * 获取 MemoryService 实例
+	 */
+	getMemoryService(): MemoryService | null {
+		return this.memoryService;
 	}
 
 	// @mention 文件列表缓存（避免每次输入都重复扫描）
@@ -1647,8 +1706,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 		const steeringContent = this.steeringService
 			? this.steeringService.getActiveContent()
 			: null;
-		if (steeringContent) {
-			}
+
+		// 获取跨会话记忆内容（来自 .maxian/memory/auto-memory.md）
+		const memoryContent = this.memoryService
+			? await this.memoryService.loadMemory()
+			: null;
 
 		let prompt = SystemPromptGenerator.generate(
 			workspaceRoot,
@@ -1665,7 +1727,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 				// 🔧 自动诊断信息注入（Task #18）
 				diagnosticText: this.currentDiagnosticText,
 				// 📋 Steering内容注入（P1优化 - .maxian/steering/*.md）
-				steeringContent: steeringContent
+				steeringContent: steeringContent,
+				// 🧠 跨会话记忆注入（来自 .maxian/memory/auto-memory.md）
+				memoryContent: memoryContent ?? null
 			}
 		);
 
@@ -2110,6 +2174,50 @@ export class MaxianService extends Disposable implements IMaxianService {
 					type: 'object',
 					properties: {},
 					required: []
+				}
+			},
+
+			// 29. pr_review - PR代码审查
+			{
+				name: 'pr_review',
+				description: '获取当前工作区与基础分支之间的git diff，供Agent进行代码审查。工具返回提交记录和代码变更，Agent根据返回内容分析代码质量、安全性、性能等问题。\n\n**使用场景**：\n- 审查即将合并的功能分支代码\n- 在提交前进行自查\n- 分析某次代码变更的影响范围',
+				parameters: {
+					type: 'object',
+					properties: {
+						base_branch: {
+							type: 'string',
+							description: '对比的基础分支名称（默认自动检测 main 或 master）。示例："main", "develop", "release/1.0"'
+						},
+						focus: {
+							type: 'string',
+							description: '审查重点，可选值：\n- "all"（默认）：全面审查\n- "security"：重点关注安全性\n- "performance"：重点关注性能\n- "maintainability"：重点关注可维护性\n- "correctness"：重点关注正确性\n- "style"：重点关注代码风格'
+						}
+					},
+					required: []
+				}
+			},
+
+			// 30. generate_tests - 测试代码生成
+			{
+				name: 'generate_tests',
+				description: '分析指定源文件的内容，返回文件元信息和源代码，供Agent生成对应的测试代码框架。工具会自动检测语言、推荐测试框架、推导测试文件路径。Agent根据返回内容调用 write_to_file 工具写入测试文件。\n\n**使用场景**：\n- 为新创建的类/模块生成测试骨架\n- 为现有代码补充测试覆盖\n- 生成符合项目约定的测试代码',
+				parameters: {
+					type: 'object',
+					properties: {
+						target_file: {
+							type: 'string',
+							description: '要生成测试的源文件路径（相对于工作区根目录）。示例："src/main/java/com/example/UserService.java"'
+						},
+						test_framework: {
+							type: 'string',
+							description: '测试框架名称（可选，默认根据语言自动检测）。支持：\n- Java/Kotlin: "junit5"（默认）\n- TypeScript/JavaScript: "jest"（默认）\n- Python: "pytest"（默认）\n- Go: "go_test"（默认）\n- C#: "xunit"\n- C++: "googletest"\n- Ruby: "rspec"\n- PHP: "phpunit"'
+						},
+						output_path: {
+							type: 'string',
+							description: '测试文件输出路径（可选，默认自动推导）。示例："src/test/java/com/example/UserServiceTest.java"'
+						}
+					},
+					required: ['target_file']
 				}
 			}
 		];
@@ -2785,6 +2893,26 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	async getAskHistory(limit: number = 50): Promise<AskHistoryItem[]> {
 		return this.aiLogService.getAskHistory(limit);
+	}
+
+	/**
+	 * 功能1: 回滚到当前任务的最后一个 checkpoint
+	 */
+	async rollbackToLastCheckpoint(): Promise<{ success: boolean; message: string }> {
+		if (!this.currentTask) {
+			return { success: false, message: '当前没有活动的任务' };
+		}
+		return this.currentTask.rollbackToLastCheckpoint();
+	}
+
+	/**
+	 * 功能1: 获取当前任务的所有 checkpoint 列表
+	 */
+	getCheckpoints(): any[] {
+		if (!this.currentTask) {
+			return [];
+		}
+		return this.currentTask.getCheckpoints();
 	}
 
 	/**

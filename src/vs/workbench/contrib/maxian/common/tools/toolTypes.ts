@@ -72,6 +72,10 @@ export const toolParamNames = [
 	'skill_name',     // skill 工具参数
 	'requires_approval', // execute_command: 是否需要用户确认（参考Cline）
 	'options',        // ask_followup_question: 备选答案数组（参考Cline）
+	'base_branch',    // pr_review: 对比的基础分支
+	'focus',          // pr_review: 审查重点
+	'test_framework', // generate_tests: 测试框架名称
+	'output_path',    // generate_tests: 测试文件输出路径
 ] as const;
 
 export type ToolParamName = (typeof toolParamNames)[number];
@@ -108,6 +112,8 @@ export const toolNames = [
 	'skill',        // Skills系统：按需加载专业知识
 	'todowrite',    // P2优化：写入待办列表（同 update_todo_list 但更丰富）
 	'todoread',     // P2优化：读取当前待办列表
+	'pr_review',    // PR代码审查：获取git diff供Agent分析
+	'generate_tests', // 测试代码生成：分析源文件供Agent生成测试
 ] as const;
 
 // 工具名称
@@ -257,6 +263,8 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 	skill: '加载专业知识',        // Skills系统
 	todowrite: '写入待办列表',    // P2优化
 	todoread: '读取待办列表',     // P2优化
+	pr_review: 'PR代码审查',      // PR审查工具
+	generate_tests: '生成测试代码', // 测试生成工具
 } as const;
 
 // 工具分组
@@ -276,6 +284,8 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 			'list_code_definition_names',
 			'codebase_search',
 			'glob',
+			'pr_review',       // PR代码审查（只读git操作）
+			'generate_tests',  // 测试代码生成（分析源文件）
 		],
 	},
 	edit: {
@@ -316,6 +326,16 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 		alwaysAvailable: true,  // Skills始终可用
 	},
 };
+
+export interface PrReviewToolUse extends ToolUse {
+	name: 'pr_review';
+	params: Partial<Pick<Record<ToolParamName, string>, 'base_branch' | 'focus'>>;
+}
+
+export interface GenerateTestsToolUse extends ToolUse {
+	name: 'generate_tests';
+	params: Partial<Pick<Record<ToolParamName, string>, 'target_file' | 'test_framework' | 'output_path'>>;
+}
 
 // 始终可用的工具
 export const ALWAYS_AVAILABLE_TOOLS: ToolName[] = [

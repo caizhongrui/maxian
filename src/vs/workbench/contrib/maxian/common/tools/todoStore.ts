@@ -9,7 +9,7 @@
  * 每个 Session 独立维护一份待办列表
  */
 
-export type TodoStatus = 'pending' | 'in_progress' | 'completed';
+export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
 export type TodoPriority = 'high' | 'medium' | 'low';
 
 /**
@@ -76,6 +76,7 @@ function validateStatus(value?: string): TodoStatus | null {
 	if (normalized === 'pending' || normalized === 'todo') { return 'pending'; }
 	if (normalized === 'in_progress' || normalized === 'in-progress' || normalized === 'active') { return 'in_progress'; }
 	if (normalized === 'completed' || normalized === 'done' || normalized === 'complete') { return 'completed'; }
+	if (normalized === 'failed' || normalized === 'error' || normalized === 'fail') { return 'failed'; }
 	return null;
 }
 
@@ -101,6 +102,7 @@ export function formatTodoList(todos: ITodoItem[]): string {
 			case 'completed': return '✅';
 			case 'in_progress': return '🔄';
 			case 'pending': return '⏳';
+			case 'failed': return '❌';
 		}
 	};
 

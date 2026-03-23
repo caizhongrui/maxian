@@ -241,6 +241,16 @@ export const DEFAULT_PERMISSION_RULES: Record<ToolName, Record<string, Permissio
 
 	todoread: {
 		'*': 'allow'
+	},
+
+	// PR代码审查（只读git操作，始终允许）
+	pr_review: {
+		'*': 'allow'
+	},
+
+	// 测试代码生成（读取源文件分析，始终允许）
+	generate_tests: {
+		'*': 'allow'
 	}
 };
 

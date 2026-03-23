@@ -213,6 +213,10 @@ export class TaskService extends Disposable {
 	private totalApiRounds = 0;
 	private static readonly MAX_TOTAL_API_ROUNDS = 80; // 超过80轮 API 调用，强制询问用户
 
+	// 功能2: Debug 自动测试循环计数器
+	private _debugTestRetryCount = 0;
+	private static readonly MAX_DEBUG_TEST_RETRIES = 3; // 最多循环3次
+
 	// Token & Tool usage
 	private tokenUsage: TokenUsage = {
 		totalTokensIn: 0,
@@ -1200,7 +1204,31 @@ export class TaskService extends Disposable {
 			return; // handler 不支持档位切换，跳过
 		}
 
-		const allFastTools = toolUses.length > 0 && toolUses.every(t => this.FLASH_MODEL_TOOLS.has(t.name));
+		// 功能3: 完善混合模型调度，batch 内的子工具也参与判断
+		const isToolFast = (toolName: string): boolean => this.FLASH_MODEL_TOOLS.has(toolName);
+
+		const isBatchAllFast = (batchInput: any): boolean => {
+			try {
+				const rawCalls = batchInput?.tool_calls;
+				const calls: Array<{ tool: string; name?: string }> = typeof rawCalls === 'string'
+					? JSON.parse(rawCalls)
+					: (Array.isArray(rawCalls) ? rawCalls : []);
+				if (calls.length === 0) {
+					return true; // 空 batch 视为快速
+				}
+				return calls.every(c => isToolFast(c.tool || c.name || ''));
+			} catch {
+				return false; // 无法解析时保守处理，视为写入操作
+			}
+		};
+
+		const allFastTools = toolUses.length > 0 && toolUses.every(t => {
+			if (t.name === 'batch') {
+				return isBatchAllFast(t.input);
+			}
+			return isToolFast(t.name);
+		});
+
 		const tier = allFastTools ? 'flash' : 'plus';
 		(this.apiHandler as any).setModelTier(tier);
 	}
@@ -1622,6 +1650,28 @@ export class TaskService extends Disposable {
 			}
 		}
 
+		// 功能1: 写文件操作前自动创建 checkpoint（edit/multiedit/write_to_file/apply_diff）
+		if (TaskService.CHECKPOINT_BEFORE_TOOLS.has(toolUse.name)) {
+			try {
+				const filePath = toolUse.input?.path || toolUse.input?.target_file || 'unknown';
+				await this.checkpointManager.createCheckpoint(
+					`写文件前 - ${toolUse.name}: ${filePath}`,
+					{
+						messageCount: this.apiConversationHistory.length,
+						messages: [...this.apiConversationHistory],
+						tokenUsage: { ...this.tokenUsage },
+						timestamp: Date.now(),
+						toolName: toolUse.name,
+						filePath,
+					}
+				);
+				console.log(`[TaskService] 写文件前创建 checkpoint: ${toolUse.name} -> ${filePath}`);
+			} catch (checkpointError) {
+				// checkpoint 失败不影响主流程
+				console.warn('[TaskService] 写文件前创建 checkpoint 失败:', checkpointError);
+			}
+		}
+
 		// 执行工具
 		try {
 			const toolStatusText = this.formatToolStatusForDisplay(toolUse);
@@ -1945,6 +1995,13 @@ export class TaskService extends Disposable {
 	 */
 	private static readonly WRITE_TOOLS = new Set([
 		'write_to_file', 'apply_diff', 'edit', 'edit_file', 'insert_content', 'multiedit', 'patch',
+	]);
+
+	/**
+	 * 写文件操作前需要创建 checkpoint 的工具集合（功能1）
+	 */
+	private static readonly CHECKPOINT_BEFORE_TOOLS = new Set([
+		'edit', 'multiedit', 'write_to_file', 'apply_diff',
 	]);
 
 	/**
@@ -2419,6 +2476,34 @@ case 'execute_command':
 			return { shouldContinue: true, shouldEndLoop: true };
 		}
 
+		// 功能2: Debug 模式自动测试循环
+		if (this.currentMode === 'debug' && this._debugTestRetryCount < TaskService.MAX_DEBUG_TEST_RETRIES) {
+			const testResult = await this.runDebugTests();
+			if (testResult !== null) {
+				// 测试有结果（不是"无法检测项目类型"的null）
+				if (!testResult.passed) {
+					// 测试失败，将错误注入对话，让 AI 继续修复
+					this._debugTestRetryCount++;
+					console.log(`[TaskService] Debug 测试失败（第${this._debugTestRetryCount}次），注入测试错误让 AI 修复`);
+					await this.say('tool', `[Debug 自动测试] 运行 ${testResult.command} 失败（第 ${this._debugTestRetryCount}/${TaskService.MAX_DEBUG_TEST_RETRIES} 次）`);
+
+					return {
+						shouldContinue: true,
+						shouldEndLoop: false,
+						toolResult: {
+							type: 'tool_result',
+							tool_use_id: toolUse.id,
+							content: `[DEBUG_TEST_FAILED] 测试命令 \`${testResult.command}\` 执行失败，请修复错误后再次尝试完成任务。\n\n测试输出：\n${testResult.output}`,
+							is_error: false
+						}
+					};
+				}
+				// 测试通过，重置计数器，继续正常完成流程
+				console.log(`[TaskService] Debug 测试通过：${testResult.command}`);
+				this._debugTestRetryCount = 0;
+			}
+		}
+
 		// 显示完成结果
 		await this.say('completion_result', result);
 
@@ -2454,6 +2539,172 @@ case 'execute_command':
 				is_error: false
 			}
 		};
+	}
+
+	// ========== 功能2: Debug 自动测试 ==========
+
+	/**
+	 * 检测项目类型并运行测试（Debug 模式专用）
+	 * @returns { passed, command, output } 测试结果，null 表示无法检测项目类型
+	 */
+	private async runDebugTests(): Promise<{ passed: boolean; command: string; output: string } | null> {
+		const cwd = this.workspaceRoot;
+
+		// 检测项目类型（通过 execute_command 执行 ls 检测文件）
+		let testCommand: string | null = null;
+
+		try {
+			// 检测 mvnw（Maven Wrapper 优先）
+			const checkMvnw = await this.toolExecutor.executeTool({
+				type: 'tool_use',
+				name: 'execute_command' as ToolName,
+				params: { command: 'test -f mvnw && echo "mvnw" || echo "none"', cwd, requires_approval: 'false', description: 'Check mvnw' },
+				partial: false,
+				toolUseId: `debug_check_mvnw_${Date.now()}`
+			});
+			if (typeof checkMvnw === 'string' && checkMvnw.includes('mvnw')) {
+				testCommand = './mvnw test -q';
+			}
+		} catch { /* ignore */ }
+
+		if (!testCommand) {
+			try {
+				// 检测 pom.xml（Maven）
+				const checkPom = await this.toolExecutor.executeTool({
+					type: 'tool_use',
+					name: 'execute_command' as ToolName,
+					params: { command: 'test -f pom.xml && echo "pom" || echo "none"', cwd, requires_approval: 'false', description: 'Check pom.xml' },
+					partial: false,
+					toolUseId: `debug_check_pom_${Date.now()}`
+				});
+				if (typeof checkPom === 'string' && checkPom.includes('pom')) {
+					testCommand = 'mvn test -q';
+				}
+			} catch { /* ignore */ }
+		}
+
+		if (!testCommand) {
+			try {
+				// 检测 package.json（Node.js）
+				const checkPkg = await this.toolExecutor.executeTool({
+					type: 'tool_use',
+					name: 'execute_command' as ToolName,
+					params: { command: 'test -f package.json && node -e "const p=require(\'./package.json\');console.log(p.scripts&&p.scripts.test?\'has_test\':\'no_test\')"', cwd, requires_approval: 'false', description: 'Check package.json test script' },
+					partial: false,
+					toolUseId: `debug_check_pkg_${Date.now()}`
+				});
+				if (typeof checkPkg === 'string' && checkPkg.includes('has_test')) {
+					testCommand = 'npm test -- --run';
+				}
+			} catch { /* ignore */ }
+		}
+
+		if (!testCommand) {
+			try {
+				// 检测 pytest.ini 或 setup.py（Python）
+				const checkPy = await this.toolExecutor.executeTool({
+					type: 'tool_use',
+					name: 'execute_command' as ToolName,
+					params: { command: '(test -f pytest.ini || test -f setup.py || test -f pyproject.toml) && echo "pytest" || echo "none"', cwd, requires_approval: 'false', description: 'Check pytest' },
+					partial: false,
+					toolUseId: `debug_check_py_${Date.now()}`
+				});
+				if (typeof checkPy === 'string' && checkPy.includes('pytest')) {
+					testCommand = 'pytest -q';
+				}
+			} catch { /* ignore */ }
+		}
+
+		if (!testCommand) {
+			// 无法识别项目类型，跳过测试
+			console.log('[TaskService] Debug 测试：无法识别项目类型，跳过自动测试');
+			return null;
+		}
+
+		// 执行测试命令
+		console.log(`[TaskService] Debug 自动运行测试：${testCommand}`);
+		try {
+			const testOutput = await this.toolExecutor.executeTool({
+				type: 'tool_use',
+				name: 'execute_command' as ToolName,
+				params: { command: testCommand, cwd, requires_approval: 'false', description: 'Debug auto test' },
+				partial: false,
+				toolUseId: `debug_test_${Date.now()}`
+			});
+			const outputStr = typeof testOutput === 'string' ? testOutput : JSON.stringify(testOutput);
+
+			// 解析退出码：execute_command 成功则 exit code 为 0
+			// 输出中如果包含错误关键字，视为失败
+			const lowerOutput = outputStr.toLowerCase();
+			const hasFailed = lowerOutput.includes('tests failed') ||
+				lowerOutput.includes('test failed') ||
+				lowerOutput.includes('failures=') ||
+				lowerOutput.includes('error:') ||
+				lowerOutput.includes('build failure') ||
+				lowerOutput.includes('build failed') ||
+				(lowerOutput.includes('exit code') && !lowerOutput.includes('exit code 0'));
+
+			return {
+				passed: !hasFailed,
+				command: testCommand,
+				output: outputStr.length > 3000 ? outputStr.substring(0, 3000) + '\n... (输出截断)' : outputStr
+			};
+		} catch (error) {
+			// 命令执行失败（非0退出码），视为测试失败
+			const errMsg = error instanceof Error ? error.message : String(error);
+			return {
+				passed: false,
+				command: testCommand,
+				output: errMsg.length > 3000 ? errMsg.substring(0, 3000) + '\n... (输出截断)' : errMsg
+			};
+		}
+	}
+
+	// ========== 功能1: Checkpoint 回滚 ==========
+
+	/**
+	 * 回滚到最后一个 checkpoint（由 maxian.rollbackCheckpoint 命令调用）
+	 * 恢复保存的对话历史状态
+	 */
+	public async rollbackToLastCheckpoint(): Promise<{ success: boolean; message: string }> {
+		const latest = this.checkpointManager.getLatestCheckpoint();
+		if (!latest) {
+			return { success: false, message: '没有可用的 checkpoint' };
+		}
+
+		try {
+			const data = await this.checkpointManager.restoreCheckpoint(latest.id);
+			if (!data) {
+				return { success: false, message: `无法恢复 checkpoint: ${latest.id}` };
+			}
+
+			// 恢复对话历史
+			if (data.messages && Array.isArray(data.messages)) {
+				this.apiConversationHistory = data.messages;
+			}
+
+			// 恢复 token 使用统计
+			if (data.tokenUsage) {
+				this.tokenUsage = { ...this.tokenUsage, ...data.tokenUsage };
+			}
+
+			console.log(`[TaskService] 已回滚到 checkpoint: ${latest.id} (${latest.description})`);
+			return {
+				success: true,
+				message: `已回滚到 checkpoint: ${latest.description}（创建于 ${new Date(latest.timestamp).toLocaleString()}）`
+			};
+		} catch (error) {
+			const errMsg = error instanceof Error ? error.message : String(error);
+			console.error('[TaskService] 回滚 checkpoint 失败:', error);
+			return { success: false, message: `回滚失败: ${errMsg}` };
+		}
+	}
+
+	/**
+	 * 获取所有可用 checkpoint 列表
+	 */
+	public getCheckpoints(): import('../checkpoints/CheckpointManager.js').Checkpoint[] {
+		return this.checkpointManager.getAllCheckpoints();
 	}
 
 	// ========== 辅助方法 ==========

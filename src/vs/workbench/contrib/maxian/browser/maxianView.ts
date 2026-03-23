@@ -119,6 +119,8 @@ export class MaxianView extends ViewPane {
 	private mentionDropdown: HTMLElement | null = null; // @mention 下拉列表容器（用于部分输入时的过滤）
 	private mentionDropdownItems: string[] = []; // 当前下拉列表中的文件路径
 	private mentionDropdownIndex: number = -1; // 当前高亮项索引
+	// @mention 特殊选项（@git:diff、@web:）
+	private mentionDropdownSpecialItems: Array<{ type: 'special'; key: string; label: string; icon: string; description: string }> = [];
 	// @mention 相关（contenteditable 光标跟踪）
 	private mentionAtNode: Text | null = null; // 包含 @ 的文本节点
 	private mentionAtOffset: number = -1;      // @ 在文本节点中的 offset
@@ -1095,7 +1097,10 @@ export class MaxianView extends ViewPane {
 				if (e.key === 'ArrowDown') {
 					e.preventDefault();
 					e.stopPropagation();
-					this.mentionDropdownIndex = Math.min(this.mentionDropdownIndex + 1, this.mentionDropdownItems.length - 1);
+					const maxIdx = this.mentionDropdownSpecialItems.length > 0
+						? this.mentionDropdownSpecialItems.length - 1
+						: this.mentionDropdownItems.length - 1;
+					this.mentionDropdownIndex = Math.min(this.mentionDropdownIndex + 1, maxIdx);
 					this.updateMentionDropdownHighlight();
 					return;
 				}
@@ -1109,7 +1114,12 @@ export class MaxianView extends ViewPane {
 				if (e.key === 'Enter' || e.key === 'Tab') {
 					e.preventDefault();
 					e.stopPropagation();
-					if (this.mentionDropdownIndex >= 0 && this.mentionDropdownIndex < this.mentionDropdownItems.length) {
+					if (this.mentionDropdownSpecialItems.length > 0) {
+						// 特殊选项模式（@git:diff、@web:）
+						if (this.mentionDropdownIndex >= 0 && this.mentionDropdownIndex < this.mentionDropdownSpecialItems.length) {
+							this.insertMentionSpecial(this.mentionDropdownSpecialItems[this.mentionDropdownIndex].key);
+						}
+					} else if (this.mentionDropdownIndex >= 0 && this.mentionDropdownIndex < this.mentionDropdownItems.length) {
 						this.insertMentionFile(this.mentionDropdownItems[this.mentionDropdownIndex]);
 					}
 					return;
@@ -1963,6 +1973,8 @@ export class MaxianView extends ViewPane {
 	/**
 	 * 检测输入框中光标位置前是否有 @mention 触发词
 	 * - 刚输入 @ 时（query 为空）：立即打开 VSCode QuickPick 文件选择器
+	 * - 已输入 @git 时：显示 @git:diff 选项
+	 * - 已输入 @web 时：显示 @web: 选项
 	 * - 已输入 @部分路径 时：显示 inline 过滤下拉列表
 	 */
 	private handleMentionInput(): void {
@@ -1998,6 +2010,34 @@ export class MaxianView extends ViewPane {
 		this.mentionAtNode = node as Text;
 		this.mentionAtOffset = atIdx;
 		this.mentionCursorOffset = offset;
+
+		// 检测特殊 mentions：@git 和 @web
+		const lowerQuery = query.toLowerCase();
+
+		// @git:diff 选项
+		if (lowerQuery === 'git' || lowerQuery === 'git:' || lowerQuery === 'git:d' || lowerQuery === 'git:di' || lowerQuery === 'git:dif' || lowerQuery === 'git:diff') {
+			this.showMentionDropdownWithSpecial([
+				{ type: 'special', key: 'git:diff', label: '@git:diff', icon: 'codicon-source-control', description: '注入当前 git diff 内容' }
+			]);
+			return;
+		}
+
+		// @web: 选项
+		if (lowerQuery === 'web' || lowerQuery === 'web:') {
+			this.showMentionDropdownWithSpecial([
+				{ type: 'special', key: 'web:', label: '@web:URL', icon: 'codicon-globe', description: '注入网页内容（输入URL）' }
+			]);
+			return;
+		}
+
+		// 空查询时：同时显示特殊选项和文件列表
+		if (!query) {
+			this.showMentionDropdownWithSpecial([
+				{ type: 'special', key: 'git:diff', label: '@git:diff', icon: 'codicon-source-control', description: '注入当前 git diff 内容' },
+				{ type: 'special', key: 'web:', label: '@web:URL', icon: 'codicon-globe', description: '注入网页内容（输入URL）' }
+			]);
+			return;
+		}
 
 		this.maxianService.getWorkspaceFiles(query).then(files => {
 			if (!this.mentionAtNode) return;
@@ -2545,6 +2585,7 @@ export class MaxianView extends ViewPane {
 			this.mentionDropdown.style.display = 'none';
 		}
 		this.mentionDropdownItems = [];
+		this.mentionDropdownSpecialItems = [];
 		this.mentionDropdownIndex = -1;
 		this.mentionAtNode = null;
 		// 清除上下文键：下拉列表隐藏
@@ -2565,6 +2606,193 @@ export class MaxianView extends ViewPane {
 				item.classList.remove('active');
 			}
 		});
+	}
+
+	/**
+	 * 显示包含特殊选项（@git:diff、@web:）的下拉列表
+	 */
+	private showMentionDropdownWithSpecial(items: Array<{ type: 'special'; key: string; label: string; icon: string; description: string }>): void {
+		if (!this.mentionDropdown) return;
+
+		this.mentionDropdownSpecialItems = items;
+		this.mentionDropdownItems = []; // 清空文件列表，使用特殊列表
+		this.mentionDropdownIndex = items.length > 0 ? 0 : -1;
+
+		// 清空并重新渲染
+		while (this.mentionDropdown.firstChild) {
+			this.mentionDropdown.removeChild(this.mentionDropdown.firstChild);
+		}
+
+		items.forEach((item, index) => {
+			const el = append(this.mentionDropdown!, $('div.maxian-mention-item'));
+			el.style.padding = '6px 10px';
+			el.style.cursor = 'pointer';
+			el.style.display = 'flex';
+			el.style.alignItems = 'center';
+			el.style.gap = '8px';
+			el.dataset['specialIndex'] = String(index);
+
+			// 图标
+			const iconEl = append(el, $(`span.codicon.${item.icon}`));
+			iconEl.style.fontSize = '14px';
+			iconEl.style.color = 'var(--vscode-symbolIcon-keywordForeground, var(--vscode-charts-blue))';
+			iconEl.style.flexShrink = '0';
+
+			// 文字区
+			const textCol = append(el, $('span'));
+			textCol.style.display = 'flex';
+			textCol.style.flexDirection = 'column';
+			textCol.style.gap = '1px';
+
+			const labelEl = append(textCol, $('span'));
+			labelEl.textContent = item.label;
+			labelEl.style.fontWeight = '600';
+			labelEl.style.fontSize = '13px';
+			labelEl.style.color = 'var(--vscode-foreground)';
+
+			const descEl = append(textCol, $('span'));
+			descEl.textContent = item.description;
+			descEl.style.fontSize = '11px';
+			descEl.style.color = 'var(--vscode-descriptionForeground)';
+
+			if (index === 0) {
+				el.classList.add('active');
+			}
+
+			el.onmouseenter = () => {
+				this.mentionDropdownIndex = index;
+				this.updateMentionDropdownHighlight();
+			};
+
+			el.onclick = () => {
+				this.insertMentionSpecial(item.key);
+			};
+		});
+
+		this.mentionDropdown.style.display = 'block';
+		this.maxianMentionDropdownVisibleCtx?.set(true);
+	}
+
+	/**
+	 * 插入特殊 mention chip（@git:diff 或 @web:URL）
+	 */
+	private insertMentionSpecial(key: string): void {
+		const atNode = this.mentionAtNode;
+		const atOffset = this.mentionAtOffset;
+		const cursorOffset = this.mentionCursorOffset;
+
+		if (!atNode) { this.hideMentionDropdown(); return; }
+
+		if (key === 'web:') {
+			// @web: 需要用户输入URL，弹出 prompt
+			const url = window.prompt('@web: 请输入要获取内容的URL', 'https://');
+			if (!url || !url.startsWith('http')) {
+				this.hideMentionDropdown();
+				return;
+			}
+			this._insertSpecialChipIntoInput(atNode, atOffset, cursorOffset, `web:${url}`, `@web:${url}`, 'codicon-globe');
+		} else if (key === 'git:diff') {
+			this._insertSpecialChipIntoInput(atNode, atOffset, cursorOffset, 'git:diff', '@git:diff', 'codicon-source-control');
+		}
+	}
+
+	/**
+	 * 在输入框中插入特殊 chip（内部辅助方法）
+	 */
+	private _insertSpecialChipIntoInput(
+		atNode: Text,
+		atOffset: number,
+		cursorOffset: number,
+		specialKey: string,
+		displayLabel: string,
+		iconClass: string
+	): void {
+		// 删除 @query 文本
+		const fullText = atNode.textContent ?? '';
+		atNode.textContent = fullText.slice(0, atOffset) + fullText.slice(cursorOffset);
+
+		// 创建特殊 chip
+		const chip = this._createSpecialMentionChip(specialKey, displayLabel, iconClass);
+		const insertRange = document.createRange();
+		insertRange.setStart(atNode, atOffset);
+		insertRange.collapse(true);
+		insertRange.insertNode(chip);
+
+		// chip 后插入空格节点
+		const spaceNode = document.createTextNode('\u00A0');
+		chip.after(spaceNode);
+
+		// 移动光标到空格后
+		const sel = window.getSelection();
+		if (sel) {
+			const r = document.createRange();
+			r.setStart(spaceNode, 1);
+			r.collapse(true);
+			sel.removeAllRanges();
+			sel.addRange(r);
+		}
+
+		this.mentionAtNode = null;
+		this.inputBox.focus();
+		this.hideMentionDropdown();
+		this.inputBox.style.height = 'auto';
+		this.inputBox.style.height = this.inputBox.scrollHeight + 'px';
+		this.updateInputPlaceholder();
+	}
+
+	/**
+	 * 创建特殊 mention chip（@git:diff 或 @web:URL）
+	 */
+	private _createSpecialMentionChip(specialKey: string, displayLabel: string, iconClass: string): HTMLElement {
+		const chip = $('span') as HTMLSpanElement;
+		(chip as HTMLElement).contentEditable = 'false';
+		(chip as HTMLElement).dataset['mentionSpecial'] = specialKey;
+		chip.style.display = 'inline-flex';
+		chip.style.alignItems = 'center';
+		chip.style.gap = '3px';
+		chip.style.padding = '1px 7px 1px 5px';
+		chip.style.margin = '0 2px';
+		chip.style.borderRadius = '4px';
+		chip.style.fontSize = '12px';
+		chip.style.fontFamily = 'var(--vscode-editor-font-family)';
+		chip.style.backgroundColor = 'var(--vscode-charts-blue, rgba(0,122,204,0.2))';
+		chip.style.color = 'var(--vscode-badge-foreground)';
+		chip.style.border = '1px solid var(--vscode-charts-blue, #0078d4)';
+		chip.style.cursor = 'default';
+		chip.style.verticalAlign = 'middle';
+		chip.style.userSelect = 'none';
+		chip.style.whiteSpace = 'nowrap';
+		chip.title = specialKey;
+
+		const icon = $(`span.codicon.${iconClass}`) as HTMLSpanElement;
+		icon.style.fontSize = '11px';
+		icon.style.pointerEvents = 'none';
+		chip.appendChild(icon);
+
+		const label = $('span') as HTMLSpanElement;
+		label.textContent = displayLabel;
+		label.style.pointerEvents = 'none';
+		chip.appendChild(label);
+
+		// 删除按钮
+		const delBtn = $('span.codicon.codicon-close') as HTMLSpanElement;
+		delBtn.style.fontSize = '10px';
+		delBtn.style.marginLeft = '3px';
+		delBtn.style.cursor = 'pointer';
+		delBtn.style.opacity = '0.7';
+		delBtn.title = '移除引用';
+		delBtn.onclick = (e) => {
+			e.stopPropagation();
+			const next = chip.nextSibling;
+			if (next?.nodeType === Node.TEXT_NODE && next.textContent === '\u00A0') {
+				next.remove();
+			}
+			chip.remove();
+			this.updateInputPlaceholder();
+		};
+		chip.appendChild(delBtn);
+
+		return chip;
 	}
 
 
@@ -2644,7 +2872,17 @@ export class MaxianView extends ViewPane {
 			if (node.nodeType === Node.TEXT_NODE) {
 				text += node.textContent ?? '';
 			} else if (node instanceof HTMLElement) {
-				if (node.dataset['mentionPath']) {
+				if (node.dataset['mentionSpecial']) {
+					// 特殊 mention chip（@git:diff、@web:URL）
+					// expandPath=true 时用特殊标记占位，sendMessage 中异步替换为实际内容
+					// expandPath=false 时显示可读标签
+					if (expandPath) {
+						text += `\x00mention:${node.dataset['mentionSpecial']}\x00`;
+					} else {
+						const specialKey = node.dataset['mentionSpecial'];
+						text += specialKey?.startsWith('web:') ? `@web:${specialKey.slice(4)}` : `@${specialKey}`;
+					}
+				} else if (node.dataset['mentionPath']) {
 					// chip 节点
 					text += expandPath
 						? '@' + node.dataset['mentionPath']
@@ -2706,6 +2944,12 @@ export class MaxianView extends ViewPane {
 		// 调用maxianService发送消息，传递当前模式
 		// maxianService会通过onMessage事件通知UI更新
 
+		// 处理特殊 mentions（@git:diff、@web:URL），异步获取内容替换到消息中
+		let finalMessage = expandedMessage;
+		if (expandedMessage.includes('\x00mention:')) {
+			finalMessage = await this._resolveSpecialMentions(expandedMessage);
+		}
+
 		// 如果是 ask 模式，且选中了知识库，则传递知识库配置
 		let knowledgeBaseConfig: import('./maxianService.js').IKnowledgeBaseConfig | undefined;
 		if (this.currentMode === 'ask') {
@@ -2728,7 +2972,59 @@ export class MaxianView extends ViewPane {
 			}
 		}
 
-		await this.maxianService.sendMessage(expandedMessage, this.currentMode, knowledgeBaseConfig);
+		await this.maxianService.sendMessage(finalMessage, this.currentMode, knowledgeBaseConfig);
+	}
+
+	/**
+	 * 异步解析消息中的特殊 mention 标记（\x00mention:key\x00）
+	 * - @git:diff → 获取 git diff HEAD 内容
+	 * - @web:URL → fetch URL 并截取前5000字符
+	 */
+	private async _resolveSpecialMentions(message: string): Promise<string> {
+		const parts = message.split(/\x00mention:([^\x00]+)\x00/g);
+		const resolved: string[] = [];
+
+		for (let i = 0; i < parts.length; i++) {
+			if (i % 2 === 0) {
+				// 普通文本
+				resolved.push(parts[i]);
+			} else {
+				// mention key
+				const key = parts[i];
+				if (key === 'git:diff') {
+					try {
+						const diff = await this.maxianService.getGitDiff();
+						if (diff) {
+							resolved.push(`\n<git_diff>\n${diff}\n</git_diff>\n`);
+						} else {
+							resolved.push('\n[git diff: 没有变更或不是 git 仓库]\n');
+						}
+					} catch {
+						resolved.push('\n[git diff: 获取失败]\n');
+					}
+				} else if (key.startsWith('web:')) {
+					const url = key.slice(4);
+					try {
+						const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+						if (response.ok) {
+							const text = await response.text();
+							// 简单去除 HTML 标签，截取前5000字符
+							const plain = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 5000);
+							resolved.push(`\n<web_content url="${url}">\n${plain}\n</web_content>\n`);
+						} else {
+							resolved.push(`\n[web fetch 失败: HTTP ${response.status}]\n`);
+						}
+					} catch (e) {
+						resolved.push(`\n[web fetch 失败: ${String(e)}]\n`);
+					}
+				} else {
+					// 未知 key，原样保留
+					resolved.push(`@${key}`);
+				}
+			}
+		}
+
+		return resolved.join('');
 	}
 
 	private handleMessageEvent(event: import('./maxianService.js').IMessageEvent): void {
@@ -6156,6 +6452,44 @@ export class MaxianView extends ViewPane {
 			white-space: nowrap;
 		`;
 
+		// "在编辑器中查看 Diff" 按钮（仅当有文件路径时显示）
+		if (path) {
+			const openDiffBtn = append(diffHeader, $('span'));
+			openDiffBtn.title = '在编辑器中查看完整 Diff';
+			openDiffBtn.style.cssText = `
+				display: inline-flex;
+				align-items: center;
+				gap: 3px;
+				padding: 2px 6px;
+				border-radius: 3px;
+				font-size: 11px;
+				color: var(--vscode-textLink-foreground, #4fc1ff);
+				cursor: pointer;
+				border: 1px solid transparent;
+				flex-shrink: 0;
+				margin-right: 4px;
+			`;
+			const openDiffIcon = append(openDiffBtn, $('span.codicon.codicon-diff'));
+			openDiffIcon.style.fontSize = '11px';
+			openDiffIcon.style.pointerEvents = 'none';
+			const openDiffLabel = append(openDiffBtn, $('span'));
+			openDiffLabel.textContent = '编辑器查看';
+			openDiffLabel.style.pointerEvents = 'none';
+			openDiffBtn.onmouseenter = () => {
+				openDiffBtn.style.backgroundColor = 'var(--vscode-toolbar-hoverBackground, rgba(90,93,94,0.31))';
+				openDiffBtn.style.borderColor = 'var(--vscode-widget-border, rgba(127,127,127,0.3))';
+			};
+			openDiffBtn.onmouseleave = () => {
+				openDiffBtn.style.backgroundColor = 'transparent';
+				openDiffBtn.style.borderColor = 'transparent';
+			};
+			openDiffBtn.onclick = (e) => {
+				e.stopPropagation();
+				// 使用 openEditPreviewDiff 打开编辑器 diff 视图
+				this.maxianService.openEditPreviewDiff(path, edits).catch(() => {});
+			};
+		}
+
 		const toggleBtn = append(diffHeader, $('span.codicon.codicon-chevron-down'));
 		toggleBtn.style.cssText = `color: var(--vscode-icon-foreground); font-size: 11px; transition: transform 0.2s;`;
 
@@ -6366,15 +6700,19 @@ export class MaxianView extends ViewPane {
 		// 显示容器
 		this.todoListContainer.style.display = 'block';
 
-		// 计算完成数
+		// 计算完成数（completed 和 failed 分别统计）
 		const completedCount = todos.filter(t => t.status === 'completed').length;
+		const failedCount = todos.filter(t => t.status === 'failed').length;
 		const totalCount = todos.length;
+		const doneCount = completedCount + failedCount; // 已处理（完成或失败）
 
 		// 更新徽章
 		const badge = this.todoListContainer.querySelector('.todo-list-badge') as HTMLElement;
 		if (badge) {
 			badge.textContent = `${completedCount}/${totalCount}`;
-			if (completedCount === totalCount && totalCount > 0) {
+			if (failedCount > 0) {
+				badge.style.background = 'var(--vscode-charts-orange, #cc8800)';
+			} else if (completedCount === totalCount && totalCount > 0) {
 				badge.style.background = 'var(--vscode-charts-green)';
 			} else {
 				badge.style.background = 'var(--vscode-badge-background)';
@@ -6384,8 +6722,11 @@ export class MaxianView extends ViewPane {
 		// 更新进度信息
 		const progressInfo = this.todoListContainer.querySelector('.todo-list-progress-info') as HTMLElement;
 		if (progressInfo) {
-			const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-			if (completedCount === totalCount && totalCount > 0) {
+			const percent = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+			if (failedCount > 0 && completedCount + failedCount === totalCount) {
+				progressInfo.textContent = `⚠️ ${completedCount} 完成 / ${failedCount} 失败`;
+				progressInfo.style.color = 'var(--vscode-charts-orange, #cc8800)';
+			} else if (completedCount === totalCount && totalCount > 0) {
 				progressInfo.textContent = '✅ 全部完成';
 				progressInfo.style.color = 'var(--vscode-charts-green)';
 			} else {
@@ -6476,6 +6817,8 @@ export class MaxianView extends ViewPane {
 					const icon = append(statusIcon, $('span'));
 					icon.style.color = 'var(--vscode-charts-green)';
 					icon.textContent = '✅';
+					// 已完成：背景轻微绿色
+					item.style.backgroundColor = 'rgba(var(--vscode-charts-green-rgb, 52, 168, 83), 0.04)';
 					break;
 				}
 				case 'in_progress': {
@@ -6490,6 +6833,18 @@ export class MaxianView extends ViewPane {
 						border-radius: 50%;
 						animation: todo-spin 1s linear infinite;
 					`;
+					// 进行中：背景轻微蓝色 + 左边框高亮
+					item.style.backgroundColor = 'rgba(0, 122, 204, 0.06)';
+					item.style.borderLeft = '2px solid var(--vscode-charts-blue)';
+					item.style.paddingLeft = '6px';
+					break;
+				}
+				case 'failed': {
+					const icon = append(statusIcon, $('span'));
+					icon.style.color = 'var(--vscode-errorForeground, #f14c4c)';
+					icon.textContent = '❌';
+					// 失败：背景轻微红色
+					item.style.backgroundColor = 'rgba(var(--vscode-charts-red-rgb, 241, 76, 76), 0.06)';
 					break;
 				}
 				case 'pending':
@@ -6503,18 +6858,27 @@ export class MaxianView extends ViewPane {
 
 			// 任务内容
 			const content = append(item, $('span.todo-content'));
+			let contentColor = 'var(--vscode-foreground)';
+			let textDecoration = '';
+			if (todo.status === 'completed') {
+				contentColor = 'var(--vscode-descriptionForeground)';
+				textDecoration = 'text-decoration: line-through;';
+			} else if (todo.status === 'failed') {
+				contentColor = 'var(--vscode-errorForeground, #f14c4c)';
+			}
 			content.style.cssText = `
 				flex: 1;
 				font-size: 12px;
 				line-height: 1.5;
-				color: ${todo.status === 'completed' ? 'var(--vscode-descriptionForeground)' : 'var(--vscode-foreground)'};
-				${todo.status === 'completed' ? 'text-decoration: line-through;' : ''}
+				color: ${contentColor};
+				${textDecoration}
 			`;
 
 			// 显示内容或进行中描述
 			if (todo.status === 'in_progress' && todo.activeForm) {
 				content.textContent = todo.activeForm;
 				content.style.fontWeight = '500';
+				content.style.color = 'var(--vscode-foreground)';
 			} else {
 				content.textContent = todo.content;
 			}

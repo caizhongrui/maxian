@@ -38,6 +38,11 @@ import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextke
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { MAXIAN_INPUT_FOCUSED, MAXIAN_MENTION_DROPDOWN_VISIBLE } from './maxianContextKeys.js';
 import { ICommandExecutionService, ICommandExecutionResult, ICommandExecutionOptions } from '../common/services/commandExecutionService.js';
+import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
+import { IStorageService } from '../../../../platform/storage/common/storage.js';
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { Disposable } from '../../../../base/common/lifecycle.js';
+import { FimCompletionProvider } from './fim/fimCompletionProvider.js';
 
 // 确保ripgrep服务被注册（导入副作用）
 import '../../../services/ripgrep/browser/ripgrep.contribution.js';
@@ -340,6 +345,31 @@ registerAction2(class ClearConversationAction extends Action2 {
 	}
 });
 
+/**
+ * 回滚到最后一个 Checkpoint
+ * 功能1: Checkpoint 完善 - 在每次写文件操作前自动创建 checkpoint，用户可通过此命令回滚
+ * 默认无快捷键，用户可自行绑定
+ */
+registerAction2(class RollbackCheckpointAction extends Action2 {
+	constructor() {
+		super({
+			id: 'maxian.rollbackCheckpoint',
+			title: { value: '回滚到上一个 Checkpoint', original: 'Rollback to Last Checkpoint' },
+			category: MAXIAN_CATEGORY,
+			f1: true
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const maxianService = accessor.get(IMaxianService);
+		const result = await maxianService.rollbackToLastCheckpoint();
+		if (result.success) {
+			console.log('[maxian.rollbackCheckpoint]', result.message);
+		} else {
+			console.warn('[maxian.rollbackCheckpoint] 回滚失败:', result.message);
+		}
+	}
+});
+
 // ====== 标题栏快捷按钮 ======
 
 /**
@@ -388,3 +418,37 @@ registerAction2(class OpenKeybindingsAction extends Action2 {
 		accessor.get(ICommandService).executeCommand('workbench.action.openGlobalKeybindings', '天和·码弦');
 	}
 });
+
+// ====== 码弦 FIM 内联代码补全注册 ======
+
+/**
+ * 码弦 FIM 内联代码补全 Workbench Contribution
+ *
+ * 在 BlockRestore 阶段注册，此时 languageFeaturesService 已可用。
+ * 使用 InlineCompletionsProvider 内部 API，与 aiInlineCompletions 使用相同机制。
+ * FIM provider 注册为所有语言（通过 isFimSupportedLanguage 在运行时过滤），
+ * 确保 VS Code 内部引擎能正确分发给 FIM provider。
+ */
+class MaxianFimCompletionContribution extends Disposable implements IWorkbenchContribution {
+	static readonly ID = 'workbench.contrib.maxianFimCompletion';
+
+	constructor(
+		@ILanguageFeaturesService languageFeaturesService: ILanguageFeaturesService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IStorageService storageService: IStorageService,
+	) {
+		super();
+
+		const provider = new FimCompletionProvider(configurationService, storageService);
+
+		// 注册到所有语言（provider 内部通过 isFimSupportedLanguage 过滤不支持的语言）
+		const registration = languageFeaturesService.inlineCompletionsProvider.register('*', provider);
+		this._register(registration);
+	}
+}
+
+registerWorkbenchContribution2(
+	MaxianFimCompletionContribution.ID,
+	MaxianFimCompletionContribution,
+	WorkbenchPhase.BlockRestore,
+);

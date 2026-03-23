@@ -28,6 +28,9 @@ import { getReferences } from '../../common/lsp/lspReferences.js';
 import { getTypeDefinition } from '../../common/lsp/lspTypeDefinition.js';
 import { ICommandExecutionService } from '../../common/services/commandExecutionService.js';
 import { consumePathSavedByDiff } from '../diffViewProvider.js';
+import { prReviewTool } from '../../common/tools/prReviewTool.js';
+import { generateTestsTool } from '../../common/tools/generateTestsTool.js';
+import { SemanticSearchService } from '../../common/vector/semanticSearchService.js';
 
 /**
  * 工具执行器实现类
@@ -110,7 +113,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 		}
 
 		try {
-			let result: ToolResponse;
+			let result: ToolResponse = '';
 
 			// 埋点：工具使用事件（在分发前统一上报，使用可选链静默处理）
 			this.context.behaviorReporter?.reportToolUse(toolUse.name);
@@ -194,9 +197,29 @@ export class ToolExecutorImpl implements IToolExecutor {
 					result = await this.searchTool.searchFiles(toolUse as any);
 					break;
 
-				case 'codebase_search':
-					result = await this.searchTool.codebaseSearch(toolUse as any);
+				case 'codebase_search': {
+					const semanticQuery: string = toolUse.params.query || '';
+					const semanticPath: string = toolUse.params.path || '';
+					const semanticCwd = semanticPath || this.context.workspaceRoot || '';
+					// 优先尝试语义向量搜索，失败时 fallback 到 ripgrep 关键字搜索
+					let semanticUsed = false;
+					if (semanticQuery && semanticCwd) {
+						try {
+							const semanticService = SemanticSearchService.getInstance();
+							const semanticResults = await semanticService.semanticSearch(semanticQuery, semanticCwd, 10);
+							if (semanticResults.length > 0) {
+								result = semanticService.formatResults(semanticResults, semanticQuery);
+								semanticUsed = true;
+							}
+						} catch (semanticError) {
+							console.warn('[ToolExecutor] 语义搜索失败，fallback到关键字搜索:', semanticError);
+						}
+					}
+					if (!semanticUsed) {
+						result = await this.searchTool.codebaseSearch(toolUse as any);
+					}
 					break;
+				}
 
 				case 'list_code_definition_names':
 					result = await this.searchTool.listCodeDefinitionNames(toolUse.params.path || '');
@@ -297,6 +320,29 @@ export class ToolExecutorImpl implements IToolExecutor {
 						{ workspacePath: this.context.workspaceRoot || '', didEditFile: false, fileContextTracker: {} as any } as any,
 						toolUse.params,
 						this.skillService
+					);
+					break;
+
+				// PR代码审查工具
+				case 'pr_review':
+					result = await prReviewTool(
+						this.context.workspaceRoot || process.cwd(),
+						{
+							base_branch: toolUse.params.base_branch,
+							focus: toolUse.params.focus,
+						}
+					);
+					break;
+
+				// 测试代码生成工具
+				case 'generate_tests':
+					result = await generateTestsTool(
+						this.context.workspaceRoot || process.cwd(),
+						{
+							target_file: toolUse.params.target_file || '',
+							test_framework: toolUse.params.test_framework,
+							output_path: toolUse.params.output_path,
+						}
 					);
 					break;
 

@@ -102,6 +102,27 @@ apply_diff **仅限以下场景**（普通编辑禁止使用）：
 - ✅ result 简洁概括改动，引用代码用 \`[\`fn()\`](path:line)\` 格式
 - ❌ 禁止套话、重复计划列表、以问题结尾
 
+## pr_review 工具（PR代码审查）
+
+用户要求审查代码、review PR、检查提交时使用。
+
+- 调用 pr_review 获取 git diff 数据
+- 工具返回提交记录 + 代码变更（最多50000字符），然后由你分析
+- 审查维度：安全漏洞、性能问题、代码规范、逻辑错误、可维护性
+- 可通过 focus 参数指定重点（security/performance/maintainability/correctness/style/all）
+- 审查结束后输出结构化报告：总体评价 + 分类问题列表 + 改进建议
+
+## generate_tests 工具（测试代码生成）
+
+用户要求生成测试、补充单元测试时使用。
+
+- 调用 generate_tests 分析目标文件，工具返回源码内容和推导的测试路径
+- 工具自动检测语言（Java→JUnit5，TS/JS→Jest，Python→pytest，Go→go_test）
+- 工具自动推导测试文件路径（Maven标准结构：src/main→src/test）
+- 根据返回的源代码，生成完整的测试类/测试文件（不可有TODO占位符）
+- 测试覆盖：正常流程、边界条件、异常场景、Mock依赖
+- 最终调用 write_to_file 将测试代码写入推导的测试路径
+
 ## skill工具
 
 根据任务类型主动调用（不要等用户要求），每个任务最多1次：

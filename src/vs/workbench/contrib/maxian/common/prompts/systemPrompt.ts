@@ -49,6 +49,7 @@ export class SystemPromptGenerator {
 			preloadedSkills?: ISkill[];
 			diagnosticText?: string | null;
 			steeringContent?: string | null;
+			memoryContent?: string | null;
 		}
 	): string {
 		const sections: string[] = [];
@@ -95,6 +96,17 @@ STEERING
 以下是团队/项目级别的规范和约定（来自 .maxian/steering/ 配置文件）。这些规范必须优先遵守，如与通用指南冲突，以此为准。
 
 ${options.steeringContent}`);
+		}
+
+		// 11.5 跨会话记忆内容（来自 .maxian/memory/auto-memory.md）
+		if (options?.memoryContent) {
+			sections.push(`====
+
+MEMORY
+
+以下是从历史对话中提取的用户偏好、项目约定和常见模式（来自 .maxian/memory/auto-memory.md）。请参考这些记忆信息来更好地理解用户需求和项目背景。
+
+${options.memoryContent}`);
 		}
 
 		// 12. 自动诊断信息（来自LSP）
