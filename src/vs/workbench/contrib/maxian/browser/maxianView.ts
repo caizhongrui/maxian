@@ -6697,6 +6697,12 @@ export class MaxianView extends ViewPane {
 			}
 		}
 
+		// 没有任务时隐藏容器
+		if (todos.length === 0) {
+			this.clearTodoList();
+			return;
+		}
+
 		// 显示容器
 		this.todoListContainer.style.display = 'block';
 

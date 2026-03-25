@@ -10,48 +10,37 @@
  * 工具本身只负责获取diff内容，不调用LLM，Agent会根据返回内容进行分析。
  */
 
-import { execSync } from 'child_process';
 import type { ToolResponse } from './toolTypes.js';
 
 /** diff内容最大字符数（50000字符） */
 const MAX_DIFF_LENGTH = 50000;
 
+/** 命令执行回调类型 */
+export type RunCommandFn = (command: string, cwd: string) => Promise<{ output: string; error: string | null }>;
+
 /**
  * 执行git命令，返回输出字符串或错误信息
  */
-function runGitCommand(command: string, cwd: string): { output: string; error: string | null } {
-	try {
-		const output = execSync(command, {
-			cwd,
-			encoding: 'utf-8',
-			maxBuffer: 10 * 1024 * 1024, // 10MB缓冲区
-			timeout: 30000, // 30秒超时
-		});
-		return { output: output || '', error: null };
-	} catch (err: any) {
-		const errorMessage = err.stderr
-			? err.stderr.toString()
-			: err.message || String(err);
-		return { output: '', error: errorMessage };
-	}
+async function runGitCommand(command: string, cwd: string, runCommand: RunCommandFn): Promise<{ output: string; error: string | null }> {
+	return runCommand(command, cwd);
 }
 
 /**
  * 检测仓库的默认主分支（main 或 master）
  */
-function detectDefaultBranch(cwd: string): string {
+async function detectDefaultBranch(cwd: string, runCommand: RunCommandFn): Promise<string> {
 	// 先尝试 main
-	const mainResult = runGitCommand('git rev-parse --verify main', cwd);
+	const mainResult = await runGitCommand('git rev-parse --verify main', cwd, runCommand);
 	if (!mainResult.error) {
 		return 'main';
 	}
 	// 再尝试 master
-	const masterResult = runGitCommand('git rev-parse --verify master', cwd);
+	const masterResult = await runGitCommand('git rev-parse --verify master', cwd, runCommand);
 	if (!masterResult.error) {
 		return 'master';
 	}
 	// 尝试从远程HEAD获取
-	const remoteHeadResult = runGitCommand('git symbolic-ref refs/remotes/origin/HEAD', cwd);
+	const remoteHeadResult = await runGitCommand('git symbolic-ref refs/remotes/origin/HEAD', cwd, runCommand);
 	if (!remoteHeadResult.error && remoteHeadResult.output.trim()) {
 		const parts = remoteHeadResult.output.trim().split('/');
 		return parts[parts.length - 1] || 'main';
@@ -64,6 +53,7 @@ function detectDefaultBranch(cwd: string): string {
  *
  * @param workspacePath 工作区根目录路径
  * @param params 工具参数
+ * @param runCommand 命令执行回调（由调用方提供，避免在 browser 上下文中直接使用 child_process）
  * @returns 格式化的审查数据，供Agent分析
  */
 export async function prReviewTool(
@@ -71,45 +61,48 @@ export async function prReviewTool(
 	params: {
 		base_branch?: string;
 		focus?: string;
-	}
+	},
+	runCommand: RunCommandFn
 ): Promise<ToolResponse> {
-	const cwd = workspacePath || process.cwd();
+	const cwd = workspacePath || '.';
 	const focus = params.focus || 'all';
 
 	// 确定基础分支
 	let baseBranch = params.base_branch;
 	if (!baseBranch) {
-		baseBranch = detectDefaultBranch(cwd);
+		baseBranch = await detectDefaultBranch(cwd, runCommand);
 	}
 
 	// 检查是否在git仓库中
-	const gitCheckResult = runGitCommand('git rev-parse --git-dir', cwd);
+	const gitCheckResult = await runGitCommand('git rev-parse --git-dir', cwd, runCommand);
 	if (gitCheckResult.error) {
 		return `Error: 当前目录不是git仓库，或git未安装。\n\n详情：${gitCheckResult.error}`;
 	}
 
 	// 获取当前分支名
-	const currentBranchResult = runGitCommand('git rev-parse --abbrev-ref HEAD', cwd);
+	const currentBranchResult = await runGitCommand('git rev-parse --abbrev-ref HEAD', cwd, runCommand);
 	const currentBranch = currentBranchResult.error
 		? '(unknown)'
 		: currentBranchResult.output.trim();
 
 	// 检查基础分支是否存在
-	const baseBranchCheckResult = runGitCommand(`git rev-parse --verify ${baseBranch}`, cwd);
+	const baseBranchCheckResult = await runGitCommand(`git rev-parse --verify ${baseBranch}`, cwd, runCommand);
 	if (baseBranchCheckResult.error) {
 		// 尝试远程分支
 		const remoteBaseBranch = `origin/${baseBranch}`;
-		const remoteBranchCheckResult = runGitCommand(`git rev-parse --verify ${remoteBaseBranch}`, cwd);
+		const remoteBranchCheckResult = await runGitCommand(`git rev-parse --verify ${remoteBaseBranch}`, cwd, runCommand);
 		if (remoteBranchCheckResult.error) {
-			return `Error: 基础分支 "${baseBranch}" 不存在。\n\n请检查分支名称，或使用 base_branch 参数指定正确的基础分支。\n\n可用分支：\n${runGitCommand('git branch -a', cwd).output}`;
+			const branchListResult = await runGitCommand('git branch -a', cwd, runCommand);
+			return `Error: 基础分支 "${baseBranch}" 不存在。\n\n请检查分支名称，或使用 base_branch 参数指定正确的基础分支。\n\n可用分支：\n${branchListResult.output}`;
 		}
 		baseBranch = remoteBaseBranch;
 	}
 
 	// 获取提交记录
-	const logResult = runGitCommand(
+	const logResult = await runGitCommand(
 		`git log ${baseBranch}...HEAD --oneline`,
-		cwd
+		cwd,
+		runCommand
 	);
 
 	const commitLog = logResult.error
@@ -117,9 +110,10 @@ export async function prReviewTool(
 		: logResult.output.trim() || '(没有新的提交)';
 
 	// 获取diff内容
-	const diffResult = runGitCommand(
+	const diffResult = await runGitCommand(
 		`git diff ${baseBranch}...HEAD`,
-		cwd
+		cwd,
+		runCommand
 	);
 
 	if (diffResult.error) {
@@ -130,8 +124,8 @@ export async function prReviewTool(
 
 	if (!diffContent.trim()) {
 		// 尝试仅diff当前未提交的更改
-		const stagedDiffResult = runGitCommand('git diff --cached', cwd);
-		const unstagedDiffResult = runGitCommand('git diff', cwd);
+		const stagedDiffResult = await runGitCommand('git diff --cached', cwd, runCommand);
+		const unstagedDiffResult = await runGitCommand('git diff', cwd, runCommand);
 		const combinedDiff = [stagedDiffResult.output, unstagedDiffResult.output]
 			.filter(Boolean)
 			.join('\n');

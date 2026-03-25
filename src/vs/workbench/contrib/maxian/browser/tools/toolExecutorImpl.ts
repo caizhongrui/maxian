@@ -28,9 +28,10 @@ import { getReferences } from '../../common/lsp/lspReferences.js';
 import { getTypeDefinition } from '../../common/lsp/lspTypeDefinition.js';
 import { ICommandExecutionService } from '../../common/services/commandExecutionService.js';
 import { consumePathSavedByDiff } from '../diffViewProvider.js';
-import { prReviewTool } from '../../common/tools/prReviewTool.js';
-import { generateTestsTool } from '../../common/tools/generateTestsTool.js';
+import { prReviewTool, RunCommandFn } from '../../common/tools/prReviewTool.js';
+import { generateTestsTool, FileSystemOps } from '../../common/tools/generateTestsTool.js';
 import { IVectorSearchService } from '../../common/vector/IVectorSearchService.js';
+import { URI } from '../../../../../base/common/uri.js';
 
 /**
  * 工具执行器实现类
@@ -57,6 +58,8 @@ export class ToolExecutorImpl implements IToolExecutor {
 	private subAgentRunner?: (agentType: string, prompt: string, taskId?: string, taskToolId?: string) => Promise<string>;
 
 	private vectorSearchService?: IVectorSearchService;
+	private commandExecutionService?: ICommandExecutionService;
+	private fileService: IFileService;
 
 	constructor(
 		fileService: IFileService,
@@ -69,6 +72,8 @@ export class ToolExecutorImpl implements IToolExecutor {
 		modelService?: IModelService,
 		vectorSearchService?: IVectorSearchService
 	) {
+		this.fileService = fileService;
+		this.commandExecutionService = commandExecutionService;
 		this.fileOperations = new FileOperationsTool(fileService, context.workspaceRoot || '', undefined, modelService);
 		this.commandExecution = new CommandExecutionTool(terminalService);
 		if (commandExecutionService) {
@@ -80,6 +85,60 @@ export class ToolExecutorImpl implements IToolExecutor {
 		this.vectorSearchService = vectorSearchService;
 		// P0优化：初始化批量执行器
 		this.batchExecutor = new BatchToolExecutor(this);
+	}
+
+	/**
+	 * 构建 RunCommandFn 适配器，供 prReviewTool 使用
+	 */
+	private buildRunCommandFn(): RunCommandFn {
+		const svc = this.commandExecutionService;
+		return async (command: string, cwd: string) => {
+			if (!svc) {
+				return { output: '', error: 'Command execution service not available' };
+			}
+			try {
+				const result = await svc.execute(command, { cwd, timeout: 30000 });
+				if (result.exitCode === 0 || (result.exitCode !== 0 && result.stdout)) {
+					// 非零退出码也可能有有效输出（如 git rev-parse 验证命令）
+					if (result.exitCode !== 0 && !result.stdout) {
+						return { output: '', error: result.stderr || `exit code ${result.exitCode}` };
+					}
+					return { output: result.stdout, error: result.exitCode !== 0 ? (result.stderr || null) : null };
+				}
+				return { output: '', error: result.stderr || `exit code ${result.exitCode}` };
+			} catch (err: any) {
+				return { output: '', error: err.message || String(err) };
+			}
+		};
+	}
+
+	/**
+	 * 构建 FileSystemOps 适配器，供 generateTestsTool 使用
+	 */
+	private buildFileSystemOps(): FileSystemOps {
+		const fs = this.fileService;
+		return {
+			exists: async (filePath: string) => {
+				try {
+					await fs.stat(URI.file(filePath));
+					return true;
+				} catch {
+					return false;
+				}
+			},
+			stat: async (filePath: string) => {
+				const s = await fs.stat(URI.file(filePath));
+				return { size: s.size, isDirectory: s.isDirectory };
+			},
+			readText: async (filePath: string) => {
+				const content = await fs.readFile(URI.file(filePath));
+				return content.value.toString();
+			},
+			readdir: async (dirPath: string) => {
+				const resolved = await fs.resolve(URI.file(dirPath));
+				return resolved.children?.map(c => c.name) ?? [];
+			},
+		};
 	}
 
 	/**
@@ -204,18 +263,43 @@ export class ToolExecutorImpl implements IToolExecutor {
 				case 'codebase_search': {
 					const semanticQuery: string = toolUse.params.query || '';
 					const semanticPath: string = toolUse.params.path || '';
-					const semanticCwd = semanticPath || this.context.workspaceRoot || '';
+					const workspaceRoot = this.context.workspaceRoot || '';
+					// 向量索引始终以工作区根目录为 key，子路径不能作为 cwd（否则找不到索引）
+					const semanticCwd = workspaceRoot;
+					// 如果 AI 传了子路径，解析为绝对路径用于过滤搜索结果
+					const subPathFilter = semanticPath
+						? (semanticPath.startsWith('/') ? semanticPath : workspaceRoot.replace(/\/$/, '') + '/' + semanticPath)
+						: null;
 					// 优先尝试语义向量搜索，失败时 fallback 到 ripgrep 关键字搜索
 					let semanticUsed = false;
+					console.log(`[ToolExecutor] codebase_search: query="${semanticQuery}" cwd="${semanticCwd}" hasService=${!!this.vectorSearchService}`);
 					if (semanticQuery && semanticCwd && this.vectorSearchService) {
 						try {
-							const semanticResults = await this.vectorSearchService.semanticSearch(semanticQuery, semanticCwd, 10);
-						if (semanticResults.length > 0) {
+							// 语义搜索超时：10秒（等待模型加载 + 索引检查）
+							// 若超时则静默 fallback 到关键字搜索
+							const semanticTimeoutPromise = new Promise<never>((_, reject) =>
+								setTimeout(() => reject(new Error('semantic_search_timeout')), 10000)
+							);
+							let semanticResults = await Promise.race([
+								this.vectorSearchService.semanticSearch(semanticQuery, semanticCwd, 10),
+								semanticTimeoutPromise
+							]);
+							console.log(`[ToolExecutor] 语义搜索返回 ${semanticResults.length} 条结果，subPathFilter="${subPathFilter}"`);
+							// 若 AI 传了子路径，过滤结果只保留该路径下的文件
+							if (subPathFilter && semanticResults.length > 0) {
+								semanticResults = semanticResults.filter(r => r.filePath.startsWith(subPathFilter));
+								console.log(`[ToolExecutor] 子路径过滤后剩余 ${semanticResults.length} 条`);
+							}
+							if (semanticResults.length > 0) {
 								result = this.vectorSearchService.formatResults(semanticResults, semanticQuery);
 								semanticUsed = true;
 							}
-						} catch (semanticError) {
-							console.warn('[ToolExecutor] 语义搜索失败，fallback到关键字搜索:', semanticError);
+						} catch (semanticError: any) {
+							if (semanticError?.message === 'semantic_search_timeout') {
+								console.warn('[ToolExecutor] 语义搜索超时，fallback到关键字搜索');
+							} else {
+								console.warn('[ToolExecutor] 语义搜索失败，fallback到关键字搜索:', semanticError);
+							}
 						}
 					}
 					if (!semanticUsed) {
@@ -329,23 +413,25 @@ export class ToolExecutorImpl implements IToolExecutor {
 				// PR代码审查工具
 				case 'pr_review':
 					result = await prReviewTool(
-						this.context.workspaceRoot || process.cwd(),
+						this.context.workspaceRoot || '.',
 						{
 							base_branch: toolUse.params.base_branch,
 							focus: toolUse.params.focus,
-						}
+						},
+						this.buildRunCommandFn()
 					);
 					break;
 
 				// 测试代码生成工具
 				case 'generate_tests':
 					result = await generateTestsTool(
-						this.context.workspaceRoot || process.cwd(),
+						this.context.workspaceRoot || '.',
 						{
 							target_file: toolUse.params.target_file || '',
 							test_framework: toolUse.params.test_framework,
 							output_path: toolUse.params.output_path,
-						}
+						},
+						this.buildFileSystemOps()
 					);
 					break;
 

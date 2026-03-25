@@ -40,26 +40,77 @@ export interface IndexConfig {
 const DEFAULT_MAX_TOKENS = 500;
 
 /**
+ * 批量模式每 N 个文件写一次磁盘（checkpoint），防止内存无限增长
+ */
+const BULK_CHECKPOINT_INTERVAL = 50;
+
+/**
+ * 让出事件循环，给主线程调度其他任务的机会
+ */
+function yieldToEventLoop(): Promise<void> {
+	return new Promise(resolve => setImmediate(resolve));
+}
+
+/**
+ * 短暂休眠，给操作系统调度其他进程/线程的机会
+ * Worker 线程自身已有节流（THROTTLE_MS），这里的延迟给主线程减压
+ */
+function sleep(ms: number): Promise<void> {
+	return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
  * 跳过的目录（不索引）
  */
 const SKIP_DIRS = new Set([
+	// 依赖管理
 	'node_modules',
+	'vendor',
+	// 版本控制
 	'.git',
 	'.svn',
+	'.hg',
+	// JS/TS 构建产物
 	'out',
 	'dist',
 	'build',
 	'.next',
 	'.nuxt',
+	'.output',
+	'.turbo',
+	// Java/Kotlin/Scala 构建产物（Maven/Gradle/Ant）
+	'target',           // Maven target/, Cargo target/
+	'bin',              // Gradle bin/, .NET bin/
+	'obj',              // .NET obj/
+	'.gradle',          // Gradle 缓存
+	'classes',          // Ant classes/
+	'generated-sources',
+	'generated-test-sources',
+	// Python
 	'__pycache__',
-	'.cache',
+	'.venv',
+	'venv',
+	'env',
+	'site-packages',
+	// IDE/工具元数据
 	'.vscode',
+	'.idea',
+	'.eclipse',
+	'.settings',
 	'.maxian',
+	// 测试覆盖率
 	'coverage',
 	'.nyc_output',
-	'vendor',
-	'.turbo',
+	// 缓存/临时
+	'.cache',
 	'.DS_Store',
+	// Flutter/Dart
+	'.dart_tool',
+	'.flutter-plugins',
+	// 其他
+	'logs',
+	'tmp',
+	'temp',
 ]);
 
 /**
@@ -82,17 +133,37 @@ const INDEXABLE_EXTENSIONS = new Set([
  * 跳过的文件模式
  */
 const SKIP_FILE_PATTERNS = [
+	// 压缩/打包产物
 	/\.min\.(js|css)$/,
 	/\.bundle\.js$/,
 	/\.chunk\.js$/,
+	// Source maps & lock files
 	/\.map$/,
 	/\.lock$/,
 	/package-lock\.json$/,
 	/yarn\.lock$/,
 	/pnpm-lock\.yaml$/,
+	/Gemfile\.lock$/,
+	/Podfile\.lock$/,
+	/composer\.lock$/,
+	// TypeScript 类型声明（不是源码）
 	/\.d\.ts$/,
+	// 文档/协议文件
 	/CHANGELOG/i,
 	/LICENSE/i,
+	// Java 编译产物
+	/\.class$/,
+	/\.jar$/,
+	/\.war$/,
+	/\.ear$/,
+	/\.aar$/,
+	// Python 编译
+	/\.pyc$/,
+	/\.pyo$/,
+	// C/C++ 编译产物
+	/\.(o|a|so|dylib|dll|exe|lib)$/,
+	// 图片/媒体/字体（非文本）
+	/\.(png|jpg|jpeg|gif|bmp|ico|webp|svg|woff|woff2|ttf|eot|otf|mp4|mp3|pdf)$/i,
 ];
 
 /**
@@ -148,8 +219,13 @@ export class CodebaseIndexer {
 		const vectorStore = getVectorStore(cwd);
 
 		// 过滤出需要重新索引的文件
-		const filesToIndex: Array<{ path: string; mtime: number }> = [];
+		// 优化：一次性获取全部 filePath→mtime 映射，避免 O(N×M) 的逐文件 listItemsByMetadata 查询
+		const filesToIndex: Array<{ path: string; mtime: number; isNew: boolean }> = [];
 		const fs = await import('fs');
+
+		// 一次 O(N) 扫描，加载全部已索引文件的 mtime
+		const fileIndexMap = forceRebuild ? new Map<string, number>() : await vectorStore.getFileIndexMap();
+		console.log('[CodebaseIndexer] 已索引文件数（从 Map 读取）:', fileIndexMap.size);
 
 		for (const filePath of files) {
 			try {
@@ -157,12 +233,17 @@ export class CodebaseIndexer {
 				const mtime = stat.mtimeMs;
 
 				if (forceRebuild) {
-					filesToIndex.push({ path: filePath, mtime });
+					filesToIndex.push({ path: filePath, mtime, isNew: false });
 				} else {
-					const isUpToDate = await vectorStore.isFileIndexed(filePath, mtime);
-					if (!isUpToDate) {
-						filesToIndex.push({ path: filePath, mtime });
+					const indexedMtime = fileIndexMap.get(filePath);
+					if (indexedMtime === undefined) {
+						// 新文件，未在索引中
+						filesToIndex.push({ path: filePath, mtime, isNew: true });
+					} else if (indexedMtime !== mtime) {
+						// 文件已修改
+						filesToIndex.push({ path: filePath, mtime, isNew: false });
 					}
+					// else: mtime 相同，无需重新索引
 				}
 			} catch {
 				// 文件可能已删除，跳过
@@ -171,24 +252,54 @@ export class CodebaseIndexer {
 
 		console.log('[CodebaseIndexer] 需要索引的文件数:', filesToIndex.length);
 
-		// 逐文件索引
-		for (let i = 0; i < filesToIndex.length; i++) {
-			const { path: filePath, mtime } = filesToIndex[i];
-
+		if (filesToIndex.length === 0) {
 			if (onProgress) {
-				onProgress({
-					total: filesToIndex.length,
-					indexed: i,
-					currentFile: filePath,
-					phase: 'indexing'
-				});
+				onProgress({ total: 0, indexed: 0, currentFile: '', phase: 'done' });
+			}
+			const elapsed = Date.now() - startTime;
+			console.log('[CodebaseIndexer] 无需重新索引，耗时:', elapsed, 'ms');
+			return;
+		}
+
+		// ── 批量模式：整个工作区索引只写 BULK_CHECKPOINT_INTERVAL 次磁盘 ──
+		await vectorStore.beginBulkUpdate();
+
+		try {
+			for (let i = 0; i < filesToIndex.length; i++) {
+				const { path: filePath, mtime, isNew } = filesToIndex[i];
+
+				if (onProgress) {
+					onProgress({
+						total: filesToIndex.length,
+						indexed: i,
+						currentFile: filePath,
+						phase: 'indexing'
+					});
+				}
+
+				try {
+					await this.indexFileBulk(filePath, cwd, mtime, vectorStore, isNew);
+				} catch (error) {
+					console.warn('[CodebaseIndexer] 索引文件失败:', filePath, error);
+				}
+
+				// 每 BULK_CHECKPOINT_INTERVAL 个文件写一次磁盘（checkpoint）
+				if ((i + 1) % BULK_CHECKPOINT_INTERVAL === 0) {
+					await vectorStore.commitBulkUpdate(true); // 写磁盘后继续 bulk 模式
+					console.log(`[CodebaseIndexer] Checkpoint: ${i + 1}/${filesToIndex.length} 文件已写盘`);
+					// checkpoint 后额外休眠，给系统其他任务运行机会
+					await sleep(500);
+				}
+
+				// 每个文件后让出事件循环
+				await yieldToEventLoop();
 			}
 
-			try {
-				await this.indexFile(filePath, cwd, mtime);
-			} catch (error) {
-				console.warn('[CodebaseIndexer] 索引文件失败:', filePath, error);
-			}
+			// 最终提交（不重新开启事务）
+			await vectorStore.commitBulkUpdate(false);
+		} catch (err) {
+			await vectorStore.rollbackBulkUpdate();
+			throw err;
 		}
 
 		const elapsed = Date.now() - startTime;
@@ -201,6 +312,62 @@ export class CodebaseIndexer {
 				currentFile: '',
 				phase: 'done'
 			});
+		}
+	}
+
+	/**
+	 * 在批量模式中索引单个文件（纯内存操作，不写磁盘）
+	 * @param filePath 文件绝对路径
+	 * @param cwd 工作区根目录
+	 * @param mtime 文件 mtime
+	 * @param vectorStore VectorStore 实例（批量模式中复用）
+	 */
+	async indexFileBulk(filePath: string, cwd: string, mtime: number, vectorStore: import('./vectorStore.js').VectorStore, isNew = false): Promise<void> {
+		const fs = await import('fs');
+
+		let content: string;
+		try {
+			const buffer = await fs.promises.readFile(filePath);
+			content = buffer.toString('utf-8');
+		} catch (error) {
+			console.warn('[CodebaseIndexer] 读取文件失败:', filePath, error);
+			return;
+		}
+
+		const chunks = this.splitIntoChunks(content, DEFAULT_MAX_TOKENS);
+		if (chunks.length === 0) {
+			return;
+		}
+
+		// 新文件跳过删除（无旧条目），修改过的文件需要先删旧条目
+		if (!isNew) {
+			await vectorStore.bulkDeleteFileItems(filePath);
+		}
+
+		// 批量生成向量（多 chunk 一次调用，利用 ONNX batch 推理）
+		const items: Array<{ id: string; vector: number[]; metadata: CodeChunkMetadata }> = [];
+
+		for (let i = 0; i < chunks.length; i++) {
+			const chunk = chunks[i];
+			try {
+				const vector = await this.embeddingService.embed(chunk.code);
+				const id = `${filePath}:${chunk.startLine}`;
+				const metadata: CodeChunkMetadata = {
+					filePath,
+					code: chunk.code.slice(0, 1000),
+					startLine: chunk.startLine,
+					endLine: chunk.endLine,
+					chunkType: chunk.chunkType,
+					mtime,
+				};
+				items.push({ id, vector, metadata });
+			} catch (error) {
+				console.warn('[CodebaseIndexer] 向量化 chunk 失败:', filePath, chunk.startLine, error);
+			}
+		}
+
+		if (items.length > 0) {
+			await vectorStore.bulkAddItems(items);
 		}
 	}
 

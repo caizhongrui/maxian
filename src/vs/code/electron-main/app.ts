@@ -1286,8 +1286,15 @@ export class CodeApplication extends Disposable {
 		mainProcessElectronServer.registerChannel('maxianCommandExecution', maxianCommandExecutionChannel);
 
 		// 码弦 向量搜索（语义搜索）
-		const maxianVectorSearchChannel = ProxyChannel.fromService(accessor.get(IVectorSearchService), disposables);
-		mainProcessElectronServer.registerChannel('maxianVectorSearch', maxianVectorSearchChannel);
+		try {
+			const vectorSearchSvc = accessor.get(IVectorSearchService);
+			this.logService.info('[App] IVectorSearchService obtained, registering channel...');
+			const maxianVectorSearchChannel = ProxyChannel.fromService(vectorSearchSvc, disposables);
+			mainProcessElectronServer.registerChannel('maxianVectorSearch', maxianVectorSearchChannel);
+			this.logService.info('[App] maxianVectorSearch channel registered successfully');
+		} catch (err) {
+			this.logService.error('[App] Failed to register maxianVectorSearch channel:', err);
+		}
 
 		// Skills System
 		this.logService.info('[App] Getting ISkillService...');

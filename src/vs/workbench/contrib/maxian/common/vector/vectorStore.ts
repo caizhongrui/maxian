@@ -109,14 +109,65 @@ export class VectorStore {
 				version: 1,
 				deleteIfExists: false,
 				metadata_config: {
-					indexed: ['filePath']
+					indexed: ['filePath', 'mtime']  // mtime 内联存储，用于增量索引的 mtime 比对
 				}
 			};
 			await this._index.createIndex(config);
 			console.log('[VectorStore] 索引已创建:', this._indexDir);
 		} else {
-			console.log('[VectorStore] 索引已存在:', this._indexDir);
+			// 索引文件存在，验证完整性（防止因异常终止导致 index.json 损坏）
+			const isValid = await this._validateIndex();
+			if (!isValid) {
+				console.warn('[VectorStore] index.json 损坏，自动重建索引:', this._indexDir);
+				await this._rebuildIndex(fs);
+			} else {
+				console.log('[VectorStore] 索引已存在且完整:', this._indexDir);
+			}
 		}
+	}
+
+	/**
+	 * 验证索引完整性（尝试读取 stats，失败则说明 index.json 损坏）
+	 */
+	private async _validateIndex(): Promise<boolean> {
+		try {
+			await this._index!.getIndexStats();
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	/**
+	 * 重建损坏的索引（删除旧 index.json，重新创建空索引）
+	 */
+	private async _rebuildIndex(fs: typeof import('fs')): Promise<void> {
+		// 删除损坏的 index.json（保留 UUID 元数据文件，但它们的向量数据已丢失，只能重建）
+		const indexJsonPath = `${this._indexDir}/index.json`;
+		try {
+			await fs.promises.unlink(indexJsonPath);
+		} catch { /* 文件可能不存在，忽略 */ }
+
+		// 清理残留的 UUID JSON 文件（没有对应向量，留着会造成孤儿数据）
+		try {
+			const files = await fs.promises.readdir(this._indexDir);
+			for (const file of files) {
+				if (file !== 'index.json' && file.endsWith('.json')) {
+					await fs.promises.unlink(`${this._indexDir}/${file}`).catch(() => { /* ignore */ });
+				}
+			}
+		} catch { /* ignore */ }
+
+		// 重新创建空索引
+		const config: CreateIndexConfig = {
+			version: 1,
+			deleteIfExists: false,
+			metadata_config: {
+				indexed: ['filePath', 'mtime']
+			}
+		};
+		await this._index!.createIndex(config);
+		console.log('[VectorStore] 索引已重建（原索引已损坏）:', this._indexDir);
 	}
 
 	/**
@@ -144,26 +195,119 @@ export class VectorStore {
 		await this.initialize();
 		const index = this._index!;
 
-		// vectra 的 batchInsertItems 要求没有进行中的 update
-		// 我们先删除已存在的条目，再批量插入
-		for (const item of items) {
-			// 尝试删除已存在的（忽略错误）
-			try {
-				await index.deleteItem(item.id);
-			} catch { /* item may not exist */ }
-		}
-
 		if (items.length === 0) {
 			return;
 		}
 
-		await index.batchInsertItems(
-			items.map(item => ({
+		// 在一个 beginUpdate/endUpdate 事务中完成删除 + 插入，只写一次磁盘
+		await index.beginUpdate();
+		try {
+			// 在内存中删除已存在的同 id 条目（不触发 endUpdate，无磁盘写入）
+			for (const item of items) {
+				await index.deleteItem(item.id);
+			}
+			// 在内存中插入所有新条目（upsertItem 检测到 _update 存在则只写内存）
+			for (const item of items) {
+				await index.upsertItem({
+					id: item.id,
+					vector: item.vector,
+					metadata: item.metadata,
+				} as Partial<IndexItem<CodeChunkMetadata>>);
+			}
+			// 一次性写磁盘
+			await index.endUpdate();
+		} catch (err) {
+			try { await index.cancelUpdate(); } catch { /* ignore */ }
+			throw err;
+		}
+	}
+
+	// ── 批量模式（Bulk Mode）─────────────────────────────────────────────────────
+	// 用于全量/增量工作区索引：beginBulkUpdate 开启事务，所有后续操作在内存进行，
+	// 每 N 文件调用一次 commitBulkUpdate 写盘（checkpoint），避免每文件一次写盘。
+
+	/** 是否处于批量模式 */
+	private _inBulkMode = false;
+
+	/**
+	 * 开始批量更新事务（仅加载一次 index.json 到内存）
+	 */
+	async beginBulkUpdate(): Promise<void> {
+		await this.initialize();
+		if (this._inBulkMode) {
+			return; // 已经在事务中
+		}
+		await this._index!.beginUpdate();
+		this._inBulkMode = true;
+	}
+
+	/**
+	 * 提交批量更新（写磁盘），然后立即重新开启事务继续后续操作
+	 * @param reopen 是否写完后立即重新开启事务（默认 true）
+	 */
+	async commitBulkUpdate(reopen = true): Promise<void> {
+		if (!this._inBulkMode) {
+			return;
+		}
+		await this._index!.endUpdate();
+		this._inBulkMode = false;
+		if (reopen) {
+			await this._index!.beginUpdate();
+			this._inBulkMode = true;
+		}
+	}
+
+	/**
+	 * 回滚批量更新（丢弃内存中的变更）
+	 */
+	async rollbackBulkUpdate(): Promise<void> {
+		if (!this._inBulkMode) {
+			return;
+		}
+		try { await this._index!.cancelUpdate(); } catch { /* ignore */ }
+		this._inBulkMode = false;
+	}
+
+	/**
+	 * 在批量模式中删除某文件的所有条目（纯内存操作，不写磁盘）
+	 * 必须在 beginBulkUpdate 之后调用
+	 */
+	async bulkDeleteFileItems(filePath: string): Promise<void> {
+		if (!this._inBulkMode || !this._index) {
+			return;
+		}
+		// deleteItem 检测到 _update 存在时仅在内存中操作，不写磁盘
+		const index = this._index;
+		// 从 _update.items 中找出所有属于该文件的条目并删除
+		// vectra 的 deleteItem 在 bulk 模式下直接改 _update.items，时间复杂度 O(N)
+		// 对于大索引，逐条删除效率低；改为直接过滤更高效
+		// 但 vectra 没有暴露 _update，只能用 deleteItem
+		// 先 listItemsByMetadata 找到所有该文件的 id，再逐一 deleteItem
+		const items = await index.listItemsByMetadata({
+			filePath: { '$eq': filePath }
+		} as Record<string, unknown>);
+		for (const item of items) {
+			await index.deleteItem(item.id);
+		}
+	}
+
+	/**
+	 * 在批量模式中添加多个条目（纯内存操作，不写磁盘）
+	 * 必须在 beginBulkUpdate 之后调用
+	 */
+	async bulkAddItems(items: Array<{ id: string; vector: number[]; metadata: CodeChunkMetadata }>): Promise<void> {
+		if (!this._inBulkMode || !this._index || items.length === 0) {
+			return;
+		}
+		const index = this._index;
+		// upsertItem 在 _update 存在时只写内存
+		for (const item of items) {
+			await index.upsertItem({
 				id: item.id,
 				vector: item.vector,
 				metadata: item.metadata,
-			} as Partial<IndexItem<CodeChunkMetadata>>))
-		);
+			} as Partial<IndexItem<CodeChunkMetadata>>);
+		}
 	}
 
 	/**
@@ -213,6 +357,30 @@ export class VectorStore {
 	}
 
 	/**
+	 * 一次性获取索引中所有文件的 filePath→mtime 映射
+	 * 用于替代逐文件 isFileIndexed 调用，将 O(N×M) 降为 O(N+M)
+	 */
+	async getFileIndexMap(): Promise<Map<string, number>> {
+		await this.initialize();
+		const index = this._index!;
+		const map = new Map<string, number>();
+		try {
+			// listItemsByMetadata({}) 返回全部条目（indexed 字段在内存中，无磁盘读取）
+			const items = await index.listItemsByMetadata({} as Record<string, unknown>);
+			for (const item of items) {
+				const meta = item.metadata as CodeChunkMetadata;
+				if (meta.filePath && !map.has(meta.filePath)) {
+					// 只记录每个文件第一次出现的 mtime（同文件多个 chunk mtime 相同）
+					map.set(meta.filePath, meta.mtime ?? -1);
+				}
+			}
+		} catch {
+			// 索引异常时返回空 map，触发全量重索引
+		}
+		return map;
+	}
+
+	/**
 	 * 获取索引中的条目总数
 	 */
 	async getItemCount(): Promise<number> {
@@ -243,7 +411,7 @@ export class VectorStore {
 			version: 1,
 			deleteIfExists: true,
 			metadata_config: {
-				indexed: ['filePath']
+				indexed: ['filePath', 'mtime']
 			}
 		};
 		await index.createIndex(config);
@@ -272,6 +440,11 @@ export class VectorStore {
 			// 检查 mtime 是否匹配（任意一条匹配即可）
 			for (const item of items) {
 				const meta = item.metadata as CodeChunkMetadata;
+				// 兼容旧索引：mtime 未存为 indexed 字段时为 undefined，
+				// 视为"已是最新"（避免旧索引在每次启动时触发全量重索引）
+				if (meta.mtime === undefined || meta.mtime === null) {
+					return true;
+				}
 				if (meta.mtime === currentMtime) {
 					return true;
 				}

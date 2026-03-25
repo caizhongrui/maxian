@@ -38,12 +38,14 @@ import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextke
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { MAXIAN_INPUT_FOCUSED, MAXIAN_MENTION_DROPDOWN_VISIBLE } from './maxianContextKeys.js';
 import { ICommandExecutionService, ICommandExecutionResult, ICommandExecutionOptions } from '../common/services/commandExecutionService.js';
-import { IVectorSearchService, ISemanticSearchResult } from '../common/vector/IVectorSearchService.js';
+import { IVectorSearchService, ISemanticSearchResult, IIndexStats } from '../common/vector/IVectorSearchService.js';
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { FimCompletionProvider } from './fim/fimCompletionProvider.js';
+import { VectorSearchStatusBarContribution } from './vectorSearchStatusBar.js';
+import { VectorIndexFileWatcherContribution } from './vectorIndexFileWatcher.js';
 
 // 确保ripgrep服务被注册（导入副作用）
 import '../../../services/ripgrep/browser/ripgrep.contribution.js';
@@ -71,6 +73,12 @@ class BrowserVectorSearchService implements IVectorSearchService {
 	formatResults(_results: ISemanticSearchResult[], _query: string): string {
 		return '';
 	}
+	async getIndexStats(_cwd: string): Promise<IIndexStats> {
+		return { itemCount: 0, isIndexing: false, indexed: 0, total: 0, lastIndexedAt: 0, modelReady: false };
+	}
+	async triggerIndexing(_cwd: string): Promise<void> { }
+	async indexFile(_filePath: string, _cwd: string): Promise<void> { }
+	async deleteFileIndex(_filePath: string, _cwd: string): Promise<void> { }
 }
 registerSingleton(IVectorSearchService, BrowserVectorSearchService, InstantiationType.Delayed);
 
@@ -466,4 +474,18 @@ registerWorkbenchContribution2(
 	MaxianFimCompletionContribution.ID,
 	MaxianFimCompletionContribution,
 	WorkbenchPhase.BlockRestore,
+);
+
+// 注册语义搜索状态栏（在工作区恢复后启动轮询）
+registerWorkbenchContribution2(
+	VectorSearchStatusBarContribution.ID,
+	VectorSearchStatusBarContribution,
+	WorkbenchPhase.AfterRestored,
+);
+
+// 注册向量索引文件监听器（文件保存/删除时自动更新索引）
+registerWorkbenchContribution2(
+	VectorIndexFileWatcherContribution.ID,
+	VectorIndexFileWatcherContribution,
+	WorkbenchPhase.AfterRestored,
 );

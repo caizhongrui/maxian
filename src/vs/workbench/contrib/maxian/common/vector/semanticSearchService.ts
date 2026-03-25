@@ -45,6 +45,15 @@ interface IndexState {
 	lastIndexedAt: number;
 	/** 索引中的 Promise */
 	indexingPromise: Promise<void> | null;
+	/** 当前已处理文件数 */
+	indexed: number;
+	/** 总文件数 */
+	total: number;
+	/**
+	 * 本次进程中是否已完成过完整扫描（包含增量）
+	 * false = 进程重启后首次访问，可能存在未完成的增量索引
+	 */
+	fullyScanCompleted: boolean;
 }
 
 const _indexStates = new Map<string, IndexState>();
@@ -59,16 +68,15 @@ function getIndexState(cwd: string): IndexState {
 			indexing: false,
 			lastIndexedAt: 0,
 			indexingPromise: null,
+			indexed: 0,
+			total: 0,
+			fullyScanCompleted: false,
 		};
 		_indexStates.set(cwd, state);
 	}
 	return state;
 }
 
-/**
- * 索引过期时间：30 分钟
- */
-const INDEX_TTL_MS = 30 * 60 * 1000;
 
 /**
  * SemanticSearchService: 高层语义搜索 API
@@ -149,13 +157,16 @@ export class SemanticSearchService {
 	}
 
 	/**
-	 * 确保工作区索引存在且不过期
-	 * 如果索引不存在或已过期，触发重新索引
-	 * 如果索引正在进行中，等待其完成
+	 * 确保工作区索引存在，并在需要时触发（增量）索引
+	 *
+	 * 策略：
+	 * 1. 若正在索引中 → 等待完成（不重复触发）
+	 * 2. 若 itemCount === 0 → 首次全量索引，阻塞本次搜索（抛"稍后重试"）
+	 * 3. 若 itemCount > 0 且本进程中还未完整扫描过 → 后台增量扫描（补全上次中断）
+	 * 4. 若已完整扫描过 → 直接复用
 	 */
 	async ensureIndexed(cwd: string): Promise<void> {
 		const state = getIndexState(cwd);
-		const now = Date.now();
 
 		// 如果正在索引，等待完成
 		if (state.indexing && state.indexingPromise) {
@@ -163,39 +174,56 @@ export class SemanticSearchService {
 			return;
 		}
 
-		// 检查索引是否存在
+		// 检查索引是否存在（磁盘持久化，重启后仍有效）
 		const vectorStore = getVectorStore(cwd);
 		const itemCount = await vectorStore.getItemCount().catch(() => 0);
-		const isExpired = now - state.lastIndexedAt > INDEX_TTL_MS;
 
-		if (itemCount === 0 || isExpired) {
-			// 触发索引
-			console.log('[SemanticSearch] 触发工作区索引，itemCount:', itemCount, 'isExpired:', isExpired);
-			state.indexing = true;
-			state.indexingPromise = this.indexer.indexWorkspace(cwd, {
-				onProgress: (progress) => {
-					if (progress.phase === 'indexing' && progress.indexed % 10 === 0) {
-						console.log(`[SemanticSearch] 索引进度: ${progress.indexed}/${progress.total}`);
-					}
-				}
-			}).then(() => {
-				state.lastIndexedAt = Date.now();
-				state.indexing = false;
-				state.indexingPromise = null;
-				console.log('[SemanticSearch] 工作区索引完成');
-			}).catch((error) => {
-				console.error('[SemanticSearch] 工作区索引失败:', error);
-				state.indexing = false;
-				state.indexingPromise = null;
-			});
-
-			// 等待索引完成（第一次必须等待，后续可以异步）
-			if (itemCount === 0) {
-				// 索引为空时，必须等待索引完成再搜索
-				await state.indexingPromise;
-			}
-			// 如果已有部分索引但过期，后台刷新，不阻塞本次搜索
+		if (itemCount === 0) {
+			// 索引为空：首次全量建立（后台运行）
+			console.log('[SemanticSearch] 触发工作区全量索引（后台），itemCount:', itemCount);
+			this._startIndexing(cwd, state);
+			// 本次搜索无内容可用，通知调用方稍后重试
+			throw new Error('索引正在建立中，请稍后重试');
 		}
+
+		if (!state.fullyScanCompleted) {
+			// 索引有数据，本进程首次访问（可能是上次中断或正常退出后重启）
+			// 触发一次增量扫描补全缺失文件。由于 isFileIndexed 使用 mtime 比对，
+			// 已索引且未修改的文件会被跳过（快速），只有缺失文件才会被重新嵌入。
+			console.log('[SemanticSearch] 触发工作区增量扫描（后台，补全缺失文件），itemCount:', itemCount);
+			this._startIndexing(cwd, state);
+			// 有现有索引，可以立即搜索，不抛错
+		}
+		// else: 本进程中已完整扫描过，直接复用
+	}
+
+	/**
+	 * 启动后台索引任务（全量或增量，由 indexWorkspace 内部 mtime 判断）
+	 */
+	private _startIndexing(cwd: string, state: ReturnType<typeof getIndexState>): void {
+		state.indexing = true;
+		state.indexed = 0;
+		state.total = 0;
+		state.indexingPromise = this.indexer.indexWorkspace(cwd, {
+			onProgress: (progress) => {
+				state.indexed = progress.indexed;
+				state.total = progress.total;
+				if (progress.phase === 'indexing' && progress.indexed % 50 === 0) {
+					console.log(`[SemanticSearch] 索引进度: ${progress.indexed}/${progress.total}`);
+				}
+			}
+		}).then(() => {
+			state.lastIndexedAt = Date.now();
+			state.indexing = false;
+			state.fullyScanCompleted = true;
+			state.indexingPromise = null;
+			console.log('[SemanticSearch] 工作区索引完成');
+		}).catch((error) => {
+			console.error('[SemanticSearch] 工作区索引失败:', error);
+			state.indexing = false;
+			state.indexingPromise = null;
+			// fullyScanCompleted 保持 false，下次仍会触发增量扫描
+		});
 	}
 
 	/**
@@ -265,10 +293,23 @@ export class SemanticSearchService {
 	}
 
 	/**
-	 * 获取索引统计信息
+	 * 主动触发工作区索引（切换项目时调用）
+	 * 内部调用 ensureIndexed，忽略"索引建立中"错误
+	 */
+	async triggerIndexing(cwd: string): Promise<void> {
+		const normalizedCwd = cwd.replace(/\/$/, '');
+		try {
+			await this.ensureIndexed(normalizedCwd);
+		} catch {
+			// ensureIndexed 在 itemCount===0 时抛出"索引正在建立中"，属于预期行为，忽略
+		}
+	}
+
+	/**
+	 * 获取索引统计与进度信息（供状态栏轮询）
 	 * @param cwd 工作区根目录
 	 */
-	async getIndexStats(cwd: string): Promise<{ itemCount: number; indexDir: string; isIndexing: boolean; lastIndexedAt: number }> {
+	async getIndexStats(cwd: string): Promise<{ itemCount: number; isIndexing: boolean; indexed: number; total: number; lastIndexedAt: number }> {
 		const normalizedCwd = cwd.replace(/\/$/, '');
 		const vectorStore = getVectorStore(normalizedCwd);
 		const state = getIndexState(normalizedCwd);
@@ -277,8 +318,9 @@ export class SemanticSearchService {
 
 		return {
 			itemCount,
-			indexDir: vectorStore.getIndexDir(),
 			isIndexing: state.indexing,
+			indexed: state.indexed,
+			total: state.total,
 			lastIndexedAt: state.lastIndexedAt,
 		};
 	}

@@ -10,12 +10,21 @@
  * 工具本身负责读取文件、检测语言、推导测试路径，Agent根据返回内容调用write_to_file生成测试。
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
+import * as path from '../../../../../base/common/path.js';
 import type { ToolResponse } from './toolTypes.js';
 
 /** 文件最大读取大小（1MB） */
 const MAX_FILE_SIZE = 1 * 1024 * 1024;
+
+/**
+ * 文件系统操作回调（由调用方提供，避免在 browser 上下文中直接使用 Node.js fs 模块）
+ */
+export interface FileSystemOps {
+	exists(filePath: string): Promise<boolean>;
+	stat(filePath: string): Promise<{ size: number; isDirectory: boolean }>;
+	readText(filePath: string): Promise<string>;
+	readdir(dirPath: string): Promise<string[]>;
+}
 
 /**
  * 支持的语言信息
@@ -173,17 +182,14 @@ function inferJavaTestPath(absolutePath: string, relativePath: string, baseName:
 
 /**
  * 推导Python测试文件路径
- * src/module/foo.py → tests/test_foo.py
- * src/module/foo.py → src/module/test_foo.py (如果没有tests目录)
  */
-function inferPythonTestPath(relativePath: string, workspacePath: string): string {
+async function inferPythonTestPath(relativePath: string, workspacePath: string, fsOps: FileSystemOps): Promise<string> {
 	const dir = path.dirname(relativePath);
 	const baseName = path.basename(relativePath, '.py');
 
 	// 检查是否有顶层tests/目录
 	const testsDir = path.join(workspacePath, 'tests');
-	if (fs.existsSync(testsDir)) {
-		// 推导相对路径
+	if (await fsOps.exists(testsDir)) {
 		const relativeDir = dir === '.' ? '' : dir.replace(/^src[/\\]?/, '');
 		if (relativeDir) {
 			return `tests/${relativeDir}/test_${baseName}.py`.replace(/\\/g, '/');
@@ -197,23 +203,21 @@ function inferPythonTestPath(relativePath: string, workspacePath: string): strin
 
 /**
  * 推导TypeScript/JavaScript测试文件路径
- * src/utils/foo.ts → src/utils/foo.test.ts
- * src/utils/foo.ts → __tests__/foo.test.ts (如果有__tests__目录)
  */
-function inferJsTestPath(relativePath: string, workspacePath: string, langInfo: LanguageInfo): string {
+async function inferJsTestPath(relativePath: string, workspacePath: string, langInfo: LanguageInfo, fsOps: FileSystemOps): Promise<string> {
 	const dir = path.dirname(relativePath);
 	const ext = path.extname(relativePath);
 	const baseName = path.basename(relativePath, ext);
 
 	// 检查是否有__tests__目录
 	const testsDir = path.join(workspacePath, '__tests__');
-	if (fs.existsSync(testsDir)) {
+	if (await fsOps.exists(testsDir)) {
 		return `__tests__/${baseName}${langInfo.testFileExtension}`;
 	}
 
 	// spec目录检查
 	const specDir = path.join(workspacePath, 'spec');
-	if (fs.existsSync(specDir)) {
+	if (await fsOps.exists(specDir)) {
 		return `spec/${baseName}.spec${ext}`;
 	}
 
@@ -223,7 +227,6 @@ function inferJsTestPath(relativePath: string, workspacePath: string, langInfo: 
 
 /**
  * 推导Go测试文件路径
- * src/foo.go → src/foo_test.go
  */
 function inferGoTestPath(relativePath: string): string {
 	const dir = path.dirname(relativePath);
@@ -234,20 +237,21 @@ function inferGoTestPath(relativePath: string): string {
 /**
  * 推导测试文件输出路径
  */
-function inferTestOutputPath(
+async function inferTestOutputPath(
 	relativePath: string,
 	absolutePath: string,
 	workspacePath: string,
 	langInfo: LanguageInfo,
-	language: string
-): string {
+	language: string,
+	fsOps: FileSystemOps
+): Promise<string> {
 	switch (language) {
 		case 'Java':
 			return inferJavaTestPath(absolutePath, relativePath, path.basename(relativePath, '.java'), langInfo);
 		case 'Kotlin':
 			return inferJavaTestPath(absolutePath, relativePath, path.basename(relativePath, '.kt'), langInfo);
 		case 'Python':
-			return inferPythonTestPath(relativePath, workspacePath);
+			return inferPythonTestPath(relativePath, workspacePath, fsOps);
 		case 'Go':
 			return inferGoTestPath(relativePath);
 		case 'TypeScript':
@@ -255,7 +259,7 @@ function inferTestOutputPath(
 		case 'JavaScript':
 		case 'JavaScript (React)':
 		case 'JavaScript (ESM)':
-			return inferJsTestPath(relativePath, workspacePath, langInfo);
+			return inferJsTestPath(relativePath, workspacePath, langInfo, fsOps);
 		default: {
 			// 通用推导：在同目录下加测试后缀
 			const dir = path.dirname(relativePath);
@@ -300,6 +304,7 @@ function formatFileSize(bytes: number): string {
  *
  * @param workspacePath 工作区根目录路径
  * @param params 工具参数
+ * @param fsOps 文件系统操作回调（由调用方提供，避免在 browser 上下文中直接使用 Node.js fs 模块）
  * @returns 格式化的分析结果，供Agent生成测试代码
  */
 export async function generateTestsTool(
@@ -308,7 +313,8 @@ export async function generateTestsTool(
 		target_file: string;
 		test_framework?: string;
 		output_path?: string;
-	}
+	},
+	fsOps: FileSystemOps
 ): Promise<ToolResponse> {
 	const targetFile = params.target_file;
 	if (!targetFile) {
@@ -326,13 +332,13 @@ export async function generateTestsTool(
 		: targetFile;
 
 	// 检查文件是否存在
-	if (!fs.existsSync(absolutePath)) {
+	if (!await fsOps.exists(absolutePath)) {
 		// 尝试模糊匹配
 		const parentDir = path.dirname(absolutePath);
 		const targetName = path.basename(absolutePath).toLowerCase();
-		if (fs.existsSync(parentDir)) {
+		if (await fsOps.exists(parentDir)) {
 			try {
-				const dirContents = fs.readdirSync(parentDir);
+				const dirContents = await fsOps.readdir(parentDir);
 				const minMatchLen = Math.max(3, Math.floor(targetName.length * 0.6));
 				const suggestions = dirContents
 					.filter(f => {
@@ -352,14 +358,20 @@ export async function generateTestsTool(
 	}
 
 	// 检查是否为目录
-	const stat = fs.statSync(absolutePath);
-	if (stat.isDirectory()) {
+	let statResult: { size: number; isDirectory: boolean };
+	try {
+		statResult = await fsOps.stat(absolutePath);
+	} catch (err: any) {
+		return `Error: 无法获取文件信息: ${err.message}`;
+	}
+
+	if (statResult.isDirectory) {
 		return `Error: ${targetFile} 是一个目录，请指定具体的源文件路径。`;
 	}
 
 	// 检查文件大小
-	if (stat.size > MAX_FILE_SIZE) {
-		return `Error: 文件过大 (${formatFileSize(stat.size)})，最大支持 ${formatFileSize(MAX_FILE_SIZE)}。\n\n请使用 read_file 工具配合 start_line/end_line 参数分段读取文件内容，然后手动指定测试需求。`;
+	if (statResult.size > MAX_FILE_SIZE) {
+		return `Error: 文件过大 (${formatFileSize(statResult.size)})，最大支持 ${formatFileSize(MAX_FILE_SIZE)}。\n\n请使用 read_file 工具配合 start_line/end_line 参数分段读取文件内容，然后手动指定测试需求。`;
 	}
 
 	// 检测语言
@@ -371,12 +383,12 @@ export async function generateTestsTool(
 
 	// 推导测试文件输出路径（优先使用用户指定）
 	const outputPath = params.output_path
-		|| inferTestOutputPath(relativePath, absolutePath, workspacePath, langInfo, language);
+		|| await inferTestOutputPath(relativePath, absolutePath, workspacePath, langInfo, language, fsOps);
 
 	// 读取源文件内容
 	let fileContent: string;
 	try {
-		fileContent = fs.readFileSync(absolutePath, 'utf-8');
+		fileContent = await fsOps.readText(absolutePath);
 	} catch (err: any) {
 		return `Error: 读取文件失败: ${err.message}`;
 	}
@@ -387,7 +399,7 @@ export async function generateTestsTool(
 	const testFileAbsPath = path.isAbsolute(outputPath)
 		? outputPath
 		: path.resolve(workspacePath, outputPath);
-	const testFileExists = fs.existsSync(testFileAbsPath);
+	const testFileExists = await fsOps.exists(testFileAbsPath);
 
 	// 构建输出
 	const lines: string[] = [
@@ -406,7 +418,7 @@ export async function generateTestsTool(
 	lines.push(
 		'',
 		`### 文件信息`,
-		`- 文件大小: ${formatFileSize(stat.size)}`,
+		`- 文件大小: ${formatFileSize(statResult.size)}`,
 		`- 代码行数: ${lineCount} 行`,
 		'',
 		'### 源文件内容',
