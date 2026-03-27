@@ -41,7 +41,7 @@ import { ContextManager } from '../context/ContextManager.js';
 import { StateMutex } from '../utils/StateMutex.js';
 import { CheckpointManager } from '../checkpoints/CheckpointManager.js';
 
-const MAX_CONSECUTIVE_MISTAKES = 3; // 最大连续错误次数
+const MAX_CONSECUTIVE_MISTAKES = 5; // 最大连续错误次数
 
 // ========== 上下文管理常量 ==========
 const MAX_CONTEXT_TOKENS = 100000; // 最大上下文 token 数
@@ -326,12 +326,29 @@ export class TaskService extends Disposable {
 			status: TaskStatus.IDLE
 		};
 
-		// 如果提供了初始任务，添加到历史
+		// 如果提供了初始任务，添加到历史（支持图片）
 		if (options.task) {
-			this.apiConversationHistory.push({
-				role: 'user',
-				content: options.task
-			});
+			if (options.images && options.images.length > 0) {
+				const contentBlocks: import('../api/types.js').ContentBlock[] = [
+					{ type: 'text', text: options.task }
+				];
+				for (const imgBase64 of options.images) {
+					let media_type: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp' = 'image/png';
+					if (imgBase64.startsWith('/9j/')) media_type = 'image/jpeg';
+					else if (imgBase64.startsWith('R0lGOD')) media_type = 'image/gif';
+					else if (imgBase64.startsWith('UklGR')) media_type = 'image/webp';
+					contentBlocks.push({
+						type: 'image',
+						source: { type: 'base64', data: imgBase64, media_type }
+					} as import('../api/types.js').ImageContentBlock);
+				}
+				this.apiConversationHistory.push({ role: 'user', content: contentBlocks });
+			} else {
+				this.apiConversationHistory.push({
+					role: 'user',
+					content: options.task
+				});
+			}
 		}
 	}
 
@@ -584,12 +601,40 @@ export class TaskService extends Disposable {
 
 	/**
 	 * 添加用户消息
+	 * 如果提供了 images（base64 字符串数组），会构建多模态内容块传给 AI
 	 */
 	public addUserMessage(message: string, images?: string[]): void {
-		this.apiConversationHistory.push({
-			role: 'user',
-			content: message
-		});
+		if (images && images.length > 0) {
+			// 多模态消息：文本 + 图片
+			const contentBlocks: import('../api/types.js').ContentBlock[] = [
+				{ type: 'text', text: message }
+			];
+			for (const imgBase64 of images) {
+				// 检测 MIME 类型（PNG/JPEG/GIF/WebP）
+				let media_type: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp' = 'image/png';
+				if (imgBase64.startsWith('/9j/')) media_type = 'image/jpeg';
+				else if (imgBase64.startsWith('R0lGOD')) media_type = 'image/gif';
+				else if (imgBase64.startsWith('UklGR')) media_type = 'image/webp';
+
+				contentBlocks.push({
+					type: 'image',
+					source: {
+						type: 'base64',
+						data: imgBase64,
+						media_type
+					}
+				} as import('../api/types.js').ImageContentBlock);
+			}
+			this.apiConversationHistory.push({
+				role: 'user',
+				content: contentBlocks
+			});
+		} else {
+			this.apiConversationHistory.push({
+				role: 'user',
+				content: message
+			});
+		}
 
 		// 不使用say，直接添加以避免异步问题
 		const ts = Date.now();

@@ -52,9 +52,14 @@ interface AiProxyRequest {
 	apiType?: string;  // chat 或 completion
 }
 
+// 多模态内容块（用于 user 消息中包含图片）
+type AiProxyContentPart =
+	| { type: 'text'; text: string }
+	| { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } };
+
 interface AiProxyMessage {
 	role: 'system' | 'user' | 'assistant' | 'tool';
-	content: string;
+	content: string | AiProxyContentPart[];
 	tool_calls?: AiProxyToolCall[];
 	tool_call_id?: string;
 	name?: string;
@@ -661,12 +666,31 @@ export class AiProxyHandler implements IApiHandler {
 			} else {
 				// 处理内容块数组
 				let textContent = '';
+				const imageParts: AiProxyContentPart[] = [];
 				const toolCalls: AiProxyToolCall[] = [];
 				const toolResults: Array<{ tool_call_id: string; content: string }> = [];
 
 				for (const block of msg.content) {
 					if (block.type === 'text') {
 						textContent += block.text;
+					} else if (block.type === 'image') {
+						// 图片内容块 → OpenAI image_url 格式
+						const imgBlock = block as import('./types.js').ImageContentBlock;
+						if (imgBlock.source.type === 'base64') {
+							const mimeType = imgBlock.source.media_type || 'image/png';
+							imageParts.push({
+								type: 'image_url',
+								image_url: {
+									url: `data:${mimeType};base64,${imgBlock.source.data}`,
+									detail: 'high'
+								}
+							});
+						} else if (imgBlock.source.type === 'url') {
+							imageParts.push({
+								type: 'image_url',
+								image_url: { url: imgBlock.source.data, detail: 'high' }
+							});
+						}
 					} else if (block.type === 'tool_use') {
 						toolCalls.push({
 							id: block.id,
@@ -682,6 +706,15 @@ export class AiProxyHandler implements IApiHandler {
 							content: block.content
 						});
 					}
+				}
+
+				// user 消息：如果包含图片，使用多模态格式
+				if (msg.role === 'user' && imageParts.length > 0) {
+					const parts: AiProxyContentPart[] = [];
+					if (textContent) parts.push({ type: 'text', text: textContent });
+					parts.push(...imageParts);
+					result.push({ role: 'user', content: parts });
+					continue;
 				}
 
 				// assistant消息：包含文本和tool_calls

@@ -29,7 +29,7 @@ import { IModelService } from '../../../../editor/common/services/model.js';
 import { DiffViewProvider } from './diffViewProvider.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { DifyHandler, DifyConfiguration } from '../common/api/difyHandler.js';
-import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IAILogService, AskHistoryItem } from '../../../../platform/aiLog/common/aiLog.js';
 import { IRequestService } from '../../../../platform/request/common/request.js';
 import { EnvironmentContextTracker } from './EnvironmentContextTracker.js';
@@ -59,6 +59,8 @@ import { initOutputTruncation } from '../common/utils/outputTruncation.js';
 import { executeEdit } from '../common/tools/editTool.js';
 import { executeMultiedit, EditOperation } from '../common/tools/multieditTool.js';
 import { BehaviorReporter } from './behaviorReporter.js';
+import { McpHub } from '../common/mcp/McpHub.js';
+import { McpServerConfig, McpServerInfo } from '../common/mcp/McpTypes.js';
 
 
 export const IMaxianService = createDecorator<IMaxianService>('maxianService');
@@ -197,7 +199,7 @@ export interface IMaxianService {
 	 * @param mode 当前模式（默认为code模式）
 	 * @param knowledgeBaseConfig 知识库配置（ask模式专用）
 	 */
-	sendMessage(message: string, mode?: Mode, knowledgeBaseConfig?: IKnowledgeBaseConfig): Promise<void>;
+	sendMessage(message: string, mode?: Mode, knowledgeBaseConfig?: IKnowledgeBaseConfig, images?: string[]): Promise<void>;
 
 	/**
 	 * 提交用户回复（回答AI的问题）- 旧版本
@@ -409,6 +411,27 @@ export interface IMaxianService {
 	 * 获取当前任务的所有 checkpoint 列表
 	 */
 	getCheckpoints(): any[];
+
+	/** 获取所有 MCP 服务器状态 */
+	getMcpServers(): McpServerInfo[];
+
+	/** 保存并更新单个 MCP 服务器配置 */
+	saveMcpServer(config: McpServerConfig): Promise<McpServerInfo>;
+
+	/** 删除 MCP 服务器配置 */
+	deleteMcpServer(name: string): void;
+
+	/** 订阅 MCP 服务器变化 */
+	onMcpServersChange(listener: (servers: McpServerInfo[]) => void): () => void;
+
+	/** 重新连接指定 MCP 服务器 */
+	reconnectMcpServer(name: string): Promise<McpServerInfo | undefined>;
+
+	/** 调用 MCP 工具（用于 #figma 等快捷引用） */
+	callMcpTool(serverName: string, toolName: string, args: Record<string, any>): Promise<string>;
+
+	/** 获取所有已连接的 MCP 工具列表 */
+	getConnectedMcpTools(): Array<{ serverName: string; toolName: string; description: string }>;
 }
 
 /**
@@ -515,6 +538,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	// 📊 行为埋点上报器
 	public behaviorReporter: BehaviorReporter | null = null;
+
+	// 🔌 MCP Hub（管理所有 MCP 服务器连接）
+	public mcpHub: McpHub = new McpHub();
 
 	constructor(
 		@IFileService private readonly fileService: IFileService,
@@ -700,6 +726,12 @@ export class MaxianService extends Disposable implements IMaxianService {
 			}
 		);
 
+		// 注入 MCP Hub（支持 use_mcp_tool / access_mcp_resource 工具）
+		(this.toolExecutor as ToolExecutorImpl).setMcpHub(this.mcpHub);
+
+		// 加载并连接已配置的 MCP 服务器
+		await this.loadAndConnectMcpServers();
+
 
 		// P1优化：并行初始化 RepoMapService、SteeringService 和 MemoryService
 		if (workspaceRoot) {
@@ -751,7 +783,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 		this.behaviorReporter?.reportSessionStart();
 	}
 
-	async sendMessage(message: string, mode: Mode = DEFAULT_MODE, knowledgeBaseConfig?: IKnowledgeBaseConfig): Promise<void> {
+	async sendMessage(message: string, mode: Mode = DEFAULT_MODE, knowledgeBaseConfig?: IKnowledgeBaseConfig, images?: string[]): Promise<void> {
 
 		// 更新当前模式
 		this.currentMode = mode;
@@ -787,7 +819,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			await this.sendDifyMessage(resolvedMessage, knowledgeBaseConfig);
 		} else {
 			// 其他模式：使用 TaskService 进行完整的任务处理
-			await this.sendTaskMessage(resolvedMessage);
+			await this.sendTaskMessage(resolvedMessage, images);
 		}
 	}
 
@@ -1231,7 +1263,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 	 * 使用 TaskService 发送消息（code/architect/debug 等模式）
 	 * 完整的任务处理，包括工具调用
 	 */
-	private async sendTaskMessage(message: string): Promise<void> {
+	private async sendTaskMessage(message: string, images?: string[]): Promise<void> {
 		if (!this.apiHandler || !this.toolExecutor) {
 			console.error('[Maxian] API Handler 或工具执行器未初始化');
 			this._onMessage.fire({
@@ -1298,6 +1330,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 			this.currentTask = new TaskService({
 				task: fullMessage,
+				images,
 				apiHandler: this.apiHandler,
 				toolExecutor: this.toolExecutor,
 				getSystemPrompt: () => this.getSystemPrompt(),
@@ -1671,7 +1704,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		// 生成缓存键（包含 steering 版本，确保 steering 变更时缓存失效）
 		const steeringVersion = this.steeringService ? this.steeringService.getLoadVersion() : 0;
-		const cacheKey = `${workspaceRoot}:${this.currentMode}:${availableTools.length}:sv${steeringVersion}`;
+		const mcpToolCount = this.mcpHub.getConnectedTools().length;
+		const cacheKey = `${workspaceRoot}:${this.currentMode}:${availableTools.length}:sv${steeringVersion}:mcp${mcpToolCount}`;
 		const now = Date.now();
 
 		// 检查缓存是否有效
@@ -1764,6 +1798,15 @@ export class MaxianService extends Disposable implements IMaxianService {
 - 禁止单独调用 read_file（使用 batch）
 
 记住：预加载的代码是为你精心准备的，直接使用可节省50%以上的响应时间！`;
+		}
+
+		// 注入 MCP 服务器上下文
+		const connectedMcpTools = this.mcpHub.getConnectedTools();
+		if (connectedMcpTools.length > 0) {
+			const mcpSection = this.buildMcpContextSection();
+			if (mcpSection) {
+				prompt += mcpSection;
+			}
 		}
 
 		// 更新缓存
@@ -2222,8 +2265,55 @@ export class MaxianService extends Disposable implements IMaxianService {
 					},
 					required: ['target_file']
 				}
-			}
+			},
+
+			// 31. use_mcp_tool - MCP工具调用
+			{
+				name: 'use_mcp_tool',
+				description: '调用已连接的 MCP (Model Context Protocol) 服务器上的工具。可用于读取 Figma 设计稿、调用外部 API 等。',
+				parameters: {
+					type: 'object',
+					properties: {
+						server_name: { type: 'string', description: 'MCP 服务器名称（在设置中配置的名称）' },
+						tool_name: { type: 'string', description: '要调用的工具名称' },
+						arguments: { type: 'string', description: '工具参数（JSON 字符串）' }
+					},
+					required: ['server_name', 'tool_name']
+				}
+			},
+
+			// 32. access_mcp_resource - MCP资源访问
+			{
+				name: 'access_mcp_resource',
+				description: '读取已连接的 MCP 服务器上的资源（通过 URI 访问）。',
+				parameters: {
+					type: 'object',
+					properties: {
+						server_name: { type: 'string', description: 'MCP 服务器名称' },
+						uri: { type: 'string', description: '资源 URI' }
+					},
+					required: ['server_name', 'uri']
+				}
+			},
+
+			// MCP 动态工具：已连接服务器上的工具（作为独立 tool definition 注入）
+			...this.getMcpToolDefinitions()
 		];
+	}
+
+	/**
+	 * 获取所有已连接 MCP 服务器的工具定义
+	 */
+	private getMcpToolDefinitions(): Array<{ name: string; description: string; parameters: any }> {
+		const result: Array<{ name: string; description: string; parameters: any }> = [];
+		for (const { serverName, tool } of this.mcpHub.getConnectedTools()) {
+			result.push({
+				name: `use_mcp_tool___${serverName}___${tool.name}`,
+				description: `[MCP: ${serverName}] ${tool.description || tool.name}`,
+				parameters: tool.inputSchema || { type: 'object', properties: {} }
+			});
+		}
+		return result;
 	}
 
 	/**
@@ -3375,7 +3465,164 @@ ${preloadedCode}
 			this.steeringService.dispose();
 			this.steeringService = null;
 		}
+		// 释放 MCP Hub 资源
+		this.mcpHub.dispose();
 		super.dispose();
+	}
+
+	// ===================================================================
+	// MCP 服务器管理
+	// ===================================================================
+
+	private static readonly MCP_STORAGE_KEY = 'zhikai.mcp.servers';
+
+	/** 读取 MCP 配置（使用 localStorage，在 Electron renderer 中持久化） */
+	private mcpStorageGet(): string | null {
+		try {
+			return window.localStorage.getItem(MaxianService.MCP_STORAGE_KEY);
+		} catch {
+			return this.storageService.get(MaxianService.MCP_STORAGE_KEY, StorageScope.APPLICATION) ?? null;
+		}
+	}
+
+	/** 写入 MCP 配置 */
+	private mcpStorageSet(value: string): void {
+		try {
+			window.localStorage.setItem(MaxianService.MCP_STORAGE_KEY, value);
+		} catch {
+			this.storageService.store(MaxianService.MCP_STORAGE_KEY, value, StorageScope.APPLICATION, StorageTarget.USER);
+		}
+	}
+
+	/** 从存储加载 MCP 配置并连接 */
+	async loadAndConnectMcpServers(): Promise<void> {
+		try {
+			const stored = this.mcpStorageGet();
+			if (!stored) return;
+			const configs: McpServerConfig[] = JSON.parse(stored);
+			if (Array.isArray(configs) && configs.length > 0) {
+				await this.mcpHub.loadConfigs(configs);
+			}
+		} catch (e) {
+			console.error('[Maxian] 加载 MCP 服务器配置失败:', e);
+		}
+	}
+
+	/** 获取所有 MCP 服务器状态 */
+	getMcpServers(): McpServerInfo[] {
+		return this.mcpHub.getAllServers();
+	}
+
+	/** 保存并更新单个 MCP 服务器配置 */
+	async saveMcpServer(config: McpServerConfig): Promise<McpServerInfo> {
+		// 读取已有配置，合并新配置后写入
+		let allConfigs: McpServerConfig[] = [];
+		try {
+			const stored = this.mcpStorageGet();
+			if (stored) allConfigs = JSON.parse(stored);
+		} catch { /* ignore */ }
+
+		const idx = allConfigs.findIndex(s => s.name === config.name);
+		if (idx >= 0) {
+			allConfigs[idx] = config;
+		} else {
+			allConfigs.push(config);
+		}
+		this.mcpStorageSet(JSON.stringify(allConfigs));
+
+		// 连接/更新
+		return this.mcpHub.updateServer(config);
+	}
+
+	/** 删除 MCP 服务器配置 */
+	deleteMcpServer(name: string): void {
+		let allConfigs: McpServerConfig[] = [];
+		try {
+			const stored = this.mcpStorageGet();
+			if (stored) allConfigs = JSON.parse(stored);
+		} catch { /* ignore */ }
+		allConfigs = allConfigs.filter(s => s.name !== name);
+		this.mcpStorageSet(JSON.stringify(allConfigs));
+		this.mcpHub.disconnectServer(name);
+	}
+
+	/** 订阅 MCP 服务器变化 */
+	onMcpServersChange(listener: (servers: McpServerInfo[]) => void): () => void {
+		return this.mcpHub.onDidChange(listener);
+	}
+
+	/** 重新连接指定 MCP 服务器 */
+	async reconnectMcpServer(name: string): Promise<McpServerInfo | undefined> {
+		const server = this.mcpHub.getServer(name);
+		if (!server) return undefined;
+		return this.mcpHub.connectServer(server.config);
+	}
+
+	/** 调用 MCP 工具（用于 #figma 等快捷引用），返回序列化字符串 */
+	async callMcpTool(serverName: string, toolName: string, args: Record<string, any>): Promise<string> {
+		const response = await this.mcpHub.callTool(serverName, toolName, args);
+		if (response.isError) {
+			const errText = response.content.map(c => c.text || '').join('\n');
+			throw new Error(errText || 'MCP tool returned error');
+		}
+		return response.content
+			.map(c => {
+				if (c.type === 'text') return c.text || '';
+				if (c.type === 'resource' && c.resource?.text) return c.resource.text;
+				return JSON.stringify(c);
+			})
+			.join('\n');
+	}
+
+	/** 获取所有已连接的 MCP 工具列表 */
+	getConnectedMcpTools(): Array<{ serverName: string; toolName: string; description: string }> {
+		return this.mcpHub.getConnectedTools().map(({ serverName, tool }) => ({
+			serverName,
+			toolName: tool.name,
+			description: tool.description || '',
+		}));
+	}
+
+	/**
+	 * 构建 MCP 服务器上下文注入到系统提示词
+	 */
+	private buildMcpContextSection(): string {
+		const servers = this.mcpHub.getAllServers().filter(s => s.isConnected);
+		if (servers.length === 0) return '';
+
+		const lines: string[] = ['\n\n====\n\n# 已连接的 MCP 服务器\n'];
+		lines.push('你可以通过 `use_mcp_tool` 工具调用以下 MCP 服务器的功能：\n');
+
+		for (const server of servers) {
+			lines.push(`## ${server.config.name}`);
+			if (server.config.description) {
+				lines.push(`*${server.config.description}*`);
+			}
+			lines.push(`- 服务器 URL: ${server.config.url}`);
+			lines.push(`- 可用工具 (${server.tools.length} 个):`);
+			for (const tool of server.tools) {
+				lines.push(`  - **${tool.name}**: ${tool.description || '(无描述)'}`);
+			}
+			if (server.resources.length > 0) {
+				lines.push(`- 可用资源 (${server.resources.length} 个):`);
+				for (const res of server.resources) {
+					lines.push(`  - ${res.uri}${res.name ? ` (${res.name})` : ''}`);
+				}
+			}
+			lines.push('');
+		}
+
+		lines.push('## 使用方式');
+		lines.push('调用 MCP 工具时，使用：');
+		lines.push('```xml');
+		lines.push('<use_mcp_tool>');
+		lines.push('<server_name>服务器名称</server_name>');
+		lines.push('<tool_name>工具名称</tool_name>');
+		lines.push('<arguments>{"参数": "值"}</arguments>');
+		lines.push('</use_mcp_tool>');
+		lines.push('```');
+
+		return lines.join('\n');
 	}
 }
 

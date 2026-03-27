@@ -16,6 +16,7 @@ import { IThemeService } from '../../../../platform/theme/common/themeService.js
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { IMaxianService, type ITokenUsageEvent, type ITaskProgressEvent, type IToolInputStreamingEvent, type IToolCompletedEvent, type ITodoListEvent, type ITodoItem } from './maxianService.js';
+import { type McpServerConfig, type McpServerInfo } from '../common/mcp/McpTypes.js';
 import { type AskHistoryItem } from '../../../../platform/aiLog/common/aiLog.js';
 import { $, append, clearNode } from '../../../../base/browser/dom.js';
 import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
@@ -125,9 +126,13 @@ export class MaxianView extends ViewPane {
 	private mentionAtNode: Text | null = null; // 包含 @ 的文本节点
 	private mentionAtOffset: number = -1;      // @ 在文本节点中的 offset
 	private mentionCursorOffset: number = -1;  // 光标在文本节点中的 offset
+	// #mcp 相关（同 mentionDropdown 复用，通过 mentionDropdownMode 区分）
+	private mentionDropdownMode: '@' | '#' = '@'; // 当前下拉是 @ 还是 # 触发
 	// 快捷键上下文键
 	private maxianInputFocusedCtx!: IContextKey<boolean>;
 	private maxianMentionDropdownVisibleCtx!: IContextKey<boolean>;
+	// MCP 设置面板
+	private mcpPanel: HTMLElement | null = null;
 
 	constructor(
 		options: IViewPaneOptions,
@@ -831,6 +836,37 @@ export class MaxianView extends ViewPane {
 		// 加载知识库列表
 		this.loadKnowledgeBases();
 
+		// MCP 设置按钮
+		const mcpButton = append(leftControls, $('button.codicon.codicon-plug')) as HTMLButtonElement;
+		mcpButton.title = 'MCP 服务器设置';
+		mcpButton.style.padding = '6px';
+		mcpButton.style.minWidth = '28px';
+		mcpButton.style.minHeight = '28px';
+		mcpButton.style.backgroundColor = 'transparent';
+		mcpButton.style.color = 'var(--vscode-descriptionForeground)';
+		mcpButton.style.border = 'none';
+		mcpButton.style.borderRadius = '4px';
+		mcpButton.style.cursor = 'pointer';
+		mcpButton.style.fontSize = '16px';
+		mcpButton.style.display = 'inline-flex';
+		mcpButton.style.alignItems = 'center';
+		mcpButton.style.justifyContent = 'center';
+		mcpButton.style.transition = 'all 0.15s';
+		mcpButton.style.opacity = '0.6';
+		mcpButton.style.flexShrink = '0';
+		mcpButton.style.marginLeft = '4px';
+		mcpButton.onmouseenter = () => {
+			mcpButton.style.opacity = '1';
+			mcpButton.style.color = 'var(--vscode-foreground)';
+			mcpButton.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+		};
+		mcpButton.onmouseleave = () => {
+			mcpButton.style.opacity = '0.6';
+			mcpButton.style.color = 'var(--vscode-descriptionForeground)';
+			mcpButton.style.backgroundColor = 'transparent';
+		};
+		mcpButton.onclick = () => this.toggleMcpPanel();
+
 		// 刷新按钮
 		const refreshButton = append(leftControls, $('button.codicon.codicon-refresh')) as HTMLButtonElement;
 		refreshButton.title = '刷新操作类型和知识库';
@@ -1115,9 +1151,15 @@ export class MaxianView extends ViewPane {
 					e.preventDefault();
 					e.stopPropagation();
 					if (this.mentionDropdownSpecialItems.length > 0) {
-						// 特殊选项模式（@git:diff、@web:）
 						if (this.mentionDropdownIndex >= 0 && this.mentionDropdownIndex < this.mentionDropdownSpecialItems.length) {
-							this.insertMentionSpecial(this.mentionDropdownSpecialItems[this.mentionDropdownIndex].key);
+							const item = this.mentionDropdownSpecialItems[this.mentionDropdownIndex];
+							if (this.mentionDropdownMode === '#') {
+								// #mcp 工具选择
+								this._insertMcpTool(item.key);
+							} else {
+								// @特殊选项（@git:diff、@web:）
+								this.insertMentionSpecial(item.key);
+							}
 						}
 					} else if (this.mentionDropdownIndex >= 0 && this.mentionDropdownIndex < this.mentionDropdownItems.length) {
 						this.insertMentionFile(this.mentionDropdownItems[this.mentionDropdownIndex]);
@@ -1995,49 +2037,32 @@ export class MaxianView extends ViewPane {
 		const offset = range.startOffset;
 		const text = (node.textContent ?? '').slice(0, offset);
 
-		// 向前查找 @（遇到空格/换行则停止）
-		let atIdx = -1;
+		// 向左扫描找到最近的触发字符（# 或 @），遇到空格/换行停止
+		let triggerIdx = -1;
+		let triggerChar = '';
 		for (let i = text.length - 1; i >= 0; i--) {
 			const ch = text[i];
-			if (ch === '@') { atIdx = i; break; }
+			if (ch === '#' || ch === '@') { triggerIdx = i; triggerChar = ch; break; }
 			if (ch === ' ' || ch === '\n') break;
 		}
-		if (atIdx === -1) { this.hideMentionDropdown(); return; }
+		if (triggerIdx === -1) { this.hideMentionDropdown(); return; }
 
-		const query = text.slice(atIdx + 1);
+		const query = text.slice(triggerIdx + 1);
 		if (query.includes(' ') || query.includes('\n')) { this.hideMentionDropdown(); return; }
 
 		this.mentionAtNode = node as Text;
-		this.mentionAtOffset = atIdx;
+		this.mentionAtOffset = triggerIdx;
 		this.mentionCursorOffset = offset;
 
-		// 检测特殊 mentions：@git 和 @web
-		const lowerQuery = query.toLowerCase();
-
-		// @git:diff 选项
-		if (lowerQuery === 'git' || lowerQuery === 'git:' || lowerQuery === 'git:d' || lowerQuery === 'git:di' || lowerQuery === 'git:dif' || lowerQuery === 'git:diff') {
-			this.showMentionDropdownWithSpecial([
-				{ type: 'special', key: 'git:diff', label: '@git:diff', icon: 'codicon-source-control', description: '注入当前 git diff 内容' }
-			]);
+		if (triggerChar === '#') {
+			// # 触发 MCP 工具选择
+			this.mentionDropdownMode = '#';
+			this._showMcpToolDropdown(query);
 			return;
 		}
 
-		// @web: 选项
-		if (lowerQuery === 'web' || lowerQuery === 'web:') {
-			this.showMentionDropdownWithSpecial([
-				{ type: 'special', key: 'web:', label: '@web:URL', icon: 'codicon-globe', description: '注入网页内容（输入URL）' }
-			]);
-			return;
-		}
-
-		// 空查询时：同时显示特殊选项和文件列表
-		if (!query) {
-			this.showMentionDropdownWithSpecial([
-				{ type: 'special', key: 'git:diff', label: '@git:diff', icon: 'codicon-source-control', description: '注入当前 git diff 内容' },
-				{ type: 'special', key: 'web:', label: '@web:URL', icon: 'codicon-globe', description: '注入网页内容（输入URL）' }
-			]);
-			return;
-		}
+		// @ 触发文件选择
+		this.mentionDropdownMode = '@';
 
 		this.maxianService.getWorkspaceFiles(query).then(files => {
 			if (!this.mentionAtNode) return;
@@ -2511,6 +2536,7 @@ export class MaxianView extends ViewPane {
 		if (!this.mentionDropdown) return;
 
 		this.mentionDropdownItems = files;
+		this.mentionDropdownSpecialItems = []; // 切换到文件模式，清空特殊选项
 		this.mentionDropdownIndex = files.length > 0 ? 0 : -1;
 
 		// 清空并重新渲染列表项（用 DOM API 避免 TrustedHTML CSP 限制）
@@ -2578,6 +2604,158 @@ export class MaxianView extends ViewPane {
 	}
 
 	/**
+	 * 显示 #mcp 工具选择下拉菜单
+	 * 列出所有已连接 MCP 服务器的工具，按服务器分组
+	 */
+	private _showMcpToolDropdown(query: string): void {
+		if (!this.mentionDropdown) return;
+
+		// 获取所有已连接 MCP 工具
+		const allTools = this.maxianService.getConnectedMcpTools();
+		if (allTools.length === 0) {
+			this.hideMentionDropdown();
+			return;
+		}
+
+		// 过滤匹配 query 的工具
+		const lowerQuery = query.toLowerCase();
+		const filtered = allTools.filter(t =>
+			!lowerQuery ||
+			t.serverName.toLowerCase().includes(lowerQuery) ||
+			t.toolName.toLowerCase().includes(lowerQuery) ||
+			t.description.toLowerCase().includes(lowerQuery)
+		);
+
+		if (filtered.length === 0) {
+			this.hideMentionDropdown();
+			return;
+		}
+
+		// 按 serverName 分组，每组只显示一个入口（选择后插入 #serverName ）
+		const servers = new Map<string, { serverName: string; description: string; toolCount: number }>();
+		for (const t of filtered) {
+			if (!servers.has(t.serverName)) {
+				// 找服务器描述：用第一个工具的描述或服务器名
+				servers.set(t.serverName, { serverName: t.serverName, description: t.description, toolCount: 0 });
+			}
+			servers.get(t.serverName)!.toolCount++;
+		}
+
+		const items: Array<{ type: 'special'; key: string; label: string; icon: string; description: string }> = [];
+		for (const [, srv] of servers) {
+			items.push({
+				type: 'special',
+				key: `mcp:${srv.serverName}`,
+				label: `#${srv.serverName}`,
+				icon: 'codicon-plug',
+				description: `MCP · ${srv.toolCount} 个工具可用`
+			});
+		}
+
+		this.mentionDropdownSpecialItems = items;
+		this.mentionDropdownItems = [];
+		this.mentionDropdownIndex = items.length > 0 ? 0 : -1;
+
+		// 清空并渲染下拉列表
+		while (this.mentionDropdown.firstChild) {
+			this.mentionDropdown.removeChild(this.mentionDropdown.firstChild);
+		}
+
+		// 标题行
+		const titleRow = append(this.mentionDropdown, $('div'));
+		titleRow.style.padding = '4px 10px 2px';
+		titleRow.style.fontSize = '11px';
+		titleRow.style.color = 'var(--vscode-descriptionForeground)';
+		titleRow.style.fontWeight = '600';
+		titleRow.style.letterSpacing = '0.5px';
+		titleRow.style.textTransform = 'uppercase';
+		titleRow.textContent = 'MCP 工具';
+
+		items.forEach((item, index) => {
+			const el = append(this.mentionDropdown!, $('div.maxian-mention-item'));
+			el.style.padding = '6px 10px';
+			el.style.cursor = 'pointer';
+			el.style.display = 'flex';
+			el.style.alignItems = 'center';
+			el.style.gap = '8px';
+			el.dataset['specialIndex'] = String(index);
+
+			const iconEl = append(el, $(`span.codicon.${item.icon}`));
+			iconEl.style.fontSize = '14px';
+			iconEl.style.color = 'var(--vscode-charts-green, #4ec9b0)';
+			iconEl.style.flexShrink = '0';
+
+			const textCol = append(el, $('span'));
+			textCol.style.display = 'flex';
+			textCol.style.flexDirection = 'column';
+			textCol.style.gap = '1px';
+
+			const labelEl = append(textCol, $('span'));
+			labelEl.textContent = item.label;
+			labelEl.style.fontWeight = '600';
+			labelEl.style.fontSize = '13px';
+			labelEl.style.color = 'var(--vscode-foreground)';
+
+			const descEl = append(textCol, $('span'));
+			descEl.textContent = item.description;
+			descEl.style.fontSize = '11px';
+			descEl.style.color = 'var(--vscode-descriptionForeground)';
+
+			if (index === 0) {
+				el.classList.add('active');
+			}
+
+			el.onmouseenter = () => {
+				this.mentionDropdownIndex = index;
+				this.updateMentionDropdownHighlight();
+			};
+			el.onclick = () => {
+				this._insertMcpTool(item.key);
+			};
+		});
+
+		this.mentionDropdown.style.display = 'block';
+		this.maxianMentionDropdownVisibleCtx?.set(true);
+	}
+
+	/**
+	 * 插入 #mcp 工具引用到输入框
+	 * 替换 #query 为 #serverName （等待用户输入 URL/参数）
+	 */
+	private _insertMcpTool(key: string): void {
+		// key 格式: mcp:serverName
+		const serverName = key.startsWith('mcp:') ? key.slice(4) : key;
+
+		const atNode = this.mentionAtNode;
+		const atOffset = this.mentionAtOffset;
+		const cursorOffset = this.mentionCursorOffset;
+
+		if (!atNode) { this.hideMentionDropdown(); return; }
+
+		// 删除 #query 文本，替换为 #serverName + 空格
+		const fullText = atNode.textContent ?? '';
+		const insertText = `#${serverName} `;
+		atNode.textContent = fullText.slice(0, atOffset) + insertText + fullText.slice(cursorOffset);
+
+		// 移动光标到插入文本末尾
+		const sel = window.getSelection();
+		if (sel) {
+			const r = document.createRange();
+			r.setStart(atNode, atOffset + insertText.length);
+			r.collapse(true);
+			sel.removeAllRanges();
+			sel.addRange(r);
+		}
+
+		this.mentionAtNode = null;
+		this.inputBox.focus();
+		this.hideMentionDropdown();
+		this.inputBox.style.height = 'auto';
+		this.inputBox.style.height = this.inputBox.scrollHeight + 'px';
+		this.updateInputPlaceholder();
+	}
+
+	/**
 	 * 隐藏 @mention 下拉列表
 	 */
 	private hideMentionDropdown(): void {
@@ -2608,70 +2786,6 @@ export class MaxianView extends ViewPane {
 		});
 	}
 
-	/**
-	 * 显示包含特殊选项（@git:diff、@web:）的下拉列表
-	 */
-	private showMentionDropdownWithSpecial(items: Array<{ type: 'special'; key: string; label: string; icon: string; description: string }>): void {
-		if (!this.mentionDropdown) return;
-
-		this.mentionDropdownSpecialItems = items;
-		this.mentionDropdownItems = []; // 清空文件列表，使用特殊列表
-		this.mentionDropdownIndex = items.length > 0 ? 0 : -1;
-
-		// 清空并重新渲染
-		while (this.mentionDropdown.firstChild) {
-			this.mentionDropdown.removeChild(this.mentionDropdown.firstChild);
-		}
-
-		items.forEach((item, index) => {
-			const el = append(this.mentionDropdown!, $('div.maxian-mention-item'));
-			el.style.padding = '6px 10px';
-			el.style.cursor = 'pointer';
-			el.style.display = 'flex';
-			el.style.alignItems = 'center';
-			el.style.gap = '8px';
-			el.dataset['specialIndex'] = String(index);
-
-			// 图标
-			const iconEl = append(el, $(`span.codicon.${item.icon}`));
-			iconEl.style.fontSize = '14px';
-			iconEl.style.color = 'var(--vscode-symbolIcon-keywordForeground, var(--vscode-charts-blue))';
-			iconEl.style.flexShrink = '0';
-
-			// 文字区
-			const textCol = append(el, $('span'));
-			textCol.style.display = 'flex';
-			textCol.style.flexDirection = 'column';
-			textCol.style.gap = '1px';
-
-			const labelEl = append(textCol, $('span'));
-			labelEl.textContent = item.label;
-			labelEl.style.fontWeight = '600';
-			labelEl.style.fontSize = '13px';
-			labelEl.style.color = 'var(--vscode-foreground)';
-
-			const descEl = append(textCol, $('span'));
-			descEl.textContent = item.description;
-			descEl.style.fontSize = '11px';
-			descEl.style.color = 'var(--vscode-descriptionForeground)';
-
-			if (index === 0) {
-				el.classList.add('active');
-			}
-
-			el.onmouseenter = () => {
-				this.mentionDropdownIndex = index;
-				this.updateMentionDropdownHighlight();
-			};
-
-			el.onclick = () => {
-				this.insertMentionSpecial(item.key);
-			};
-		});
-
-		this.mentionDropdown.style.display = 'block';
-		this.maxianMentionDropdownVisibleCtx?.set(true);
-	}
 
 	/**
 	 * 插入特殊 mention chip（@git:diff 或 @web:URL）
@@ -2950,6 +3064,14 @@ export class MaxianView extends ViewPane {
 			finalMessage = await this._resolveSpecialMentions(expandedMessage);
 		}
 
+		// 处理 #figma <url> 快捷引用，自动拉取 Figma 设计数据注入上下文（含截图）
+		let figmaImages: string[] | undefined;
+		if (finalMessage.includes('#figma ')) {
+			const figmaResult = await this._resolveFigmaMentions(finalMessage);
+			finalMessage = figmaResult.text;
+			figmaImages = figmaResult.images.length > 0 ? figmaResult.images : undefined;
+		}
+
 		// 如果是 ask 模式，且选中了知识库，则传递知识库配置
 		let knowledgeBaseConfig: import('./maxianService.js').IKnowledgeBaseConfig | undefined;
 		if (this.currentMode === 'ask') {
@@ -2972,7 +3094,7 @@ export class MaxianView extends ViewPane {
 			}
 		}
 
-		await this.maxianService.sendMessage(finalMessage, this.currentMode, knowledgeBaseConfig);
+		await this.maxianService.sendMessage(finalMessage, this.currentMode, knowledgeBaseConfig, figmaImages);
 	}
 
 	/**
@@ -3025,6 +3147,157 @@ export class MaxianView extends ViewPane {
 		}
 
 		return resolved.join('');
+	}
+
+	/**
+	 * 处理消息中的 #figma <url> 模式，自动调用 Figma MCP 工具获取设计数据（含截图）
+	 * 支持格式：#figma https://www.figma.com/design/... 后面跟描述
+	 *
+	 * 返回 { text: 替换后的消息, images: base64截图数组 }
+	 * - 官方 Figma MCP 提供 get_image 工具时，images 会包含设计截图
+	 * - 截图会作为多模态内容发给 AI，大幅提升代码还原精度
+	 */
+	private async _resolveFigmaMentions(message: string): Promise<{ text: string; images: string[] }> {
+		// 匹配 #figma <url> 模式，URL 以空格或行尾结束
+		const figmaPattern = /#figma\s+(https?:\/\/[^\s]+)/g;
+		let resultText = message;
+		const resultImages: string[] = [];
+		const matches = [...message.matchAll(figmaPattern)];
+
+		for (const match of matches) {
+			const fullMatch = match[0];
+			const figmaUrl = match[1];
+
+			// 从 Figma URL 提取 fileKey 和可选的 nodeId
+			// 支持：https://www.figma.com/design/FILEKEY/name?node-id=8-2247
+			//       https://www.figma.com/file/FILEKEY/name
+			const fileKeyMatch = figmaUrl.match(/figma\.com\/(?:design|file)\/([a-zA-Z0-9]+)/);
+			if (!fileKeyMatch) {
+				resultText = resultText.replace(fullMatch, `[#figma: 无法从 URL 中提取文件 ID，请确认 URL 格式正确]`);
+				continue;
+			}
+			const fileKey = fileKeyMatch[1];
+
+			// 提取 nodeId（8-2247 → 8:2247，Figma API 格式）
+			const nodeIdMatch = figmaUrl.match(/[?&]node-id=([^&]+)/);
+			const nodeId = nodeIdMatch
+				? decodeURIComponent(nodeIdMatch[1]).replace(/-/g, ':')
+				: undefined;
+
+			// 找到已连接的 Figma MCP 服务器的所有工具
+			const allTools = this.maxianService.getConnectedMcpTools();
+			const figmaTool = allTools.find(t =>
+				t.toolName === 'get_figma_data' ||
+				t.toolName.toLowerCase().includes('figma') ||
+				t.serverName.toLowerCase().includes('figma')
+			);
+
+			if (!figmaTool) {
+				resultText = resultText.replace(fullMatch, `[#figma: 未找到已连接的 Figma MCP 服务器，请先在 MCP 面板中添加并连接 Figma 服务器]`);
+				continue;
+			}
+
+			// 找到同一服务器下的 get_image 工具（官方 Figma MCP 提供）
+			const imageToolName = allTools.find(t =>
+				t.serverName === figmaTool.serverName &&
+				(t.toolName === 'get_image' || t.toolName === 'get_images')
+			)?.toolName;
+
+			try {
+				const args: Record<string, any> = { fileKey };
+				if (nodeId) {
+					args['nodeId'] = nodeId;
+				}
+
+				// 并行获取结构数据和截图（如果支持）
+				const fetchPromises: [Promise<string>, Promise<string> | null] = [
+					this.maxianService.callMcpTool(figmaTool.serverName, figmaTool.toolName, args),
+					imageToolName
+						? this.maxianService.callMcpTool(figmaTool.serverName, imageToolName, {
+							fileKey,
+							...(nodeId ? { nodeId } : {}),
+							format: 'png',
+							scale: 2,
+						}).catch(() => null as any)
+						: null,
+				];
+
+				const [designData, imageData] = await Promise.all(fetchPromises);
+
+				// 处理截图（官方 Figma MCP 返回 base64 或 URL）
+				let imageNote = '';
+				if (imageData) {
+					// 尝试解析图片数据（可能是 base64 或 URL）
+					const imgBase64 = this._extractBase64FromFigmaImageResponse(imageData);
+					if (imgBase64) {
+						resultImages.push(imgBase64);
+						imageNote = '\n\n> 注意：已附加设计截图，请结合截图和结构数据精确还原每个细节。';
+					}
+				}
+
+				const figmaInstruction = `
+<figma_design url="${figmaUrl}" fileKey="${fileKey}"${nodeId ? ` nodeId="${nodeId}"` : ''}${imageToolName ? ' hasScreenshot="true"' : ''}>
+${designData}
+</figma_design>${imageNote}
+
+<figma_implementation_rules>
+请严格按照上方 Figma 设计数据${resultImages.length > 0 ? '和附加的截图' : ''}还原 UI，遵循以下规则：
+
+1. **颜色精确**：从设计数据中提取精确的 hex/rgba 颜色值，不要使用近似色
+2. **尺寸精确**：使用设计数据中的 px 值，转换为 CSS（width/height/padding/margin/font-size 等）
+3. **布局还原**：识别 Figma 的 Auto Layout → CSS flexbox/grid，保持方向(row/column)、间距(gap)、对齐方式
+4. **字体还原**：提取 fontFamily、fontSize、fontWeight、lineHeight、letterSpacing
+5. **圆角/阴影**：提取 borderRadius、box-shadow（effectType: DROP_SHADOW）
+6. **层级结构**：按 Figma 图层树结构构建 HTML/Vue 组件树
+7. **图片/图标**：Figma 图片用占位符或 SVG，图标优先用 Element Plus 图标或 Unicode
+8. **响应式**：如果设计有多个断点，实现对应的响应式样式
+9. **不要简化**：不要因为复杂就简化设计，要完整还原每个元素
+
+输出格式：Vue 3 单文件组件（.vue），使用 \`<script setup>\`、\`<template>\`、\`<style scoped>\`
+</figma_implementation_rules>`;
+				resultText = resultText.replace(fullMatch, figmaInstruction);
+			} catch (e) {
+				resultText = resultText.replace(fullMatch, `[#figma 获取失败: ${String(e)}]`);
+			}
+		}
+
+		return { text: resultText, images: resultImages };
+	}
+
+	/**
+	 * 从 Figma MCP get_image 工具的返回值中提取 base64 图片数据
+	 * 官方 Figma MCP 可能返回：base64 字符串、data:image/... URL、或包含 url 字段的 JSON
+	 */
+	private _extractBase64FromFigmaImageResponse(response: string): string | null {
+		if (!response) return null;
+
+		// 已经是纯 base64 字符串
+		if (/^[A-Za-z0-9+/]+=*$/.test(response.trim()) && response.length > 100) {
+			return response.trim();
+		}
+
+		// data:image/png;base64,... 格式
+		const dataUrlMatch = response.match(/data:image\/[a-z]+;base64,([A-Za-z0-9+/]+=*)/);
+		if (dataUrlMatch) return dataUrlMatch[1];
+
+		// JSON 格式（可能包含 url 或 data 字段）
+		try {
+			const json = JSON.parse(response);
+			// { data: "base64..." } 或 { images: { nodeId: "base64..." } }
+			if (json.data && typeof json.data === 'string') {
+				return this._extractBase64FromFigmaImageResponse(json.data);
+			}
+			if (json.images && typeof json.images === 'object') {
+				const firstImg = Object.values(json.images)[0];
+				if (typeof firstImg === 'string') {
+					return this._extractBase64FromFigmaImageResponse(firstImg);
+				}
+			}
+		} catch {
+			// 不是 JSON，忽略
+		}
+
+		return null;
 	}
 
 	private handleMessageEvent(event: import('./maxianService.js').IMessageEvent): void {
@@ -6917,5 +7190,289 @@ export class MaxianView extends ViewPane {
 		this.clearToolInputStreaming();
 		this.clearTodoList();
 		super.dispose();
+	}
+
+	// ===================================================================
+	// MCP 设置面板
+	// ===================================================================
+
+	/** 切换 MCP 设置面板 */
+	private toggleMcpPanel(): void {
+		if (this.mcpPanel) {
+			this.mcpPanel.remove();
+			this.mcpPanel = null;
+			return;
+		}
+		this.renderMcpPanel();
+	}
+
+	/** 渲染 MCP 设置面板 */
+	private renderMcpPanel(): void {
+		const panel = append(this.container, $('div.maxian-mcp-panel'));
+		this.mcpPanel = panel;
+		panel.style.cssText = `
+			position: absolute;
+			bottom: 0; left: 0; right: 0;
+			background: var(--vscode-editor-background);
+			border-top: 1px solid var(--vscode-widget-border);
+			z-index: 200;
+			display: flex;
+			flex-direction: column;
+			max-height: 80%;
+			overflow: hidden;
+		`;
+
+		// 标题栏
+		const header = append(panel, $('div'));
+		header.style.cssText = `
+			display: flex; align-items: center; justify-content: space-between;
+			padding: 10px 14px;
+			border-bottom: 1px solid var(--vscode-widget-border);
+			background: var(--vscode-sideBarSectionHeader-background, var(--vscode-editor-background));
+			flex-shrink: 0;
+		`;
+		const title = append(header, $('span'));
+		title.textContent = 'MCP 服务器';
+		title.style.cssText = 'font-size: 13px; font-weight: 600; color: var(--vscode-foreground);';
+
+		const closeBtn = append(header, $('button.codicon.codicon-close')) as HTMLButtonElement;
+		closeBtn.style.cssText = `
+			background: transparent; border: none; cursor: pointer;
+			color: var(--vscode-descriptionForeground); padding: 2px; border-radius: 4px;
+		`;
+		closeBtn.onclick = () => { panel.remove(); this.mcpPanel = null; };
+
+		// 服务器列表区域
+		const listArea = append(panel, $('div'));
+		listArea.style.cssText = 'flex: 1; overflow-y: auto; padding: 8px;';
+
+		const renderServerList = () => {
+			clearNode(listArea);
+			const servers = this.maxianService.getMcpServers();
+			if (servers.length === 0) {
+				const empty = append(listArea, $('div'));
+				empty.style.cssText = 'text-align: center; padding: 20px; color: var(--vscode-descriptionForeground); font-size: 12px;';
+				empty.textContent = '暂无 MCP 服务器。点击下方"添加服务器"配置。';
+			} else {
+				for (const server of servers) {
+					this.renderMcpServerItem(listArea, server, renderServerList);
+				}
+			}
+		};
+
+		renderServerList();
+
+		// 订阅变化
+		const unsub = this.maxianService.onMcpServersChange(() => renderServerList());
+		panel.addEventListener('remove', unsub as any);
+
+		// 底部工具栏
+		const footer = append(panel, $('div'));
+		footer.style.cssText = `
+			display: flex; justify-content: flex-end; align-items: center;
+			padding: 8px 14px;
+			border-top: 1px solid var(--vscode-widget-border);
+			flex-shrink: 0;
+		`;
+		const addBtn = append(footer, $('button'));
+		addBtn.textContent = '+ 添加服务器';
+		addBtn.style.cssText = `
+			padding: 5px 12px; font-size: 12px; cursor: pointer;
+			background: var(--vscode-button-background); color: var(--vscode-button-foreground);
+			border: none; border-radius: 4px;
+		`;
+		addBtn.onclick = () => this.showMcpServerForm(null, renderServerList);
+	}
+
+	/** 渲染单个 MCP 服务器条目 */
+	private renderMcpServerItem(container: HTMLElement, server: McpServerInfo, refresh: () => void): void {
+		const item = append(container, $('div'));
+		item.style.cssText = `
+			display: flex; align-items: center; gap: 8px;
+			padding: 8px 10px; margin-bottom: 4px; border-radius: 6px;
+			border: 1px solid var(--vscode-widget-border);
+			background: var(--vscode-textCodeBlock-background, rgba(128,128,128,0.05));
+		`;
+
+		// 状态指示点
+		const dot = append(item, $('span'));
+		dot.style.cssText = `
+			width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+			background: ${server.isConnected ? '#4CAF50' : server.isConnecting ? '#FF9800' : '#f44336'};
+		`;
+		dot.title = server.isConnected ? '已连接' : server.isConnecting ? '连接中...' : (server.error || '未连接');
+
+		// 名称 + 状态
+		const info = append(item, $('div'));
+		info.style.cssText = 'flex: 1; min-width: 0;';
+		const name = append(info, $('div'));
+		name.style.cssText = 'font-size: 12px; font-weight: 600; color: var(--vscode-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+		name.textContent = server.config.name;
+
+		const statusLine = append(info, $('div'));
+		statusLine.style.cssText = 'font-size: 11px; color: var(--vscode-descriptionForeground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px;';
+		if (server.isConnected) {
+			statusLine.textContent = `${server.tools.length} 个工具 · ${server.config.url}`;
+		} else if (server.isConnecting) {
+			statusLine.textContent = '连接中...';
+		} else if (server.error) {
+			statusLine.textContent = `错误: ${server.error}`;
+			statusLine.style.color = 'var(--vscode-errorForeground)';
+		} else {
+			statusLine.textContent = server.config.url;
+		}
+
+		// 操作按钮
+		const actions = append(item, $('div'));
+		actions.style.cssText = 'display: flex; gap: 4px; flex-shrink: 0;';
+
+		// 重新连接按钮
+		const reconnectBtn = append(actions, $('button.codicon.codicon-refresh')) as HTMLButtonElement;
+		reconnectBtn.title = '重新连接';
+		reconnectBtn.style.cssText = 'background: transparent; border: none; cursor: pointer; color: var(--vscode-descriptionForeground); padding: 3px; border-radius: 3px; font-size: 13px;';
+		reconnectBtn.onclick = async () => {
+			reconnectBtn.style.opacity = '0.5';
+			await this.maxianService.reconnectMcpServer(server.config.name);
+			reconnectBtn.style.opacity = '1';
+		};
+
+		// 编辑按钮
+		const editBtn = append(actions, $('button.codicon.codicon-edit')) as HTMLButtonElement;
+		editBtn.title = '编辑';
+		editBtn.style.cssText = 'background: transparent; border: none; cursor: pointer; color: var(--vscode-descriptionForeground); padding: 3px; border-radius: 3px; font-size: 13px;';
+		editBtn.onclick = () => this.showMcpServerForm(server.config, refresh);
+
+		// 删除按钮
+		const deleteBtn = append(actions, $('button.codicon.codicon-trash')) as HTMLButtonElement;
+		deleteBtn.title = '删除';
+		deleteBtn.style.cssText = 'background: transparent; border: none; cursor: pointer; color: var(--vscode-errorForeground); padding: 3px; border-radius: 3px; font-size: 13px;';
+		deleteBtn.onclick = () => {
+			this.maxianService.deleteMcpServer(server.config.name);
+		};
+	}
+
+	/** 显示添加/编辑 MCP 服务器表单 */
+	private showMcpServerForm(existing: McpServerConfig | null, refresh: () => void): void {
+		// 弹出表单层
+		const overlay = append(this.container, $('div'));
+		overlay.style.cssText = `
+			position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+			background: rgba(0,0,0,0.5); z-index: 300;
+			display: flex; align-items: center; justify-content: center;
+		`;
+
+		const form = append(overlay, $('div'));
+		form.style.cssText = `
+			background: var(--vscode-editor-background);
+			border: 1px solid var(--vscode-widget-border);
+			border-radius: 8px; padding: 20px; width: 380px; max-width: 90%;
+			display: flex; flex-direction: column; gap: 12px;
+		`;
+
+		const formTitle = append(form, $('div'));
+		formTitle.textContent = existing ? '编辑 MCP 服务器' : '添加 MCP 服务器';
+		formTitle.style.cssText = 'font-size: 14px; font-weight: 600; color: var(--vscode-foreground); margin-bottom: 4px;';
+
+		const makeField = (label: string, placeholder: string, value: string = '', type = 'text') => {
+			const wrapper = append(form, $('div'));
+			wrapper.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
+			const lbl = append(wrapper, $('label'));
+			lbl.textContent = label;
+			lbl.style.cssText = 'font-size: 11px; color: var(--vscode-descriptionForeground);';
+			const input = append(wrapper, $('input')) as HTMLInputElement;
+			input.type = type;
+			input.placeholder = placeholder;
+			input.value = value;
+			input.style.cssText = `
+				padding: 6px 8px; font-size: 12px; border-radius: 4px;
+				background: var(--vscode-input-background); color: var(--vscode-input-foreground);
+				border: 1px solid var(--vscode-input-border, var(--vscode-widget-border)); outline: none;
+			`;
+			return input;
+		};
+
+		const nameInput = makeField('服务器名称 *', '如: figma', existing?.name || '');
+		const urlInput = makeField('服务器 URL *', '如: https://mcp.figma.com/mcp', existing?.url || '');
+		const tokenInput = makeField('Authorization Token', 'Bearer <token> 或直接输入 token', existing?.headers?.['Authorization'] || '', 'text');
+
+		// 描述
+		const descInput = makeField('描述（可选）', '如: Figma 设计稿读取', existing?.description || '');
+
+		// 启用开关
+		const enabledWrapper = append(form, $('div'));
+		enabledWrapper.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+		const enabledCheck = append(enabledWrapper, $('input')) as HTMLInputElement;
+		enabledCheck.type = 'checkbox';
+		enabledCheck.checked = existing?.enabled !== false;
+		const enabledLabel = append(enabledWrapper, $('label'));
+		enabledLabel.textContent = '启用此服务器';
+		enabledLabel.style.cssText = 'font-size: 12px; color: var(--vscode-foreground); cursor: pointer;';
+		enabledLabel.onclick = () => { enabledCheck.checked = !enabledCheck.checked; };
+
+		// 错误提示
+		const errorMsg = append(form, $('div'));
+		errorMsg.style.cssText = 'font-size: 11px; color: var(--vscode-errorForeground); display: none;';
+
+		// 按钮
+		const btnRow = append(form, $('div'));
+		btnRow.style.cssText = 'display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;';
+
+		const cancelBtn = append(btnRow, $('button'));
+		cancelBtn.textContent = '取消';
+		cancelBtn.style.cssText = `
+			padding: 5px 14px; font-size: 12px; cursor: pointer; border-radius: 4px;
+			background: transparent; color: var(--vscode-foreground);
+			border: 1px solid var(--vscode-widget-border);
+		`;
+		cancelBtn.onclick = () => overlay.remove();
+
+		const saveBtn = append(btnRow, $('button'));
+		saveBtn.textContent = existing ? '保存' : '添加并连接';
+		saveBtn.style.cssText = `
+			padding: 5px 14px; font-size: 12px; cursor: pointer; border-radius: 4px;
+			background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none;
+		`;
+		saveBtn.onclick = async () => {
+			const name = nameInput.value.trim();
+			const url = urlInput.value.trim();
+			if (!name || !url) {
+				errorMsg.textContent = '服务器名称和 URL 为必填项';
+				errorMsg.style.display = 'block';
+				return;
+			}
+
+			// 构建 headers
+			const headers: Record<string, string> = {};
+			const token = tokenInput.value.trim();
+			if (token) {
+				headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+			}
+
+			const config: McpServerConfig = {
+				name,
+				url,
+				headers: Object.keys(headers).length > 0 ? headers : undefined,
+				enabled: enabledCheck.checked,
+				description: descInput.value.trim() || undefined,
+			};
+
+			saveBtn.textContent = '连接中...';
+			saveBtn.setAttribute('disabled', 'true');
+			try {
+				await this.maxianService.saveMcpServer(config);
+				overlay.remove();
+				refresh();
+			} catch (e: any) {
+				errorMsg.textContent = `保存失败: ${e?.message || String(e)}`;
+				errorMsg.style.display = 'block';
+				saveBtn.textContent = existing ? '保存' : '添加并连接';
+				saveBtn.removeAttribute('disabled');
+			}
+		};
+
+		// 点击遮罩关闭
+		overlay.addEventListener('click', (e) => {
+			if (e.target === overlay) overlay.remove();
+		});
 	}
 }
