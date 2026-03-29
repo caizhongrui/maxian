@@ -170,13 +170,14 @@ export class AiProxyHandler implements IApiHandler {
 		this.config = config;
 		console.log('[Maxian] AiProxyHandler 初始化，API URL:', config.apiUrl);
 
-		// 初始化模型信息
+		// 初始化模型信息（根据模型名称判断是否支持视觉）
+		const modelId = config.businessCode || config.model || 'qwen-plus';
 		this.modelInfo = {
-			id: config.businessCode || config.model || 'qwen-plus',
-			name: config.businessCode || config.model || 'qwen-plus',
+			id: modelId,
+			name: modelId,
 			maxTokens: 8192,
 			supportsTools: true,
-			supportsVision: false,
+			supportsVision: AiProxyHandler.modelSupportsVision(modelId),
 			supportsStreaming: true
 		};
 	}
@@ -962,6 +963,29 @@ export class AiProxyHandler implements IApiHandler {
 	 */
 	getModel(): ModelInfo {
 		return this.modelInfo;
+	}
+
+	/**
+	 * 根据模型名称判断是否支持视觉输入
+	 * 支持的模型：qwen-vl-*、claude-3-*、gpt-4-vision、gpt-4o、gemini-*-vision 等
+	 */
+	static modelSupportsVision(modelId: string): boolean {
+		const id = modelId.toLowerCase();
+		return (
+			id.includes('vl') ||                  // qwen-vl-max, qwen-vl-plus
+			id.includes('vision') ||              // gpt-4-vision, gemini-pro-vision
+			id.includes('gpt-4o') ||              // gpt-4o (多模态)
+			id.includes('claude-3') ||            // claude-3-* 全系列支持视觉
+			id.includes('claude-opus') ||
+			id.includes('claude-sonnet') ||
+			id.includes('claude-haiku') ||
+			id.includes('gemini-1.5') ||          // gemini-1.5-pro/flash 支持视觉
+			id.includes('gemini-2') ||
+			id.includes('pixtral') ||             // Mistral 视觉模型
+			id.includes('llava') ||               // LLaVA 系列
+			id.includes('internvl') ||            // InternVL
+			id.includes('qvq')                    // QVQ 推理视觉模型
+		);
 	}
 
 	/**

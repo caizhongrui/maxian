@@ -1273,6 +1273,13 @@ export class MaxianService extends Disposable implements IMaxianService {
 			return;
 		}
 
+		// 模型不支持视觉时，丢弃图片（文本结构数据仍会发送）
+		const supportsVision = this.apiHandler.getModel().supportsVision;
+		if (!supportsVision && images && images.length > 0) {
+			console.log('[Maxian] 当前模型不支持视觉输入，忽略 Figma 截图（仍使用结构数据）');
+			images = undefined;
+		}
+
 		// 获取工作区根目录
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
 		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
