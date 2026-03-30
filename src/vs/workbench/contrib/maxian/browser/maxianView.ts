@@ -3150,15 +3150,15 @@ export class MaxianView extends ViewPane {
 	}
 
 	/**
-	 * 处理消息中的 #figma <url> 模式，自动调用 Figma MCP 工具获取设计数据（含截图）
+	 * 处理消息中的 #figma <url> 模式，自动调用 Figma MCP 工具获取设计数据
 	 * 支持格式：#figma https://www.figma.com/design/... 后面跟描述
 	 *
-	 * 返回 { text: 替换后的消息, images: base64截图数组 }
-	 * - 官方 Figma MCP 提供 get_image 工具时，images 会包含设计截图
-	 * - 截图会作为多模态内容发给 AI，大幅提升代码还原精度
+	 * 核心策略：
+	 * 1. 限制请求深度（depth:5），从源头减少数据量
+	 * 2. 预处理原始数据，提取精华摘要（颜色/字体/组件树），压缩到 ~10KB
+	 * 3. 返回 { text, images } — images 仅官方 MCP 支持视觉模型时有值
 	 */
 	private async _resolveFigmaMentions(message: string): Promise<{ text: string; images: string[] }> {
-		// 匹配 #figma <url> 模式，URL 以空格或行尾结束
 		const figmaPattern = /#figma\s+(https?:\/\/[^\s]+)/g;
 		let resultText = message;
 		const resultImages: string[] = [];
@@ -3168,9 +3168,6 @@ export class MaxianView extends ViewPane {
 			const fullMatch = match[0];
 			const figmaUrl = match[1];
 
-			// 从 Figma URL 提取 fileKey 和可选的 nodeId
-			// 支持：https://www.figma.com/design/FILEKEY/name?node-id=8-2247
-			//       https://www.figma.com/file/FILEKEY/name
 			const fileKeyMatch = figmaUrl.match(/figma\.com\/(?:design|file)\/([a-zA-Z0-9]+)/);
 			if (!fileKeyMatch) {
 				resultText = resultText.replace(fullMatch, `[#figma: 无法从 URL 中提取文件 ID，请确认 URL 格式正确]`);
@@ -3178,13 +3175,11 @@ export class MaxianView extends ViewPane {
 			}
 			const fileKey = fileKeyMatch[1];
 
-			// 提取 nodeId（8-2247 → 8:2247，Figma API 格式）
 			const nodeIdMatch = figmaUrl.match(/[?&]node-id=([^&]+)/);
 			const nodeId = nodeIdMatch
 				? decodeURIComponent(nodeIdMatch[1]).replace(/-/g, ':')
 				: undefined;
 
-			// 找到已连接的 Figma MCP 服务器的所有工具
 			const allTools = this.maxianService.getConnectedMcpTools();
 			const figmaTool = allTools.find(t =>
 				t.toolName === 'get_figma_data' ||
@@ -3197,64 +3192,58 @@ export class MaxianView extends ViewPane {
 				continue;
 			}
 
-			// 找到同一服务器下的 get_image 工具（官方 Figma MCP 提供）
 			const imageToolName = allTools.find(t =>
 				t.serverName === figmaTool.serverName &&
 				(t.toolName === 'get_image' || t.toolName === 'get_images')
 			)?.toolName;
 
 			try {
-				const args: Record<string, any> = { fileKey };
-				if (nodeId) {
-					args['nodeId'] = nodeId;
-				}
+				// depth:5 从源头限制数据量，避免返回完整的嵌套树（可能几十万字符）
+				const args: Record<string, any> = { fileKey, depth: 5 };
+				if (nodeId) args['nodeId'] = nodeId;
 
-				// 并行获取结构数据和截图（如果支持）
-				const fetchPromises: [Promise<string>, Promise<string> | null] = [
+				const fetchPromises: [Promise<string>, Promise<string | null>] = [
 					this.maxianService.callMcpTool(figmaTool.serverName, figmaTool.toolName, args),
 					imageToolName
 						? this.maxianService.callMcpTool(figmaTool.serverName, imageToolName, {
 							fileKey,
 							...(nodeId ? { nodeId } : {}),
 							format: 'png',
-							scale: 2,
-						}).catch(() => null as any)
-						: null,
+							scale: 1,
+						}).catch(() => null)
+						: Promise.resolve(null),
 				];
 
-				const [designData, imageData] = await Promise.all(fetchPromises);
+				const [rawDesignData, imageData] = await Promise.all(fetchPromises);
 
-				// 处理截图（官方 Figma MCP 返回 base64 或 URL）
+				// 预处理：将原始数据压缩为精华摘要
+				const designData = this._preprocessFigmaData(rawDesignData);
+
 				let imageNote = '';
 				if (imageData) {
-					// 尝试解析图片数据（可能是 base64 或 URL）
 					const imgBase64 = this._extractBase64FromFigmaImageResponse(imageData);
 					if (imgBase64) {
 						resultImages.push(imgBase64);
-						imageNote = '\n\n> 注意：已附加设计截图，请结合截图和结构数据精确还原每个细节。';
+						imageNote = '\n\n> 注意：已附加设计截图，请结合截图和结构数据精确还原。';
 					}
 				}
 
-				const figmaInstruction = `
-<figma_design url="${figmaUrl}" fileKey="${fileKey}"${nodeId ? ` nodeId="${nodeId}"` : ''}${imageToolName ? ' hasScreenshot="true"' : ''}>
+				const figmaInstruction = `<figma_design url="${figmaUrl}" fileKey="${fileKey}"${nodeId ? ` nodeId="${nodeId}"` : ''}>
 ${designData}
 </figma_design>${imageNote}
 
 <figma_implementation_rules>
-请严格按照上方 Figma 设计数据${resultImages.length > 0 ? '和附加的截图' : ''}还原 UI，遵循以下规则：
-
-1. **颜色精确**：从设计数据中提取精确的 hex/rgba 颜色值，不要使用近似色
-2. **尺寸精确**：使用设计数据中的 px 值，转换为 CSS（width/height/padding/margin/font-size 等）
-3. **布局还原**：识别 Figma 的 Auto Layout → CSS flexbox/grid，保持方向(row/column)、间距(gap)、对齐方式
-4. **字体还原**：提取 fontFamily、fontSize、fontWeight、lineHeight、letterSpacing
-5. **圆角/阴影**：提取 borderRadius、box-shadow（effectType: DROP_SHADOW）
-6. **层级结构**：按 Figma 图层树结构构建 HTML/Vue 组件树
-7. **图片/图标**：Figma 图片用占位符或 SVG，图标优先用 Element Plus 图标或 Unicode
-8. **响应式**：如果设计有多个断点，实现对应的响应式样式
-9. **不要简化**：不要因为复杂就简化设计，要完整还原每个元素
-
-输出格式：Vue 3 单文件组件（.vue），使用 \`<script setup>\`、\`<template>\`、\`<style scoped>\`
+严格按照上方设计数据还原 UI：
+1. **颜色精确**：使用设计数据中的精确 hex/rgba 值，不允许用近似色
+2. **尺寸精确**：使用 px 值转换为 CSS（width/height/padding/margin/gap/font-size）
+3. **布局还原**：Auto Layout → flexbox/grid，保持方向、间距、对齐方式
+4. **字体还原**：fontFamily、fontSize、fontWeight、lineHeight、letterSpacing 全部还原
+5. **圆角/阴影**：borderRadius、box-shadow 完整还原
+6. **层级结构**：按组件树层级构建 HTML 结构，父子关系不能乱
+7. **不要简化**：不因复杂而省略元素，每个节点都要还原
+输出：Vue 3 单文件组件，使用 \`<script setup lang="ts">\`、\`<template>\`、\`<style scoped>\`
 </figma_implementation_rules>`;
+
 				resultText = resultText.replace(fullMatch, figmaInstruction);
 			} catch (e) {
 				resultText = resultText.replace(fullMatch, `[#figma 获取失败: ${String(e)}]`);
@@ -3262,6 +3251,150 @@ ${designData}
 		}
 
 		return { text: resultText, images: resultImages };
+	}
+
+	/**
+	 * 将原始 Figma MCP 数据压缩为 AI 可高效利用的精华摘要
+	 *
+	 * 原始数据可能是 JSON 或 YAML，大小可达数十万字符。
+	 * 处理后输出结构化的设计描述，目标大小 8-15KB：
+	 *   - 颜色规范（去重、限数量）
+	 *   - 字体规范（去重、限数量）
+	 *   - 组件树骨架（保留布局/尺寸/颜色关键属性，去掉冗余字段）
+	 */
+	private _preprocessFigmaData(rawData: string): string {
+		if (!rawData) return '（无设计数据）';
+
+		// 硬上限：超过 60KB 直接截断，防止后续处理 OOM
+		const capped = rawData.length > 60000 ? rawData.slice(0, 60000) + '\n...[数据过大，已截断]' : rawData;
+
+		// 尝试 JSON 解析（部分 MCP 配置会返回 JSON）
+		let parsed: any = null;
+		try {
+			// GLips 默认返回 YAML，但 JSON 模式下返回 JSON
+			parsed = JSON.parse(capped);
+		} catch {
+			// YAML 或其他格式，无法精确解析，走文本压缩路径
+		}
+
+		if (parsed) {
+			return this._extractFigmaJsonSummary(parsed);
+		}
+
+		// YAML / 纯文本路径：提取关键信息后截断到合理大小
+		return this._extractFigmaTextSummary(capped);
+	}
+
+	/** 从 JSON 结构中提取精华设计摘要 */
+	private _extractFigmaJsonSummary(node: any): string {
+		const colors = new Set<string>();
+		const fonts: string[] = [];
+		const fontSeen = new Set<string>();
+
+		const hexColor = (c: { r: number; g: number; b: number; a?: number }): string => {
+			const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
+			const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
+			const b = Math.round(c.b * 255).toString(16).padStart(2, '0');
+			const a = c.a !== undefined && c.a < 0.99 ? Math.round(c.a * 255).toString(16).padStart(2, '0') : '';
+			return `#${r}${g}${b}${a}`;
+		};
+
+		// 递归提取 token
+		const extractTokens = (n: any) => {
+			if (!n || typeof n !== 'object') return;
+			// 颜色
+			if (Array.isArray(n.fills)) {
+				for (const f of n.fills) {
+					if (f?.type === 'SOLID' && f.color) colors.add(hexColor(f.color));
+				}
+			}
+			if (Array.isArray(n.strokes)) {
+				for (const s of n.strokes) {
+					if (s?.type === 'SOLID' && s.color) colors.add(hexColor(s.color));
+				}
+			}
+			// 字体
+			if (n.style?.fontFamily) {
+				const key = `${n.style.fontFamily} ${n.style.fontSize}px ${n.style.fontWeight || 400}`;
+				if (!fontSeen.has(key)) { fontSeen.add(key); fonts.push(key); }
+			}
+			if (Array.isArray(n.children)) n.children.forEach(extractTokens);
+		};
+		extractTokens(node);
+
+		// 构建组件树骨架（最多 6 层深）
+		const buildTree = (n: any, depth: number): string => {
+			if (!n || depth > 6) return '';
+			const indent = '  '.repeat(depth);
+
+			const attrs: string[] = [];
+			if (n.layoutMode === 'HORIZONTAL') attrs.push('flex-row');
+			else if (n.layoutMode === 'VERTICAL') attrs.push('flex-col');
+			if (n.itemSpacing) attrs.push(`gap:${Math.round(n.itemSpacing)}`);
+			const pt = n.paddingTop, pr = n.paddingRight, pb = n.paddingBottom, pl = n.paddingLeft;
+			if (pt || pr || pb || pl) {
+				attrs.push(`padding:${pt||0} ${pr||0} ${pb||0} ${pl||0}`);
+			}
+			if (n.cornerRadius) attrs.push(`radius:${n.cornerRadius}`);
+			const box = n.absoluteBoundingBox;
+			if (box?.width) attrs.push(`w:${Math.round(box.width)}`);
+			if (box?.height) attrs.push(`h:${Math.round(box.height)}`);
+			if (n.fills?.[0]?.color) attrs.push(`bg:${hexColor(n.fills[0].color)}`);
+			if (n.strokes?.[0]?.color) attrs.push(`border:${hexColor(n.strokes[0].color)}`);
+			if (n.style?.fontSize) attrs.push(`${n.style.fontSize}px`);
+			if (n.style?.fontWeight && n.style.fontWeight !== 400) attrs.push(`fw:${n.style.fontWeight}`);
+			if (n.characters) attrs.push(`"${String(n.characters).slice(0, 40)}"`);
+			if (Array.isArray(n.effects) && n.effects.some((e: any) => e.type === 'DROP_SHADOW')) attrs.push('shadow');
+
+			const attrStr = attrs.length ? ` [${attrs.join(', ')}]` : '';
+			let result = `${indent}${n.type || 'NODE'} "${n.name || ''}"${attrStr}\n`;
+
+			if (Array.isArray(n.children)) {
+				for (const child of n.children) {
+					result += buildTree(child, depth + 1);
+				}
+			}
+			return result;
+		};
+
+		const colorSection = colors.size
+			? `### 颜色\n${[...colors].slice(0, 30).map(c => `- ${c}`).join('\n')}\n`
+			: '';
+		const fontSection = fonts.length
+			? `### 字体\n${fonts.slice(0, 15).map(f => `- ${f}`).join('\n')}\n`
+			: '';
+		const treeSection = `### 组件树\n${buildTree(node, 0)}`;
+
+		return `${colorSection}\n${fontSection}\n${treeSection}`.trim();
+	}
+
+	/** 从 YAML/文本格式中提取关键设计信息（无法精确解析时的降级方案） */
+	private _extractFigmaTextSummary(text: string): string {
+		// 提取所有颜色值（hex 格式）
+		const colorMatches = [...new Set(text.match(/#[0-9a-fA-F]{6,8}/g) || [])];
+		// 提取字体大小
+		const fontSizeMatches = [...new Set((text.match(/fontSize[:\s]+(\d+)/g) || []).map(m => m.replace(/fontSize[:\s]+/, '') + 'px'))];
+		// 提取常见布局关键词
+		const hasHorizontal = /layoutMode[:\s]+HORIZONTAL/i.test(text);
+		const hasVertical = /layoutMode[:\s]+VERTICAL/i.test(text);
+
+		const colorSection = colorMatches.length
+			? `### 颜色\n${colorMatches.slice(0, 20).map(c => `- ${c}`).join('\n')}\n`
+			: '';
+		const fontSection = fontSizeMatches.length
+			? `### 字体大小\n${fontSizeMatches.slice(0, 10).map(s => `- ${s}`).join('\n')}\n`
+			: '';
+		const layoutHint = (hasHorizontal || hasVertical)
+			? `### 布局\n- 包含 ${hasHorizontal ? '水平(flex-row)' : ''}${hasHorizontal && hasVertical ? ' 和 ' : ''}${hasVertical ? '垂直(flex-col)' : ''} Auto Layout\n`
+			: '';
+
+		// 原始数据截断到 12KB 作为补充
+		const MAX_RAW = 12000;
+		const rawTruncated = text.length > MAX_RAW
+			? text.slice(0, MAX_RAW) + '\n...[原始数据已截断，显示前 12KB]'
+			: text;
+
+		return `${colorSection}\n${fontSection}\n${layoutHint}\n### 原始数据\n${rawTruncated}`.trim();
 	}
 
 	/**

@@ -1294,21 +1294,24 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 让相关文件浮到顶部，预加载命中正确文件，减少 AI 的探索轮数
 			const keywords = this.extractKeywordsSync(message);
 
+			// Figma 设计任务检测：跳过 repoMap 和预加载，节省 token 给设计数据
+			const isFigmaTask = message.includes('<figma_design');
+
 			// 2. 生成 RepoMap（传入关键词，个性化PageRank排序）
 			let repoMap = '';
-			if (this.repoMapService && this.shouldGenerateRepoMap(recentlyModifiedFiles)) {
+			if (!isFigmaTask && this.repoMapService && this.shouldGenerateRepoMap(recentlyModifiedFiles)) {
 				repoMap = await this.generateRepoMap(workspaceRoot, keywords);
-			} else if (this.lastRepoMap) {
+			} else if (!isFigmaTask && this.lastRepoMap) {
 				repoMap = this.lastRepoMap;
 			}
 
 
 			// 🚀 使用已翻译的关键词进行预加载（此时 RepoMap 已就绪）
 			let preloadedCode = '';
-			if (repoMap && keywords.length > 0) {
+			if (!isFigmaTask && repoMap && keywords.length > 0) {
 				// 使用已翻译的关键词，跳过再次翻译
 				preloadedCode = await this.smartPreloadCodeWithKeywords(message, repoMap, workspaceRoot, keywords);
-			} else if (repoMap) {
+			} else if (!isFigmaTask && repoMap) {
 				// 如果关键词提取失败，使用备用方案
 				preloadedCode = await this.smartPreloadCode(message, repoMap, workspaceRoot);
 			}
