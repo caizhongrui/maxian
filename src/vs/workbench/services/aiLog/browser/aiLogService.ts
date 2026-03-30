@@ -59,8 +59,6 @@ export class AILogService extends Disposable implements IAILogService {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					'username': credentials.username,
-					'password': credentials.password
 				},
 				body: JSON.stringify(requestBody)
 			});

@@ -91,7 +91,7 @@ export class McpClient {
 	private async connectSse(): Promise<void> {
 		const headers: Record<string, string> = {
 			'Accept': 'text/event-stream',
-			'Cache-Control': 'no-cache',
+			// 不发 Cache-Control，避免 CORS preflight 拦截
 			...this.config.headers,
 		};
 
