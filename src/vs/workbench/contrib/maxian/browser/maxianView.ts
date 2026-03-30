@@ -3219,28 +3219,39 @@ export class MaxianView extends ViewPane {
 				// 预处理：将原始数据压缩为精华摘要
 				const designData = this._preprocessFigmaData(rawDesignData);
 
-				let imageNote = '';
+				// 视觉分析：调用后端多模态模型分析截图，获取设计描述
+				let visionDescription = '';
 				if (imageData) {
 					const imgBase64 = this._extractBase64FromFigmaImageResponse(imageData);
 					if (imgBase64) {
 						resultImages.push(imgBase64);
-						imageNote = '\n\n> 注意：已附加设计截图，请结合截图和结构数据精确还原。';
+						try {
+							visionDescription = await this._callVisionAnalyze([imgBase64]);
+							console.log('[MaxianView] 视觉分析完成，描述长度:', visionDescription.length);
+						} catch (visionErr) {
+							console.warn('[MaxianView] 视觉分析失败（非致命），将仅使用结构数据:', visionErr);
+						}
 					}
 				}
 
+				const visionSection = visionDescription
+					? `\n\n<figma_visual_description>\n${visionDescription}\n</figma_visual_description>`
+					: '';
+
 				const figmaInstruction = `<figma_design url="${figmaUrl}" fileKey="${fileKey}"${nodeId ? ` nodeId="${nodeId}"` : ''}>
 ${designData}
-</figma_design>${imageNote}
+</figma_design>${visionSection}
 
 <figma_implementation_rules>
-严格按照上方设计数据还原 UI：
-1. **颜色精确**：使用设计数据中的精确 hex/rgba 值，不允许用近似色
-2. **尺寸精确**：使用 px 值转换为 CSS（width/height/padding/margin/gap/font-size）
-3. **布局还原**：Auto Layout → flexbox/grid，保持方向、间距、对齐方式
-4. **字体还原**：fontFamily、fontSize、fontWeight、lineHeight、letterSpacing 全部还原
-5. **圆角/阴影**：borderRadius、box-shadow 完整还原
-6. **层级结构**：按组件树层级构建 HTML 结构，父子关系不能乱
-7. **不要简化**：不因复杂而省略元素，每个节点都要还原
+严格按照上方设计数据和视觉描述还原 UI：
+1. **颜色精确**：使用设计数据中的精确 hex/rgba 值，不允许用近似色；视觉描述中提到的颜色风格也要遵守
+2. **视觉风格**：根据视觉描述还原整体风格（科技感/渐变/发光边框/阴影等），不要生成普通样式
+3. **尺寸精确**：使用 px 值转换为 CSS（width/height/padding/margin/gap/font-size）
+4. **布局还原**：Auto Layout → flexbox/grid，保持方向、间距、对齐方式
+5. **字体还原**：fontFamily、fontSize、fontWeight、lineHeight、letterSpacing 全部还原
+6. **特效还原**：发光效果用 box-shadow + 颜色，渐变用 linear-gradient/radial-gradient，模糊用 backdrop-filter
+7. **层级结构**：按组件树层级构建 HTML 结构，父子关系不能乱
+8. **不要简化**：不因复杂而省略元素，每个节点都要还原
 输出：Vue 3 单文件组件，使用 \`<script setup lang="ts">\`、\`<template>\`、\`<style scoped>\`
 </figma_implementation_rules>`;
 
@@ -3431,6 +3442,54 @@ ${designData}
 		}
 
 		return null;
+	}
+
+	/**
+	 * 调用后端视觉分析接口，使用多模态模型分析 Figma 截图
+	 * 返回设计的详细文字描述，用于辅助代码生成
+	 */
+	private async _callVisionAnalyze(base64Images: string[]): Promise<string> {
+		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
+		if (!apiUrl) {
+			throw new Error('未配置 API 地址 (zhikai.auth.apiUrl)');
+		}
+
+		const storedCredentials = this.storageService.get('zhikai.auth.credentials', StorageScope.APPLICATION);
+		if (!storedCredentials) {
+			throw new Error('未找到认证信息，请先登录');
+		}
+
+		const credentials = JSON.parse(storedCredentials);
+		const { username, password } = credentials;
+		if (!username || !password) {
+			throw new Error('认证信息不完整，请重新登录');
+		}
+
+		const baseUrl = apiUrl.replace(/\/$/, '');
+		const response = await fetch(`${baseUrl}/ai/proxy/vision/analyze`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				username: btoa(username),
+				password: btoa(password),
+				businessCode: 'IDE_FIGMA_VISION',
+				images: base64Images,
+				prompt: '请详细描述这个UI设计的整体布局结构、颜色方案（列出主要颜色值）、字体样式、各区块的功能和位置关系、视觉风格特征（如科技感/暗色/发光边框/渐变等特效）、交互元素（按钮/表格/图表等）。要求具体详细，供前端开发人员精确还原。',
+				maxTokens: 2000,
+			}),
+		});
+
+		if (!response.ok) {
+			const errText = await response.text();
+			throw new Error(`视觉分析接口错误 [${response.status}]: ${errText}`);
+		}
+
+		const result = await response.json();
+		if ((result.code === 200 || result.code === '200') && result.data) {
+			return result.data as string;
+		}
+
+		throw new Error(`视觉分析失败: ${result.msg || JSON.stringify(result)}`);
 	}
 
 	private handleMessageEvent(event: import('./maxianService.js').IMessageEvent): void {
