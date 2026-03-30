@@ -344,7 +344,7 @@ export class McpClient {
 
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
-			'Accept': 'application/json, text/event-stream',
+			'Accept': 'application/json',
 			...this.config.headers,
 		};
 
