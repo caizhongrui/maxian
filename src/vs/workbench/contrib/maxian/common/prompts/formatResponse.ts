@@ -42,14 +42,16 @@ export const formatResponse = {
 	 * 没有使用工具
 	 */
 	noToolsUsed: (): string => {
-		return `[错误] 你在上一次响应中没有使用任何工具！请使用工具重试。
+		return `[严重错误] 你必须在每次响应中调用至少一个工具！纯文字回复是不允许的。
 
-# 下一步
+**立即选择以下其中一项执行：**
+- 任务已完成 → 调用 \`attempt_completion\`
+- 需要写代码/文件 → 调用 \`edit\` 或 \`write_to_file\`
+- 需要更多信息 → 调用 \`ask_followup_question\`
+- 需要执行命令 → 调用 \`execute_command\`
+- 需要读取文件 → 调用 \`read_file\`
 
-如果你已经完成了用户的任务，请使用 attempt_completion 工具。
-如果你需要从用户那里获取更多信息，请使用 ask_followup_question 工具。
-否则，如果你还没有完成任务并且不需要更多信息，请继续执行任务的下一步。
-(这是一条自动消息，请不要对它进行对话式回复。)`;
+不要描述你要做什么，直接调用工具去做。(自动消息，请勿对话式回复)`;
 	},
 
 	/**

@@ -26,6 +26,9 @@ RULES
 - write_to_file 仅用于创建新文件或完全重写；对已有文件的部分修改必须使用 edit 或 apply_diff
 
 代码修改后验证规则：
+- edit / write_to_file / multiedit 工具结果中若包含 "此文件存在问题" 或 LSP 错误信息（如类型不匹配、未定义符号等），必须立即修复所有错误，修复后再继续下一步
+- 调用 attempt_completion 之前，必须对本次任务中所有修改过的文件执行一次 lsp_diagnostics 检查，确认零错误后才能调用 attempt_completion；如有错误必须先修复
+- Java 类型常见陷阱：MyBatis-Plus this.count() 返回 long，不能直接赋给 int，需用 (int)this.count() 强转或改用 long 类型接收
 - 修改 Java 文件后，若项目有 pom.xml，运行 mvn compile -q（或 ./mvnw compile -q）验证编译通过；注解处理器（如 Lombok、MapStruct）生成的代码必须通过 mvn compile 才能被 LSP 识别
 - 同一文件的 lint/类型错误修复超过 3 次后，停止并用 ask_followup_question 请求用户介入
 

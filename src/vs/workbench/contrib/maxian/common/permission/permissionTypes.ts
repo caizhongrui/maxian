@@ -251,6 +251,16 @@ export const DEFAULT_PERMISSION_RULES: Record<ToolName, Record<string, Permissio
 	// 测试代码生成（读取源文件分析，始终允许）
 	generate_tests: {
 		'*': 'allow'
+	},
+
+	// MCP 工具调用（始终允许，权限由服务器配置控制）
+	use_mcp_tool: {
+		'*': 'allow'
+	},
+
+	// MCP 资源访问（始终允许）
+	access_mcp_resource: {
+		'*': 'allow'
 	}
 };
 

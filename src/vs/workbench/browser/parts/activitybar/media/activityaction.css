@@ -45,7 +45,7 @@
 	position: relative;
 	z-index: 1;
 	display: flex;
-	overflow: hidden;
+	overflow: visible;
 	width: 40px;
 	height: 40px;
 	margin-right: 0;
@@ -138,7 +138,7 @@
 	bottom: 0;
 	margin: auto;
 	left: 0;
-	overflow: hidden;
+	overflow: visible;
 	width: 100%;
 	height: 100%;
 }
@@ -163,7 +163,6 @@
 .monaco-workbench .activitybar > .content :not(.monaco-menu) > .monaco-action-bar .badge .badge-content {
 	position: absolute;
 	top: 20px;
-	right: 8px;
 	font-size: 9px;
 	font-weight: 600;
 	min-width: 8px;

@@ -340,6 +340,27 @@ export class CodeApplication extends Disposable {
 
 		//#endregion
 
+		//#region Allow CORS for local MCP servers (http://localhost:* and http://127.0.0.1:*)
+
+		session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+			const url = details.url;
+			if (
+				url.startsWith('http://localhost:') ||
+				url.startsWith('http://127.0.0.1:') ||
+				url.startsWith('http://0.0.0.0:')
+			) {
+				const responseHeaders = details.responseHeaders ?? Object.create(null);
+				responseHeaders['Access-Control-Allow-Origin'] = ['*'];
+				responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, OPTIONS'];
+				responseHeaders['Access-Control-Allow-Headers'] = ['Content-Type, Authorization, mcp-session-id, Accept'];
+				return callback({ cancel: false, responseHeaders });
+			}
+
+			return callback({ cancel: false });
+		});
+
+		//#endregion
+
 		//#region Code Cache
 
 		type SessionWithCodeCachePathSupport = Session & {

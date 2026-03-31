@@ -984,7 +984,8 @@ export class AiProxyHandler implements IApiHandler {
 			id.includes('pixtral') ||             // Mistral 视觉模型
 			id.includes('llava') ||               // LLaVA 系列
 			id.includes('internvl') ||            // InternVL
-			id.includes('qvq')                    // QVQ 推理视觉模型
+			id.includes('qvq') ||                 // QVQ 推理视觉模型
+			id.includes('figma')                  // Figma 专用多模态 businessCode (IDE_FIGMA_CODE)
 		);
 	}
 

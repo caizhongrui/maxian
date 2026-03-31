@@ -1889,19 +1889,15 @@ export class TaskService extends Disposable {
 			}
 		} catch (e) {
 			console.error('[TaskService] batch 参数解析失败:', e);
-			// 尝试修复截断的 JSON（模型输出被截断时缺少结尾 ]}）
+			// 尝试多种策略修复截断的 JSON
 			const rawCalls = toolUse.input?.tool_calls;
 			if (typeof rawCalls === 'string') {
-				try {
-					// 找到最后一个完整的对象（以 } 结尾）然后补全数组
-					const lastBrace = rawCalls.lastIndexOf('}');
-					if (lastBrace !== -1) {
-						const fixed = rawCalls.substring(0, lastBrace + 1) + ']';
-						toolCalls = JSON.parse(fixed);
-						console.log(`[TaskService] batch JSON 截断修复成功，恢复 ${toolCalls.length} 个工具调用`);
-					}
-				} catch (e2) {
-					console.error('[TaskService] batch JSON 截断修复也失败:', e2);
+				const repaired = this._repairTruncatedBatchJson(rawCalls);
+				if (repaired) {
+					toolCalls = repaired;
+					console.log(`[TaskService] batch JSON 截断修复成功，恢复 ${toolCalls.length} 个工具调用`);
+				} else {
+					console.error('[TaskService] batch JSON 截断修复失败，放弃解析');
 				}
 			}
 		}
@@ -2342,6 +2338,81 @@ case 'execute_command':
 					params: params
 				});
 		}
+	}
+
+	/**
+	 * 修复截断的 batch tool_calls JSON 字符串
+	 * 模型输出被截断时可能缺少结尾的 }、}] 等，通过多种策略尝试修复
+	 */
+	private _repairTruncatedBatchJson(raw: string): Array<{ tool: string; parameters: any }> | null {
+		const candidates: string[] = [];
+
+		// 策略1: 直接解析（可能已经完整）
+		candidates.push(raw);
+
+		// 策略2: 末尾补 ']'
+		if (!raw.trimEnd().endsWith(']')) {
+			candidates.push(raw.trimEnd() + ']');
+		}
+
+		// 策略3: 末尾补 '}]' （工具对象未关闭 + 数组未关闭）
+		candidates.push(raw.trimEnd() + '}]');
+
+		// 策略4: 末尾补 '}}]' （参数对象 + 工具对象 + 数组均未关闭）
+		candidates.push(raw.trimEnd() + '}}]');
+
+		// 策略5: 截断到最后一个完整的 {...} 对象，然后补 ']'
+		// 找到最后一个完整对象：反向扫描找到匹配的 { }
+		const lastCompleteObjEnd = this._findLastCompleteObjectEnd(raw);
+		if (lastCompleteObjEnd > 0) {
+			const openBracket = raw.indexOf('[');
+			if (openBracket !== -1) {
+				candidates.push(raw.substring(openBracket, lastCompleteObjEnd + 1) + ']');
+			}
+		}
+
+		for (const candidate of candidates) {
+			try {
+				const parsed = JSON.parse(candidate);
+				if (Array.isArray(parsed) && parsed.length > 0) {
+					return parsed;
+				}
+			} catch {
+				// 继续尝试下一个
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * 在 JSON 字符串中找到最后一个完整 {...} 对象的结束位置
+	 * （跳过字符串内容，正确处理转义）
+	 */
+	private _findLastCompleteObjectEnd(s: string): number {
+		let lastEnd = -1;
+		let depth = 0;
+		let inString = false;
+		let escape = false;
+
+		for (let i = 0; i < s.length; i++) {
+			const ch = s[i];
+			if (escape) { escape = false; continue; }
+			if (ch === '\\' && inString) { escape = true; continue; }
+			if (ch === '"') { inString = !inString; continue; }
+			if (inString) continue;
+
+			if (ch === '{' || ch === '[') depth++;
+			else if (ch === '}' || ch === ']') {
+				depth--;
+				if (ch === '}' && depth === 1) {
+					// depth=1 means we just closed an element of the top-level array
+					lastEnd = i;
+				}
+			}
+		}
+
+		return lastEnd;
 	}
 
 	/**

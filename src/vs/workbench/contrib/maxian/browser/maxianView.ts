@@ -836,7 +836,7 @@ export class MaxianView extends ViewPane {
 		// 加载知识库列表
 		this.loadKnowledgeBases();
 
-		// MCP 设置按钮
+		// MCP 设置按钮（暂时隐藏）
 		const mcpButton = append(leftControls, $('button.codicon.codicon-plug')) as HTMLButtonElement;
 		mcpButton.title = 'MCP 服务器设置';
 		mcpButton.style.padding = '6px';
@@ -866,6 +866,7 @@ export class MaxianView extends ViewPane {
 			mcpButton.style.backgroundColor = 'transparent';
 		};
 		mcpButton.onclick = () => this.toggleMcpPanel();
+		mcpButton.style.display = 'none'; // 暂时隐藏 MCP 按钮
 
 		// 刷新按钮
 		const refreshButton = append(leftControls, $('button.codicon.codicon-refresh')) as HTMLButtonElement;
@@ -3064,9 +3065,10 @@ export class MaxianView extends ViewPane {
 			finalMessage = await this._resolveSpecialMentions(expandedMessage);
 		}
 
-		// 处理 #figma <url> 快捷引用，自动拉取 Figma 设计数据注入上下文（含截图）
+		// 处理 #<serverName> <figmaUrl> 快捷引用，自动拉取 Figma 设计数据注入上下文（含截图）
+		// 注意：MCP 服务器名可能不是 "figma"，需匹配任何 #word + figma.com URL
 		let figmaImages: string[] | undefined;
-		if (finalMessage.includes('#figma ')) {
+		if (/#\w+\s+https?:\/\/(?:www\.)?figma\.com\//.test(finalMessage)) {
 			const figmaResult = await this._resolveFigmaMentions(finalMessage);
 			finalMessage = figmaResult.text;
 			figmaImages = figmaResult.images.length > 0 ? figmaResult.images : undefined;
@@ -3159,7 +3161,8 @@ export class MaxianView extends ViewPane {
 	 * 3. 返回 { text, images } — images 仅官方 MCP 支持视觉模型时有值
 	 */
 	private async _resolveFigmaMentions(message: string): Promise<{ text: string; images: string[] }> {
-		const figmaPattern = /#figma\s+(https?:\/\/[^\s]+)/g;
+		// 匹配 #任意serverName https://figma.com/... 格式（服务器名可能不是"figma"）
+		const figmaPattern = /#\w+\s+(https?:\/\/(?:www\.)?figma\.com\/[^\s]+)/g;
 		let resultText = message;
 		const resultImages: string[] = [];
 		const matches = [...message.matchAll(figmaPattern)];
@@ -3192,68 +3195,118 @@ export class MaxianView extends ViewPane {
 				continue;
 			}
 
-			const imageToolName = allTools.find(t =>
+			const imageTool = allTools.find(t =>
 				t.serverName === figmaTool.serverName &&
-				(t.toolName === 'get_image' || t.toolName === 'get_images')
-			)?.toolName;
+				(t.toolName === 'get_image' || t.toolName === 'get_images' || t.toolName === 'download_figma_images')
+			);
+			const imageToolName = imageTool?.toolName;
 
 			try {
-				// depth:5 从源头限制数据量，避免返回完整的嵌套树（可能几十万字符）
-				const args: Record<string, any> = { fileKey, depth: 5 };
+				// depth:8 保留更完整的节点树，复杂仪表盘通常有5-8层嵌套
+				const args: Record<string, any> = { fileKey, depth: 8 };
 				if (nodeId) args['nodeId'] = nodeId;
 
-				const fetchPromises: [Promise<string>, Promise<string | null>] = [
-					this.maxianService.callMcpTool(figmaTool.serverName, figmaTool.toolName, args),
-					imageToolName
-						? this.maxianService.callMcpTool(figmaTool.serverName, imageToolName, {
-							fileKey,
-							...(nodeId ? { nodeId } : {}),
-							format: 'png',
-							scale: 1,
-						}).catch(() => null)
-						: Promise.resolve(null),
-				];
+				// 用 timestamp 区分，避免并发冲突
+				const timestamp = Date.now();
+				const figmaRelPath = `.tmp/figma-ide-${timestamp}`;
+				// 推断 MCP 服务器工作目录（即用户 home 目录）
+				const workspaceRoot = this.maxianService.getWorkspaceRoot();
+				const homeDirMatch = workspaceRoot.match(/^(\/(?:Users|home)\/[^/]+)/);
+				const mcpBaseDir = homeDirMatch ? homeDirMatch[1] : '/tmp';
+				const figmaAbsDir = `${mcpBaseDir}/${figmaRelPath}`;
 
-				const [rawDesignData, imageData] = await Promise.all(fetchPromises);
+				// Step 1: 先获取设计数据
+				const rawDesignData = await this.maxianService.callMcpTool(figmaTool.serverName, figmaTool.toolName, args);
 
-				// 预处理：将原始数据压缩为精华摘要
-				const designData = this._preprocessFigmaData(rawDesignData);
+				// Step 2: 从 YAML/JSON 中提取含图片 fill 的节点 ID（最多8个）
+				const imageNodeIds = imageToolName === 'download_figma_images'
+					? this._extractImageFillNodeIds(rawDesignData).slice(0, 8)
+					: [];
 
-				// 视觉分析：调用后端多模态模型分析截图，获取设计描述
-				let visionDescription = '';
+				// Step 3: 构造下载列表：主节点截图 + 各图片填充节点
+				let imageData: string | null = null;
+				// nodeId→本地文件名的映射，供 instruction 使用
+				const imageNodeFileMap: Map<string, string> = new Map();
+
+				if (imageToolName === 'download_figma_images' && nodeId) {
+					const downloadNodes: Array<{ nodeId: string; fileName: string }> = [
+						{ nodeId, fileName: 'design.png' },  // 主截图，用于多模态视觉参考
+					];
+					for (const imgNodeId of imageNodeIds) {
+						const safeId = imgNodeId.replace(/:/g, '-');
+						const fileName = `img-${safeId}.png`;
+						downloadNodes.push({ nodeId: imgNodeId, fileName });
+						imageNodeFileMap.set(imgNodeId, `${figmaAbsDir}/${fileName}`);
+					}
+					const imgArgs = {
+						fileKey,
+						nodes: downloadNodes,
+						localPath: figmaRelPath,
+						pngScale: 2,  // scale=2 提升截图分辨率，让多模态模型看清细节
+					};
+					imageData = await this.maxianService.callMcpTool(figmaTool.serverName, imageToolName, imgArgs).catch(() => null);
+				} else if (imageToolName && imageToolName !== 'download_figma_images') {
+					const imgArgs = {
+						fileKey,
+						...(nodeId ? { nodeId } : {}),
+						format: 'png',
+						scale: 2,
+					};
+					imageData = await this.maxianService.callMcpTool(figmaTool.serverName, imageToolName!, imgArgs).catch(() => null);
+				}
+
+				// Step 4: 提取主截图 base64 传给多模态模型
+				let hasImage = false;
 				if (imageData) {
-					const imgBase64 = this._extractBase64FromFigmaImageResponse(imageData);
+					let imgBase64: string | null = null;
+					if (imageToolName === 'download_figma_images') {
+						imgBase64 = await this._extractBase64FromDownloadFigmaResponse(imageData, figmaAbsDir);
+					} else {
+						imgBase64 = this._extractBase64FromFigmaImageResponse(imageData);
+					}
 					if (imgBase64) {
 						resultImages.push(imgBase64);
-						try {
-							visionDescription = await this._callVisionAnalyze([imgBase64]);
-							console.log('[MaxianView] 视觉分析完成，描述长度:', visionDescription.length);
-						} catch (visionErr) {
-							console.warn('[MaxianView] 视觉分析失败（非致命），将仅使用结构数据:', visionErr);
-						}
+						hasImage = true;
+						console.log(`[MaxianView] Figma截图已提取，将直接传给多模态模型；另下载图片节点 ${imageNodeIds.length} 个`);
 					}
 				}
 
-				const visionSection = visionDescription
-					? `\n\n<figma_visual_description>\n${visionDescription}\n</figma_visual_description>`
+				// Step 5: 构建图片节点路径说明（供 instruction 使用）
+				let imageAssetsSection = '';
+				if (imageNodeFileMap.size > 0) {
+					const lines = ['', '设计中的图片资源已下载到本地，代码中直接使用以下路径（<img src="...">）：'];
+					for (const [nid, path] of imageNodeFileMap.entries()) {
+						lines.push(`  - 节点 ${nid} → ${path}`);
+					}
+					imageAssetsSection = lines.join('\n');
+				}
+
+				// 预处理 YAML：有截图时多模态模型直接看图，缩减 YAML 节省 token
+				const designData = this._preprocessFigmaData(rawDesignData, hasImage);
+				// 提取 globalVars.styles 快查表，帮助模型直接找到 CSS 值，禁止猜测
+				const stylesRef = this._buildStylesQuickRef(rawDesignData);
+
+				const screenshotNote = hasImage
+					? '【重要】已附高清设计截图。截图是视觉还原的唯一标准——所有颜色、发光效果、边框、背景、阴影、布局必须与截图完全一致。禁止自行猜测任何样式。'
 					: '';
 
-				const figmaInstruction = `<figma_design url="${figmaUrl}" fileKey="${fileKey}"${nodeId ? ` nodeId="${nodeId}"` : ''}>
-${designData}
-</figma_design>${visionSection}
+				const figmaInstruction = `将以下 Figma 设计精确还原为前端代码。${screenshotNote}
 
-<figma_implementation_rules>
-严格按照上方设计数据和视觉描述还原 UI：
-1. **颜色精确**：使用设计数据中的精确 hex/rgba 值，不允许用近似色；视觉描述中提到的颜色风格也要遵守
-2. **视觉风格**：根据视觉描述还原整体风格（科技感/渐变/发光边框/阴影等），不要生成普通样式
-3. **尺寸精确**：使用 px 值转换为 CSS（width/height/padding/margin/gap/font-size）
-4. **布局还原**：Auto Layout → flexbox/grid，保持方向、间距、对齐方式
-5. **字体还原**：fontFamily、fontSize、fontWeight、lineHeight、letterSpacing 全部还原
-6. **特效还原**：发光效果用 box-shadow + 颜色，渐变用 linear-gradient/radial-gradient，模糊用 backdrop-filter
-7. **层级结构**：按组件树层级构建 HTML 结构，父子关系不能乱
-8. **不要简化**：不因复杂而省略元素，每个节点都要还原
-输出：Vue 3 单文件组件，使用 \`<script setup lang="ts">\`、\`<template>\`、\`<style scoped>\`
-</figma_implementation_rules>`;
+<figma_design url="${figmaUrl}" fileKey="${fileKey}"${nodeId ? ` nodeId="${nodeId}"` : ''}>
+${designData}
+</figma_design>
+${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
+
+还原要求（必须逐条遵守）：
+- 生成单个 HTML 文件（HTML + CSS + JS 全部内联），100% 完整，禁止骨架/TODO/占位符
+- 有截图时：截图中所有视觉效果（发光边框/内外阴影/渐变背景/毛玻璃）都必须实现，一个不漏
+- CSS 值必须来自上方样式快查表（stylesRef），表中有的项直接复制，禁止自行创造数值
+- 节点 fills 引用 → 查快查表 → CSS background；effects 引用 → 查快查表 → CSS box-shadow/backdrop-filter
+- layout.mode row/column → flex；layout.gap/padding/width/height → 精确 px
+- position: "absolute" → 绝对定位，使用节点精确坐标
+- 数据可视化：SVG 或 ECharts CDN，禁止图片占位
+- 图片元素：优先使用上方列出的本地路径；无则用 https://placehold.co/宽x高
+- 写完整代码后立即调用 attempt_completion`;
 
 				resultText = resultText.replace(fullMatch, figmaInstruction);
 			} catch (e) {
@@ -3265,6 +3318,75 @@ ${designData}
 	}
 
 	/**
+	 * 从 Figma YAML/JSON 中提取含 IMAGE fill 的节点 ID
+	 * 这些节点对应设计中的图片元素（头像、产品图、插图等），应下载后在代码中直接引用
+	 */
+	private _extractImageFillNodeIds(rawData: string): string[] {
+		const nodeIds: string[] = [];
+
+		// JSON 路径：递归查找含 IMAGE fills 的节点
+		try {
+			const parsed = JSON.parse(rawData);
+			const walk = (node: any) => {
+				if (!node || typeof node !== 'object') return;
+				if (node.id && Array.isArray(node.fills)) {
+					for (const fill of node.fills) {
+						if (fill?.type === 'IMAGE') {
+							nodeIds.push(String(node.id));
+							break;
+						}
+					}
+				}
+				for (const val of Object.values(node)) {
+					if (Array.isArray(val)) val.forEach(walk);
+					else if (val && typeof val === 'object') walk(val);
+				}
+			};
+			walk(parsed);
+			return [...new Set(nodeIds)];
+		} catch {
+			// YAML 路径
+		}
+
+		// YAML 路径：向上查找含 "type: IMAGE" 的 fill 块对应的节点 id
+		// YAML 结构：每个节点行 "  id: '5:10'" 后若干行内出现 "    type: IMAGE"
+		const lines = rawData.split('\n');
+		// 记录最近遇到的 id（每层缩进维护一个）
+		const idByIndent: Map<number, string> = new Map();
+
+		for (const line of lines) {
+			const trimmed = line.trimStart();
+			const indent = line.length - trimmed.length;
+
+			// 清理比当前缩进更深的 id 记录（离开了那个节点）
+			for (const k of idByIndent.keys()) {
+				if (k >= indent) idByIndent.delete(k);
+			}
+
+			// 记录 id 字段
+			const idMatch = trimmed.match(/^id:\s+['"]?([\d:]+)['"]?/);
+			if (idMatch) {
+				idByIndent.set(indent, idMatch[1]);
+			}
+
+			// 发现 IMAGE fill：找最近（缩进最小）的父节点 id
+			if (trimmed === 'type: IMAGE' || trimmed.startsWith('type: IMAGE')) {
+				let bestId: string | undefined;
+				let bestIndent = Infinity;
+				for (const [ind, id] of idByIndent.entries()) {
+					if (ind < indent && ind < bestIndent) {
+						bestIndent = ind;
+						bestId = id;
+					}
+				}
+				if (bestId) nodeIds.push(bestId);
+			}
+		}
+
+		return [...new Set(nodeIds)];
+	}
+
+	/**
 	 * 将原始 Figma MCP 数据压缩为 AI 可高效利用的精华摘要
 	 *
 	 * 原始数据可能是 JSON 或 YAML，大小可达数十万字符。
@@ -3273,27 +3395,116 @@ ${designData}
 	 *   - 字体规范（去重、限数量）
 	 *   - 组件树骨架（保留布局/尺寸/颜色关键属性，去掉冗余字段）
 	 */
-	private _preprocessFigmaData(rawData: string): string {
+	private _preprocessFigmaData(rawData: string, hasVision = false): string {
 		if (!rawData) return '（无设计数据）';
 
-		// 硬上限：超过 60KB 直接截断，防止后续处理 OOM
-		const capped = rawData.length > 60000 ? rawData.slice(0, 60000) + '\n...[数据过大，已截断]' : rawData;
-
-		// 尝试 JSON 解析（部分 MCP 配置会返回 JSON）
+		// 尝试 JSON 解析
 		let parsed: any = null;
 		try {
-			// GLips 默认返回 YAML，但 JSON 模式下返回 JSON
-			parsed = JSON.parse(capped);
+			parsed = JSON.parse(rawData);
 		} catch {
-			// YAML 或其他格式，无法精确解析，走文本压缩路径
+			// YAML 格式
 		}
 
 		if (parsed) {
 			return this._extractFigmaJsonSummary(parsed);
 		}
 
-		// YAML / 纯文本路径：提取关键信息后截断到合理大小
-		return this._extractFigmaTextSummary(capped);
+		// GLips YAML 格式：优先完整保留 globalVars 块（含 CSS-ready gradient/boxShadow），节点树按需截断
+		return this._extractFigmaYamlPreserveGlobalVars(rawData, hasVision ? 40000 : 50000);
+	}
+
+	/**
+	 * 从 GLips YAML 的 globalVars.styles 提取样式快查表
+	 * 输出格式：[styleId] → css-property: value; ...
+	 * 让模型直接查找 fills/effects 引用对应的 CSS 值，禁止猜测
+	 */
+	private _buildStylesQuickRef(yaml: string): string {
+		// 找 globalVars.styles 块（2空格缩进或0缩进的 globalVars:）
+		const gvIdx = yaml.indexOf('\nglobalVars:');
+		if (gvIdx < 0) return '';
+		const stylesIdx = yaml.indexOf('\n  styles:', gvIdx);
+		if (stylesIdx < 0) return '';
+
+		const lines = yaml.slice(stylesIdx + 1).split('\n');
+		const entries: string[] = [];
+
+		// CSS 属性名映射
+		const propMap: Record<string, string> = {
+			gradient: 'background',
+			color: 'color',
+			boxShadow: 'box-shadow',
+			backdropFilter: 'backdrop-filter',
+			filter: 'filter',
+			border: 'border',
+			opacity: 'opacity',
+		};
+
+		let currentId = '';
+		let currentProps: string[] = [];
+
+		const flush = () => {
+			if (currentId && currentProps.length > 0) {
+				entries.push(`[${currentId}] → ${currentProps.join('; ')}`);
+			}
+			currentProps = [];
+		};
+
+		for (const line of lines) {
+			// 顶层 styles: 行，跳过
+			if (line === '  styles:') continue;
+			// 回到顶层（非 styles 子节点），停止
+			if (line.length > 0 && !line.startsWith('  ')) break;
+			// styles 下的 ID 行（4空格缩进，形如 "    fill_abc:"）
+			const idMatch = line.match(/^    ([\w_\-.:]+):$/);
+			if (idMatch) {
+				flush();
+				currentId = idMatch[1];
+				continue;
+			}
+			// 属性行（6空格缩进，形如 "      gradient: ..."）
+			if (currentId && line.startsWith('      ')) {
+				const colonIdx = line.indexOf(':');
+				if (colonIdx > 0) {
+					const key = line.slice(0, colonIdx).trim();
+					const raw = line.slice(colonIdx + 1).trim().replace(/^['"]|['"]$/g, '');
+					// 跳过 type: IMAGE 等非 CSS 属性
+					if (key === 'type' && !['color', 'background'].includes(raw)) continue;
+					const cssKey = propMap[key] || key;
+					if (raw) currentProps.push(`${cssKey}: ${raw}`);
+				}
+			}
+		}
+		flush();
+
+		if (entries.length === 0) return '';
+		return '### 样式快查表（fills/effects 引用 ID → CSS 值，直接复制使用）\n' + entries.join('\n');
+	}
+
+	/**
+	 * GLips YAML 专用预处理：
+	 * - globalVars.styles 完整保留（含 gradient/boxShadow 等 CSS-ready 字符串，不可截断）
+	 * - 节点树部分截断到 maxNodeChars
+	 */
+	private _extractFigmaYamlPreserveGlobalVars(yaml: string, maxNodeChars: number): string {
+		// 找 globalVars 块起始（顶层字段，缩进为0）
+		const gvMatch = yaml.match(/\nglobalVars:/);
+		const gvStart = gvMatch ? yaml.indexOf(gvMatch[0]) + 1 : -1;
+
+		if (gvStart < 0) {
+			// 没有 globalVars，直接截断
+			return yaml.length > maxNodeChars ? yaml.slice(0, maxNodeChars) + '\n...[数据已截断]' : yaml;
+		}
+
+		const nodesPart = yaml.slice(0, gvStart);
+		const globalVarsPart = yaml.slice(gvStart);
+
+		// 节点树截断，globalVars 完整保留
+		const nodesTruncated = nodesPart.length > maxNodeChars
+			? nodesPart.slice(0, maxNodeChars) + '\n...[节点树已截断]\n'
+			: nodesPart;
+
+		return nodesTruncated + globalVarsPart;
 	}
 
 	/** 从 JSON 结构中提取精华设计摘要 */
@@ -3379,33 +3590,42 @@ ${designData}
 		return `${colorSection}\n${fontSection}\n${treeSection}`.trim();
 	}
 
-	/** 从 YAML/文本格式中提取关键设计信息（无法精确解析时的降级方案） */
-	private _extractFigmaTextSummary(text: string): string {
-		// 提取所有颜色值（hex 格式）
-		const colorMatches = [...new Set(text.match(/#[0-9a-fA-F]{6,8}/g) || [])];
-		// 提取字体大小
-		const fontSizeMatches = [...new Set((text.match(/fontSize[:\s]+(\d+)/g) || []).map(m => m.replace(/fontSize[:\s]+/, '') + 'px'))];
-		// 提取常见布局关键词
-		const hasHorizontal = /layoutMode[:\s]+HORIZONTAL/i.test(text);
-		const hasVertical = /layoutMode[:\s]+VERTICAL/i.test(text);
 
-		const colorSection = colorMatches.length
-			? `### 颜色\n${colorMatches.slice(0, 20).map(c => `- ${c}`).join('\n')}\n`
-			: '';
-		const fontSection = fontSizeMatches.length
-			? `### 字体大小\n${fontSizeMatches.slice(0, 10).map(s => `- ${s}`).join('\n')}\n`
-			: '';
-		const layoutHint = (hasHorizontal || hasVertical)
-			? `### 布局\n- 包含 ${hasHorizontal ? '水平(flex-row)' : ''}${hasHorizontal && hasVertical ? ' 和 ' : ''}${hasVertical ? '垂直(flex-col)' : ''} Auto Layout\n`
-			: '';
+	/**
+	 * 解析 download_figma_images 工具的响应，读取保存到磁盘的图片文件并返回 base64
+	 * download_figma_images 将图片保存到 localPath 目录，响应为文字说明（含文件路径）
+	 */
+	private async _extractBase64FromDownloadFigmaResponse(responseText: string, expectedDir: string): Promise<string | null> {
+		// 先尝试读取预期路径（localPath + fileName）
+		const candidates: string[] = [
+			`${expectedDir}/design.png`,
+			`${expectedDir}/design.svg`,
+		];
 
-		// 原始数据截断到 12KB 作为补充
-		const MAX_RAW = 12000;
-		const rawTruncated = text.length > MAX_RAW
-			? text.slice(0, MAX_RAW) + '\n...[原始数据已截断，显示前 12KB]'
-			: text;
+		// 同时从响应文本中提取绝对路径
+		// 典型响应: "Downloaded images to /path/dir\n- /path/dir/nodeId.png"
+		const pathPattern = /([/\\][^\s"'\\n]+\.(?:png|jpg|jpeg|svg|pdf))/gi;
+		let match;
+		while ((match = pathPattern.exec(responseText)) !== null) {
+			if (!candidates.includes(match[1])) {
+				candidates.push(match[1]);
+			}
+		}
 
-		return `${colorSection}\n${fontSection}\n${layoutHint}\n### 原始数据\n${rawTruncated}`.trim();
+		console.log('[MaxianView] download_figma_images 响应:', responseText.slice(0, 300));
+		console.log('[MaxianView] 尝试读取文件路径:', candidates);
+
+		// 依次尝试读取
+		for (const filePath of candidates) {
+			const base64 = await this.maxianService.readLocalFileAsBase64(filePath);
+			if (base64) {
+				console.log('[MaxianView] 成功读取 Figma 图片:', filePath, '大小:', base64.length);
+				return base64;
+			}
+		}
+
+		console.warn('[MaxianView] 所有 Figma 图片路径读取失败，候选列表:', candidates);
+		return null;
 	}
 
 	/**
@@ -3442,54 +3662,6 @@ ${designData}
 		}
 
 		return null;
-	}
-
-	/**
-	 * 调用后端视觉分析接口，使用多模态模型分析 Figma 截图
-	 * 返回设计的详细文字描述，用于辅助代码生成
-	 */
-	private async _callVisionAnalyze(base64Images: string[]): Promise<string> {
-		const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
-		if (!apiUrl) {
-			throw new Error('未配置 API 地址 (zhikai.auth.apiUrl)');
-		}
-
-		const storedCredentials = this.storageService.get('zhikai.auth.credentials', StorageScope.APPLICATION);
-		if (!storedCredentials) {
-			throw new Error('未找到认证信息，请先登录');
-		}
-
-		const credentials = JSON.parse(storedCredentials);
-		const { username, password } = credentials;
-		if (!username || !password) {
-			throw new Error('认证信息不完整，请重新登录');
-		}
-
-		const baseUrl = apiUrl.replace(/\/$/, '');
-		const response = await fetch(`${baseUrl}/ai/proxy/vision/analyze`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				username: btoa(username),
-				password: btoa(password),
-				businessCode: 'IDE_FIGMA_VISION',
-				images: base64Images,
-				prompt: '请详细描述这个UI设计的整体布局结构、颜色方案（列出主要颜色值）、字体样式、各区块的功能和位置关系、视觉风格特征（如科技感/暗色/发光边框/渐变等特效）、交互元素（按钮/表格/图表等）。要求具体详细，供前端开发人员精确还原。',
-				maxTokens: 2000,
-			}),
-		});
-
-		if (!response.ok) {
-			const errText = await response.text();
-			throw new Error(`视觉分析接口错误 [${response.status}]: ${errText}`);
-		}
-
-		const result = await response.json();
-		if ((result.code === 200 || result.code === '200') && result.data) {
-			return result.data as string;
-		}
-
-		throw new Error(`视觉分析失败: ${result.msg || JSON.stringify(result)}`);
 	}
 
 	private handleMessageEvent(event: import('./maxianService.js').IMessageEvent): void {

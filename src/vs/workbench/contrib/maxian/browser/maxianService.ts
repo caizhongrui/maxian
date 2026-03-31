@@ -432,6 +432,9 @@ export interface IMaxianService {
 
 	/** 获取所有已连接的 MCP 工具列表 */
 	getConnectedMcpTools(): Array<{ serverName: string; toolName: string; description: string }>;
+
+	/** 读取本地任意绝对路径文件并返回 base64 字符串（用于 Figma 截图读取） */
+	readLocalFileAsBase64(absolutePath: string): Promise<string | null>;
 }
 
 /**
@@ -880,10 +883,17 @@ export class MaxianService extends Disposable implements IMaxianService {
 		let fileContentsBlock = '';
 		let totalSize = 0;
 		for (const result of readResults) {
-			if (result.error || !result.text) continue;
-			if (totalSize >= MAX_TOTAL_SIZE) break;
+			// 读取失败：注入错误占位，让模型用 read_file 工具自行读取，而不是问用户
+			if (result.error || !result.text) {
+				fileContentsBlock += `\n<file_content path="${result.relativePath}">[文件预加载失败，请立即使用 read_file 工具读取此文件，禁止询问用户]</file_content>\n`;
+				continue;
+			}
+			if (totalSize >= MAX_TOTAL_SIZE) {
+				fileContentsBlock += `\n<file_content path="${result.relativePath}">[总量超出限制未加载，请使用 read_file 工具读取此文件]</file_content>\n`;
+				continue;
+			}
 			const text = result.text.length > MAX_SINGLE_FILE_SIZE
-				? result.text.substring(0, MAX_SINGLE_FILE_SIZE) + '\n// ... [文件过大，已截断]'
+				? result.text.substring(0, MAX_SINGLE_FILE_SIZE) + '\n// ... [文件过大，已截断，如需完整内容请使用 read_file 工具]'
 				: result.text;
 			fileContentsBlock += `\n<file_content path="${result.relativePath}">\n\`\`\`${result.ext}\n${text}\n\`\`\`\n</file_content>\n`;
 			totalSize += text.length;
@@ -918,6 +928,27 @@ export class MaxianService extends Disposable implements IMaxianService {
 			const preview = allLines.slice(0, maxLines).join('\n');
 			return { content: preview, totalLines };
 		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * 读取本地文件并返回 base64 字符串（供视觉分析使用）
+	 */
+	async readLocalFileAsBase64(absolutePath: string): Promise<string | null> {
+		try {
+			const uri = URI.file(absolutePath);
+			const content = await this.fileService.readFile(uri);
+			const bytes = content.value.buffer;
+			// 将 Uint8Array 转为 base64
+			let binary = '';
+			const len = bytes.byteLength;
+			for (let i = 0; i < len; i++) {
+				binary += String.fromCharCode(bytes[i]);
+			}
+			return btoa(binary);
+		} catch (e) {
+			console.warn('[MaxianService] readLocalFileAsBase64 失败:', absolutePath, e);
 			return null;
 		}
 	}
@@ -1273,8 +1304,21 @@ export class MaxianService extends Disposable implements IMaxianService {
 			return;
 		}
 
+		// Figma 任务：切换到 IDE_FIGMA_CODE（多模态模型）和 figma 专属系统提示词
+		// 不论是否有截图都切换，截图只影响是否发送图片内容，不影响 businessCode 选择
+		let effectiveApiHandler = this.apiHandler;
+		const isFigmaTaskEarly = message.includes('<figma_design');
+		const effectiveMode = isFigmaTaskEarly ? 'figma' : this.currentMode;
+		if (isFigmaTaskEarly) {
+			const credentials = this.loadAuthCredentials();
+			if (credentials) {
+				console.log('[Maxian] Figma任务，切换到多模态模型 (IDE_FIGMA_CODE)，hasImages:', !!(images && images.length > 0));
+				effectiveApiHandler = this.apiFactory.createHandler(credentials, 'figma');
+			}
+		}
+
 		// 模型不支持视觉时，丢弃图片（文本结构数据仍会发送）
-		const supportsVision = this.apiHandler.getModel().supportsVision;
+		const supportsVision = effectiveApiHandler.getModel().supportsVision;
 		if (!supportsVision && images && images.length > 0) {
 			console.log('[Maxian] 当前模型不支持视觉输入，忽略 Figma 截图（仍使用结构数据）');
 			images = undefined;
@@ -1285,17 +1329,17 @@ export class MaxianService extends Disposable implements IMaxianService {
 		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
 
 		try {
-			// P0优化：生成 environment_details 并附加到用户消息
+			// Figma 设计任务检测：跳过所有代码库上下文，只保留设计数据
+			const isFigmaTask = message.includes('<figma_design');
+
+			// P0优化：生成 environment_details 并附加到用户消息（Figma任务跳过，避免干扰）
 			const recentlyModifiedFiles = this.fileTracker?.getAndClearRecentlyModifiedFiles() || [];
-			const environmentDetails = await this.environmentTracker.generateEnvironmentDetails(recentlyModifiedFiles);
+			const environmentDetails = isFigmaTask
+				? ''
+				: await this.environmentTracker.generateEnvironmentDetails(recentlyModifiedFiles);
 
 			// 1. 同步提取关键词（零延迟，无需AI调用）
-			// 这些关键词会作为 mentionedIdents 传入 RepoMap，使 PageRank 个性化排序，
-			// 让相关文件浮到顶部，预加载命中正确文件，减少 AI 的探索轮数
-			const keywords = this.extractKeywordsSync(message);
-
-			// Figma 设计任务检测：跳过 repoMap 和预加载，节省 token 给设计数据
-			const isFigmaTask = message.includes('<figma_design');
+			const keywords = isFigmaTask ? [] : this.extractKeywordsSync(message);
 
 			// 2. 生成 RepoMap（传入关键词，个性化PageRank排序）
 			let repoMap = '';
@@ -1305,14 +1349,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 				repoMap = this.lastRepoMap;
 			}
 
-
 			// 🚀 使用已翻译的关键词进行预加载（此时 RepoMap 已就绪）
 			let preloadedCode = '';
 			if (!isFigmaTask && repoMap && keywords.length > 0) {
-				// 使用已翻译的关键词，跳过再次翻译
 				preloadedCode = await this.smartPreloadCodeWithKeywords(message, repoMap, workspaceRoot, keywords);
 			} else if (!isFigmaTask && repoMap) {
-				// 如果关键词提取失败，使用备用方案
 				preloadedCode = await this.smartPreloadCode(message, repoMap, workspaceRoot);
 			}
 
@@ -1324,7 +1365,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 			if (repoMap) {
 				messageParts.push(repoMap);
 			}
-			// 🚀 将预加载的代码放在最后，这样AI会优先看到
 			if (preloadedCode) {
 				messageParts.push(preloadedCode);
 			}
@@ -1341,13 +1381,13 @@ export class MaxianService extends Disposable implements IMaxianService {
 			this.currentTask = new TaskService({
 				task: fullMessage,
 				images,
-				apiHandler: this.apiHandler,
+				apiHandler: effectiveApiHandler,
 				toolExecutor: this.toolExecutor,
-				getSystemPrompt: () => this.getSystemPrompt(),
+				getSystemPrompt: () => this.getSystemPromptForMode(effectiveMode),
 				getToolDefinitions: () => this.getToolDefinitions(),
 				workspaceRoot,
 				consecutiveMistakeLimit: 3,
-				currentMode: this.currentMode,
+				currentMode: effectiveMode,
 				behaviorReporter: this.behaviorReporter ?? undefined,
 			});
 
@@ -1840,6 +1880,97 @@ export class MaxianService extends Disposable implements IMaxianService {
 		}
 
 		return prompt;
+	}
+
+	/**
+	 * 以指定模式生成系统提示词（用于 Figma 等需要临时切换模式的场景）
+	 * figma 模式使用专属精简提示词，完全绕过通用 SystemPromptGenerator，
+	 * 避免探索策略、代码库分析等与截图转代码无关的指令干扰模型行为。
+	 */
+	private async getSystemPromptForMode(mode: import('../common/modes/modeTypes.js').Mode): Promise<string> {
+		if (mode === this.currentMode) {
+			return this.getSystemPrompt();
+		}
+
+		// Figma 模式：使用专属提示词，对标 screenshot-to-code 的极简精准风格
+		if (mode === 'figma') {
+			const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
+			const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
+			const prompt = this.buildFigmaSystemPrompt(workspaceRoot);
+			console.log(`[Maxian] Figma 专属系统提示词已生成，长度: ${prompt.length} chars`);
+			return prompt;
+		}
+
+		// 其他非当前模式：用通用生成器
+		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
+		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
+		const availableTools = this.getAvailableTools();
+		const systemInfo = this.getSystemInfo();
+		const preloadedSkills = await Promise.resolve(this.skillService.search({}));
+		const skillsArray = Array.isArray(preloadedSkills) ? preloadedSkills : [];
+		const steeringContent = this.steeringService ? this.steeringService.getActiveContent() : null;
+		const memoryContent = this.memoryService ? await this.memoryService.loadMemory() : null;
+		return SystemPromptGenerator.generate(
+			workspaceRoot,
+			availableTools,
+			systemInfo,
+			mode,
+			{
+				includeStats: false,
+				reserveForSkills: true,
+				preloadedSkills: skillsArray,
+				diagnosticText: this.currentDiagnosticText,
+				steeringContent: steeringContent,
+				memoryContent: memoryContent ?? null
+			}
+		);
+	}
+
+	/**
+	 * 构建 Figma 转代码专属系统提示词
+	 * 极简精准风格，对标 screenshot-to-code，不包含代码库探索、任务规划等无关指令
+	 */
+	private buildFigmaSystemPrompt(workspaceRoot: string): string {
+		const xmlExample = '<write_to_file>\n<path>' + workspaceRoot + '/index.html</path>\n<content>完整代码</content>\n</write_to_file>';
+		return '你是一位顶尖前端开发专家，专精于将 Figma 设计精确还原为生产级 HTML/CSS 代码。\n\n'
+			+ '# 核心规则\n\n'
+			+ '## 代码完整性（最高优先级）\n'
+			+ '- 必须一次性写出 100% 完整的代码，绝对禁止骨架、占位符、TODO、注释省略\n'
+			+ '- 除非用户指定框架，否则生成单个 HTML 文件（HTML + CSS + JS 全部内联）\n'
+			+ '- 调用一次 write_to_file 写出完整代码后，立即调用 attempt_completion\n\n'
+			+ '## GLips YAML 格式解读（关键！）\n\n'
+			+ '设计数据来自 GLips Figma MCP，节点中 fills/effects 字段是样式引用 ID，实际 CSS 值在 globalVars.styles 中。\n\n'
+			+ 'globalVars.styles 中的值已是完整 CSS 字符串，直接复制到对应 CSS 属性：\n'
+			+ '- fills 引用中的 gradient 字段 → CSS background（直接用该字符串）\n'
+			+ '- effects 引用中的 boxShadow 字段 → CSS box-shadow（多个 shadow 逗号分隔，全部保留）\n'
+			+ '- effects 引用中的 backdropFilter 字段 → CSS backdrop-filter（不是 filter！）\n'
+			+ '- effects 引用中的 filter 字段 → CSS filter（仅图层模糊）\n'
+			+ '- 颜色为 rgba() 或 hex，直接使用，绝不近似\n\n'
+			+ '## 布局还原\n'
+			+ '- layout.mode "row" → display: flex; flex-direction: row\n'
+			+ '- layout.mode "column" → display: flex; flex-direction: column\n'
+			+ '- layout.gap/padding/justifyContent/alignItems → 直接对应 CSS 属性\n'
+			+ '- layout.width/height → 固定 px 尺寸\n'
+			+ '- position: "absolute" → position: absolute; 配合节点的精确坐标值\n\n'
+			+ '## 视觉效果\n'
+			+ '- 按设计数据精确还原所有 box-shadow、border、border-radius、opacity、backdrop-filter\n'
+			+ '- 有截图时以截图为视觉基准，设计数据提供精确数值\n\n'
+			+ '## 数据可视化（禁止图片占位）\n'
+			+ '- 圆环/饼图：SVG circle + stroke-dasharray\n'
+			+ '- 气泡图：CSS 绝对定位圆形 div，不同颜色\n'
+			+ '- 折线/柱状图等：使用 ECharts CDN (https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js)\n\n'
+			+ '## 图片处理\n'
+			+ '- 设计数据中有本地路径的图片：直接用该路径作为 src\n'
+			+ '- 无本地路径的内容图片：使用 https://placehold.co/宽x高 占位\n'
+			+ '- 背景按设计数据还原（纯色/渐变），禁止用 placehold.co 做背景\n\n'
+			+ '## 工具调用格式（XML）\n'
+			+ xmlExample + '\n\n'
+			+ '# 工作流程\n'
+			+ '1. 读取 globalVars.styles，建立引用映射（fills/effects ID → CSS 值）\n'
+			+ '2. 有截图时：观察截图确认整体布局和视觉风格\n'
+			+ '3. 遍历节点树，将每个节点还原为 HTML + CSS（精确使用 globalVars 中的 CSS 值）\n'
+			+ '4. 调用 write_to_file 写出完整代码\n'
+			+ '5. 调用 attempt_completion';
 	}
 
 	/**

@@ -114,6 +114,8 @@ export const toolNames = [
 	'todoread',     // P2优化：读取当前待办列表
 	'pr_review',    // PR代码审查：获取git diff供Agent分析
 	'generate_tests', // 测试代码生成：分析源文件供Agent生成测试
+	'use_mcp_tool',   // MCP工具调用：调用已连接的MCP服务器工具
+	'access_mcp_resource', // MCP资源访问：读取已连接的MCP服务器资源
 ] as const;
 
 // 工具名称
@@ -265,6 +267,8 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 	todoread: '读取待办列表',     // P2优化
 	pr_review: 'PR代码审查',      // PR审查工具
 	generate_tests: '生成测试代码', // 测试生成工具
+	use_mcp_tool: '调用MCP工具',   // MCP工具调用
+	access_mcp_resource: '访问MCP资源', // MCP资源访问
 } as const;
 
 // 工具分组

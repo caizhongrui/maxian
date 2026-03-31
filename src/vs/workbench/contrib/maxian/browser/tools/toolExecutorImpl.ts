@@ -32,6 +32,7 @@ import { prReviewTool, RunCommandFn } from '../../common/tools/prReviewTool.js';
 import { generateTestsTool, FileSystemOps } from '../../common/tools/generateTestsTool.js';
 import { IVectorSearchService } from '../../common/vector/IVectorSearchService.js';
 import { URI } from '../../../../../base/common/uri.js';
+import { McpHub } from '../../common/mcp/McpHub.js';
 
 /**
  * 工具执行器实现类
@@ -60,6 +61,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 	private vectorSearchService?: IVectorSearchService;
 	private commandExecutionService?: ICommandExecutionService;
 	private fileService: IFileService;
+	private mcpHub?: McpHub;
 
 	constructor(
 		fileService: IFileService,
@@ -435,6 +437,55 @@ export class ToolExecutorImpl implements IToolExecutor {
 					);
 					break;
 
+				// MCP 工具调用
+				case 'use_mcp_tool': {
+					const serverName = toolUse.params.server_name;
+					const mcpToolName = toolUse.params.tool_name;
+					const mcpArgs = toolUse.params.arguments;
+
+					if (!serverName) { result = '错误: use_mcp_tool 需要 server_name 参数'; break; }
+					if (!mcpToolName) { result = '错误: use_mcp_tool 需要 tool_name 参数'; break; }
+					if (!this.mcpHub) { result = '错误: MCP Hub 未初始化，请先在设置中配置 MCP 服务器'; break; }
+
+					let parsedArgs: Record<string, unknown> | undefined;
+					if (mcpArgs) {
+						try { parsedArgs = JSON.parse(mcpArgs); }
+						catch { result = `错误: arguments 参数不是有效 JSON: ${mcpArgs}`; break; }
+					}
+
+					const mcpResult = await this.mcpHub.callTool(serverName, mcpToolName, parsedArgs);
+					if (mcpResult.isError) {
+						result = `MCP 工具调用失败:\n${mcpResult.content.map((c: any) => c.text || '').join('\n')}`;
+					} else {
+						result = mcpResult.content.map((c: any) => {
+							if (c.type === 'text') return c.text || '';
+							if (c.type === 'image') return `[图片: ${c.mimeType}]`;
+							if (c.type === 'resource' && c.resource) return c.resource.text || JSON.stringify(c.resource);
+							if (c.type === 'resource_link') return `资源链接: ${c.name || c.uri}${c.description ? ' - ' + c.description : ''}`;
+							return '';
+						}).filter(Boolean).join('\n\n') || '(无返回内容)';
+					}
+					break;
+				}
+
+				// MCP 资源访问
+				case 'access_mcp_resource': {
+					const resourceServer = toolUse.params.server_name;
+					const resourceUri = toolUse.params.uri;
+
+					if (!resourceServer) { result = '错误: access_mcp_resource 需要 server_name 参数'; break; }
+					if (!resourceUri) { result = '错误: access_mcp_resource 需要 uri 参数'; break; }
+					if (!this.mcpHub) { result = '错误: MCP Hub 未初始化，请先在设置中配置 MCP 服务器'; break; }
+
+					const resourceResult = await this.mcpHub.readResource(resourceServer, resourceUri);
+					result = resourceResult.contents.map((item: any) => {
+						if (item.text) return item.text;
+						if (item.blob) return `[二进制内容: ${item.mimeType}]`;
+						return '';
+					}).filter(Boolean).join('\n\n') || '(空响应)';
+					break;
+				}
+
 				default:
 					result = `未知工具: ${toolUse.name}`;
 					break;
@@ -585,6 +636,13 @@ ${formatTodoList(todos)}`;
 	 */
 	setSubAgentRunner(runner: (agentType: string, prompt: string, taskId?: string, taskToolId?: string) => Promise<string>): void {
 		this.subAgentRunner = runner;
+	}
+
+	/**
+	 * 注入 MCP Hub（由 maxianService 注入）
+	 */
+	setMcpHub(hub: McpHub): void {
+		this.mcpHub = hub;
 	}
 
 

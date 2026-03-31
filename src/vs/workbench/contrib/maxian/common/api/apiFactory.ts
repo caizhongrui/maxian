@@ -90,7 +90,8 @@ export class ApiFactory {
 			'architect': 'IDE_CHAT_ARCHITECT',
 			'ask': 'IDE_CHAT_ASK',
 			'debug': 'IDE_CHAT_DEBUG',
-			'orchestrator': 'IDE_CHAT_ORCHESTRATOR'
+			'orchestrator': 'IDE_CHAT_ORCHESTRATOR',
+			'figma': 'IDE_FIGMA_CODE',  // Figma 设计稿转代码，使用多模态模型
 		};
 		return modeMap[mode] || 'IDE_CHAT_CODE';  // 默认使用编码模式
 	}
