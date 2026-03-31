@@ -31,6 +31,20 @@ jobs:
         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: 下载嵌入模型 (multilingual-e5-small)
+      run: |
+        $modelUrl = "https://huggingface.co/Xenova/multilingual-e5-small/resolve/main/onnx/model_quantized.onnx"
+        $path1 = "resources\models\Xenova\multilingual-e5-small\onnx"
+        $path2 = "resources\models\multilingual-e5-small\onnx"
+        New-Item -ItemType Directory -Force -Path $path1 | Out-Null
+        New-Item -ItemType Directory -Force -Path $path2 | Out-Null
+        Write-Host "正在下载嵌入模型..."
+        Invoke-WebRequest -Uri $modelUrl -OutFile "$path1\model_quantized.onnx" -UseBasicParsing
+        Copy-Item "$path1\model_quantized.onnx" "$path2\model_quantized.onnx"
+        Write-Host "✅ 模型下载完成"
+        Get-Item "$path1\model_quantized.onnx" | Select-Object Name, Length
+      shell: pwsh
+
     - name: 下载内置扩展
       run: npm run download-builtin-extensions
       continue-on-error: true
