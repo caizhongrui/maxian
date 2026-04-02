@@ -102,11 +102,11 @@ configurationRegistry.registerConfiguration({
 		},
 		'maxian.fim.triggerMode': {
 			type: 'string',
-			default: 'manual',
+			default: 'automatic',
 			enum: ['manual', 'automatic'],
 			enumDescriptions: [
-				'手动触发（默认）- 按快捷键时才调用 AI（推荐，避免频繁 API 调用）',
-				'自动触发 - 输入代码时自动调用 AI'
+				'手动触发 - 按快捷键时才调用 AI',
+				'自动触发（默认）- 输入代码时自动调用 AI'
 			],
 			description: '码弦 FIM 补全触发模式：manual（手动，快捷键）或 automatic（自动，输入时触发）',
 			scope: ConfigurationScope.WINDOW,
@@ -123,7 +123,7 @@ configurationRegistry.registerConfiguration({
 		},
 		'maxian.fim.maxPrefixLines': {
 			type: 'number',
-			default: 500,
+			default: 60,
 			minimum: 10,
 			maximum: 1000,
 			description: '码弦 FIM 补全时提取光标前的最大行数（作为代码前缀上下文）',
@@ -132,7 +132,7 @@ configurationRegistry.registerConfiguration({
 		},
 		'maxian.fim.maxSuffixLines': {
 			type: 'number',
-			default: 20,
+			default: 10,
 			minimum: 0,
 			maximum: 100,
 			description: '码弦 FIM 补全时提取光标后的最大行数（作为代码后缀上下文）',
@@ -141,12 +141,46 @@ configurationRegistry.registerConfiguration({
 		},
 		'maxian.fim.requestTimeout': {
 			type: 'number',
-			default: 3000,
+			default: 5000,
 			minimum: 500,
 			maximum: 10000,
 			description: '码弦 FIM 补全 API 请求超时时间（毫秒）。超时后不显示补全，不阻塞编辑器',
 			scope: ConfigurationScope.WINDOW,
 			order: 15
+		},
+		'maxian.fim.cacheEnabled': {
+			type: 'boolean',
+			default: true,
+			description: '启用 FIM 补全缓存。短时间内相同上下文直接复用结果，降低延迟与请求量',
+			scope: ConfigurationScope.WINDOW,
+			order: 16
+		},
+		'maxian.fim.cacheTtlMs': {
+			type: 'number',
+			default: 8000,
+			minimum: 1000,
+			maximum: 60000,
+			description: 'FIM 补全缓存有效期（毫秒）',
+			scope: ConfigurationScope.WINDOW,
+			order: 17
+		},
+		'maxian.fim.maxPrefixTokens': {
+			type: 'number',
+			default: 1600,
+			minimum: 128,
+			maximum: 8000,
+			description: 'FIM 前缀上下文 token 预算（近似）。超过预算会自动截断到靠近光标的内容',
+			scope: ConfigurationScope.WINDOW,
+			order: 18
+		},
+		'maxian.fim.maxSuffixTokens': {
+			type: 'number',
+			default: 320,
+			minimum: 0,
+			maximum: 2000,
+			description: 'FIM 后缀上下文 token 预算（近似）。超过预算会自动截断到靠近光标的内容',
+			scope: ConfigurationScope.WINDOW,
+			order: 19
 		}
 	}
 });

@@ -9,6 +9,9 @@ import { IMarkerService, IMarkerData, MarkerSeverity } from '../../../../../plat
 import { ITextModel } from '../../../../../editor/common/model.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { MyBatisXmlParser } from '../mybatis/mybatisXmlParser.js';
+import { createStructuredLogger } from '../../../../common/structuredLogger.js';
+
+const log = createStructuredLogger('SQLDiagnosticsProvider');
 
 /**
  * SQL 语法检查提供者
@@ -23,7 +26,7 @@ export class SQLDiagnosticsProvider extends Disposable {
 		@IMarkerService private readonly markerService: IMarkerService
 	) {
 		super();
-		console.log('[SQLDiagnosticsProvider] Initialized');
+		log.debug('initialized');
 
 		// 监听模型添加事件
 		this._register(this.modelService.onModelAdded(model => {

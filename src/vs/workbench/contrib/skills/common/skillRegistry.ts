@@ -6,6 +6,7 @@
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { ISkill, ISkillFilter, ISkillLoadOptions, SkillCategory } from './skillTypes.js';
+import { createStructuredLogger } from '../../../common/structuredLogger.js';
 
 /**
  * Skill 注册表
@@ -32,6 +33,7 @@ import { ISkill, ISkillFilter, ISkillLoadOptions, SkillCategory } from './skillT
 export class SkillRegistry extends Disposable {
 
 	private skills: Map<string, ISkill> = new Map();
+	private readonly logger = createStructuredLogger('SkillRegistry');
 
 	private readonly _onDidRegister = this._register(new Emitter<ISkill>());
 	readonly onDidRegister: Event<ISkill> = this._onDidRegister.event;
@@ -53,7 +55,7 @@ export class SkillRegistry extends Disposable {
 		}
 
 		this.skills.set(skill.slug, skill);
-		console.log(`[SkillRegistry] 注册 Skill: ${skill.name} (${skill.slug})`);
+		this.logger.debug('skill_registered', { name: skill.name, slug: skill.slug });
 
 		this._onDidRegister.fire(skill);
 		this._onDidChange.fire();
@@ -72,11 +74,11 @@ export class SkillRegistry extends Disposable {
 				this.register(skill);
 				count++;
 			} catch (error) {
-				console.error(`[SkillRegistry] 注册 Skill 失败: ${skill.slug}`, error);
+				this.logger.error('register_skill_failed', { slug: skill.slug, error: String(error) });
 			}
 		}
 
-		console.log(`[SkillRegistry] 批量注册完成: ${count}/${skills.length}`);
+		this.logger.debug('register_all_completed', { success: count, total: skills.length });
 		return count;
 	}
 
@@ -89,7 +91,7 @@ export class SkillRegistry extends Disposable {
 		const existed = this.skills.delete(slug);
 
 		if (existed) {
-			console.log(`[SkillRegistry] 注销 Skill: ${slug}`);
+			this.logger.debug('skill_unregistered', { slug });
 			this._onDidUnregister.fire(slug);
 			this._onDidChange.fire();
 		}
@@ -201,7 +203,7 @@ export class SkillRegistry extends Disposable {
 
 		// 检查 Token 限制
 		if (options.maxTokens && skill.estimatedTokens > options.maxTokens) {
-			console.warn(`[SkillRegistry] Skill ${slug} 超出 Token 限制: ${skill.estimatedTokens} > ${options.maxTokens}`);
+			this.logger.warn('skill_exceeds_token_limit', { slug, estimatedTokens: skill.estimatedTokens, maxTokens: options.maxTokens });
 			return undefined;
 		}
 
@@ -221,7 +223,7 @@ export class SkillRegistry extends Disposable {
 			content += `<!-- ${skill.templatePaths.length} templates available -->\n`;
 		}
 
-		console.log(`[SkillRegistry] 加载 Skill: ${skill.name} (~${skill.estimatedTokens} tokens)`);
+		this.logger.debug('skill_loaded', { name: skill.name, slug: skill.slug, estimatedTokens: skill.estimatedTokens });
 		return content;
 	}
 
@@ -238,13 +240,13 @@ export class SkillRegistry extends Disposable {
 		for (const slug of slugs) {
 			const skill = this.get(slug);
 			if (!skill) {
-				console.warn(`[SkillRegistry] Skill 不存在: ${slug}`);
+				this.logger.warn('skill_not_found', { slug });
 				continue;
 			}
 
 			// 检查累计 Token 限制
 			if (options.maxTokens && (totalTokens + skill.estimatedTokens) > options.maxTokens) {
-				console.warn(`[SkillRegistry] 达到 Token 限制，停止加载更多 Skills`);
+				this.logger.warn('load_multiple_token_limit_reached', { currentTotalTokens: totalTokens, nextSkillTokens: skill.estimatedTokens, maxTokens: options.maxTokens });
 				break;
 			}
 
@@ -255,7 +257,7 @@ export class SkillRegistry extends Disposable {
 			}
 		}
 
-		console.log(`[SkillRegistry] 批量加载 ${contents.length} 个 Skills (~${totalTokens} tokens)`);
+		this.logger.debug('load_multiple_completed', { count: contents.length, totalTokens });
 		return contents.join('\n\n---\n\n');
 	}
 
@@ -300,7 +302,7 @@ export class SkillRegistry extends Disposable {
 	 */
 	clear(): void {
 		this.skills.clear();
-		console.log(`[SkillRegistry] 清空所有 Skills`);
+		this.logger.debug('registry_cleared');
 		this._onDidChange.fire();
 	}
 

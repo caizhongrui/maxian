@@ -32,6 +32,7 @@ import { SQLCompletionProvider } from './sqlEditor/sqlCompletionProvider.js';
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
 import { IDesignRulesService, DesignRulesService } from '../common/designRulesService.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
+import { createStructuredLogger } from '../../../common/structuredLogger.js';
 import {
 	HasDbNlToSqlPermission,
 	HasDbSqlOptimizePermission,
@@ -52,6 +53,7 @@ import './sqlGenerator/sqlGeneratorView.css';
 import './sqlOptimizer/sqlOptimizerView.css';
 import './tableAnalyzer/tableAnalyzerView.css';
 import './healthCheck/healthCheckView.css';
+const log = createStructuredLogger('DatabaseContribution');
 
 /**
  * 数据库视图容器ID
@@ -107,17 +109,17 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 		@ILanguageFeaturesService private readonly languageFeaturesService: ILanguageFeaturesService
 	) {
 		super();
-		console.log('[Database] DatabaseContribution constructor called');
+		log.debug('constructor_called');
 		this.registerViews();
 		this.registerEditorProviders();
-		console.log('[Database] DatabaseContribution initialized successfully');
+		log.debug('initialized');
 	}
 
 	/**
 	 * 注册数据库视图
 	 */
 	private registerViews(): void {
-		console.log('[Database] Starting to register database views...');
+		log.debug('register_views_started');
 
 		const viewsRegistry = Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry);
 		const viewContainerRegistry = Registry.as<any>(ViewExtensions.ViewContainersRegistry);
@@ -138,9 +140,9 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 			};
 
 			viewContainerRegistry.registerViewContainer(viewContainerDescriptor, 0);
-			console.log('[Database] View container registered successfully');
+			log.debug('view_container_registered');
 		} catch (error) {
-			console.error('[Database] Failed to register view container:', error);
+			log.error('register_view_container_failed', { error: String(error) });
 		}
 
 		// 创建 TreeView实例
@@ -168,10 +170,9 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 			};
 
 			viewsRegistry.registerViews([viewDescriptor], viewContainer!);
-
-			console.log('[Database] TreeView registered successfully');
+			log.debug('tree_view_registered');
 		} catch (error) {
-			console.error('[Database] Failed to register TreeView:', error);
+			log.error('register_tree_view_failed', { error: String(error) });
 		}
 
 		// 注册表结构设计器视图
@@ -191,10 +192,9 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 			};
 
 			viewsRegistry.registerViews([tableDesignerViewDescriptor], viewContainer!);
-
-			console.log('[Database] TableDesignerView registered successfully');
+			log.debug('table_designer_view_registered');
 		} catch (error) {
-			console.error('[Database] Failed to register TableDesignerView:', error);
+			log.error('register_table_designer_view_failed', { error: String(error) });
 		}
 
 		// 注册 SQL 生成器视图
@@ -214,10 +214,9 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 			};
 
 			viewsRegistry.registerViews([sqlGeneratorViewDescriptor], viewContainer!);
-
-			console.log('[Database] SQLGeneratorView registered successfully');
+			log.debug('sql_generator_view_registered');
 		} catch (error) {
-			console.error('[Database] Failed to register SQLGeneratorView:', error);
+			log.error('register_sql_generator_view_failed', { error: String(error) });
 		}
 
 		// 注册 SQL 优化器视图
@@ -237,10 +236,9 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 			};
 
 			viewsRegistry.registerViews([sqlOptimizerViewDescriptor], viewContainer!);
-
-			console.log('[Database] SQLOptimizerView registered successfully');
+			log.debug('sql_optimizer_view_registered');
 		} catch (error) {
-			console.error('[Database] Failed to register SQLOptimizerView:', error);
+			log.error('register_sql_optimizer_view_failed', { error: String(error) });
 		}
 
 		// 注册表结构分析器视图
@@ -260,10 +258,9 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 			};
 
 			viewsRegistry.registerViews([tableAnalyzerViewDescriptor], viewContainer!);
-
-			console.log('[Database] TableAnalyzerView registered successfully');
+			log.debug('table_analyzer_view_registered');
 		} catch (error) {
-			console.error('[Database] Failed to register TableAnalyzerView:', error);
+			log.error('register_table_analyzer_view_failed', { error: String(error) });
 		}
 
 		// 注册数据库健康检查视图
@@ -283,10 +280,9 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 			};
 
 			viewsRegistry.registerViews([healthCheckViewDescriptor], viewContainer!);
-
-			console.log('[Database] HealthCheckView registered successfully');
+			log.debug('health_check_view_registered');
 		} catch (error) {
-			console.error('[Database] Failed to register HealthCheckView:', error);
+			log.error('register_health_check_view_failed', { error: String(error) });
 		}
 	}
 
@@ -298,7 +294,7 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 			// 注册 SQL 诊断提供者
 			const diagnosticsProvider = this.instantiationService.createInstance(SQLDiagnosticsProvider);
 			this._register(diagnosticsProvider);
-			console.log('[Database] SQLDiagnosticsProvider registered successfully');
+			log.debug('sql_diagnostics_provider_registered');
 
 			// 注册 SQL 格式化提供者
 			const formatterProvider = new SQLFormatterProvider();
@@ -327,8 +323,7 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 				{ pattern: '**/*Mapper.xml' },
 				formatterProvider
 			));
-
-			console.log('[Database] SQLFormatterProvider registered successfully');
+			log.debug('sql_formatter_provider_registered');
 
 			// 注册 SQL 补全提供者
 			const completionProvider = this.instantiationService.createInstance(SQLCompletionProvider);
@@ -345,10 +340,9 @@ class DatabaseContribution extends Disposable implements IWorkbenchContribution 
 				{ pattern: '**/*Mapper.xml' },
 				completionProvider
 			));
-
-			console.log('[Database] SQLCompletionProvider registered successfully');
+			log.debug('sql_completion_provider_registered');
 		} catch (error) {
-			console.error('[Database] Failed to register editor providers:', error);
+			log.error('register_editor_providers_failed', { error: String(error) });
 		}
 	}
 }

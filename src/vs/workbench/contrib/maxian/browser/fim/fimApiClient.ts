@@ -18,6 +18,8 @@ export interface FimRequest {
 	maxTokens?: number;
 	/** 温度参数（0-1，越低越确定性） */
 	temperature?: number;
+	/** 项目名称，用于日志记录 */
+	projectName?: string;
 }
 
 /**
@@ -117,7 +119,7 @@ export class FimApiClient {
 		const endpoint = `${apiUrl.replace(/\/$/, '')}/ai/proxy/chat/completions`;
 		const timeout = timeoutMs ?? FimApiClient.DEFAULT_TIMEOUT;
 
-		const requestBody = {
+		const requestBody: Record<string, unknown> = {
 			businessCode: FimApiClient.FIM_BUSINESS_CODE,
 			username: btoa(credentials.username),
 			password: btoa(credentials.password),
@@ -126,7 +128,11 @@ export class FimApiClient {
 			fimSuffix: request.suffix,       // 光标后内容
 			temperature: request.temperature ?? FimApiClient.DEFAULT_TEMPERATURE,
 			maxTokens: request.maxTokens ?? FimApiClient.DEFAULT_MAX_TOKENS,
+			autoLog: true,                   // 代码补全无显式日志，由后端自动记录
 		};
+		if (request.projectName) {
+			requestBody['projectName'] = request.projectName;
+		}
 
 		const controller = new AbortController();
 		const timeoutId = setTimeout(() => {

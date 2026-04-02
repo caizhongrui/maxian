@@ -12,6 +12,7 @@ import { ISkillService } from '../common/skillService.js';
 import { ISkill, ISkillFilter, ISkillLoadOptions, ISkillActivationContext } from '../common/skillTypes.js';
 import { SkillRegistry } from '../common/skillRegistry.js';
 import { SkillScanner } from './skillScanner.js';
+import { createStructuredLogger } from '../../../common/structuredLogger.js';
 
 /**
  * Skill 服务实现（Node.js 环境）
@@ -28,6 +29,7 @@ export class SkillServiceImpl extends Disposable implements ISkillService {
 	declare readonly _serviceBrand: undefined;
 
 	private readonly registry: SkillRegistry;
+	private readonly logger = createStructuredLogger('SkillService');
 	private _skillsDirectory: string;
 	private _initialized: boolean = false;
 	private disposeWatcher?: () => void;
@@ -41,7 +43,7 @@ export class SkillServiceImpl extends Disposable implements ISkillService {
 		// 确定 Skills 目录
 		this._skillsDirectory = this.resolveSkillsDirectory();
 
-		console.log(`[SkillService] 初始化，Skills 目录: ${this._skillsDirectory}`);
+		this.logger.debug('init', { skillsDirectory: this._skillsDirectory });
 	}
 
 	get skillsDirectory(): string {
@@ -65,11 +67,11 @@ export class SkillServiceImpl extends Disposable implements ISkillService {
 	 */
 	async initialize(): Promise<void> {
 		if (this._initialized) {
-			console.warn('[SkillService] 已经初始化过了');
+			this.logger.warn('initialize_skipped_already_initialized');
 			return;
 		}
 
-		console.log('[SkillService] 开始初始化...');
+		this.logger.debug('initialize_started');
 
 		try {
 			// 扫描 Skills 目录
@@ -79,10 +81,10 @@ export class SkillServiceImpl extends Disposable implements ISkillService {
 			this.watchDirectory();
 
 			this._initialized = true;
-			console.log('[SkillService] 初始化完成');
+			this.logger.debug('initialize_completed');
 
 		} catch (error) {
-			console.error('[SkillService] 初始化失败:', error);
+			this.logger.error('initialize_failed', { error: String(error) });
 			throw error;
 		}
 	}
@@ -91,7 +93,7 @@ export class SkillServiceImpl extends Disposable implements ISkillService {
 	 * 重新扫描 Skills 目录
 	 */
 	async rescan(): Promise<void> {
-		console.log('[SkillService] 开始扫描 Skills...');
+		this.logger.debug('rescan_started');
 
 		try {
 			// 扫描目录
@@ -103,10 +105,10 @@ export class SkillServiceImpl extends Disposable implements ISkillService {
 			// 批量注册
 			const count = this.registry.registerAll(skills);
 
-			console.log(`[SkillService] 扫描完成，成功注册 ${count} 个 Skill`);
+			this.logger.debug('rescan_completed', { count });
 
 		} catch (error) {
-			console.error('[SkillService] 扫描失败:', error);
+			this.logger.error('rescan_failed', { error: String(error) });
 			throw error;
 		}
 	}
@@ -122,9 +124,9 @@ export class SkillServiceImpl extends Disposable implements ISkillService {
 
 		// 开始监听
 		this.disposeWatcher = SkillScanner.watch(this._skillsDirectory, () => {
-			console.log('[SkillService] 检测到 Skills 变化，重新扫描...');
+			this.logger.debug('skills_changed_rescan');
 			this.rescan().catch(error => {
-				console.error('[SkillService] 重新扫描失败:', error);
+				this.logger.error('rescan_failed_after_change', { error: String(error) });
 			});
 		});
 
@@ -144,7 +146,7 @@ export class SkillServiceImpl extends Disposable implements ISkillService {
 	 */
 	get(slug: string): ISkill | undefined {
 		if (!this._initialized) {
-			console.warn('[SkillService] get() called before initialization');
+			this.logger.warn('get_before_initialization', { slug });
 			return undefined;
 		}
 		return this.registry.get(slug);
@@ -165,7 +167,7 @@ export class SkillServiceImpl extends Disposable implements ISkillService {
 	 */
 	list(): ISkill[] {
 		if (!this._initialized) {
-			console.warn('[SkillService] list() called before initialization, returning empty array');
+			this.logger.warn('list_before_initialization');
 			return [];
 		}
 		return this.registry.list();
@@ -177,7 +179,7 @@ export class SkillServiceImpl extends Disposable implements ISkillService {
 	search(filter: ISkillFilter): ISkill[] {
 		// 如果还未初始化，返回空数组
 		if (!this._initialized) {
-			console.warn('[SkillService] search() called before initialization, returning empty array');
+			this.logger.warn('search_before_initialization', { hasQuery: !!filter.query });
 			return [];
 		}
 		return this.registry.search(filter);
@@ -188,7 +190,7 @@ export class SkillServiceImpl extends Disposable implements ISkillService {
 	 */
 	getOfficialSkills(): ISkill[] {
 		if (!this._initialized) {
-			console.warn('[SkillService] getOfficialSkills() called before initialization, returning empty array');
+			this.logger.warn('get_official_before_initialization');
 			return [];
 		}
 		return this.registry.getOfficialSkills();
@@ -287,7 +289,7 @@ export class SkillServiceImpl extends Disposable implements ISkillService {
 			.slice(0, maxSkills)
 			.map(([skill]) => skill);
 
-		console.log(`[SkillService] 推荐 ${recommended.length} 个 Skills:`, recommended.map(s => s.slug));
+		this.logger.debug('recommendation_generated', { count: recommended.length, slugs: recommended.map(s => s.slug) });
 
 		return recommended;
 	}
@@ -330,11 +332,11 @@ export class SkillServiceImpl extends Disposable implements ISkillService {
 				try {
 					const entries = fs.readdirSync(userSkillsDir);
 					if (entries.length > 0) {
-						console.log(`[SkillService] ✓ 使用用户自定义 Skills 目录: ${userSkillsDir}`);
+						this.logger.debug('use_user_skills_directory', { dir: userSkillsDir });
 						return userSkillsDir;
 					}
 				} catch (err) {
-					console.warn(`[SkillService] 读取用户 Skills 目录失败: ${userSkillsDir}`, err);
+					this.logger.warn('read_user_skills_directory_failed', { dir: userSkillsDir, error: String(err) });
 				}
 			}
 		}
@@ -346,23 +348,23 @@ export class SkillServiceImpl extends Disposable implements ISkillService {
 			const builtinSkillsDir = path.join(appRoot, 'resources', 'skills');
 
 			if (fs.existsSync(builtinSkillsDir)) {
-				console.log(`[SkillService] ✓ 使用 IDE 内置 Skills 目录: ${builtinSkillsDir}`);
+				this.logger.debug('use_builtin_skills_directory', { dir: builtinSkillsDir });
 				return builtinSkillsDir;
 			} else {
-				console.warn(`[SkillService] ⚠ IDE 内置 Skills 目录不存在: ${builtinSkillsDir}`);
+				this.logger.warn('builtin_skills_directory_missing', { dir: builtinSkillsDir });
 			}
 		} catch (err) {
-			console.error(`[SkillService] 获取应用根目录失败:`, err);
+			this.logger.error('resolve_app_root_failed', { error: String(err) });
 		}
 
 		// 3. Fallback: 使用当前工作目录（开发环境）
 		const fallbackSkillsDir = path.join(process.cwd(), 'resources', 'skills');
-		console.log(`[SkillService] ⚠ Fallback 到开发环境 Skills 目录: ${fallbackSkillsDir}`);
+		this.logger.warn('fallback_skills_directory', { dir: fallbackSkillsDir });
 		return fallbackSkillsDir;
 	}
 
 	override dispose(): void {
-		console.log('[SkillService] 销毁');
+		this.logger.debug('disposed');
 		super.dispose();
 	}
 }

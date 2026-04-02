@@ -35,6 +35,7 @@ export class MainThreadExtensionService implements MainThreadExtensionServiceSha
 
 	private readonly _extensionHostKind: ExtensionHostKind;
 	private readonly _internalExtensionService: IInternalExtensionService;
+	private readonly _knownExtensionIssueLogs = new Set<string>();
 
 	constructor(
 		extHostContext: IExtHostContext,
@@ -75,8 +76,18 @@ export class MainThreadExtensionService implements MainThreadExtensionServiceSha
 	$onExtensionRuntimeError(extensionId: ExtensionIdentifier, data: SerializedError): void {
 		const error = transformErrorFromSerialization(data);
 		this._internalExtensionService._onExtensionRuntimeError(extensionId, error);
+		if (isKnownExtensionNoise(error.message)) {
+			const logKey = `${extensionId.value}:${error.message}`;
+			if (!this._knownExtensionIssueLogs.has(logKey)) {
+				this._knownExtensionIssueLogs.add(logKey);
+				console.warn(`[${extensionId.value}] ${error.message}`);
+			}
+			return;
+		}
 		console.error(`[${extensionId.value}]${error.message}`);
-		console.error(error.stack);
+		if (error.stack) {
+			console.error(error.stack);
+		}
 	}
 	async $onExtensionActivationError(extensionId: ExtensionIdentifier, data: SerializedError, missingExtensionDependency: MissingExtensionDependency | null): Promise<void> {
 		const error = transformErrorFromSerialization(data);
@@ -99,6 +110,14 @@ export class MainThreadExtensionService implements MainThreadExtensionServiceSha
 		}
 
 		const isDev = !this._environmentService.isBuilt || this._environmentService.isExtensionDevelopment;
+		if (isKnownExtensionNoise(error.message)) {
+			const logKey = `${extensionId.value}:${error.message}`;
+			if (!this._knownExtensionIssueLogs.has(logKey)) {
+				this._knownExtensionIssueLogs.add(logKey);
+				console.warn(`[${extensionId.value}] ${error.message}`);
+			}
+			return;
+		}
 		if (isDev) {
 			this._notificationService.error(error);
 			return;
@@ -187,6 +206,13 @@ export class MainThreadExtensionService implements MainThreadExtensionServiceSha
 	async $asBrowserUri(uri: UriComponents): Promise<UriComponents> {
 		return FileAccess.uriToBrowserUri(URI.revive(uri));
 	}
+}
+
+function isKnownExtensionNoise(message: string): boolean {
+	const normalized = message.toLowerCase();
+	return normalized.includes('requires vs code version')
+		|| normalized.includes('extension is not compatible with code')
+		|| normalized.includes('please provide instrumentation key');
 }
 
 class ExtensionHostProxy implements IExtensionHostProxy {

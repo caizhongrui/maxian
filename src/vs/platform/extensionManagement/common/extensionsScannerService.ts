@@ -694,7 +694,12 @@ class ExtensionsScanner extends Disposable {
 		for (const [severity, message] of validations) {
 			if (severity === Severity.Error) {
 				isValid = false;
-				this.logService.error(this.formatMessage(input.location, message));
+				const formattedMessage = this.formatMessage(input.location, message);
+				if (isVersionMismatchValidation(message)) {
+					this.logService.warn(formattedMessage);
+				} else {
+					this.logService.error(formattedMessage);
+				}
 			}
 		}
 		extension.isValid = isValid;
@@ -983,6 +988,10 @@ class CachedExtensionsScanner extends ExtensionsScanner {
 		return this.userDataProfilesService.profiles.find(p => this.uriIdentityService.extUri.isEqual(input.location, p.extensionsResource)) ?? this.currentProfile;
 	}
 
+}
+
+function isVersionMismatchValidation(message: string): boolean {
+	return message.includes('Extension is not compatible with Code');
 }
 
 export function toExtensionDescription(extension: IScannedExtension, isUnderDevelopment: boolean): IExtensionDescription {

@@ -42,6 +42,7 @@ import { IVectorSearchService, ISemanticSearchResult, IIndexStats } from '../com
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { FimCompletionProvider } from './fim/fimCompletionProvider.js';
 import { VectorSearchStatusBarContribution } from './vectorSearchStatusBar.js';
@@ -459,10 +460,11 @@ class MaxianFimCompletionContribution extends Disposable implements IWorkbenchCo
 		@ILanguageFeaturesService languageFeaturesService: ILanguageFeaturesService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IStorageService storageService: IStorageService,
+		@IWorkspaceContextService workspaceContextService: IWorkspaceContextService,
 	) {
 		super();
 
-		const provider = new FimCompletionProvider(configurationService, storageService);
+		const provider = new FimCompletionProvider(configurationService, storageService, workspaceContextService);
 
 		// 注册到所有语言（provider 内部通过 isFimSupportedLanguage 过滤不支持的语言）
 		const registration = languageFeaturesService.inlineCompletionsProvider.register('*', provider);

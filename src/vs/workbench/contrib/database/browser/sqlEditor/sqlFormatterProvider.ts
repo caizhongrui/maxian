@@ -8,6 +8,9 @@ import { ITextModel } from '../../../../../editor/common/model.js';
 import { FormattingOptions, TextEdit, DocumentFormattingEditProvider, DocumentRangeFormattingEditProvider } from '../../../../../editor/common/languages.js';
 import { Range } from '../../../../../editor/common/core/range.js';
 import { MyBatisXmlParser } from '../mybatis/mybatisXmlParser.js';
+import { createStructuredLogger } from '../../../../common/structuredLogger.js';
+
+const log = createStructuredLogger('SQLFormatterProvider');
 
 /**
  * SQL 格式化提供者
@@ -17,7 +20,7 @@ export class SQLFormatterProvider extends Disposable implements DocumentFormatti
 
 	constructor() {
 		super();
-		console.log('[SQLFormatterProvider] Initialized');
+		log.debug('initialized');
 	}
 
 	/**
@@ -99,7 +102,7 @@ export class SQLFormatterProvider extends Disposable implements DocumentFormatti
 
 			return edits.length > 0 ? edits : null;
 		} catch (error) {
-			console.error('[SQLFormatterProvider] Format MyBatis XML failed:', error);
+			log.error('format_mybatis_xml_failed', { error: String(error) });
 			return null;
 		}
 	}

@@ -9,6 +9,7 @@ import { Emitter, Event } from '../../../../../base/common/event.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
 import { RunOnceScheduler } from '../../../../../base/common/async.js';
+import { createStructuredLogger } from '../../../../common/structuredLogger.js';
 
 /**
  * 文件保存事件
@@ -69,6 +70,7 @@ export const DEFAULT_WATCHER_OPTIONS: IFileWatcherOptions = {
  * 监听文件保存事件并提供防抖处理
  */
 export class FileWatcher extends Disposable {
+	private readonly logger = createStructuredLogger('FileWatcher');
 
 	private readonly _onFileSaved = this._register(new Emitter<IFileSaveEvent>());
 	readonly onFileSaved: Event<IFileSaveEvent> = this._onFileSaved.event;
@@ -97,8 +99,7 @@ export class FileWatcher extends Disposable {
 				this.handleFileSave(e);
 			})
 		);
-
-		console.log('[FileWatcher] 文件监听器已初始化', {
+		this.logger.debug('initialized', {
 			debounceDelay: this.options.debounceDelay,
 			workspaceOnly: this.options.workspaceOnly,
 			extensionFilter: this.options.extensionFilter,
@@ -116,7 +117,7 @@ export class FileWatcher extends Disposable {
 		// 检查是否在工作区内
 		if (this.options.workspaceOnly) {
 			if (!this.workspaceRoot || !filePath.startsWith(this.workspaceRoot)) {
-				console.log('[FileWatcher] 忽略工作区外的文件:', filePath);
+				this.logger.debug('skip_file_outside_workspace', { filePath });
 				return;
 			}
 		}
@@ -127,12 +128,11 @@ export class FileWatcher extends Disposable {
 				filePath.toLowerCase().endsWith(ext.toLowerCase())
 			);
 			if (!matchesExtension) {
-				console.log('[FileWatcher] 文件扩展名不匹配，忽略:', filePath);
+				this.logger.debug('skip_file_extension_mismatch', { filePath });
 				return;
 			}
 		}
-
-		console.log('[FileWatcher] 检测到文件保存:', filePath);
+		this.logger.debug('file_saved_detected', { filePath });
 
 		// 防抖处理
 		this.scheduleFileSaveEvent(resource, filePath);
@@ -158,8 +158,7 @@ export class FileWatcher extends Disposable {
 
 		this.schedulers.set(key, scheduler);
 		scheduler.schedule();
-
-		console.log(`[FileWatcher] 调度诊断检查: ${filePath} (${this.options.debounceDelay}ms后)`);
+		this.logger.debug('diagnostic_check_scheduled', { filePath, debounceDelayMs: this.options.debounceDelay });
 	}
 
 	/**
@@ -171,8 +170,7 @@ export class FileWatcher extends Disposable {
 			filePath,
 			timestamp: Date.now(),
 		};
-
-		console.log('[FileWatcher] 触发文件保存事件:', filePath);
+		this.logger.debug('file_saved_event_fired', { filePath });
 		this._onFileSaved.fire(event);
 	}
 
@@ -189,7 +187,7 @@ export class FileWatcher extends Disposable {
 	 */
 	public updateOptions(options: Partial<IFileWatcherOptions>): void {
 		Object.assign(this.options, options);
-		console.log('[FileWatcher] 配置已更新:', this.options);
+		this.logger.debug('options_updated', { options: this.options });
 	}
 
 	/**
@@ -202,8 +200,7 @@ export class FileWatcher extends Disposable {
 			scheduler.dispose();
 		}
 		this.schedulers.clear();
-
-		console.log('[FileWatcher] 文件监听器已清理');
+		this.logger.debug('disposed');
 		super.dispose();
 	}
 

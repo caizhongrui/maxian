@@ -21,9 +21,11 @@ import { ISecretStorageService } from '../../../../platform/secrets/common/secre
 import { IStatusbarService, StatusbarAlignment, IStatusbarEntryAccessor } from '../../../services/statusbar/browser/statusbar.js';
 import { HeartbeatService } from './heartbeatService.js';
 import { IUpdateService } from '../../../../platform/update/common/update.js';
+import { createStructuredLogger } from '../../../common/structuredLogger.js';
 
 // 注册认证服务
 registerSingleton(IAuthService, AuthService, InstantiationType.Delayed);
+const log = createStructuredLogger('AuthStartupContribution');
 
 /**
  * 认证启动贡献
@@ -51,17 +53,17 @@ class AuthStartupContribution extends Disposable implements IWorkbenchContributi
 		// 创建心跳服务实例
 		this.heartbeatService = this.instantiationService.createInstance(HeartbeatService);
 		this._register(this.heartbeatService);
-		console.log('[AuthStartupContribution] Heartbeat service created');
+		log.debug('heartbeat_service_created');
 
 		// IDE 启动时进行认证检查，延迟执行以确保 UI 已完全加载
 		setTimeout(() => {
-			console.log('[AuthStartupContribution] Starting authentication check...');
+			log.debug('authentication_check_started');
 			this.checkAuthentication();
 		}, 1000); // 延迟 1 秒，确保 QuickInput UI 已准备好
 
 		// 监听登录状态变化
 		this._register(this.authService.onDidChangeStatus((status) => {
-			console.log('[AuthStartupContribution] Auth status changed:', status);
+			log.debug('auth_status_changed', { status });
 			if (status === AuthStatus.Unauthenticated) {
 				// 隐藏状态栏项
 				this.updateStatusBar();
@@ -72,23 +74,22 @@ class AuthStartupContribution extends Disposable implements IWorkbenchContributi
 
 		// 监听用户信息变化
 		this._register(this.authService.onDidChangeUser((user) => {
-			console.log('[AuthStartupContribution] User changed:', user ? user.username : 'null');
+			log.debug('auth_user_changed', { userName: user?.username ?? null });
 			if (user) {
 				// this.notificationService.info(`欢迎回来，${user.displayName || user.username}！`);
 				// 显示状态栏项
 				this.updateStatusBar();
 				// 用户登录成功，启动心跳
-				console.log('[AuthStartupContribution] Starting heartbeat for user:', user.username);
+				log.debug('start_heartbeat_for_user', { userName: user.username });
 				this.heartbeatService.startHeartbeat();
 				// 登录成功后检查更新（延迟2秒确保UpdateService已初始化）
-				console.log('[AuthStartupContribution] Will check for updates after login...');
+				log.debug('schedule_update_check_after_login');
 				setTimeout(() => {
-					console.log('[AuthStartupContribution] UpdateService state:', this.updateService.state);
-					console.log('[AuthStartupContribution] Calling checkForUpdates...');
+					log.debug('check_for_updates_called', { state: String(this.updateService.state) });
 					this.updateService.checkForUpdates(false).then(() => {
-						console.log('[AuthStartupContribution] checkForUpdates completed');
+						log.debug('check_for_updates_completed');
 					}).catch((err) => {
-						console.error('[AuthStartupContribution] checkForUpdates failed:', err);
+						log.error('check_for_updates_failed', { error: String(err) });
 					});
 				}, 2000);
 			} else {
@@ -152,7 +153,7 @@ class AuthStartupContribution extends Disposable implements IWorkbenchContributi
 		// authService.autoLogin() 会从 StorageService 读取凭据
 		const autoLoginSuccess = await this.authService.autoLogin();
 		if (autoLoginSuccess) {
-			console.log('[Auth] 自动登录成功');
+			log.debug('auto_login_success');
 			// 清理旧的 SecretStorage 中的密码（向后兼容迁移）
 			await this.secretStorageService.delete(AuthStartupContribution.PASSWORD_KEY);
 			return;
@@ -163,7 +164,7 @@ class AuthStartupContribution extends Disposable implements IWorkbenchContributi
 		const legacyPassword = await this.secretStorageService.get(AuthStartupContribution.PASSWORD_KEY);
 
 		if (apiUrl && username && legacyPassword) {
-			console.log('[Auth] 检测到旧版本的密码存储，尝试迁移...');
+			log.debug('legacy_password_migration_started');
 			try {
 				// 使用旧密码登录，登录成功后会自动保存到新位置（StorageService）
 				await this.authService.login({
@@ -171,12 +172,12 @@ class AuthStartupContribution extends Disposable implements IWorkbenchContributi
 					password: legacyPassword,
 					rememberMe: true
 				});
-				console.log('[Auth] 旧密码迁移成功');
+				log.debug('legacy_password_migration_success');
 				// 清理旧的 SecretStorage
 				await this.secretStorageService.delete(AuthStartupContribution.PASSWORD_KEY);
 				return;
 			} catch (error) {
-				console.warn('[Auth] 旧密码迁移失败，清理旧数据');
+				log.warn('legacy_password_migration_failed', { error: String(error) });
 				await this.secretStorageService.delete(AuthStartupContribution.PASSWORD_KEY);
 			}
 		}

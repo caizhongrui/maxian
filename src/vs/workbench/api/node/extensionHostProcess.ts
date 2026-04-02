@@ -361,9 +361,14 @@ async function startExtensionHostProcess(): Promise<void> {
 				promise.catch(e => {
 					unhandledPromises.splice(idx, 1);
 					if (!isCancellationError(e)) {
-						console.warn(`rejected promise not handled within 1 second: ${e}`);
-						if (e && e.stack) {
-							console.warn(`stack trace: ${e.stack}`);
+						const errorMessage = `${e ?? ''}`;
+						if (isKnownExtensionHostNoise(errorMessage)) {
+							console.warn(`rejected promise not handled within 1 second: ${errorMessage}`);
+						} else {
+							console.warn(`rejected promise not handled within 1 second: ${errorMessage}`);
+							if (e && e.stack) {
+								console.warn(`stack trace: ${e.stack}`);
+							}
 						}
 						if (reason) {
 							onUnexpectedError(reason);
@@ -423,6 +428,13 @@ async function startExtensionHostProcess(): Promise<void> {
 
 	// rewrite onTerminate-function to be a proper shutdown
 	onTerminate = (reason: string) => extensionHostMain.terminate(reason);
+}
+
+function isKnownExtensionHostNoise(message: string): boolean {
+	const normalized = message.toLowerCase();
+	return normalized.includes('requires vs code version')
+		|| normalized.includes('extension is not compatible with code')
+		|| normalized.includes('please provide instrumentation key');
 }
 
 startExtensionHostProcess().catch((err) => console.log(err));

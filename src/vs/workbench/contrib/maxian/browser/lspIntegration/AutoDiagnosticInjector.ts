@@ -11,6 +11,7 @@ import { FileWatcher, IFileSaveEvent, IFileWatcherOptions } from './FileWatcher.
 import { DiagnosticFormatter, IDiagnosticFormatterOptions } from './DiagnosticFormatter.js';
 import { ILspDiagnosticsService, FileDiagnostics, DiagnosticSeverity } from '../../common/lsp/lspDiagnostics.js';
 import { RunOnceScheduler } from '../../../../../base/common/async.js';
+import { createStructuredLogger } from '../../../../common/structuredLogger.js';
 
 // 类型别名，保持代码的可读性
 type DiagnosticResult = FileDiagnostics;
@@ -132,6 +133,7 @@ export interface IDiagnosticInjectionEvent {
  * 核心功能：监听文件保存 → 获取诊断 → 格式化 → 准备注入到System Prompt
  */
 export class AutoDiagnosticInjector extends Disposable {
+	private readonly logger = createStructuredLogger('AutoDiagnosticInjector');
 
 	private readonly _onDiagnosticReady = this._register(new Emitter<IDiagnosticInjectionEvent>());
 	readonly onDiagnosticReady: Event<IDiagnosticInjectionEvent> = this._onDiagnosticReady.event;
@@ -164,8 +166,7 @@ export class AutoDiagnosticInjector extends Disposable {
 		if (this.config.enabled) {
 			this.initialize();
 		}
-
-		console.log('[AutoDiagnosticInjector] 自动诊断注入器已创建', this.config);
+		this.logger.debug('created', { config: this.config });
 	}
 
 	/**
@@ -173,7 +174,7 @@ export class AutoDiagnosticInjector extends Disposable {
 	 */
 	private initialize(): void {
 		if (this.fileWatcher) {
-			console.warn('[AutoDiagnosticInjector] 已经初始化，跳过');
+			this.logger.warn('initialize_skipped_already_initialized');
 			return;
 		}
 
@@ -193,8 +194,7 @@ export class AutoDiagnosticInjector extends Disposable {
 
 		// 启动缓存清理
 		this.cleanupScheduler.schedule();
-
-		console.log('[AutoDiagnosticInjector] 初始化完成');
+		this.logger.debug('initialized');
 	}
 
 	/**
@@ -202,11 +202,10 @@ export class AutoDiagnosticInjector extends Disposable {
 	 */
 	private async handleFileSaved(event: IFileSaveEvent): Promise<void> {
 		if (!this.config.autoFetchOnSave) {
-			console.log('[AutoDiagnosticInjector] 自动获取已禁用，跳过:', event.filePath);
+			this.logger.debug('skip_auto_fetch_disabled', { filePath: event.filePath });
 			return;
 		}
-
-		console.log('[AutoDiagnosticInjector] 处理文件保存:', event.filePath);
+		this.logger.debug('handle_file_saved', { filePath: event.filePath });
 
 		// 等待LSP服务器更新（fetchDelay）
 		await this.delay(this.config.fetchDelay);
@@ -222,21 +221,21 @@ export class AutoDiagnosticInjector extends Disposable {
 	 */
 	public async fetchAndInjectDiagnostics(filePath: string): Promise<boolean> {
 		try {
-			console.log('[AutoDiagnosticInjector] 获取诊断:', filePath);
+			this.logger.debug('fetch_diagnostics_started', { filePath });
 
 			// 检查缓存
 			const cached = this.getCachedDiagnostic(filePath);
 			let result: DiagnosticResult;
 
 			if (cached) {
-				console.log('[AutoDiagnosticInjector] 使用缓存的诊断:', filePath);
+				this.logger.debug('use_cached_diagnostics', { filePath });
 				result = cached;
 			} else {
 				// 调用LSP诊断服务
 				const diagnostics = await this.lspDiagnosticsService.getDiagnostics(filePath);
 
 				if (!diagnostics) {
-					console.warn('[AutoDiagnosticInjector] 获取诊断失败:', filePath);
+					this.logger.warn('get_diagnostics_returned_empty', { filePath });
 					return false;
 				}
 
@@ -257,7 +256,7 @@ export class AutoDiagnosticInjector extends Disposable {
 
 			// 如果没有诊断信息，清除当前诊断文本
 			if (result.diagnostics.length === 0) {
-				console.log('[AutoDiagnosticInjector] 无诊断信息:', filePath);
+				this.logger.debug('no_diagnostics', { filePath });
 				this.clearDiagnosticText();
 				return false;
 			}
@@ -265,7 +264,7 @@ export class AutoDiagnosticInjector extends Disposable {
 			// 检查是否仅注入严重错误
 			if (this.config.criticalErrorsOnly) {
 				if (!DiagnosticFormatter.hasCriticalErrors([result])) {
-					console.log('[AutoDiagnosticInjector] 无严重错误，跳过注入:', filePath);
+					this.logger.debug('skip_non_critical_diagnostics', { filePath });
 					this.clearDiagnosticText();
 					return false;
 				}
@@ -278,7 +277,7 @@ export class AutoDiagnosticInjector extends Disposable {
 			);
 
 			if (!formattedText) {
-				console.log('[AutoDiagnosticInjector] 格式化后无诊断信息:', filePath);
+				this.logger.debug('formatted_diagnostics_empty', { filePath });
 				this.clearDiagnosticText();
 				return false;
 			}
@@ -302,8 +301,7 @@ export class AutoDiagnosticInjector extends Disposable {
 			};
 
 			this._onDiagnosticReady.fire(injectionEvent);
-
-			console.log('[AutoDiagnosticInjector] 诊断就绪:', {
+			this.logger.debug('diagnostics_ready', {
 				filePath,
 				summary,
 				count,
@@ -312,7 +310,7 @@ export class AutoDiagnosticInjector extends Disposable {
 
 			return true;
 		} catch (error) {
-			console.error('[AutoDiagnosticInjector] 获取诊断失败:', filePath, error);
+			this.logger.error('fetch_and_inject_failed', { filePath, error: String(error) });
 			return false;
 		}
 	}
@@ -332,7 +330,7 @@ export class AutoDiagnosticInjector extends Disposable {
 		if (this.currentDiagnosticText !== null) {
 			this.currentDiagnosticText = null;
 			this._onDiagnosticCleared.fire();
-			console.log('[AutoDiagnosticInjector] 诊断文本已清除');
+			this.logger.debug('diagnostic_text_cleared');
 		}
 	}
 
@@ -380,7 +378,7 @@ export class AutoDiagnosticInjector extends Disposable {
 		}
 
 		if (cleaned > 0) {
-			console.log(`[AutoDiagnosticInjector] 清理了 ${cleaned} 个过期缓存项`);
+			this.logger.debug('cleanup_expired_cache', { cleaned });
 		}
 	}
 
@@ -389,13 +387,13 @@ export class AutoDiagnosticInjector extends Disposable {
 	 */
 	public enable(): void {
 		if (this.config.enabled) {
-			console.log('[AutoDiagnosticInjector] 已经启用');
+			this.logger.debug('enable_skipped_already_enabled');
 			return;
 		}
 
 		this.config.enabled = true;
 		this.initialize();
-		console.log('[AutoDiagnosticInjector] 已启用');
+		this.logger.debug('enabled');
 	}
 
 	/**
@@ -403,7 +401,7 @@ export class AutoDiagnosticInjector extends Disposable {
 	 */
 	public disable(): void {
 		if (!this.config.enabled) {
-			console.log('[AutoDiagnosticInjector] 已经禁用');
+			this.logger.debug('disable_skipped_already_disabled');
 			return;
 		}
 
@@ -420,8 +418,7 @@ export class AutoDiagnosticInjector extends Disposable {
 
 		// 清空缓存
 		this.diagnosticCache.clear();
-
-		console.log('[AutoDiagnosticInjector] 已禁用');
+		this.logger.debug('disabled');
 	}
 
 	/**
@@ -442,8 +439,7 @@ export class AutoDiagnosticInjector extends Disposable {
 			// 更新文件监听器配置
 			this.fileWatcher.updateOptions(this.config.watcherOptions);
 		}
-
-		console.log('[AutoDiagnosticInjector] 配置已更新:', this.config);
+		this.logger.debug('config_updated', { config: this.config });
 	}
 
 	/**
@@ -482,6 +478,6 @@ export class AutoDiagnosticInjector extends Disposable {
 		this.disable();
 		this.cleanupScheduler.cancel();
 		super.dispose();
-		console.log('[AutoDiagnosticInjector] 已清理');
+		this.logger.debug('disposed');
 	}
 }

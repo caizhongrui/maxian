@@ -6,6 +6,9 @@
 import { IVectorSearchService, ISemanticSearchResult, IIndexStats } from '../common/vector/IVectorSearchService.js';
 import { SemanticSearchService } from '../common/vector/semanticSearchService.js';
 import { EmbeddingService } from '../common/vector/embeddingService.js';
+import { createStructuredLogger } from '../../../common/structuredLogger.js';
+
+const log = createStructuredLogger('VectorSearchService');
 
 /**
  * 向量搜索服务 Node.js 层实现（运行在 electron-main 进程，有完整 Node.js 权限）
@@ -27,9 +30,9 @@ export class VectorSearchServiceImpl implements IVectorSearchService {
 	private _warmUpModel(): void {
 		EmbeddingService.getInstance().warmUp().then(() => {
 			this._modelReady = true;
-			console.log('[VectorSearch] 嵌入模型预热完成，语义搜索已就绪');
+			log.debug('embedding_model_warmup_completed');
 		}).catch((err) => {
-			console.warn('[VectorSearch] 嵌入模型预热失败，语义搜索不可用:', err.message);
+			log.warn('embedding_model_warmup_failed', { error: String(err?.message ?? err) });
 		});
 	}
 
@@ -62,7 +65,7 @@ export class VectorSearchServiceImpl implements IVectorSearchService {
 		const { getVectorStore } = await import('../common/vector/vectorStore.js');
 		const vectorStore = getVectorStore(normalizedCwd);
 		await vectorStore.deleteFileItems(filePath);
-		console.log('[VectorSearch] 文件索引已删除:', filePath);
+		log.debug('file_index_deleted', { filePath });
 	}
 
 	/**

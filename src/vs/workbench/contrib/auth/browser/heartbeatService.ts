@@ -7,6 +7,7 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IAuthService } from '../common/authService.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
+import { createStructuredLogger } from '../../../common/structuredLogger.js';
 
 /**
  * 心跳请求数据结构
@@ -28,6 +29,7 @@ export class HeartbeatService extends Disposable {
 	private static readonly IDE_TYPE = 'Tianhe Zhikai IDE';
 
 	private readonly clientId: string;
+	private readonly logger = createStructuredLogger('HeartbeatService');
 	private heartbeatTimer: any | undefined;
 	private isRunning = false;
 
@@ -56,8 +58,7 @@ export class HeartbeatService extends Disposable {
 		this.heartbeatTimer = setInterval(() => {
 			this.sendHeartbeat();
 		}, HeartbeatService.HEARTBEAT_INTERVAL_MS);
-
-		console.log('[HeartbeatService] Started with interval:', HeartbeatService.HEARTBEAT_INTERVAL_MS / 1000, 'seconds');
+		this.logger.debug('started', { intervalSeconds: HeartbeatService.HEARTBEAT_INTERVAL_MS / 1000 });
 	}
 
 	/**
@@ -74,8 +75,7 @@ export class HeartbeatService extends Disposable {
 			clearInterval(this.heartbeatTimer);
 			this.heartbeatTimer = undefined;
 		}
-
-		console.log('[HeartbeatService] Stopped');
+		this.logger.debug('stopped');
 	}
 
 	/**
@@ -85,20 +85,20 @@ export class HeartbeatService extends Disposable {
 		try {
 			// 检查用户是否已登录
 			if (!this.authService.isAuthenticated()) {
-				console.debug('[HeartbeatService] User not authenticated, skipping heartbeat');
+				this.logger.debug('skip_not_authenticated');
 				return;
 			}
 
 			const user = this.authService.currentUser;
 			if (!user) {
-				console.debug('[HeartbeatService] No user info, skipping heartbeat');
+				this.logger.debug('skip_missing_user');
 				return;
 			}
 
 			// 获取API URL
 			const apiUrl = this.configurationService.getValue<string>('zhikai.auth.apiUrl');
 			if (!apiUrl) {
-				console.debug('[HeartbeatService] API URL not configured, skipping heartbeat');
+				this.logger.debug('skip_missing_api_url');
 				return;
 			}
 
@@ -124,12 +124,12 @@ export class HeartbeatService extends Disposable {
 			});
 
 			if (response.ok) {
-				console.debug('[HeartbeatService] Heartbeat sent successfully for user:', user.username);
+				this.logger.debug('sent_success', { userName: user.username });
 			} else {
-				console.warn('[HeartbeatService] Heartbeat failed with status:', response.status);
+				this.logger.warn('sent_failed_status', { status: response.status });
 			}
 		} catch (error) {
-			console.warn('[HeartbeatService] Failed to send heartbeat:', error);
+			this.logger.warn('send_failed', { error: String(error) });
 		}
 	}
 

@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ISkill } from '../common/skillTypes.js';
 import { SkillParser } from '../common/skillParser.js';
+import { createStructuredLogger } from '../../../common/structuredLogger.js';
 
 /**
  * Skill 扫描器
@@ -29,6 +30,7 @@ import { SkillParser } from '../common/skillParser.js';
  * ```
  */
 export class SkillScanner {
+	private static readonly logger = createStructuredLogger('SkillScanner');
 
 	private static readonly SKILL_FILENAME = 'SKILL.md';
 	private static readonly EXAMPLES_DIR = 'examples';
@@ -45,7 +47,7 @@ export class SkillScanner {
 		try {
 			// 检查目录是否存在
 			if (!fs.existsSync(skillsDir)) {
-				console.warn(`[SkillScanner] Skills 目录不存在: ${skillsDir}`);
+				this.logger.warn('skills_directory_missing', { skillsDir });
 				return skills;
 			}
 
@@ -63,7 +65,7 @@ export class SkillScanner {
 
 				// 检查 SKILL.md 是否存在
 				if (!fs.existsSync(skillFilePath)) {
-					console.warn(`[SkillScanner] 跳过目录（缺少 SKILL.md）: ${skillDir}`);
+					this.logger.debug('skip_directory_without_skill_file', { skillDir });
 					continue;
 				}
 
@@ -77,17 +79,17 @@ export class SkillScanner {
 					skill.templatePaths = this.scanSubdirectory(skillDir, this.TEMPLATES_DIR);
 
 					skills.push(skill);
-					console.log(`[SkillScanner] 成功加载 Skill: ${skill.name} (${skill.slug})`);
+					this.logger.debug('skill_loaded', { name: skill.name, slug: skill.slug });
 
 				} catch (error) {
-					console.error(`[SkillScanner] 解析 Skill 失败: ${skillFilePath}`, error);
+					this.logger.error('skill_parse_failed', { skillFilePath, error: String(error) });
 				}
 			}
 
-			console.log(`[SkillScanner] 扫描完成，共找到 ${skills.length} 个 Skill`);
+			this.logger.debug('scan_completed', { skillsDir, count: skills.length });
 
 		} catch (error) {
-			console.error(`[SkillScanner] 扫描目录失败: ${skillsDir}`, error);
+			this.logger.error('scan_directory_failed', { skillsDir, error: String(error) });
 		}
 
 		return skills;
@@ -112,7 +114,7 @@ export class SkillScanner {
 			return filePaths.length > 0 ? filePaths : undefined;
 
 		} catch (error) {
-			console.warn(`[SkillScanner] 扫描子目录失败: ${subdirPath}`, error);
+			this.logger.warn('scan_subdirectory_failed', { subdirPath, error: String(error) });
 			return undefined;
 		}
 	}
@@ -125,27 +127,27 @@ export class SkillScanner {
 	 */
 	static watch(skillsDir: string, onChange: () => void): () => void {
 		if (!fs.existsSync(skillsDir)) {
-			console.warn(`[SkillScanner] 无法监听不存在的目录: ${skillsDir}`);
+			this.logger.warn('watch_directory_missing', { skillsDir });
 			return () => { };
 		}
 
 		try {
 			const watcher = fs.watch(skillsDir, { recursive: true }, (eventType, filename) => {
 				if (filename && filename.includes(this.SKILL_FILENAME)) {
-					console.log(`[SkillScanner] 检测到 Skill 变化: ${filename}`);
+					this.logger.debug('skill_file_changed', { eventType, filename });
 					onChange();
 				}
 			});
 
-			console.log(`[SkillScanner] 开始监听目录: ${skillsDir}`);
+			this.logger.debug('watch_started', { skillsDir });
 
 			return () => {
 				watcher.close();
-				console.log(`[SkillScanner] 停止监听目录: ${skillsDir}`);
+				this.logger.debug('watch_stopped', { skillsDir });
 			};
 
 		} catch (error) {
-			console.error(`[SkillScanner] 监听目录失败: ${skillsDir}`, error);
+			this.logger.error('watch_failed', { skillsDir, error: String(error) });
 			return () => { };
 		}
 	}

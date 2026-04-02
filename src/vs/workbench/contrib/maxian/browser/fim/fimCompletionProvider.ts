@@ -15,7 +15,8 @@ import {
 } from '../../../../../editor/common/languages.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { IStorageService } from '../../../../../platform/storage/common/storage.js';
-import { FimApiClient } from './fimApiClient.js';
+import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
+import { FimApiClient, type FimResponse } from './fimApiClient.js';
 import { readFimSettings, isFimSupportedLanguage } from './fimSettings.js';
 
 /**
@@ -53,12 +54,17 @@ export class FimCompletionProvider implements InlineCompletionsProvider {
 
 	/** 最小请求间隔（毫秒），防止连续快速触发 */
 	private static readonly MIN_REQUEST_INTERVAL = 200;
+	private static readonly TOKEN_TO_CHAR_RATIO = 4;
+	private static readonly MAX_CACHE_ENTRIES = 200;
 
 	private readonly apiClient: FimApiClient;
+	private readonly completionCache = new Map<string, { completion: string; expiresAt: number }>();
+	private readonly inFlightRequests = new Map<string, Promise<FimResponse>>();
 
 	constructor(
 		private readonly configurationService: IConfigurationService,
 		storageService: IStorageService,
+		private readonly workspaceContextService?: IWorkspaceContextService,
 	) {
 		this.apiClient = new FimApiClient(configurationService, storageService);
 	}
@@ -146,45 +152,63 @@ export class FimCompletionProvider implements InlineCompletionsProvider {
 		}
 
 		// 9. 提取 prefix 和 suffix 上下文
-		const { prefix, suffix } = this.extractContext(model, position, settings.maxPrefixLines, settings.maxSuffixLines);
+		const { prefix, suffix } = this.extractContext(
+			model,
+			position,
+			settings.maxPrefixLines,
+			settings.maxSuffixLines,
+			settings.maxPrefixTokens,
+			settings.maxSuffixTokens,
+		);
 
 		// prefix 过短时不触发（至少需要有意义的上下文）
 		if (prefix.trim().length < 2) {
 			return undefined;
 		}
 
-		// 10. 发起 FIM API 请求
-		this.lastRequestTime = Date.now();
+		// 10. 计算缓存键并优先尝试缓存命中
+		const projectName = this.workspaceContextService?.getWorkspace().folders[0]?.name ?? '';
+		const requestKey = this.buildRequestKey(languageId, prefix, suffix, projectName);
 
-		const fimResponse = await this.apiClient.complete(
-			{ prefix, suffix },
-			settings.requestTimeout,
+		if (settings.cacheEnabled) {
+			const cachedCompletion = this.getCachedCompletion(requestKey);
+			if (cachedCompletion) {
+				if (token.isCancellationRequested) {
+					return undefined;
+				}
+				return {
+					items: [this.toInlineCompletion(cachedCompletion, position)],
+				};
+			}
+		}
+
+		// 11. 发起 FIM API 请求（同 key 请求合并）
+		this.lastRequestTime = Date.now();
+		const fimResponse = await this.requestWithDedup(
+			requestKey,
+			() => this.apiClient.complete(
+				{ prefix, suffix, projectName: projectName || undefined },
+				settings.requestTimeout,
+			),
 		);
 
-		// 11. 超时或被取消后不返回结果
+		// 12. 超时或被取消后不返回结果
 		if (fimResponse.timedOut || token.isCancellationRequested) {
 			return undefined;
 		}
 
-		// 12. 清理和验证补全内容
+		// 13. 清理和验证补全内容
 		const cleanedCompletion = this.cleanCompletion(fimResponse.completion, prefix, suffix);
 		if (!cleanedCompletion) {
 			return undefined;
 		}
+		if (settings.cacheEnabled) {
+			this.setCachedCompletion(requestKey, cleanedCompletion, settings.cacheTtlMs);
+		}
 
-		// 13. 构建内联补全候选项
+		// 14. 构建内联补全候选项
 		// 插入位置为当前光标位置（不替换现有文本）
-		const item: InlineCompletion = {
-			insertText: cleanedCompletion,
-			range: {
-				startLineNumber: position.lineNumber,
-				startColumn: position.column,
-				endLineNumber: position.lineNumber,
-				endColumn: position.column,
-			},
-		};
-
-		return { items: [item] };
+		return { items: [this.toInlineCompletion(cleanedCompletion, position)] };
 	}
 
 	/**
@@ -197,12 +221,16 @@ export class FimCompletionProvider implements InlineCompletionsProvider {
 	 * @param position 光标位置
 	 * @param maxPrefixLines 最大前缀行数
 	 * @param maxSuffixLines 最大后缀行数
+	 * @param maxPrefixTokens 前缀 token 预算（近似）
+	 * @param maxSuffixTokens 后缀 token 预算（近似）
 	 */
 	private extractContext(
 		model: ITextModel,
 		position: Position,
 		maxPrefixLines: number,
 		maxSuffixLines: number,
+		maxPrefixTokens: number,
+		maxSuffixTokens: number,
 	): { prefix: string; suffix: string } {
 		const totalLines = model.getLineCount();
 		const currentLine = position.lineNumber;
@@ -221,7 +249,7 @@ export class FimCompletionProvider implements InlineCompletionsProvider {
 		const currentLinePrefixPart = currentLineContent.substring(0, currentColumn - 1);
 		prefixLines.push(currentLinePrefixPart);
 
-		const prefix = prefixLines.join('\n');
+		const prefix = this.trimPrefixByTokenBudget(prefixLines.join('\n'), maxPrefixTokens);
 
 		// 后缀：从当前光标到 (currentLine + maxSuffixLines)
 		const suffixEndLine = Math.min(totalLines, currentLine + maxSuffixLines);
@@ -235,9 +263,107 @@ export class FimCompletionProvider implements InlineCompletionsProvider {
 			suffixLines.push(model.getLineContent(i));
 		}
 
-		const suffix = suffixLines.join('\n');
+		const suffix = this.trimSuffixByTokenBudget(suffixLines.join('\n'), maxSuffixTokens);
 
 		return { prefix, suffix };
+	}
+
+	private trimPrefixByTokenBudget(prefix: string, tokenBudget: number): string {
+		if (tokenBudget <= 0 || !prefix) {
+			return '';
+		}
+		const maxChars = tokenBudget * FimCompletionProvider.TOKEN_TO_CHAR_RATIO;
+		if (prefix.length <= maxChars) {
+			return prefix;
+		}
+		return prefix.slice(prefix.length - maxChars);
+	}
+
+	private trimSuffixByTokenBudget(suffix: string, tokenBudget: number): string {
+		if (tokenBudget <= 0 || !suffix) {
+			return '';
+		}
+		const maxChars = tokenBudget * FimCompletionProvider.TOKEN_TO_CHAR_RATIO;
+		if (suffix.length <= maxChars) {
+			return suffix;
+		}
+		return suffix.slice(0, maxChars);
+	}
+
+	private buildRequestKey(languageId: string, prefix: string, suffix: string, projectName: string): string {
+		const raw = `${languageId}|${projectName}|${prefix}|<CURSOR>|${suffix}`;
+		return this.hashFnv1a(raw);
+	}
+
+	private hashFnv1a(input: string): string {
+		let hash = 0x811c9dc5;
+		for (let i = 0; i < input.length; i++) {
+			hash ^= input.charCodeAt(i);
+			hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+		}
+		return (hash >>> 0).toString(16);
+	}
+
+	private getCachedCompletion(key: string): string | undefined {
+		this.pruneExpiredCache();
+		const item = this.completionCache.get(key);
+		if (!item) {
+			return undefined;
+		}
+		if (item.expiresAt <= Date.now()) {
+			this.completionCache.delete(key);
+			return undefined;
+		}
+		return item.completion;
+	}
+
+	private setCachedCompletion(key: string, completion: string, ttlMs: number): void {
+		if (ttlMs <= 0 || !completion) {
+			return;
+		}
+		this.completionCache.set(key, {
+			completion,
+			expiresAt: Date.now() + ttlMs,
+		});
+		if (this.completionCache.size > FimCompletionProvider.MAX_CACHE_ENTRIES) {
+			const firstKey = this.completionCache.keys().next().value;
+			if (typeof firstKey === 'string') {
+				this.completionCache.delete(firstKey);
+			}
+		}
+	}
+
+	private pruneExpiredCache(): void {
+		const now = Date.now();
+		for (const [key, value] of this.completionCache.entries()) {
+			if (value.expiresAt <= now) {
+				this.completionCache.delete(key);
+			}
+		}
+	}
+
+	private requestWithDedup(key: string, factory: () => Promise<FimResponse>): Promise<FimResponse> {
+		const existing = this.inFlightRequests.get(key);
+		if (existing) {
+			return existing;
+		}
+		const requestPromise = factory().finally(() => {
+			this.inFlightRequests.delete(key);
+		});
+		this.inFlightRequests.set(key, requestPromise);
+		return requestPromise;
+	}
+
+	private toInlineCompletion(completion: string, position: Position): InlineCompletion {
+		return {
+			insertText: completion,
+			range: {
+				startLineNumber: position.lineNumber,
+				startColumn: position.column,
+				endLineNumber: position.lineNumber,
+				endColumn: position.column,
+			},
+		};
 	}
 
 	/**

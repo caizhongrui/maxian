@@ -57,6 +57,14 @@ export interface FimSettings {
 	requestTimeout: number;
 	/** 触发模式：manual（快捷键）或 automatic（自动） */
 	triggerMode: 'manual' | 'automatic';
+	/** 是否启用补全缓存 */
+	cacheEnabled: boolean;
+	/** 缓存有效期（毫秒） */
+	cacheTtlMs: number;
+	/** prefix 最大 token 预算（近似值） */
+	maxPrefixTokens: number;
+	/** suffix 最大 token 预算（近似值） */
+	maxSuffixTokens: number;
 }
 
 /**
@@ -64,11 +72,20 @@ export interface FimSettings {
  */
 export function readFimSettings(configurationService: IConfigurationService): FimSettings {
 	const enabled = configurationService.getValue<boolean>('maxian.fim.enabled') ?? true;
-	const triggerMode = configurationService.getValue<string>('maxian.fim.triggerMode') as 'manual' | 'automatic' ?? 'manual';
+	const fimTriggerMode = configurationService.getValue<string>('maxian.fim.triggerMode');
+	const legacyTriggerMode = configurationService.getValue<string>('zhikai.ai.completionTriggerMode');
+	const resolvedTriggerMode = (fimTriggerMode ?? legacyTriggerMode ?? 'automatic');
+	const triggerMode = (resolvedTriggerMode === 'manual' || resolvedTriggerMode === 'automatic')
+		? resolvedTriggerMode
+		: 'automatic';
 	const debounceDelay = configurationService.getValue<number>('maxian.fim.debounceDelay') ?? 300;
-	const maxPrefixLines = configurationService.getValue<number>('maxian.fim.maxPrefixLines') ?? 500;
-	const maxSuffixLines = configurationService.getValue<number>('maxian.fim.maxSuffixLines') ?? 20;
-	const requestTimeout = configurationService.getValue<number>('maxian.fim.requestTimeout') ?? 3000;
+	const maxPrefixLines = configurationService.getValue<number>('maxian.fim.maxPrefixLines') ?? 60;
+	const maxSuffixLines = configurationService.getValue<number>('maxian.fim.maxSuffixLines') ?? 10;
+	const requestTimeout = configurationService.getValue<number>('maxian.fim.requestTimeout') ?? 5000;
+	const cacheEnabled = configurationService.getValue<boolean>('maxian.fim.cacheEnabled') ?? true;
+	const cacheTtlMs = configurationService.getValue<number>('maxian.fim.cacheTtlMs') ?? 8000;
+	const maxPrefixTokens = configurationService.getValue<number>('maxian.fim.maxPrefixTokens') ?? 1600;
+	const maxSuffixTokens = configurationService.getValue<number>('maxian.fim.maxSuffixTokens') ?? 320;
 
 	return {
 		enabled,
@@ -77,6 +94,10 @@ export function readFimSettings(configurationService: IConfigurationService): Fi
 		maxPrefixLines,
 		maxSuffixLines,
 		requestTimeout,
+		cacheEnabled,
+		cacheTtlMs,
+		maxPrefixTokens,
+		maxSuffixTokens,
 	};
 }
 

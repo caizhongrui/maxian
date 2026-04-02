@@ -15,6 +15,7 @@ import {
 	CompletionContext
 } from '../../../../../editor/common/languages.js';
 import { IDatabaseService } from '../../common/databaseService.js';
+import { createStructuredLogger } from '../../../../common/structuredLogger.js';
 
 /**
  * SQL 关键字列表
@@ -266,6 +267,8 @@ const MATH_FUNCTIONS: SQLFunction[] = [
 	}
 ];
 
+const log = createStructuredLogger('SQLCompletionProvider');
+
 /**
  * SQL 智能补全提供者
  */
@@ -285,7 +288,7 @@ export class SQLCompletionProvider extends Disposable implements CompletionItemP
 		private readonly databaseService: IDatabaseService
 	) {
 		super();
-		console.log('[SQLCompletionProvider] Initialized');
+		log.debug('initialized');
 	}
 
 	/**
@@ -460,7 +463,7 @@ export class SQLCompletionProvider extends Disposable implements CompletionItemP
 			this.updateCache(cacheKey, tables);
 			return tables;
 		} catch (error) {
-			console.error('[SQLCompletionProvider] Failed to get tables:', error);
+			log.error('get_tables_failed', { error: String(error) });
 			return [];
 		}
 	}
@@ -488,7 +491,7 @@ export class SQLCompletionProvider extends Disposable implements CompletionItemP
 			this.updateCache(cacheKey, columns);
 			return columns;
 		} catch (error) {
-			console.error('[SQLCompletionProvider] Failed to get columns:', error);
+			log.error('get_columns_failed', { error: String(error), tableName });
 			return [];
 		}
 	}

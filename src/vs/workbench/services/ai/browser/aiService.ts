@@ -139,7 +139,7 @@ export class AIService implements IAIService {
 				temperature: temperature,
 				maxTokens: maxTokens,
 				username: btoa(this.credentials!.username),
-				password: btoa(this.credentials!.password)
+				password: btoa(this.credentials!.password),
 			};
 
 			// 如果提供了businessCode，则添加到请求中
@@ -244,7 +244,7 @@ export class AIService implements IAIService {
 				temperature: temperature,
 				maxTokens: maxTokens,
 				username: btoa(this.credentials!.username),
-				password: btoa(this.credentials!.password)
+				password: btoa(this.credentials!.password),
 			};
 
 			if (businessCode) {

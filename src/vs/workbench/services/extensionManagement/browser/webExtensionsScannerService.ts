@@ -774,7 +774,11 @@ export class WebExtensionsScannerService extends Disposable implements IWebExten
 		for (const [severity, message] of validations) {
 			if (severity === Severity.Error) {
 				isValid = false;
-				this.logService.error(message);
+				if (isVersionMismatchValidation(message)) {
+					this.logService.warn(message);
+				} else {
+					this.logService.error(message);
+				}
 			}
 		}
 
@@ -991,6 +995,10 @@ export class WebExtensionsScannerService extends Disposable implements IWebExten
 		return resourceQueue;
 	}
 
+}
+
+function isVersionMismatchValidation(message: string): boolean {
+	return message.includes('Extension is not compatible with Code');
 }
 
 if (isWeb) {
