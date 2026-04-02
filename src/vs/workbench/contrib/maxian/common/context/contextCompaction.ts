@@ -608,6 +608,35 @@ export class TieredCompactionManager {
 		tierCounts: { tier1: number; tier2: number; tier3: number; tier4: number };
 	}> = [];
 
+	// E4优化：压缩熔断器（对齐 Claude Code MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3）
+	private consecutiveCompactionFailures: number = 0;
+	private static readonly MAX_CONSECUTIVE_FAILURES = 3;
+
+	/**
+	 * E4优化：检查熔断器是否已触发（连续失败 3 次后停止尝试）
+	 */
+	isCircuitOpen(): boolean {
+		return this.consecutiveCompactionFailures >= TieredCompactionManager.MAX_CONSECUTIVE_FAILURES;
+	}
+
+	/**
+	 * E4优化：记录一次压缩失败
+	 */
+	recordCompactionFailure(): void {
+		this.consecutiveCompactionFailures++;
+		console.warn(`[TieredCompactionManager] E4 压缩失败 ${this.consecutiveCompactionFailures}/${TieredCompactionManager.MAX_CONSECUTIVE_FAILURES}${this.isCircuitOpen() ? ' — 熔断器已触发，停止尝试' : ''}`);
+	}
+
+	/**
+	 * E4优化：记录一次压缩成功，重置失败计数
+	 */
+	recordCompactionSuccess(): void {
+		if (this.consecutiveCompactionFailures > 0) {
+			console.log(`[TieredCompactionManager] E4 压缩成功，重置熔断器 (之前失败 ${this.consecutiveCompactionFailures} 次)`);
+			this.consecutiveCompactionFailures = 0;
+		}
+	}
+
 	/**
 	 * 检查是否需要执行分层压缩
 	 */

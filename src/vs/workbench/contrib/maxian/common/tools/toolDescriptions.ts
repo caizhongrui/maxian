@@ -78,14 +78,24 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
 	read_file: {
 		name: 'read_file',
 		summary: '读取文件内容',
-		description: `读取指定文件的内容。支持文本文件和部分二进制文件。
+		description: `读取指定路径的文件。可以读取此机器上的任何文件。
 
 **重要：** 在使用任何编辑工具（edit、write_to_file、apply_diff）之前，必须先使用此工具读取文件当前内容。这是强制要求！
 
-**支持的功能：**
-- 读取完整文件或指定行范围
-- 自动检测文件编码
-- 支持大文件分段读取`,
+**支持的文件类型：**
+- 普通文本文件（默认，最多读取 2000 行）
+- 图片文件（PNG、JPG 等）— 以视觉方式呈现给 AI
+- Jupyter Notebook（.ipynb）— 返回所有单元格及输出
+- 目录无法读取，请使用 list_files 或 glob
+
+**分段读取指导（对大文件至关重要）：**
+- 若已知需要哪部分，请只读取该部分（使用 start_line/end_line），这对大文件非常重要
+- 若不指定，默认从头读取最多 2000 行
+- 超过 2000 行的大文件必须用 start_line/end_line 分段读取
+
+**文件未变更时的行为：**
+- 若该文件在本次对话中已被读取且内容未发生变化，工具将返回"文件未变更"提示
+- 此时无需重新读取，直接使用上次读取结果即可`,
 		parameters: [
 			{
 				name: 'path',
@@ -98,7 +108,7 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
 				name: 'start_line',
 				type: 'number',
 				required: false,
-				description: '起始行号（从1开始）',
+				description: '起始行号（从1开始）。已知需要某部分时务必指定，对大文件尤其重要',
 				default: '1',
 			},
 			{
@@ -106,7 +116,7 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
 				type: 'number',
 				required: false,
 				description: '结束行号（包含）',
-				default: '文件末尾',
+				default: '文件末尾（最多 2000 行）',
 			},
 		],
 		examples: [
@@ -119,17 +129,19 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
 			},
 			{
 				title: '读取指定行范围',
-				description: '只读取第10-20行',
+				description: '只读取第 100-200 行（大文件分段读取）',
 				xml: `<read_file>
 <path>src/main.ts</path>
-<start_line>10</start_line>
-<end_line>20</end_line>
+<start_line>100</start_line>
+<end_line>200</end_line>
 </read_file>`,
 			},
 		],
 		tips: [
-			'对于大文件，建议使用 start_line/end_line 分段读取',
-			'读取后的内容会被缓存，后续编辑操作会使用缓存校验',
+			'文件内容以 cat -n 格式返回，带行号，从第 1 行开始',
+			'已知需要哪部分时只读取那部分，这对大文件至关重要',
+			'读取后内容会被缓存：若文件未修改，再次读取会返回"文件未变更"提示',
+			'返回"文件未变更"时，直接使用上一次的读取内容，无需重新读取',
 		],
 		commonErrors: [
 			{
@@ -144,8 +156,8 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
 			},
 		],
 		performanceTips: [
-			'超过 10000 行的大文件建议分段读取',
-			'二进制文件读取可能较慢',
+			'超过 2000 行的大文件必须分段读取，使用 start_line/end_line',
+			'用 search_files 定位具体行号后再分段读取，避免盲目读取整文件',
 		],
 		relatedTools: ['write_to_file', 'edit', 'search_files'],
 	},
@@ -585,7 +597,9 @@ import { useQuery } from 'react-query';</new_string>
 **功能：**
 - 支持完整的正则表达式语法
 - 可限制搜索的文件类型
-- 支持递归搜索子目录`,
+- 支持递归搜索子目录
+
+**重要：** 如果你需要进行**开放式的复杂探索**（需要多轮 glob + search_files 才能得出结论），请改用 **task 工具** 委托给子 Agent，这样可以保持主上下文干净。`,
 		parameters: [
 			{
 				name: 'path',
@@ -606,30 +620,53 @@ import { useQuery } from 'react-query';</new_string>
 				description: '文件名模式（glob格式）',
 				examples: ['*.ts', '*.{js,jsx}'],
 			},
+			{
+				name: 'output_mode',
+				type: 'string',
+				required: false,
+				description: '输出模式：files_with_matches（默认，只返回文件路径，节省 Token）| content（返回匹配行内容）| count（只返回数量）',
+				default: 'files_with_matches',
+			},
+			{
+				name: 'head_limit',
+				type: 'number',
+				required: false,
+				description: '最多返回结果数量（默认 250）',
+				default: '250',
+			},
+			{
+				name: 'offset',
+				type: 'number',
+				required: false,
+				description: '跳过前 N 条结果（用于分页，默认 0）',
+			},
 		],
 		examples: [
 			{
-				title: '搜索 TODO 注释',
-				description: '在 src 目录搜索所有 TODO',
+				title: '搜索并获取匹配文件列表（默认，省 Token）',
+				description: '只返回文件路径，适合先定位再读取',
 				xml: `<search_files>
 <path>src</path>
 <regex>TODO:.*</regex>
 </search_files>`,
 			},
 			{
-				title: '搜索函数定义',
-				description: '搜索所有 async 函数',
+				title: '搜索并返回匹配内容',
+				description: '需要查看匹配行时用 content 模式',
 				xml: `<search_files>
 <path>.</path>
 <regex>async function \\w+</regex>
 <file_pattern>*.ts</file_pattern>
+<output_mode>content</output_mode>
 </search_files>`,
 			},
 		],
 		tips: [
+			'默认 output_mode=files_with_matches，只返回文件路径，比 content 模式节省 10-40x Token',
 			'正则表达式使用 JavaScript 语法',
-			'对于简单文本搜索，直接使用文本即可',
 			'使用 file_pattern 限制搜索范围能显著提速',
+			'结果被截断时（超过 head_limit），请使用更精确的 regex 或 file_pattern 缩小范围，或增大 head_limit',
+			'使用 offset 参数可以分页获取：第一页 offset=0，第二页 offset=250，以此类推',
 		],
 		relatedTools: ['codebase_search', 'glob'],
 	},
@@ -682,7 +719,9 @@ import { useQuery } from 'react-query';</new_string>
 - \`*.ts\` - 当前目录所有 ts 文件
 - \`**/*.ts\` - 递归所有 ts 文件
 - \`src/**/*.{ts,tsx}\` - src 下所有 ts/tsx 文件
-- \`!node_modules\` - 排除 node_modules`,
+- \`!node_modules\` - 排除 node_modules
+
+**重要：** 如果你需要进行**开放式探索**（需要多轮 glob 和 search_files 才能得出结论），请改用 **task 工具** 委托给子 Agent，这样可以保持主上下文干净、避免大量搜索残留积累。`,
 		parameters: [
 			{
 				name: 'path',
@@ -713,6 +752,11 @@ import { useQuery } from 'react-query';</new_string>
 <file_pattern>**/*.config.{js,ts,json}</file_pattern>
 </glob>`,
 			},
+		],
+		tips: [
+			'结果按修改时间降序排列，最近修改的文件优先',
+			'结果被截断时请使用更精确的 path 或 pattern 缩小范围，例如 src/**/*.ts 而非 **/*.ts',
+			'结合 search_files 使用：先用 glob 找文件，再用 search_files 搜内容',
 		],
 		relatedTools: ['list_files', 'search_files'],
 	},

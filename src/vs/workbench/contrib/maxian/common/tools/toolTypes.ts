@@ -76,6 +76,10 @@ export const toolParamNames = [
 	'focus',          // pr_review: 审查重点
 	'test_framework', // generate_tests: 测试框架名称
 	'output_path',    // generate_tests: 测试文件输出路径
+	'output_mode',    // search_files: 'content' | 'files_with_matches' | 'count'
+	'head_limit',     // search_files: 最多返回行数（默认250）
+	'offset',         // search_files: 跳过前N行（分页）
+	'max_depth',      // list_files: 最大递归深度
 ] as const;
 
 export type ToolParamName = (typeof toolParamNames)[number];
@@ -165,12 +169,12 @@ export interface CodebaseSearchToolUse extends ToolUse {
 
 export interface SearchFilesToolUse extends ToolUse {
 	name: 'search_files';
-	params: Partial<Pick<Record<ToolParamName, string>, 'path' | 'regex' | 'file_pattern'>>;
+	params: Partial<Pick<Record<ToolParamName, string>, 'path' | 'regex' | 'file_pattern' | 'output_mode' | 'head_limit' | 'offset'>>;
 }
 
 export interface ListFilesToolUse extends ToolUse {
 	name: 'list_files';
-	params: Partial<Pick<Record<ToolParamName, string>, 'path' | 'recursive'>>;
+	params: Partial<Pick<Record<ToolParamName, string>, 'path' | 'recursive' | 'max_depth'>>;
 }
 
 export interface ListCodeDefinitionNamesToolUse extends ToolUse {

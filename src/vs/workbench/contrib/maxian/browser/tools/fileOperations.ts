@@ -15,6 +15,7 @@ import { normalizeString } from '../../common/utils/textNormalization.js';
 import * as path from '../../../../../base/common/path.js';
 import { trackFileRead, assertFileWritable, withFileLock, updateFileAfterWrite } from '../../common/file/fileTimeTracker.js';
 import { getDiagnosticsAfterEdit } from '../../common/lsp/lspDiagnostics.js';
+import { FileStateCache, FileStateEntry, FILE_UNCHANGED_STUB } from '../../common/file/fileStateCache.js';
 
 /**
  * apply_diff 工具专用错误类
@@ -122,17 +123,22 @@ function applyGitUnifiedDiff(originalContent: string, diff: string): string | nu
 export class FileOperationsTool {
 	private readonly diffStrategy: MultiSearchReplaceDiffStrategy;
 	private sessionId: string;
+	/** D2: 文件内容内存缓存，读后写后均更新，避免重复磁盘 IO */
+	private readonly fileStateCache: FileStateCache;
 
 	constructor(
 		private readonly fileService: IFileService,
 		private readonly workspaceRoot: string = '',
 		sessionId?: string,
-		private readonly modelService?: IModelService
+		private readonly modelService?: IModelService,
+		fileStateCache?: FileStateCache
 	) {
 		// 初始化Diff策略（完整Kilocode实现）
 		this.diffStrategy = new MultiSearchReplaceDiffStrategy(0.9, 40); // 90%匹配阈值，40行缓冲（对齐 OpenCode 容错策略）
 		// P1-8: 会话ID用于文件时间戳追踪
 		this.sessionId = sessionId || 'default';
+		// D2: 内存缓存（外部注入或自建，跨工具共享）
+		this.fileStateCache = fileStateCache ?? new FileStateCache();
 	}
 
 	/**
@@ -206,20 +212,84 @@ export class FileOperationsTool {
 				}
 			}
 
-			// 读取文本文件内容
+			// D2/B3: 全量读取时先检查缓存，文件未变则返回 FILE_UNCHANGED_STUB（零磁盘读）
+			const isPartialRead = start_line !== undefined || end_line !== undefined;
+			if (!isPartialRead) {
+				const cached = this.fileStateCache.get(absolutePath);
+				if (cached && !cached.isPartialView) {
+					try {
+						const statForCache = await this.fileService.resolve(uri);
+						const diskMtime = statForCache.mtime ?? 0;
+						const diskSize = statForCache.size ?? 0;
+						if (diskMtime === cached.mtime && diskSize === cached.size) {
+							console.log(`[FileStateCache] B3 FILE_UNCHANGED_STUB: ${absolutePath}`);
+							return FILE_UNCHANGED_STUB;
+						}
+					} catch {
+						// stat 失败，降级到正常磁盘读取
+					}
+				}
+			} else if (isPartialRead) {
+				// 局部读取时，若缓存有完整内容且文件未变，直接从缓存切片，省去磁盘 IO
+				const cached = this.fileStateCache.get(absolutePath);
+				if (cached && !cached.isPartialView) {
+					try {
+						const statForCache = await this.fileService.resolve(uri);
+						const diskMtime = statForCache.mtime ?? 0;
+						const diskSize = statForCache.size ?? 0;
+						if (diskMtime === cached.mtime && diskSize === cached.size) {
+							// 从缓存内容中切片返回（不读磁盘）
+							const cachedLines = cached.content.split(/\r?\n/);
+							if (cachedLines.length > 0 && cachedLines[cachedLines.length - 1] === '' && cached.content.endsWith('\n')) {
+								cachedLines.pop();
+							}
+							const totalLines = cachedLines.length;
+							const startIdx = start_line ? Math.max(0, parseInt(start_line, 10) - 1) : 0;
+							const endIdx = end_line ? Math.min(totalLines, parseInt(end_line, 10)) : totalLines;
+							if (startIdx < totalLines && startIdx <= endIdx) {
+								const selectedLines = cachedLines.slice(startIdx, endIdx);
+								const lineStart = startIdx + 1;
+								const numberedContent = addLineNumbers(selectedLines.join('\n'), lineStart);
+								console.log(`[FileStateCache] D2 partial-from-cache: ${absolutePath} lines ${lineStart}-${endIdx}`);
+								return `<file path="${absolutePath}">\n<content lines="${lineStart}-${endIdx}">\n${numberedContent}</content>\n</file>`;
+							}
+						}
+					} catch {
+						// stat 失败，降级到正常磁盘读取
+					}
+				}
+			}
+
+			// 读取文本文件内容（走磁盘）
 			const content = await this.fileService.readFile(uri);
 			const text = content.value.toString();
 			const allLines = text.split(/\r?\n/);
 
-			// P1-8: 记录文件读取时间戳
+			// P1-8 + D2: 记录文件读取时间戳，同时更新内存缓存
+			let cachedMtime = Date.now();
+			let cachedSize = text.length;
 			try {
 				const stat = await this.fileService.resolve(uri);
-				const mtime = stat.mtime ?? Date.now();
-				const size = stat.size ?? text.length;
-				trackFileRead(this.sessionId, absolutePath, mtime, size);
+				cachedMtime = stat.mtime ?? Date.now();
+				cachedSize = stat.size ?? text.length;
+				trackFileRead(this.sessionId, absolutePath, cachedMtime, cachedSize);
 			} catch (e) {
 				// 忽略 stat 失败，不影响读取
 				console.warn(`[FileOperations] 获取文件 stat 失败: ${absolutePath}`, e);
+			}
+			// D2/B4: 更新内存缓存
+			// - 全量读取：isPartialView=false，供后续 edit 走缓存（D4）和 STUB 检测（B3）
+			// - 局部读取：isPartialView=true，记录 AI 只看到了部分内容（B4），edit 时会警告
+			{
+				const cacheEntry: FileStateEntry = {
+					content: text,
+					mtime: cachedMtime,
+					size: cachedSize,
+					isPartialView: isPartialRead,
+					startLine: isPartialRead && start_line ? parseInt(start_line, 10) : undefined,
+					endLine: isPartialRead && end_line ? parseInt(end_line, 10) : undefined,
+				};
+				this.fileStateCache.set(absolutePath, cacheEntry);
 			}
 
 			// 如果文件末尾有换行符，split会产生一个空字符串，需要移除
@@ -376,25 +446,46 @@ ${assertResult.message}
 				trim: false // 保留原始空白符
 			});
 
-			// 4. 代码省略检测
+			// 4. 代码省略检测（B6优化：强化检测，不依赖 line_count 也能拦截明显省略）
 			const actualLineCount = processedContent.split('\n').length;
 			const predictedLineCount = line_count ? parseInt(line_count, 10) : undefined;
 
-			// 检测常见的代码省略标记
-			const omissionPatterns = [
-				/\/\/\s*(rest of|remaining|other|previous|existing)\s*(code|implementation|logic|content)/i,
-				/\/\*\s*(rest of|remaining|other|previous|existing)\s*(code|implementation|logic|content)/i,
+			// 高置信度省略标记：即使没有 line_count 也直接拒绝
+			const strongOmissionPatterns = [
+				/\/\/\s*(rest of|remaining|previous|existing)\s*(code|implementation|logic|methods?|functions?|content)/i,
+				/\/\*[\s\S]*?(rest of|remaining|previous|existing)\s*(code|implementation|logic|methods?|functions?|content)/i,
+				/#\s*(rest of|remaining|previous|existing)\s*(code|implementation|logic|content)/i,
+				/\/\/\s*\.\.\.\s*(rest|remaining|more)/i,
+				/\.\.\.\s*(rest of|remaining|previous)\s*(implementation|code)/i,
+			];
+
+			// 较低置信度省略标记：需配合行数验证才拒绝
+			const weakOmissionPatterns = [
 				/\/\/\s*\.\.\./,
 				/\/\*\s*\.\.\./,
-				/\/\/\s*TODO/i,
 				/\/\/\s*unchanged/i,
 				/\/\*\s*unchanged/i,
 			];
 
-			const hasOmissionMarker = omissionPatterns.some(pattern => pattern.test(processedContent));
+			const hasStrongOmission = strongOmissionPatterns.some(p => p.test(processedContent));
+			const hasWeakOmission = weakOmissionPatterns.some(p => p.test(processedContent));
 
-			// 如果检测到代码省略
-			if (hasOmissionMarker && predictedLineCount && actualLineCount < predictedLineCount) {
+			if (hasStrongOmission) {
+				// 高置信度：直接拒绝
+				const matchedPattern = strongOmissionPatterns.find(p => p.test(processedContent));
+				return `<error>
+错误: 检测到代码内容被省略（B6）
+
+文件: ${absolutePath}
+发现了明显的省略标记（如 "// rest of code"、"// remaining implementation" 等）。
+写入操作已拒绝，请提供完整的文件内容，不要使用任何省略符号或占位符。
+
+如果只需要修改部分内容，请使用 edit 或 apply_diff 工具。
+匹配模式: ${matchedPattern?.toString()}
+</error>`;
+			}
+
+			if (hasWeakOmission && predictedLineCount && actualLineCount < predictedLineCount) {
 				return `<error>
 错误: 检测到代码内容可能被省略
 
@@ -402,7 +493,7 @@ ${assertResult.message}
 实际行数: ${actualLineCount}
 预期行数: ${predictedLineCount}
 
-发现了代码省略标记（如 "// rest of code" 或 "// ..." 等）。
+发现了代码省略标记（如 "// ..." 或 "/* unchanged */" 等）。
 请提供完整的文件内容，不要使用任何省略符号或占位符。
 
 如果只需要修改部分内容，建议使用 apply_diff 工具。
@@ -452,12 +543,19 @@ ${assertResult.message}
 					throw writeError;
 				}
 
-				// P1-8: 写入后更新时间戳记录
+				// P1-8 + D2: 写入后更新时间戳记录并刷新内存缓存
 				try {
 					const newStat = await this.fileService.resolve(uri);
 					const newMtime = newStat.mtime ?? Date.now();
 					const newSize = newStat.size ?? processedContent.length;
 					updateFileAfterWrite(this.sessionId, absolutePath, newMtime, newSize);
+					// D2: 用实际写入的内容更新缓存，下次 readRaw/edit 直接走内存
+					this.fileStateCache.set(absolutePath, {
+						content: processedContent,
+						mtime: newMtime,
+						size: newSize,
+						isPartialView: false,
+					});
 				} catch (e) {
 					console.warn(`[FileOperations] 更新时间戳记录失败: ${absolutePath}`, e);
 				}
@@ -538,7 +636,9 @@ ${assertResult.message}
 	 * @returns 文件和目录列表（目录以"/"结尾）
 	 */
 	async listFiles(toolUse: ListFilesToolUse): Promise<ToolResponse> {
-		const { path: dirPath, recursive } = toolUse.params;
+		const { path: dirPath, recursive, max_depth } = toolUse.params;
+		// F6优化：max_depth 限制递归深度；recursive=true 时默认 depth=3，防止大 monorepo context 爆炸
+		const maxDepth = max_depth ? parseInt(max_depth, 10) : (recursive === 'true' ? 3 : 1);
 
 		if (!dirPath) {
 			return '错误: 未提供目录路径';
@@ -577,8 +677,8 @@ ${assertResult.message}
 					return;
 				}
 
-				// 限制递归深度
-				if (depth > 10) {
+				// F6优化：按 max_depth 限制递归深度
+				if (depth >= maxDepth) {
 					return;
 				}
 
@@ -660,6 +760,23 @@ ${assertResult.message}
 		const absolutePath = this.resolveFilePath(filePath);
 		try {
 			const uri = URI.file(absolutePath);
+
+			// D2/D4: 先检查内存缓存，若文件未被外部修改则直接返回缓存内容（零磁盘 IO）
+			const cached = this.fileStateCache.get(absolutePath);
+			if (cached && !cached.isPartialView) {
+				try {
+					const statCheck = await this.fileService.resolve(uri);
+					const diskMtime = statCheck.mtime ?? 0;
+					const diskSize = statCheck.size ?? 0;
+					if (diskMtime === cached.mtime && diskSize === cached.size) {
+						console.log(`[FileStateCache] D4 readRaw-from-cache: ${absolutePath}`);
+						return cached.content;
+					}
+				} catch {
+					// stat 失败，降级到磁盘读取
+				}
+			}
+
 			const exists = await this.fileService.exists(uri);
 			if (!exists) {
 				return null;
@@ -667,12 +784,19 @@ ${assertResult.message}
 			const content = await this.fileService.readFile(uri);
 			const text = content.value.toString();
 
-			// 同时记录读取时间戳（与 readFile 行为一致）
+			// 同时记录读取时间戳（与 readFile 行为一致），并更新内存缓存
 			try {
 				const stat = await this.fileService.resolve(uri);
 				const mtime = stat.mtime ?? Date.now();
 				const size = stat.size ?? text.length;
 				trackFileRead(this.sessionId, absolutePath, mtime, size);
+				// D2: 更新内存缓存
+				this.fileStateCache.set(absolutePath, {
+					content: text,
+					mtime,
+					size,
+					isPartialView: false,
+				});
 			} catch (e) {
 				console.warn(`[FileOperations] readRawFileContent: 获取 stat 失败: ${absolutePath}`, e);
 			}
@@ -914,7 +1038,12 @@ ${assertResult.message}
 							if (pattern(normalizedPath)) {
 								// P2优化：记录 mtime 以便按修改时间排序（对齐 OpenCode glob.ts）
 								const mtime = child.mtime ?? 0;
-								matchedFiles.push({ path: filePath, mtime });
+								// F5优化：返回相对路径（相对于工作区根目录），减少 Token 消耗
+								const wsRoot = this.workspaceRoot.replace(/\/$/, '');
+								const relPath = filePath.startsWith(wsRoot)
+									? filePath.substring(wsRoot.length).replace(/^[\/\\]/, '')
+									: filePath;
+								matchedFiles.push({ path: relPath, mtime });
 							}
 						}
 					}

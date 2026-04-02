@@ -146,20 +146,18 @@ export class FileTimeTracker {
 
 		// 检查文件是否被外部修改
 		if (currentMtime > readTime.mtime) {
-			return {
-				success: false,
-				error: FileTimeError.MODIFIED_EXTERNALLY,
-				message: `文件 ${filePath} 在上次读取后已被外部修改。请重新使用 read_file 读取最新内容后再进行修改。`,
-			};
-		}
-
-		// 可选：检查文件大小变化（额外保护）
-		if (currentSize !== undefined && currentSize !== readTime.size) {
-			return {
-				success: false,
-				error: FileTimeError.MODIFIED_EXTERNALLY,
-				message: `文件 ${filePath} 大小已变化（原: ${readTime.size}, 现: ${currentSize}）。请重新读取文件。`,
-			};
+			// B5优化：Windows/OneDrive/iCloud 会在不修改内容的情况下更新 mtime
+			// 若 mtime 变了但 size 未变，视为时间戳误报，允许写入
+			const sizeUnchanged = currentSize !== undefined && readTime.size !== undefined && currentSize === readTime.size;
+			if (!sizeUnchanged) {
+				return {
+					success: false,
+					error: FileTimeError.MODIFIED_EXTERNALLY,
+					message: `文件 ${filePath} 在上次读取后已被外部修改（mtime: ${readTime.mtime} → ${currentMtime}, size: ${readTime.size ?? '?'} → ${currentSize ?? '?'}）。请重新使用 read_file 读取最新内容后再进行修改。`,
+				};
+			}
+			// size 未变：仅时间戳刷新（Windows/OneDrive 误报），记录警告后允许继续
+			console.warn(`[FileTimeTracker] B5: mtime 变化但 size 未变，视为时间戳误报，允许写入: ${filePath}`);
 		}
 
 		return { success: true };

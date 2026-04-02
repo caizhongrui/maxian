@@ -117,6 +117,8 @@ export interface UsageStreamChunk {
 	cacheReadInputTokens?: number;
 	/** 缓存写入的 token 数（用于 prompt caching） */
 	cacheCreationInputTokens?: number;
+	/** E2优化：输出被截断的原因（'length' 表示命中 max_output_tokens 上限） */
+	stopReason?: string;
 }
 
 /**

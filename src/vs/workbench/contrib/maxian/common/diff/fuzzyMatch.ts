@@ -477,11 +477,76 @@ export function findMatch(content: string, oldString: string): MatchResult {
 		// matches.length === 0：该策略无匹配，继续下一个策略
 	}
 
+	// B1: 弯引号/直引号归一化容错（Claude Code 三层容错之一）
+	// AI 输出 "string"（弯引号），文件实际是 "string"（直引号）时，精确匹配失败
+	const normalizedOldString = normalizeCurlyQuotes(oldString);
+	if (normalizedOldString !== oldString) {
+		for (const { fn } of REPLACERS) {
+			const matches: MatchResult[] = [];
+			for (const result of fn(content, normalizedOldString)) {
+				if (result.found) {
+					matches.push(result);
+					if (matches.length > 1) break;
+				}
+			}
+			if (matches.length === 1) {
+				return { ...matches[0], strategy: (matches[0].strategy || '') + '+CurlyQuoteNorm' };
+			} else if (matches.length > 1) {
+				hasMultipleMatches = true;
+			}
+		}
+	}
+
+	// B2: API Desanitization 容错（Anthropic API 传输时缩写某些标签）
+	// <function_results> → <fnr>，<function_calls> → <fn> 等
+	const desanitizedOldString = desanitizeApiTags(oldString);
+	if (desanitizedOldString !== oldString) {
+		for (const { fn } of REPLACERS) {
+			const matches: MatchResult[] = [];
+			for (const result of fn(content, desanitizedOldString)) {
+				if (result.found) {
+					matches.push(result);
+					if (matches.length > 1) break;
+				}
+			}
+			if (matches.length === 1) {
+				return { ...matches[0], strategy: (matches[0].strategy || '') + '+Desanitize' };
+			} else if (matches.length > 1) {
+				hasMultipleMatches = true;
+			}
+		}
+	}
+
 	if (hasMultipleMatches) {
 		return { found: false, multipleMatches: true };
 	}
 
 	return { found: false };
+}
+
+/**
+ * B1: 弯引号归一化 — 将 AI 输出的智能引号替换为直引号（ASCII）
+ * AI 常输出 "text" 或 'text'，但文件中是 "text" 或 'text'
+ */
+function normalizeCurlyQuotes(text: string): string {
+	return text
+		.replace(/[\u201C\u201D]/g, '"')   // " " → "
+		.replace(/[\u2018\u2019]/g, "'")   // ' ' → '
+		.replace(/[\u00AB\u00BB]/g, '"');  // « » → "
+}
+
+/**
+ * B2: API Desanitization — 还原 Anthropic API 传输时对 XML 标签的缩写
+ * API 会将某些标签缩短以节省空间，AI 看到缩写版本，但文件里是原始版本
+ */
+function desanitizeApiTags(text: string): string {
+	return text
+		.replace(/<fnr>/g, '<function_results>')
+		.replace(/<\/fnr>/g, '</function_results>')
+		.replace(/<fn>/g, '<function_calls>')
+		.replace(/<\/fn>/g, '</function_calls>')
+		.replace(/<fc>/g, '<function_calls>')
+		.replace(/<\/fc>/g, '</function_calls>');
 }
 
 /**

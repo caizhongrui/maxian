@@ -781,6 +781,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		this._initialized = true;
 		console.log('[Maxian] 码弦服务初始化完成');
+		console.log('[Maxian] ✅ v1.108.4 Phase1优化已加载: E1(context四级阈值) E2(输出截断自动续写) E4(压缩熔断器) F4(search默认路径模式) F5(glob相对路径) + 11项其他优化');
 
 		// 埋点：会话开始（初始化完成后触发）
 		this.behaviorReporter?.reportSessionStart();

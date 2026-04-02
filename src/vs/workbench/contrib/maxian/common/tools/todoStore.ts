@@ -120,6 +120,26 @@ export function formatTodoList(todos: ITodoItem[]): string {
 }
 
 /**
+ * A8优化: 检查是否所有 todo 都已完成（触发自动清空）
+ * 对齐 Claude Code: 全部 completed 时发送 [] 清空列表
+ */
+export function shouldAutoClean(todos: ITodoItem[]): boolean {
+	return todos.length > 0 && todos.every(t => t.status === 'completed' || t.status === 'failed');
+}
+
+/**
+ * A8优化: 超过 3 个 completed 时注入验证 nudge
+ * 对齐 Claude Code: 提醒 AI 检查已完成的 todo 是否真正完成
+ */
+export function getVerificationNudge(todos: ITodoItem[]): string | null {
+	const completedCount = todos.filter(t => t.status === 'completed').length;
+	if (completedCount >= 3) {
+		return `\n\n[验证提示] 你已标记了 ${completedCount} 个任务为 completed。请确认这些任务确实已完成（运行测试、检查输出），而不仅仅是执行了修改。`;
+	}
+	return null;
+}
+
+/**
  * TodoStore 操作集合
  */
 export const TodoStore = {

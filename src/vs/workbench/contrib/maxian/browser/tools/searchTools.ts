@@ -8,6 +8,8 @@ import { URI } from '../../../../../base/common/uri.js';
 import { SearchFilesToolUse, CodebaseSearchToolUse, ToolResponse } from '../../common/tools/toolTypes.js';
 import { CancellationToken, CancellationTokenSource } from '../../../../../base/common/cancellation.js';
 import { IRipgrepService } from '../../../../services/ripgrep/common/ripgrep.js';
+import { IFileService } from '../../../../../platform/files/common/files.js';
+import * as path from '../../../../../base/common/path.js';
 import * as glob from '../../../../../base/common/glob.js';
 
 /**
@@ -36,7 +38,8 @@ export class SearchTool {
 		private readonly searchService: ISearchService,
 		// @ts-expect-error: ripgrepService保留以备将来使用
 		private readonly _ripgrepService: IRipgrepService,
-		private readonly workspaceRoot: string
+		private readonly workspaceRoot: string,
+		private readonly fileService?: IFileService
 	) {
 		console.log('[SearchTool] 初始化，工作区:', workspaceRoot);
 	}
@@ -48,8 +51,13 @@ export class SearchTool {
 	 * @returns 搜索结果
 	 */
 	async searchFiles(toolUse: SearchFilesToolUse): Promise<ToolResponse> {
-		const { path, regex, file_pattern } = toolUse.params;
+		const { path, regex, file_pattern, output_mode, head_limit, offset } = toolUse.params;
 		const startTime = Date.now();
+
+		// output_mode 默认 'files_with_matches'（减少 token 消耗），可选 'content' / 'count'
+		const outputMode = (output_mode as 'content' | 'files_with_matches' | 'count') || 'files_with_matches';
+		const headLimit = head_limit ? parseInt(head_limit, 10) : 250;
+		const offsetVal = offset ? parseInt(offset, 10) : 0;
 
 		if (!regex && !file_pattern) {
 			return '错误: 必须提供搜索模式(regex)或文件模式(file_pattern)';
@@ -73,9 +81,9 @@ export class SearchTool {
 			const fileNameFilter = isFilePath ? lastSegment : undefined;
 			const folderUri = URI.file(folderPath);
 
-			// 创建可取消的 token（5秒超时）
+			// 创建可取消的 token（30秒超时，大型项目 ripgrep 需要时间）
 			const cts = new CancellationTokenSource();
-			const timeoutId = setTimeout(() => cts.cancel(), 5000);
+			const timeoutId = setTimeout(() => cts.cancel(), 30000);
 
 			try {
 				// 如果提供了 regex，执行内容搜索（QueryType.Text，底层使用 ripgrep 搜索文件内容）
@@ -98,7 +106,7 @@ export class SearchTool {
 						return `❌ 未找到匹配正则表达式 "${regex}" 的内容\n\n📁 搜索路径: "${searchPath}"${file_pattern ? '\n📄 文件模式: ' + file_pattern : ''}\n\n💡 建议：\n1. 检查正则表达式语法是否正确\n2. 或使用 codebase_search 进行关键词搜索\n3. 或使用 glob 工具按文件名搜索`;
 					}
 
-					// 返回 filePath:lineNumber: content 格式（与 codebaseSearch 一致，参考 OpenCode grep.ts）
+					// 按文件分组
 					const resultsByFile = new Map<string, { lineNumber: number; line: string }[]>();
 					for (const { filePath, lineNumber, line } of results.values()) {
 						if (!resultsByFile.has(filePath)) {
@@ -107,16 +115,28 @@ export class SearchTool {
 						resultsByFile.get(filePath)!.push({ lineNumber, line });
 					}
 					const sortedFiles = await this.sortFilesByMtime([...resultsByFile.keys()]);
+
+					// count 模式：只返回统计
+					if (outputMode === 'count') {
+						return `${results.size} matches across ${resultsByFile.size} files`;
+					}
+
+					// files_with_matches 模式（默认）：只返回文件路径，大幅减少 token
+					if (outputMode === 'files_with_matches') {
+						const filePaths = sortedFiles.slice(offsetVal, offsetVal + headLimit);
+						return filePaths.join('\n');
+					}
+
+					// content 模式：返回完整内容（filePath:lineNumber: content）
 					const allResults: string[] = [];
 					for (const filePath of sortedFiles) {
 						const fileResults = resultsByFile.get(filePath)!;
 						for (const { lineNumber, line } of fileResults) {
 							allResults.push(`${filePath}:${lineNumber}: ${line.trim()}`);
-							if (allResults.length >= 100) { break; }
 						}
-						if (allResults.length >= 100) { break; }
 					}
-					return `找到 ${results.size} 个匹配 (显示前${allResults.length}个):\n\n${allResults.join('\n')}`;
+					const paged = allResults.slice(offsetVal, offsetVal + headLimit);
+					return `找到 ${results.size} 个匹配 (显示 ${offsetVal + 1}-${offsetVal + paged.length} / ${allResults.length}):\n\n${paged.join('\n')}`;
 				}
 
 				// 只有 file_pattern，执行文件名搜索（QueryType.File）
@@ -144,8 +164,12 @@ export class SearchTool {
 					}
 				}
 
-				const files = result.results.map(r => r.resource.fsPath);
-				return files.join('\n');
+				const allFiles = result.results.map(r => r.resource.fsPath);
+				if (outputMode === 'count') {
+					return `${allFiles.length} files`;
+				}
+				const paged = allFiles.slice(offsetVal, offsetVal + headLimit);
+				return paged.join('\n');
 			} finally {
 				clearTimeout(timeoutId);
 				cts.dispose();
@@ -206,9 +230,9 @@ export class SearchTool {
 
 			console.log('[SearchTool] codebaseSearch 开始，查询:', query, '路径:', searchPath);
 
-			// 创建可取消的 token（5秒超时）
+			// 创建可取消的 token（30秒超时，大型项目 ripgrep 需要时间）
 			const cts = new CancellationTokenSource();
-			const timeoutId = setTimeout(() => cts.cancel(), 5000);
+			const timeoutId = setTimeout(() => cts.cancel(), 30000);
 
 			try {
 				// 策略1: 直接文本搜索（使用 ripgrep）
@@ -374,8 +398,9 @@ export class SearchTool {
 				}
 			}
 		} catch (error) {
-			// 搜索被取消或失败
-			if (!(error instanceof Error && error.message.includes('cancel'))) {
+			// 搜索被取消或失败（Canceled 大小写不敏感匹配）
+			const msg = error instanceof Error ? error.message : String(error);
+			if (!msg.toLowerCase().includes('cancel')) {
 				console.warn('[SearchTool] 文本搜索失败:', error);
 			}
 		}
@@ -384,14 +409,137 @@ export class SearchTool {
 	}
 
 	/**
-	 * 列出代码定义名称
-	 * 使用符号搜索功能
+	 * F1: 列出代码定义名称（函数/类/接口/方法等）
+	 *
+	 * 使用正则解析，支持 TypeScript/JavaScript/Python/Java/Go/Rust/C/C++ 等常见语言。
+	 * 对齐 Claude Code list_code_definition_names 功能，
+	 * 帮助 AI 快速了解文件结构而无需读取完整内容（节省 5-20x Token）。
 	 */
-	async listCodeDefinitionNames(path: string): Promise<ToolResponse> {
+	async listCodeDefinitionNames(filePath: string): Promise<ToolResponse> {
+		if (!filePath) {
+			return '错误: 未提供文件路径';
+		}
+
+		const absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(this.workspaceRoot, filePath);
+
 		try {
-			// TODO: 实现符号搜索
-			// 需要使用IWorkspaceSymbolProvider或语言服务
-			return '代码定义列表功能暂未实现';
+			// 读取文件内容
+			let text: string;
+			if (this.fileService) {
+				const uri = URI.file(absolutePath);
+				const exists = await this.fileService.exists(uri);
+				if (!exists) {
+					return `错误: 文件不存在: ${absolutePath}`;
+				}
+				const content = await this.fileService.readFile(uri);
+				text = content.value.toString();
+			} else {
+				return '错误: 文件服务未初始化';
+			}
+
+			const lines = text.split(/\r?\n/);
+			const symbols: Array<{ line: number; kind: string; name: string }> = [];
+
+			// 根据文件扩展名选择解析策略
+			const ext = absolutePath.match(/\.([^.]+)$/)?.[1]?.toLowerCase() ?? '';
+
+			if (['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs'].includes(ext)) {
+				// TypeScript / JavaScript
+				const patterns: Array<{ kind: string; regex: RegExp }> = [
+					{ kind: 'class',     regex: /^(?:export\s+(?:default\s+)?|abstract\s+)?class\s+(\w+)/ },
+					{ kind: 'interface', regex: /^(?:export\s+)?interface\s+(\w+)/ },
+					{ kind: 'type',      regex: /^(?:export\s+)?type\s+(\w+)\s*[=<]/ },
+					{ kind: 'enum',      regex: /^(?:export\s+)?(?:const\s+)?enum\s+(\w+)/ },
+					{ kind: 'function',  regex: /^(?:export\s+(?:default\s+)?)?(?:async\s+)?function\s*\*?\s*(\w+)\s*[(<]/ },
+					{ kind: 'function',  regex: /^(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*[^=]+)?\s*=\s*(?:async\s+)?(?:function|\([^)]*\)\s*=>|\w+\s*=>)/ },
+					{ kind: 'method',    regex: /^\s+(?:(?:public|private|protected|static|async|override|abstract)\s+)*(?:async\s+)?(?:get\s+|set\s+)?(\w+)\s*\([^)]*\)\s*(?::\s*[^{]+)?\s*\{/ },
+					{ kind: 'decorator', regex: /^@(\w+)/ },
+				];
+				for (let i = 0; i < lines.length; i++) {
+					const trimmed = lines[i].trimStart();
+					for (const { kind, regex } of patterns) {
+						const m = trimmed.match(regex);
+						if (m && m[1] && m[1] !== 'if' && m[1] !== 'for' && m[1] !== 'while' && m[1] !== 'return') {
+							symbols.push({ line: i + 1, kind, name: m[1] });
+							break;
+						}
+					}
+				}
+			} else if (ext === 'py') {
+				// Python
+				for (let i = 0; i < lines.length; i++) {
+					const m = lines[i].match(/^(\s*)(?:async\s+)?def\s+(\w+)\s*\(/) ??
+						lines[i].match(/^(\s*)class\s+(\w+)\s*[:(]/);
+					if (m) {
+						const indent = m[1].length;
+						const kind = lines[i].match(/\bclass\b/) ? 'class' : 'function';
+						symbols.push({ line: i + 1, kind: indent > 0 ? 'method' : kind, name: m[2] });
+					}
+				}
+			} else if (['java', 'kt', 'scala'].includes(ext)) {
+				// Java / Kotlin / Scala
+				for (let i = 0; i < lines.length; i++) {
+					const trimmed = lines[i].trimStart();
+					const classM = trimmed.match(/(?:public|private|protected|internal|abstract|sealed|data|open|)?\s*(?:class|interface|enum|object|record)\s+(\w+)/);
+					if (classM) { symbols.push({ line: i + 1, kind: 'class', name: classM[1] }); continue; }
+					const methodM = trimmed.match(/(?:(?:public|private|protected|internal|static|final|override|suspend|abstract)\s+)*(?:fun|void|int|long|double|float|boolean|String|[A-Z]\w*)\s+(\w+)\s*\([^)]*\)/);
+					if (methodM && methodM[1] && methodM[1] !== 'if' && methodM[1] !== 'for') {
+						symbols.push({ line: i + 1, kind: 'method', name: methodM[1] });
+					}
+				}
+			} else if (['go'].includes(ext)) {
+				// Go
+				for (let i = 0; i < lines.length; i++) {
+					const funcM = lines[i].match(/^func\s+(?:\(\w+\s+\*?\w+\)\s+)?(\w+)\s*\(/);
+					const typeM = lines[i].match(/^type\s+(\w+)\s+(?:struct|interface)/);
+					if (funcM) { symbols.push({ line: i + 1, kind: 'function', name: funcM[1] }); }
+					else if (typeM) { symbols.push({ line: i + 1, kind: 'type', name: typeM[1] }); }
+				}
+			} else if (['rs'].includes(ext)) {
+				// Rust
+				for (let i = 0; i < lines.length; i++) {
+					const trimmed = lines[i].trimStart();
+					const m = trimmed.match(/^(?:pub(?:\s*\(\w+\))?\s+)?(?:async\s+)?fn\s+(\w+)\s*[<(]/) ??
+						trimmed.match(/^(?:pub(?:\s*\(\w+\))?\s+)?(?:struct|enum|trait|impl|type)\s+(\w+)/);
+					if (m) {
+						const kind = trimmed.match(/\bfn\b/) ? 'function' :
+							trimmed.match(/\bstruct\b/) ? 'struct' :
+							trimmed.match(/\benum\b/) ? 'enum' :
+							trimmed.match(/\btrait\b/) ? 'trait' :
+							trimmed.match(/\bimpl\b/) ? 'impl' : 'type';
+						symbols.push({ line: i + 1, kind, name: m[1] });
+					}
+				}
+			} else if (['c', 'cpp', 'cc', 'cxx', 'h', 'hpp'].includes(ext)) {
+				// C / C++
+				for (let i = 0; i < lines.length; i++) {
+					const trimmed = lines[i].trimStart();
+					const classM = trimmed.match(/^(?:class|struct|namespace|enum)\s+(\w+)/);
+					if (classM) { symbols.push({ line: i + 1, kind: 'class', name: classM[1] }); continue; }
+					// 函数定义（返回值 + 函数名 + 括号，排除 if/for/while）
+					const funcM = trimmed.match(/^(?:static\s+|inline\s+|virtual\s+|override\s+)?(?:[\w:*&<>]+\s+)+(\w+)\s*\([^;]*\)\s*(?:const\s*)?\{/);
+					if (funcM && funcM[1] && !['if', 'for', 'while', 'switch', 'catch'].includes(funcM[1])) {
+						symbols.push({ line: i + 1, kind: 'function', name: funcM[1] });
+					}
+				}
+			} else {
+				// 通用：提取常见模式（function/class/def）
+				for (let i = 0; i < lines.length; i++) {
+					const m = lines[i].match(/(?:function|class|def|func|fn|sub|procedure)\s+(\w+)/i);
+					if (m) {
+						symbols.push({ line: i + 1, kind: 'symbol', name: m[1] });
+					}
+				}
+			}
+
+			if (symbols.length === 0) {
+				return `<definitions path="${absolutePath}">\n(未找到符号定义，文件可能不含顶层定义或不支持该语言)\n</definitions>`;
+			}
+
+			// 格式化输出（对齐 Claude Code 格式）
+			const lines2 = symbols.map(s => `${s.line.toString().padStart(4)}: ${s.kind.padEnd(10)} ${s.name}`);
+			return `<definitions path="${absolutePath}">\n${lines2.join('\n')}\n</definitions>`;
+
 		} catch (error) {
 			return `列出代码定义失败: ${error instanceof Error ? error.message : String(error)}`;
 		}

@@ -8,7 +8,7 @@ import { ToolUse, ToolResponse, ToolName, ALWAYS_AVAILABLE_TOOLS, TOOL_GROUPS } 
 import { FileOperationsTool } from './fileOperations.js';
 import { CommandExecutionTool } from './commandExecution.js';
 import { SearchTool } from './searchTools.js';
-import { TodoStore, parseTodos, formatTodoList, IRawTodoInput } from '../../common/tools/todoStore.js';
+import { TodoStore, parseTodos, formatTodoList, IRawTodoInput, shouldAutoClean, getVerificationNudge } from '../../common/tools/todoStore.js';
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { IModelService } from '../../../../../editor/common/services/model.js';
 import { ITerminalService } from '../../../terminal/browser/terminal.js';
@@ -33,6 +33,8 @@ import { generateTestsTool, FileSystemOps } from '../../common/tools/generateTes
 import { IVectorSearchService } from '../../common/vector/IVectorSearchService.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { McpHub } from '../../common/mcp/McpHub.js';
+import { FileStateCache } from '../../common/file/fileStateCache.js';
+import { HooksManager } from '../../common/hooks/hooksManager.js';
 
 /**
  * 工具执行器实现类
@@ -49,8 +51,15 @@ export class ToolExecutorImpl implements IToolExecutor {
 	/**
 	 * 文件读取计数器：记录每个文件在当前 Agent 生命周期中被 read_file 读取的次数
 	 * key: 绝对路径, value: 读取次数
+	 * 注：B3/D2 后重复读未变文件会返回 FILE_UNCHANGED_STUB，此计数器仅用于统计，不再 FATAL
 	 */
 	private fileReadCount: Map<string, number> = new Map();
+
+	/** D2: 文件内容内存缓存，与 FileOperationsTool 共享同一实例 */
+	private readonly fileStateCache: FileStateCache = new FileStateCache();
+
+	/** C5: Hooks 管理器 */
+	private readonly hooksManager: HooksManager;
 
 	/**
 	 * 子 Agent 运行器（由 maxianService 注入）
@@ -76,12 +85,13 @@ export class ToolExecutorImpl implements IToolExecutor {
 	) {
 		this.fileService = fileService;
 		this.commandExecutionService = commandExecutionService;
-		this.fileOperations = new FileOperationsTool(fileService, context.workspaceRoot || '', undefined, modelService);
+		this.fileOperations = new FileOperationsTool(fileService, context.workspaceRoot || '', undefined, modelService, this.fileStateCache);
+		this.hooksManager = new HooksManager(context.workspaceRoot || '');
 		this.commandExecution = new CommandExecutionTool(terminalService);
 		if (commandExecutionService) {
 			this.commandExecution.setCommandExecutionService(commandExecutionService);
 		}
-		this.searchTool = new SearchTool(searchService, ripgrepService, context.workspaceRoot || '');
+		this.searchTool = new SearchTool(searchService, ripgrepService, context.workspaceRoot || '', fileService);
 		this.context = context;
 		this.skillService = skillService;
 		this.vectorSearchService = vectorSearchService;
@@ -178,6 +188,13 @@ export class ToolExecutorImpl implements IToolExecutor {
 		}
 
 		try {
+			// C5: PreToolUse Hooks — 在工具执行前运行，非0退出码可阻止执行
+			const preHookResult = await this.hooksManager.runPreToolUseHooks(toolUse.name, toolUse.params || {});
+			if (preHookResult.blocked) {
+				console.warn(`[Maxian] C5 PreToolUse hook 阻止工具执行: ${toolUse.name}`);
+				return `<error>[Hook 阻止] 工具 "${toolUse.name}" 被 PreToolUse hook 阻止：\n${preHookResult.blockReason}</error>`;
+			}
+
 			let result: ToolResponse = '';
 
 			// 埋点：工具使用事件（在分发前统一上报，使用可选链静默处理）
@@ -186,32 +203,19 @@ export class ToolExecutorImpl implements IToolExecutor {
 			switch (toolUse.name) {
 				// 文件操作工具
 				case 'read_file': {
+					// D2/B3: readFile 内部已实现缓存检测，文件未变时返回 FILE_UNCHANGED_STUB（~20 tokens）
+					// 不再需要 DUPLICATE_READ FATAL——STUB 本身就告知 AI 文件未变，自然终止重读循环
 					const readFilePath = toolUse.params?.path as string || '';
 					const resolvedReadPath = readFilePath ? this.fileOperations.resolveFilePath(readFilePath) : readFilePath;
 					const prevCount = this.fileReadCount.get(resolvedReadPath) || 0;
 					const newCount = prevCount + 1;
 					this.fileReadCount.set(resolvedReadPath, newCount);
 
-					if (newCount === 2) {
-						// 第2次读取同一文件：执行但附加警告
-						result = await this.fileOperations.readFile(toolUse as any);
-						const warnMsg = `\n\n⚠️ [DUPLICATE_READ 警告] 这是第 ${newCount} 次读取 "${readFilePath}"。\n` +
-							`规则：已读取过的文件请直接使用上下文中的内容，无需重复 read_file。\n` +
-							`若文件已被 @mentions 引用（<file_content> 标签），禁止再次调用 read_file。`;
-						result = (typeof result === 'string' ? result : String(result)) + warnMsg;
-					} else if (newCount >= 3) {
-						// 第3次及以上：强制错误，阻止继续浪费 token
-						console.warn(`[Maxian] DUPLICATE_READ FATAL: "${resolvedReadPath}" 已读取 ${newCount} 次`);
-						throw new Error(
-							`[DUPLICATE_READ FATAL] 文件 "${readFilePath}" 已读取 ${newCount} 次，强制停止。\n\n` +
-							`根本原因分析：\n` +
-							`1. 若用户消息含 <file_content path="${readFilePath}"> 标签，说明文件已在上下文中，直接使用，禁止 read_file\n` +
-							`2. 若已有之前的 read_file 结果，直接使用那次的内容，无需重读\n` +
-							`3. 仅当确认文件已被其他 edit/write 工具修改后，才允许重新 read_file\n\n` +
-							`⛔ 请直接使用已有的文件内容继续完成任务，或调用 attempt_completion 结束。`
-						);
-					} else {
-						result = await this.fileOperations.readFile(toolUse as any);
+					result = await this.fileOperations.readFile(toolUse as any);
+
+					// 仅在第2次读取且非 STUB 时（说明文件已被修改）附加一次提示
+					if (newCount === 2 && typeof result === 'string' && !result.includes('<file_unchanged>')) {
+						result = result + `\n\n⚠️ [重复读取] 这是第 ${newCount} 次读取 "${readFilePath}"（文件已变动，本次返回最新内容）。`;
 					}
 					break;
 				}
@@ -320,11 +324,13 @@ export class ToolExecutorImpl implements IToolExecutor {
 					break;
 
 				case 'attempt_completion':
-					result = this.handleAttemptCompletion(toolUse);
+					// 由 TaskService.handleAttemptCompletion 处理，此分支不应被到达
+					result = `[attempt_completion] 已由主循环处理`;
 					break;
 
 				case 'new_task':
-					result = this.handleNewTask(toolUse);
+					// 由 TaskService 主循环处理，此分支不应被到达
+					result = `[new_task] 已由主循环处理`;
 					break;
 
 				case 'update_todo_list':
@@ -493,6 +499,18 @@ export class ToolExecutorImpl implements IToolExecutor {
 
 				// P1-7: 工具执行成功，重置 Doom Loop 计数
 			resetDoomLoopCount(sessionId, toolUse.name);
+
+			// C5: PostToolUse Hooks — 在工具执行后运行，stdout 非空则替换输出
+			const postHookResult = await this.hooksManager.runPostToolUseHooks(
+				toolUse.name,
+				toolUse.params || {},
+				typeof result === 'string' ? result : JSON.stringify(result)
+			);
+			if (postHookResult.replacedOutput !== undefined) {
+				console.log(`[Maxian] C5 PostToolUse hook 替换输出: ${toolUse.name}`);
+				return postHookResult.replacedOutput;
+			}
+
 			return result;
 		} catch (error) {
 			const errorMsg = `工具 ${toolUse.name} 执行失败: ${error instanceof Error ? error.message : String(error)}`;
@@ -551,24 +569,6 @@ export class ToolExecutorImpl implements IToolExecutor {
 	}
 
 	/**
-	 * 处理任务完成
-	 */
-	private handleAttemptCompletion(toolUse: ToolUse): ToolResponse {
-		const { result } = toolUse.params;
-		// TODO: 实现任务完成逻辑
-		return `任务完成: ${result || '(未提供结果)'}`;
-	}
-
-	/**
-	 * 处理新任务
-	 */
-	private handleNewTask(toolUse: ToolUse): ToolResponse {
-		const { message } = toolUse.params;
-		// TODO: 实现新任务创建
-		return `创建新任务: ${message || '(未提供消息)'}`;
-	}
-
-	/**
 	 * 处理待办列表更新（update_todo_list / todowrite）
 	 * 完整实现：解析、验证、持久化、返回确认
 	 */
@@ -597,15 +597,28 @@ export class ToolExecutorImpl implements IToolExecutor {
 		}
 
 		const sessionId = this.context.sessionId || 'default';
-		TodoStore.update(sessionId, parsedTodos);
 
+		// A8优化: 所有 todo 均 completed/failed 时自动清空列表（对齐 Claude Code）
+		if (shouldAutoClean(parsedTodos)) {
+			TodoStore.clear(sessionId);
+			if (this.context.onTodoListUpdate) {
+				this.context.onTodoListUpdate([]);
+			}
+			return '所有待办任务已完成，列表已清空。';
+		}
+
+		TodoStore.update(sessionId, parsedTodos);
 
 		// 触发上下文回调（由 maxianService 注入）
 		if (this.context.onTodoListUpdate) {
 			this.context.onTodoListUpdate(parsedTodos);
 		}
 
-		return formatTodoList(parsedTodos);
+		let response = formatTodoList(parsedTodos);
+		// A8优化: 3+ completed 时注入验证 nudge（对齐 Claude Code）
+		const nudge = getVerificationNudge(parsedTodos);
+		if (nudge) { response += nudge; }
+		return response;
 	}
 
 	/**
@@ -771,13 +784,23 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 		if (consumePathSavedByDiff(resolvedEditPath)) {
 			let output = '✅ 文件已通过 diff 确认保存';
 			try {
-				const diagnostics = await getDiagnosticsAfterEdit(editParams.path);
+				const diagnostics = await getDiagnosticsAfterEdit(resolvedEditPath);
 				if (diagnostics) { output += diagnostics; }
 			} catch { /* LSP 失败不影响主流程 */ }
 			return output;
 		}
 
 		try {
+			// B4: 编辑前检查是否基于局部视图
+			const resolvedEditPath = this.fileOperations.resolveFilePath(editParams.path);
+			const cachedStateForEdit = this.fileStateCache.get(resolvedEditPath);
+			let partialViewWarning = '';
+			if (cachedStateForEdit?.isPartialView) {
+				const s = cachedStateForEdit.startLine ?? '?';
+				const e = cachedStateForEdit.endLine ?? '?';
+				partialViewWarning = `\n\n⚠️ [B4 局部视图] 上次读取该文件时仅查看了第 ${s}-${e} 行。本次编辑已基于完整文件内容执行，建议先完整读取文件（不带 start_line/end_line 参数）以确认修改上下文。`;
+			}
+
 			// 读取文件原始内容（不带行号和XML包装，避免字符串替换失败）
 			const content = await this.fileOperations.readRawFileContent(editParams.path);
 
@@ -785,7 +808,7 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			const result = executeEdit(content, editParams);
 
 			if (!result.success) {
-				return formatEditResponse(result);
+				return formatEditResponse(result) + partialViewWarning;
 			}
 
 			// 写入修改后的内容
@@ -797,9 +820,9 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			} as any);
 
 			// 写入后追加 LSP 诊断（对齐 OpenCode edit.ts 行为）
-			let output = formatEditResponse(result);
+			let output = formatEditResponse(result) + partialViewWarning;
 			try {
-				const diagnostics = await getDiagnosticsAfterEdit(editParams.path);
+				const diagnostics = await getDiagnosticsAfterEdit(resolvedEditPath);
 				if (diagnostics) output += diagnostics;
 			} catch { /* LSP 失败不影响主流程 */ }
 			return output;
@@ -829,7 +852,7 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 		if (consumePathSavedByDiff(resolvedMultieditPath)) {
 			let output = '✅ 文件已通过 diff 确认保存';
 			try {
-				const diagnostics = await getDiagnosticsAfterEdit(path);
+				const diagnostics = await getDiagnosticsAfterEdit(resolvedMultieditPath);
 				if (diagnostics) { output += diagnostics; }
 			} catch { /* LSP 失败不影响主流程 */ }
 			return output;
@@ -859,6 +882,15 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 
 
 		try {
+			// B4: 编辑前检查是否基于局部视图
+			const cachedStateForMultiedit = this.fileStateCache.get(resolvedMultieditPath);
+			let partialViewWarningMulti = '';
+			if (cachedStateForMultiedit?.isPartialView) {
+				const s = cachedStateForMultiedit.startLine ?? '?';
+				const e = cachedStateForMultiedit.endLine ?? '?';
+				partialViewWarningMulti = `\n\n⚠️ [B4 局部视图] 上次读取该文件时仅查看了第 ${s}-${e} 行。本次编辑已基于完整文件内容执行，建议先完整读取文件（不带 start_line/end_line 参数）以确认修改上下文。`;
+			}
+
 			// 读取文件原始内容（不带行号和XML包装，避免字符串替换失败）
 			const rawContent = await this.fileOperations.readRawFileContent(path);
 
@@ -870,7 +902,7 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			const result = executeMultiedit(rawContent, editOperations);
 
 			if (!result.success) {
-				return formatMultieditResponse(result, path);
+				return formatMultieditResponse(result, path) + partialViewWarningMulti;
 			}
 
 			// 写入修改后的内容
@@ -882,9 +914,9 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			} as any);
 
 			// 写入后追加 LSP 诊断（对齐 OpenCode 行为）
-			let output = formatMultieditResponse(result, path);
+			let output = formatMultieditResponse(result, path) + partialViewWarningMulti;
 			try {
-				const diagnostics = await getDiagnosticsAfterEdit(path);
+				const diagnostics = await getDiagnosticsAfterEdit(resolvedMultieditPath);
 				if (diagnostics) output += diagnostics;
 			} catch { /* LSP 失败不影响主流程 */ }
 			return output;

@@ -44,10 +44,24 @@ import { CheckpointManager } from '../checkpoints/CheckpointManager.js';
 const MAX_CONSECUTIVE_MISTAKES = 5; // 最大连续错误次数
 
 // ========== 上下文管理常量 ==========
-const MAX_CONTEXT_TOKENS = 100000; // 最大上下文 token 数
-const TOKEN_BUFFER = 20000; // 预留给响应的 token
+// 对齐 Claude Code 真实源码（autoCompact.ts）：使用模型实际最大上下文窗口
+// Claude claude-sonnet-4-6 / claude-opus-4-6 均支持 200K 输入 token
+const MAX_CONTEXT_TOKENS = 200000; // 对齐 Claude Code 真实值（Sonnet/Opus 均为 200K）
 const MAX_TOOL_RESULT_LENGTH = 20000; // 🚀 优化：对齐OpenCode标准（2000行/50KB），减少token消耗
 const TRUNCATE_FRACTION = 0.5; // 截断时移除的消息比例
+
+// E1优化：有效 context 窗口精确计算（对齐 Claude Code autoCompact.ts）
+// effectiveWindow = modelContextWindow - maxOutputTokens（预留输出空间）
+const MAX_OUTPUT_TOKENS = 32768; // 与 aiProxyHandler.ts requestBody.maxTokens 保持一致
+const EFFECTIVE_CONTEXT_WINDOW = MAX_CONTEXT_TOKENS - Math.min(MAX_OUTPUT_TOKENS, 20000); // = 180000
+
+// E1优化：四级阈值（严格对齐 Claude Code autoCompact.ts 常量）
+// AUTOCOMPACT_BUFFER_TOKENS    = 13000 → 压缩触发线 = 180000 - 13000 = 167000（~92.8%）
+// WARNING_THRESHOLD_BUFFER     = 20000 → 警告线     = 167000 - 20000 = 147000（~81.7%）
+// MANUAL_COMPACT_BUFFER_TOKENS = 3000  → 阻断线     = 180000 - 3000  = 177000（~98.3%）
+const CONTEXT_WARNING_THRESHOLD      = EFFECTIVE_CONTEXT_WINDOW - 33000; // 147000，~81.7%
+const CONTEXT_AUTO_COMPACT_THRESHOLD = EFFECTIVE_CONTEXT_WINDOW - 13000; // 167000，~92.8%
+const CONTEXT_BLOCKING_LIMIT         = EFFECTIVE_CONTEXT_WINDOW - 3000;  // 177000，~98.3%
 
 /**
  * Agent 配置选项
@@ -142,6 +156,7 @@ export class TaskService extends Disposable {
 	private askResponseText?: string;
 	private askResponseImages?: string[];
 	private lastMessageTs?: number;
+	private askResolve?: () => void; // Promise-based wait for ask response
 
 	// API & Tools
 	private readonly apiHandler: IApiHandler;
@@ -185,7 +200,8 @@ export class TaskService extends Disposable {
 	// P0优化：FocusChain 任务进度管理器
 	private readonly focusChainManager: FocusChainManager;
 
-	// P2优化：完整的上下文管理系统
+	// P2优化：完整的上下文管理系统（E1优化后主要用于 trackTokenUsage 统计）
+	// @ts-ignore - E1优化后 truncateHistoryIfNeeded 改用增量计数器，保留用于未来扩展
 	private readonly modelContextTracker: ModelContextTracker;
 	// @ts-ignore - TODO: 待完整集成
 	private readonly _fullContextManager: ContextManager;
@@ -195,6 +211,8 @@ export class TaskService extends Disposable {
 	// Message history
 	private apiConversationHistory: MessageParam[] = [];
 	clineMessages: ClineMessage[] = [];
+	/** 增量 token 估算计数器（A7 优化：O(1) 代替 O(n) 扫描） */
+	private _estimatedTotalChars = 0;
 
 	// 文件变更追踪
 	private readonly fileChangesWritten: Set<string> = new Set();  // 写入/创建/修改的文件
@@ -216,6 +234,13 @@ export class TaskService extends Disposable {
 	// 功能2: Debug 自动测试循环计数器
 	private _debugTestRetryCount = 0;
 	private static readonly MAX_DEBUG_TEST_RETRIES = 3; // 最多循环3次
+
+	// E2优化：MaxOutputTokens 自动升级恢复计数器
+	private _outputLimitHits = 0;
+	private static readonly MAX_OUTPUT_LIMIT_HITS = 3; // 连续命中3次后告知用户
+
+	// D7: 后台工具摘要 Promise（在 API 流式期间异步执行轻量压缩）
+	private _pendingBackgroundCompact: Promise<void> | null = null;
 
 	// Token & Tool usage
 	private tokenUsage: TokenUsage = {
@@ -342,9 +367,9 @@ export class TaskService extends Disposable {
 						source: { type: 'base64', data: imgBase64, media_type }
 					} as import('../api/types.js').ImageContentBlock);
 				}
-				this.apiConversationHistory.push({ role: 'user', content: contentBlocks });
+				this.pushHistory({ role: 'user', content: contentBlocks as any });
 			} else {
-				this.apiConversationHistory.push({
+				this.pushHistory({
 					role: 'user',
 					content: options.task
 				});
@@ -481,16 +506,31 @@ export class TaskService extends Disposable {
 	}
 
 	/**
-	 * 等待ask响应
+	 * 等待ask响应（Promise-based，无忙轮询）
 	 */
 	private async waitForAskResponse(askTs: number): Promise<void> {
-		// 简化版本：使用轮询等待askResponse被设置
-		while (!(this.askResponse !== undefined || this.lastMessageTs !== askTs)) {
-			if (this.abort) {
-				throw new Error(`[TaskService] task ${this.taskId} aborted while waiting for ask response`);
-			}
-			await new Promise<void>(resolve => setTimeout(resolve, 100));
+		if (this.abort) {
+			throw new Error(`[TaskService] task ${this.taskId} aborted while waiting for ask response`);
 		}
+		// 已有响应则直接返回
+		if (this.askResponse !== undefined || this.lastMessageTs !== askTs) {
+			return;
+		}
+		await new Promise<void>((resolve, reject) => {
+			this.askResolve = resolve;
+			// 用 abort 检测作为兜底：每500ms检查一次abort标志，避免永久阻塞
+			const abortCheck = setInterval(() => {
+				if (this.abort) {
+					clearInterval(abortCheck);
+					this.askResolve = undefined;
+					reject(new Error(`[TaskService] task ${this.taskId} aborted while waiting for ask response`));
+				} else if (this.askResponse !== undefined || this.lastMessageTs !== askTs) {
+					clearInterval(abortCheck);
+					this.askResolve = undefined;
+					resolve();
+				}
+			}, 500);
+		});
 	}
 
 	/**
@@ -506,6 +546,9 @@ export class TaskService extends Disposable {
 		this.askResponse = response;
 		this.askResponseText = text;
 		this.askResponseImages = images;
+		// 唤醒 waitForAskResponse 中的 Promise
+		this.askResolve?.();
+		this.askResolve = undefined;
 	}
 
 	/**
@@ -521,6 +564,9 @@ export class TaskService extends Disposable {
 			this.askResponse = 'messageResponse';
 			this.askResponseText = userMessage;
 			this.askResponseImages = undefined;
+			// 唤醒 waitForAskResponse 中的 Promise
+			this.askResolve?.();
+			this.askResolve = undefined;
 		}
 	}
 
@@ -625,15 +671,9 @@ export class TaskService extends Disposable {
 					}
 				} as import('../api/types.js').ImageContentBlock);
 			}
-			this.apiConversationHistory.push({
-				role: 'user',
-				content: contentBlocks
-			});
+			this.pushHistory({ role: 'user', content: contentBlocks as any });
 		} else {
-			this.apiConversationHistory.push({
-				role: 'user',
-				content: message
-			});
+			this.pushHistory({ role: 'user', content: message });
 		}
 
 		// 不使用say，直接添加以避免异步问题
@@ -705,7 +745,7 @@ export class TaskService extends Disposable {
 				// 🔧 使用 'system_internal' 类型，不显示在UI上（避免系统提示泄露）
 				await this.say('system_internal', formatResponse.noToolsUsed());
 
-				this.apiConversationHistory.push({
+				this.pushHistory({
 					role: 'user',
 					content: formatResponse.noToolsUsed()
 				});
@@ -723,117 +763,208 @@ export class TaskService extends Disposable {
 	}
 
 	/**
-	 * 递归调用API - 参照kilocode
+	 * A3: 检测 413/prompt_too_long 错误（用于 E3 ReactiveCompact）
 	 */
-	private async recursivelyMakeClineRequests(retryAttempt: number = 0): Promise<boolean> {
-		if (this.abort) {
-			return true;
-		}
+	private isPromptTooLongError(error: unknown): boolean {
+		const msg = error instanceof Error ? error.message : String(error);
+		const lower = msg.toLowerCase();
+		return lower.includes('413') ||
+			lower.includes('prompt_too_long') ||
+			lower.includes('prompt too long') ||
+			lower.includes('context length exceeded') ||
+			lower.includes('context_length_exceeded') ||
+			lower.includes('maximum context') ||
+			lower.includes('tokens exceed') ||
+			lower.includes('token limit');
+	}
 
-		// 全局轮次上限：防止 AI 无限递归（无论读写，每轮 API 调用都计数）
-		this.totalApiRounds++;
-		const isLastRound = this.totalApiRounds >= TaskService.MAX_TOTAL_API_ROUNDS;
+	/**
+	 * A3: 迭代主循环（替代原尾递归实现）
+	 * 消除 50-100 层 async 调用栈积压，避免长任务内存溢出风险
+	 *
+	 * E3: ReactiveCompact 集成
+	 * API 返回 413/prompt_too_long 时自动强制压缩后重试，无需用户介入
+	 */
+	private async recursivelyMakeClineRequests(initialRetryAttempt: number = 0): Promise<boolean> {
+		let retryAttempt = initialRetryAttempt;
 
-		// 接近上限时（最后10轮）提前注入警告，让 AI 尽快收尾
-		if (this.totalApiRounds === TaskService.MAX_TOTAL_API_ROUNDS - 10) {
-			this.apiConversationHistory.push({
-				role: 'user',
-				content: `[SYSTEM] ⚠️ 你已进行了 ${this.totalApiRounds} 轮操作，距离最大轮次（${TaskService.MAX_TOTAL_API_ROUNDS}）还剩 10 轮。请尽快完成任务：\n- 如已完成：立即调用 attempt_completion\n- 如未完成：优先处理最关键的剩余工作，完成后调用 attempt_completion 并说明哪些工作尚未完成`
-			});
-		}
-
-		if (isLastRound) {
-			console.warn(`[TaskService] 已达到全局 API 轮次上限 ${TaskService.MAX_TOTAL_API_ROUNDS}`);
-			// 参照 OpenCode：注入 assistant 消息告知 AI 已达上限，强迫它输出文字总结而非继续调用工具
-			// 这样 AI 自然产出"完成了X，未完成Y"的总结，用户可据此决定是否继续
-			this.apiConversationHistory.push({
-				role: 'assistant' as const,
-				content: `[已达到最大操作步数 ${TaskService.MAX_TOTAL_API_ROUNDS}，工具调用已禁用]\n\n我需要停止工具调用，总结当前进展：`
-			});
-			// 继续本轮 API 调用——模型看到"自己说停了"，会输出文字总结，不再调用工具
-			// recursivelyMakeClineRequests 会因无工具调用返回 false，外层 while 循环处理 consecutiveMistakeCount
-		}
-
-		try {
-			// 调用API
-			const stream = await this.attemptApiRequest(retryAttempt);
-
-			// 处理流式响应
-			const { assistantMessage, toolUses, hasError } = await this.processApiStream(stream);
-
-			if (hasError) {
+		while (true) {  // A3: while 迭代替代尾递归
+			if (this.abort) {
 				return true;
 			}
 
-			// 添加助手响应到历史
-			if (assistantMessage || toolUses.length > 0) {
-				await this.addAssistantResponse(assistantMessage, toolUses);
-			} else {
-				// API 返回了完全空的响应（无文本、无工具调用）
-				// 必须插入一条占位 assistant 消息，否则连续 user 消息会导致 OpenAI API 报错
-				console.warn('[TaskService] API 返回空响应，插入占位 assistant 消息');
-				this.apiConversationHistory.push({
-					role: 'assistant',
-					content: ''
+			// 全局轮次上限：防止 AI 无限循环（无论读写，每轮 API 调用都计数）
+			this.totalApiRounds++;
+			const isLastRound = this.totalApiRounds >= TaskService.MAX_TOTAL_API_ROUNDS;
+
+			// 接近上限时（最后10轮）提前注入警告，让 AI 尽快收尾
+			if (this.totalApiRounds === TaskService.MAX_TOTAL_API_ROUNDS - 10) {
+				this.pushHistory({
+					role: 'user',
+					content: `[SYSTEM] ⚠️ 你已进行了 ${this.totalApiRounds} 轮操作，距离最大轮次（${TaskService.MAX_TOTAL_API_ROUNDS}）还剩 10 轮。请尽快完成任务：\n- 如已完成：立即调用 attempt_completion\n- 如未完成：优先处理最关键的剩余工作，完成后调用 attempt_completion 并说明哪些工作尚未完成`
 				});
 			}
 
-			// 没有工具调用 - 这是AI的最终回复，显示给用户
-			if (toolUses.length === 0) {
-				if (assistantMessage) {
-					// 显示AI的最终回复（不是工具调用前的"思考"文本）
-					await this.say('text', assistantMessage);
-					// 如果回复文本非常长（>500字符），说明AI在直接输出最终答案
-					// 直接结束循环，避免系统追加"noToolsUsed"提示导致模型反复调用 attempt_completion
-					if (assistantMessage.length > 500) {
-						console.log('[TaskService] AI输出了长文本回答（无工具调用），直接结束任务');
+			if (isLastRound) {
+				console.warn(`[TaskService] 已达到全局 API 轮次上限 ${TaskService.MAX_TOTAL_API_ROUNDS}`);
+				// 参照 OpenCode：注入 assistant 消息告知 AI 已达上限，强迫它输出文字总结而非继续调用工具
+				this.pushHistory({
+					role: 'assistant' as const,
+					content: `[已达到最大操作步数 ${TaskService.MAX_TOTAL_API_ROUNDS}，工具调用已禁用]\n\n我需要停止工具调用，总结当前进展：`
+				});
+				// 继续本轮 API 调用——模型看到"自己说停了"，会输出文字总结，不再调用工具
+			}
+
+			try {
+				// 调用API
+				const stream = await this.attemptApiRequest(retryAttempt);
+
+				// 处理流式响应
+				const { assistantMessage, toolUses, hasError, stopReason } = await this.processApiStream(stream);
+
+				if (hasError) {
+					return true;
+				}
+
+				// E2优化：检测 max_output_tokens 命中，自动发送续写提示
+				if (stopReason === 'length') {
+					this._outputLimitHits++;
+					console.warn(`[TaskService] E2: 命中输出 token 上限 (第 ${this._outputLimitHits} 次)`);
+
+					if (this._outputLimitHits <= TaskService.MAX_OUTPUT_LIMIT_HITS) {
+						// 添加已有的助手响应（截断的部分）
+						if (assistantMessage || toolUses.length > 0) {
+							await this.addAssistantResponse(assistantMessage, toolUses);
+						}
+						// 注入续写提示，让模型从中断处继续
+						this.pushHistory({
+							role: 'user',
+							content: 'Output token limit hit. Continue directly from where you left off without any commentary, preamble, or explanation of what you are doing.',
+						});
+						console.log(`[TaskService] E2: 注入续写提示，继续第 ${this._outputLimitHits} 次恢复`);
+						retryAttempt = 0;
+						continue;  // A3: 迭代替代递归
+					} else {
+						// 超过最大恢复次数，告知用户
+						await this.say('text', `[E2] 输出 token 已连续 ${TaskService.MAX_OUTPUT_LIMIT_HITS} 次达到上限，请尝试拆分任务为更小的步骤。`);
+						this._outputLimitHits = 0;
 						return true;
 					}
 				}
-				return false;
-			}
-			// 有工具调用时，assistantMessage 是AI的"思考"文本，不显示给用户
 
-			// 执行工具
-			const { shouldContinue, shouldEndLoop } = await this.executeTools(toolUses);
+				// 输出正常（未截断），重置计数器
+				if (this._outputLimitHits > 0) {
+					this._outputLimitHits = 0;
+				}
 
-			// 混合模型调度：根据本轮工具类型决定下一轮用 flash（探索）还是 plus（生成）
-			this.updateModelTierForNextRound(toolUses);
+				// 添加助手响应到历史
+				if (assistantMessage || toolUses.length > 0) {
+					await this.addAssistantResponse(assistantMessage, toolUses);
+				} else {
+					// API 返回了完全空的响应（无文本、无工具调用）
+					// 必须插入一条占位 assistant 消息，否则连续 user 消息会导致 OpenAI API 报错
+					console.warn('[TaskService] API 返回空响应，插入占位 assistant 消息');
+					this.pushHistory({
+						role: 'assistant',
+						content: ''
+					});
+				}
 
-			if (shouldEndLoop) {
+				// 没有工具调用 - 这是AI的最终回复，显示给用户
+				if (toolUses.length === 0) {
+					if (assistantMessage) {
+						// 显示AI的最终回复（不是工具调用前的"思考"文本）
+						await this.say('text', assistantMessage);
+						// 如果回复文本非常长（>500字符），说明AI在直接输出最终答案
+						// 直接结束循环，避免系统追加"noToolsUsed"提示导致模型反复调用 attempt_completion
+						if (assistantMessage.length > 500) {
+							console.log('[TaskService] AI输出了长文本回答（无工具调用），直接结束任务');
+							return true;
+						}
+					}
+					return false;
+				}
+				// 有工具调用时，assistantMessage 是AI的"思考"文本，不显示给用户
+
+				// 执行工具
+				const { shouldContinue, shouldEndLoop } = await this.executeTools(toolUses);
+
+				// 混合模型调度：根据本轮工具类型决定下一轮用 flash（探索）还是 plus（生成）
+				this.updateModelTierForNextRound(toolUses);
+
+				if (shouldEndLoop) {
+					return true;
+				}
+
+				if (!shouldContinue) {
+					return true;
+				}
+
+				// D7: 工具执行完成后，后台启动轻量压缩（不 await，与下轮 API 请求并行）
+				// 下轮循环开始时（truncateHistoryIfNeeded 之前）会 await 确保完成
+				this._pendingBackgroundCompact = (async () => {
+					try {
+						const tokens = this.estimateTokens(this.apiConversationHistory);
+						const SNIP_THRESHOLD = Math.floor(EFFECTIVE_CONTEXT_WINDOW * 0.50);
+						if (tokens > SNIP_THRESHOLD) {
+							const snipResult = this.contextCompactor.updateMessages(this.apiConversationHistory as CompactableMessage[]);
+							if (snipResult.needsPrune) {
+								this.apiConversationHistory = snipResult.messages;
+								this.rebuildCharCount();
+								const after = this.estimateTokens(this.apiConversationHistory);
+								if (after < tokens) {
+									console.log(`[TaskService] D7 后台压缩: ${tokens} -> ${after} tokens`);
+								}
+							}
+						}
+					} catch (e) {
+						console.warn('[TaskService] D7 后台压缩失败:', e);
+					}
+				})();
+
+				// 工具执行成功，继续下一轮 API（A3: 迭代替代递归）
+				retryAttempt = 0;
+				continue;
+
+			} catch (error) {
+				// E3: ReactiveCompact - 413/prompt_too_long 自动压缩重试
+				if (this.isPromptTooLongError(error)) {
+					console.warn('[TaskService] E3: ReactiveCompact - 收到 prompt_too_long，强制压缩后重试');
+					await this.say('text', '[E3] 上下文过长，正在自动压缩对话历史...');
+					try {
+						await this.truncateHistoryIfNeeded(true);
+					} catch (compactErr) {
+						console.error('[TaskService] E3: 强制压缩失败:', compactErr);
+					}
+					retryAttempt = 0;
+					continue;  // 压缩后直接重试
+				}
+
+				// 使用错误处理器分析错误
+				const errorInfo = this.errorHandler.classifyError(error);
+				console.error(`[TaskService] API调用错误 [${errorInfo.type}]:`, error);
+
+				// 判断是否应该自动重试
+				if (this.errorHandler.shouldRetry(error, retryAttempt)) {
+					const delay = this.errorHandler.calculateRetryDelay(retryAttempt);
+					const userMessage = `${errorInfo.userMessage}，将在 ${Math.round(delay / 1000)} 秒后重试...`;
+					await this.say('api_req_retry_delayed', userMessage);
+					await this.sleep(delay);
+					retryAttempt++;  // A3: 迭代替代递归
+					continue;
+				}
+
+				// 不可重试的错误或超过重试次数，询问用户
+				const userFriendlyMessage = this.errorHandler.getUserFriendlyMessage(error);
+				const { response } = await this.ask('api_req_failed', userFriendlyMessage);
+
+				if (response === 'yesButtonClicked') {
+					retryAttempt = 0;
+					continue;  // A3: 迭代替代递归
+				}
+
 				return true;
 			}
-
-			if (!shouldContinue) {
-				return true;
-			}
-
-			// 工具执行成功，递归继续API循环（处理工具结果）
-			return this.recursivelyMakeClineRequests(0);
-
-		} catch (error) {
-			// 使用错误处理器分析错误
-			const errorInfo = this.errorHandler.classifyError(error);
-			console.error(`[TaskService] API调用错误 [${errorInfo.type}]:`, error);
-
-			// 判断是否应该自动重试
-			if (this.errorHandler.shouldRetry(error, retryAttempt)) {
-				const delay = this.errorHandler.calculateRetryDelay(retryAttempt);
-				const userMessage = `${errorInfo.userMessage}，将在 ${Math.round(delay / 1000)} 秒后重试...`;
-				await this.say('api_req_retry_delayed', userMessage);
-				await this.sleep(delay);
-				return this.recursivelyMakeClineRequests(retryAttempt + 1);
-			}
-
-			// 不可重试的错误或超过重试次数，询问用户
-			const userFriendlyMessage = this.errorHandler.getUserFriendlyMessage(error);
-			const { response } = await this.ask('api_req_failed', userFriendlyMessage);
-
-			if (response === 'yesButtonClicked') {
-				return this.recursivelyMakeClineRequests(0);
-			}
-
-			return true;
 		}
 	}
 
@@ -883,6 +1014,10 @@ export class TaskService extends Disposable {
 		// P0优化：增加 API 调用计数（用于FocusChain提醒）
 		this.focusChainManager.incrementApiCallCount();
 
+		// E1调试：每轮输出当前 context 大小（证明新代码已加载）
+		const _ctxTokens = this.estimateTokens(this.apiConversationHistory);
+		console.log(`[TaskService] E1 context: ${_ctxTokens} tokens | 有效窗口: ${EFFECTIVE_CONTEXT_WINDOW} | 警告线: ${CONTEXT_WARNING_THRESHOLD} | 压缩线: ${CONTEXT_AUTO_COMPACT_THRESHOLD}`);
+
 		// 埋点：记录 AI 调用开始时间
 		this._aiCallStartTime = Date.now();
 
@@ -901,10 +1036,12 @@ export class TaskService extends Disposable {
 		assistantMessage: string;
 		toolUses: Array<{ id: string; name: string; input: any }>;
 		hasError: boolean;
+		stopReason: string; // E2优化：'length' 表示命中 max_output_tokens 上限
 	}> {
 		let assistantMessage = '';
 		const toolUses: Array<{ id: string; name: string; input: any }> = [];
 		let hasError = false;
+		let stopReason = ''; // E2优化：追踪输出截断原因
 		let firstTokenReceived = false;
 		let xmlDetected = false; // XML检测标志
 		let xmlToolName = ''; // XML工具调用时检测到的工具名
@@ -927,16 +1064,10 @@ export class TaskService extends Disposable {
 					firstTokenReceived = true;
 				}
 
-				// 🔒 检测是否可能是XML工具调用
+				// 🔒 检测是否可能是XML工具调用（正则一次匹配，短路返回）
 				if (!xmlDetected && this.mightBeXmlToolCall(assistantMessage)) {
 					xmlDetected = true;
-					// 提取工具名，用于显示给用户
-					for (const toolName of this.TOOL_NAMES) {
-						if (assistantMessage.includes(`<${toolName}>`) || assistantMessage.includes(`<${toolName} `)) {
-							xmlToolName = toolName;
-							break;
-						}
-					}
+					xmlToolName = this.extractXmlToolName(assistantMessage);
 				}
 
 				// 只有在未检测到XML时才进行流式显示
@@ -1060,6 +1191,10 @@ export class TaskService extends Disposable {
 				toolUses.push({ id: chunk.id, name: chunk.name, input });
 			} else if (chunk.type === 'usage') {
 				this.updateTokenUsage(chunk);
+				// E2优化：捕获 stopReason（'length' = 命中 max_output_tokens 上限）
+				if (chunk.stopReason) {
+					stopReason = chunk.stopReason;
+				}
 				// 埋点：AI 调用 usage 事件（包含本次 token 和延迟）
 				if (this.behaviorReporter) {
 					const latencyMs = this._aiCallStartTime > 0 ? Date.now() - this._aiCallStartTime : 0;
@@ -1106,7 +1241,7 @@ export class TaskService extends Disposable {
 			await this.say('api_req_finished', 'API请求已完成');
 		}
 
-		return { assistantMessage, toolUses, hasError };
+		return { assistantMessage, toolUses, hasError, stopReason };
 	}
 
 	/**
@@ -1116,19 +1251,28 @@ export class TaskService extends Disposable {
 	private readonly TOOL_NAMES: readonly string[] = ALL_TOOL_NAMES;
 
 	/**
-	 * 检测文本是否可能是XML工具调用
+	 * 预编译的XML工具调用检测正则（热路径优化：一次匹配所有工具名）
+	 * 形如 <read_file> 或 <read_file  的开标签
+	 */
+	private readonly XML_TOOL_REGEX: RegExp = new RegExp(
+		'<(' + ALL_TOOL_NAMES.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')(?:>|\\s)',
+		''
+	);
+
+	/**
+	 * 检测文本是否可能是XML工具调用（正则一次匹配，热路径 O(1) 级别）
 	 * 在流式处理时提前检测，避免XML字符泄露到前端
 	 */
 	private mightBeXmlToolCall(text: string): boolean {
-		// 检查文本中是否包含任何工具名称的 XML 标签（无论位置）
-		// AI 可能先输出文字再跟 XML 工具调用，所以不能只检查开头
-		for (const toolName of this.TOOL_NAMES) {
-			if (text.includes(`<${toolName}>`) || text.includes(`<${toolName} `)) {
-				return true;
-			}
-		}
+		return this.XML_TOOL_REGEX.test(text);
+	}
 
-		return false;
+	/**
+	 * 从文本中提取第一个匹配的XML工具名（正则直接捕获，无需循环）
+	 */
+	private extractXmlToolName(text: string): string {
+		const m = this.XML_TOOL_REGEX.exec(text);
+		return m ? m[1] : '';
 	}
 
 	/**
@@ -1205,10 +1349,15 @@ export class TaskService extends Disposable {
 			});
 		}
 
-		this.apiConversationHistory.push({
-			role: 'assistant',
-			content
-		});
+		this.pushHistory({ role: 'assistant', content: content as any });
+	}
+
+	/**
+	 * 向 apiConversationHistory 追加一条消息，同步更新增量字符计数器（A7 优化）
+	 */
+	private pushHistory(msg: MessageParam): void {
+		this.apiConversationHistory.push(msg);
+		this._estimatedTotalChars += this.countMsgChars(msg);
 	}
 
 	// ========== 工具执行 ==========
@@ -1308,28 +1457,13 @@ export class TaskService extends Disposable {
 		const hasBatch = toolNames.includes('batch');
 		const readOnlyToolNames = ['read_file', 'search_files', 'glob', 'list_files', 'codebase_search', 'list_code_definition_names', 'lsp_hover', 'lsp_diagnostics', 'lsp_definition', 'lsp_references', 'lsp_type_definition'];
 		const standaloneReadCalls = toolUses.filter(t => readOnlyToolNames.includes(t.name));
-
-		let goto_skipReadOnly = false;
 		if (!hasBatch && standaloneReadCalls.length >= 2) {
-			// 强制要求使用 batch：2+ 个独立只读调用直接拒绝，返回错误要求使用 batch
-			console.warn(`[Batch Monitor] 🚫 强制拒绝 ${standaloneReadCalls.length} 个独立只读调用，要求使用 batch 工具`);
-			const batchEnforceResults: ContentBlock[] = standaloneReadCalls.map(toolUse => ({
-				type: 'tool_result' as const,
-				tool_use_id: toolUse.id,
-				content: `[BATCH_REQUIRED] 你在一次响应中调用了 ${standaloneReadCalls.length} 个独立只读工具，这不符合效率要求。\n\n⛔ 必须使用 batch 工具合并多个操作！\n\n正确示例：\nbatch({tool_calls: [{tool: "read_file", parameters: {path: "..."}}, {tool: "read_file", parameters: {path: "..."}}]})\n\n请在下一次响应中改用 batch 工具，将所有需要读取的文件合并到一次 batch 调用中。`,
-				is_error: true
-			}));
-			toolResults.push(...batchEnforceResults);
-			if (writeTools.length === 0 && specialTools.length === 0) {
-				this.apiConversationHistory.push({ role: 'tool', content: toolResults });
-				return { shouldContinue: true, shouldEndLoop: false };
-			}
-			goto_skipReadOnly = true;
+			console.log(`[Batch Monitor] 收到 ${standaloneReadCalls.length} 个独立只读调用，并行执行`);
 		}
 		// ====== [Batch Monitor] end ======
 
 		// 1. 并行执行只读工具（超过探索上限时强制阻断）
-		if (!goto_skipReadOnly && readOnlyTools.length > 0) {
+		if (readOnlyTools.length > 0) {
 			if (this.consecutiveReadOnlyRounds >= TaskService.MAX_EXPLORE_ROUNDS && writeTools.length === 0 && specialTools.length === 0) {
 				// 超过探索上限且本轮没有写入工具 → 强制阻断只读工具，返回明确指令要求AI得出结论
 				this.consecutiveBlockedRounds++;
@@ -1367,7 +1501,7 @@ export class TaskService extends Disposable {
 			if (result.shouldEndLoop) {
 				// 添加已收集的结果
 				if (toolResults.length > 0) {
-					this.apiConversationHistory.push({ role: 'tool', content: toolResults });
+					this.pushHistory({ role: 'tool', content: toolResults });
 				}
 				return result;
 			}
@@ -1383,7 +1517,7 @@ export class TaskService extends Disposable {
 				if (result.shouldEndLoop) {
 					// 添加已收集的结果
 					if (toolResults.length > 0) {
-						this.apiConversationHistory.push({ role: 'tool', content: toolResults });
+						this.pushHistory({ role: 'tool', content: toolResults });
 					}
 					return result;
 				}
@@ -1400,7 +1534,7 @@ export class TaskService extends Disposable {
 
 		// 添加工具结果到历史
 		if (toolResults.length > 0) {
-			this.apiConversationHistory.push({
+			this.pushHistory({
 				role: 'tool',
 				content: toolResults
 			});
@@ -1435,7 +1569,7 @@ export class TaskService extends Disposable {
 
 			// 连续2次单独只读调用，注入batch提醒（从3次降到2次，更早提醒）
 			if (this.consecutiveSingleReadToolCount >= 2) {
-				this.apiConversationHistory.push({
+				this.pushHistory({
 					role: 'user',
 					content: '[SYSTEM] 效率提醒：你已经连续' + this.consecutiveSingleReadToolCount + '次单独调用只读工具。请使用batch工具将多个操作合并为一次调用。'
 				});
@@ -1444,7 +1578,7 @@ export class TaskService extends Disposable {
 
 			// 超过安全兜底上限，强制要求给出结论
 			if (this.consecutiveReadOnlyRounds >= TaskService.MAX_EXPLORE_ROUNDS) {
-				this.apiConversationHistory.push({
+				this.pushHistory({
 					role: 'user',
 					content: '[SYSTEM] ⚠️ 你已经进行了' + this.consecutiveReadOnlyRounds + '轮只读探索，已拥有足够的上下文信息。请立即行动：\n- 如果任务是分析/解释/问答类：调用 attempt_completion 给出完整结论，不要继续读取文件\n- 如果任务是编码/修改类：直接调用 edit/apply_diff/write_to_file 开始修改代码\n禁止再次调用任何读取或搜索工具。'
 				});
@@ -2797,6 +2931,7 @@ case 'execute_command':
 			// 恢复对话历史
 			if (data.messages && Array.isArray(data.messages)) {
 				this.apiConversationHistory = data.messages;
+				this.rebuildCharCount();
 			}
 
 			// 恢复 token 使用统计
@@ -2978,25 +3113,49 @@ case 'execute_command':
 	// ========== 上下文管理方法 ==========
 
 	/**
-	 * 估算消息的 token 数量
-	 * 简单估算：中文约2字符/token，英文约4字符/token，取平均3字符/token
+	 * 统计单条消息的字符数（供增量计数器使用）
 	 */
-	private estimateTokens(messages: MessageParam[]): number {
-		let totalChars = 0;
-		for (const msg of messages) {
-			if (typeof msg.content === 'string') {
-				totalChars += msg.content.length;
-			} else if (Array.isArray(msg.content)) {
-				for (const block of msg.content) {
-					if (block.type === 'text') {
-						totalChars += block.text.length;
-					} else if (block.type === 'tool_result') {
-						totalChars += block.content.length;
-					} else if (block.type === 'tool_use') {
-						totalChars += JSON.stringify(block.input).length;
-					}
+	private countMsgChars(msg: MessageParam): number {
+		let chars = 0;
+		if (typeof msg.content === 'string') {
+			chars += msg.content.length;
+		} else if (Array.isArray(msg.content)) {
+			for (const block of msg.content) {
+				if (block.type === 'text') {
+					chars += block.text.length;
+				} else if (block.type === 'tool_result') {
+					chars += typeof block.content === 'string' ? block.content.length : JSON.stringify(block.content).length;
+				} else if (block.type === 'tool_use') {
+					chars += JSON.stringify(block.input).length;
 				}
 			}
+		}
+		return chars;
+	}
+
+	/**
+	 * 重建增量字符计数器（compaction 后 apiConversationHistory 被替换时调用）
+	 */
+	private rebuildCharCount(): void {
+		let total = 0;
+		for (const msg of this.apiConversationHistory) {
+			total += this.countMsgChars(msg);
+		}
+		this._estimatedTotalChars = total;
+	}
+
+	/**
+	 * 估算消息的 token 数量
+	 * 简单估算：中文约2字符/token，英文约4字符/token，取平均3字符/token
+	 * 当传入 this.apiConversationHistory 时，直接用增量计数器，O(1)
+	 */
+	private estimateTokens(messages: MessageParam[]): number {
+		if (messages === this.apiConversationHistory) {
+			return Math.ceil(this._estimatedTotalChars / 3);
+		}
+		let totalChars = 0;
+		for (const msg of messages) {
+			totalChars += this.countMsgChars(msg);
 		}
 		return Math.ceil(totalChars / 3);
 	}
@@ -3008,15 +3167,60 @@ case 'execute_command':
 	 * 2. 使用 AI 摘要压缩旧消息
 	 * 3. 如果仍然超限，再截断消息
 	 */
-	private async truncateHistoryIfNeeded(): Promise<void> {
-		// P2优化：使用ModelContextTracker估算token
-		const currentTokens = this.modelContextTracker.estimateUsage(this.apiConversationHistory);
-		const allowedTokens = MAX_CONTEXT_TOKENS - TOKEN_BUFFER;
-
-		// P2优化：使用ModelContextTracker判断是否需要压缩
-		if (!this.modelContextTracker.shouldCompact(this.apiConversationHistory, 0.8)) {
-			return;
+	private async truncateHistoryIfNeeded(force: boolean = false): Promise<void> {
+		// D7: 确保后台压缩已完成（通常已在 API 流式期间完成，此处零等待）
+		if (this._pendingBackgroundCompact) {
+			await this._pendingBackgroundCompact;
+			this._pendingBackgroundCompact = null;
 		}
+
+		// E1优化：使用有效 context 窗口和精确四级阈值（对齐 Claude Code）
+		// 使用增量计数器 O(1) 估算，比 ModelContextTracker.estimateUsage 更精确
+		let currentTokens = this.estimateTokens(this.apiConversationHistory);
+		const usagePct = ((currentTokens / EFFECTIVE_CONTEXT_WINDOW) * 100).toFixed(1);
+
+		// D6: Snip 预处理层 — 50% 以上开始轻量级修剪工具输出，推迟重量级压缩
+		// 对齐 Claude Code 第1层 Snip（per-turn 轻量预处理，追踪 snipTokensFreed）
+		const SNIP_THRESHOLD = Math.floor(EFFECTIVE_CONTEXT_WINDOW * 0.50); // ~40000
+		if (!force && currentTokens > SNIP_THRESHOLD) {
+			const snipBefore = currentTokens;
+			const snipResult = this.contextCompactor.updateMessages(this.apiConversationHistory as CompactableMessage[]);
+			if (snipResult.needsPrune) {
+				this.apiConversationHistory = snipResult.messages;
+				this.rebuildCharCount();
+				currentTokens = this.estimateTokens(this.apiConversationHistory);
+				const freed = snipBefore - currentTokens;
+				if (freed > 0) {
+					console.log(`[TaskService] D6 Snip: 修剪工具输出 ${snipBefore} -> ${currentTokens} tokens (-${freed})`);
+				}
+			}
+		}
+
+		if (!force) {
+			// 低于警告阈值：无需任何处理
+			if (currentTokens < CONTEXT_WARNING_THRESHOLD) {
+				return;
+			}
+
+			// 警告阈值 (75%)：记录警告
+			console.warn(`[TaskService] E1 上下文警告: ${((currentTokens / EFFECTIVE_CONTEXT_WINDOW) * 100).toFixed(1)}% (${currentTokens}/${EFFECTIVE_CONTEXT_WINDOW} tokens)`);
+
+			// 低于自动压缩阈值 (~83.75%)：仅警告，不触发压缩
+			if (currentTokens < CONTEXT_AUTO_COMPACT_THRESHOLD) {
+				return;
+			}
+		} else {
+			// E3 ReactiveCompact：强制压缩模式，跳过阈值检查
+			console.warn(`[TaskService] E3 ReactiveCompact: 强制压缩 ${usagePct}% (${currentTokens}/${EFFECTIVE_CONTEXT_WINDOW} tokens)`);
+		}
+
+		// 紧急阻断阈值 (~96.25%)：打印错误，立即压缩
+		if (currentTokens >= CONTEXT_BLOCKING_LIMIT) {
+			console.error(`[TaskService] E1 紧急阻断: 上下文 ${((currentTokens / EFFECTIVE_CONTEXT_WINDOW) * 100).toFixed(1)}% 超过 blockingLimit (${CONTEXT_BLOCKING_LIMIT})，立即执行强制压缩`);
+		}
+
+		// 压缩目标：降至警告阈值以下（留出足够空间）
+		const allowedTokens = CONTEXT_WARNING_THRESHOLD;
 
 		// 创建检查点（压缩前保存状态）
 		await this.createCheckpointBeforeCompaction();
@@ -3027,6 +3231,7 @@ case 'execute_command':
 		const compactResult = this.contextCompactor.updateMessages(this.apiConversationHistory as CompactableMessage[]);
 		if (compactResult.needsPrune) {
 			this.apiConversationHistory = compactResult.messages;
+			this.rebuildCharCount();
 			const newTokens = this.estimateTokens(this.apiConversationHistory);
 			const stats = this.contextCompactor.getStats();
 			console.log(`[TaskService] ContextCompactor 修剪完成: 修剪了 ${stats.compactedParts} 个工具输出, 节省 ${stats.savedTokens} tokens, 当前 ${newTokens} tokens`);
@@ -3051,6 +3256,7 @@ case 'execute_command':
 
 			// 更新消息历史
 			this.apiConversationHistory = tieredResult.messages as MessageParam[];
+			this.rebuildCharCount();
 			const afterTieredTokens = this.estimateTokens(this.apiConversationHistory);
 
 			console.log(`[TaskService] 分层压缩完成: Tier1=${tieredResult.tierCounts.tier1}, Tier2=${tieredResult.tierCounts.tier2}, Tier3=${tieredResult.tierCounts.tier3}, Tier4=${tieredResult.tierCounts.tier4}`);
@@ -3058,46 +3264,59 @@ case 'execute_command':
 
 			// 如果需要 AI 摘要（Tier 4 有消息）
 			if (tieredResult.needsAISummary && tieredResult.summaryPrompt) {
-				console.log(`[TaskService] 分层压缩需要 AI 摘要 (Tier4 消息数: ${tieredResult.tierCounts.tier4})`);
+				// E4优化：检查熔断器，连续失败3次后跳过 AI 摘要
+				if (this.tieredCompactionManager.isCircuitOpen()) {
+					console.warn(`[TaskService] E4: 压缩熔断器已触发，跳过分层压缩 AI 摘要`);
+				} else {
+					console.log(`[TaskService] 分层压缩需要 AI 摘要 (Tier4 消息数: ${tieredResult.tierCounts.tier4})`);
 
-				try {
-					// 调用 AI 生成摘要
-					const summaryStream = this.apiHandler.createMessage(
-						'你是一个专门生成对话摘要的助手。请根据提供的对话历史生成一个详细的摘要，保留所有关键技术细节。',
-						[{ role: 'user', content: [{ type: 'text', text: tieredResult.summaryPrompt }] }],
-						[]
-					);
+					try {
+						// 调用 AI 生成摘要
+						const summaryStream = this.apiHandler.createMessage(
+							'你是一个专门生成对话摘要的助手。请根据提供的对话历史生成一个详细的摘要，保留所有关键技术细节。',
+							[{ role: 'user', content: [{ type: 'text', text: tieredResult.summaryPrompt }] }],
+							[]
+						);
 
-					let summaryText = '';
-					for await (const chunk of summaryStream) {
-						if (chunk.type === 'text') {
-							summaryText += chunk.text;
+						let summaryText = '';
+						for await (const chunk of summaryStream) {
+							if (chunk.type === 'text') {
+								summaryText += chunk.text;
+							}
 						}
+
+						if (summaryText) {
+							// 整合摘要到压缩结果
+							const finalMessages = this.tieredCompactionManager.integrateSummary(tieredResult, summaryText);
+							this.apiConversationHistory = finalMessages as MessageParam[];
+							this.rebuildCharCount();
+
+							const finalTokens = this.estimateTokens(this.apiConversationHistory);
+							console.log(`[TaskService] 分层压缩+AI摘要完成: ${tieredResult.originalTokens} -> ${finalTokens} tokens`);
+
+							// E4优化：压缩成功，重置熔断器
+							this.tieredCompactionManager.recordCompactionSuccess();
+
+							// 发出压缩完成事件
+							this.say('condense_context', JSON.stringify({
+								status: 'completed',
+								prevContextTokens: tieredResult.originalTokens,
+								newContextTokens: finalTokens,
+								summary: summaryText.substring(0, 200) + '...',
+								cost: 0,
+								autoContinue: true,
+								tiered: true, // 标记这是分层压缩
+								tierCounts: tieredResult.tierCounts,
+							}));
+						} else {
+							throw new Error('AI 返回空摘要');
+						}
+					} catch (error) {
+						console.error(`[TaskService] 分层压缩 AI 摘要失败:`, error);
+						// E4优化：记录失败，更新熔断器计数
+						this.tieredCompactionManager.recordCompactionFailure();
+						// AI 摘要失败，但分层压缩仍然有效
 					}
-
-					if (summaryText) {
-						// 整合摘要到压缩结果
-						const finalMessages = this.tieredCompactionManager.integrateSummary(tieredResult, summaryText);
-						this.apiConversationHistory = finalMessages as MessageParam[];
-
-						const finalTokens = this.estimateTokens(this.apiConversationHistory);
-						console.log(`[TaskService] 分层压缩+AI摘要完成: ${tieredResult.originalTokens} -> ${finalTokens} tokens`);
-
-						// 发出压缩完成事件
-						this.say('condense_context', JSON.stringify({
-							status: 'completed',
-							prevContextTokens: tieredResult.originalTokens,
-							newContextTokens: finalTokens,
-							summary: summaryText.substring(0, 200) + '...',
-							cost: 0,
-							autoContinue: true,
-							tiered: true, // 标记这是分层压缩
-							tierCounts: tieredResult.tierCounts,
-						}));
-					}
-				} catch (error) {
-					console.error(`[TaskService] 分层压缩 AI 摘要失败:`, error);
-					// AI 摘要失败，但分层压缩仍然有效
 				}
 			}
 
@@ -3117,22 +3336,32 @@ case 'execute_command':
 		const tokensAfterTiered = this.estimateTokens(this.apiConversationHistory);
 
 		if (this.aiSummaryCompactor.shouldSummarize(messagesAfterTiered, tokensAfterTiered)) {
-			console.log(`[TaskService] 尝试 AI 摘要压缩`);
+			// E4优化：检查熔断器，连续失败3次后跳过 AI 摘要
+			if (this.tieredCompactionManager.isCircuitOpen()) {
+				console.warn(`[TaskService] E4: 压缩熔断器已触发，跳过传统 AI 摘要压缩`);
+			} else {
+				console.log(`[TaskService] 尝试 AI 摘要压缩`);
 
-			try {
-				const summaryResult = await this.condenseContext();
-				if (summaryResult.success) {
-					const newTokens = this.estimateTokens(this.apiConversationHistory);
-					console.log(`[TaskService] AI摘要压缩完成: 从 ${summaryResult.originalTokens} tokens 压缩到 ${summaryResult.newTokens} tokens`);
+				try {
+					const summaryResult = await this.condenseContext();
+					if (summaryResult.success) {
+						const newTokens = this.estimateTokens(this.apiConversationHistory);
+						console.log(`[TaskService] AI摘要压缩完成: 从 ${summaryResult.originalTokens} tokens 压缩到 ${summaryResult.newTokens} tokens`);
 
-					// 如果压缩后仍在限制内，直接返回
-					if (newTokens <= allowedTokens) {
-						return;
+						// E4优化：压缩成功，重置熔断器
+						this.tieredCompactionManager.recordCompactionSuccess();
+
+						// 如果压缩后仍在限制内，直接返回
+						if (newTokens <= allowedTokens) {
+							return;
+						}
 					}
+				} catch (error) {
+					console.error(`[TaskService] AI摘要压缩失败:`, error);
+					// E4优化：记录失败，更新熔断器计数
+					this.tieredCompactionManager.recordCompactionFailure();
+					// 压缩失败，继续使用截断策略
 				}
-			} catch (error) {
-				console.error(`[TaskService] AI摘要压缩失败:`, error);
-				// 压缩失败，继续使用截断策略
 			}
 		}
 
@@ -3151,6 +3380,7 @@ case 'execute_command':
 		if (messagesToRemove > 0) {
 			const keptMessages = remainingMessages.slice(messagesToRemove);
 			this.apiConversationHistory = [firstMessage, ...keptMessages];
+			this.rebuildCharCount();
 
 			console.log(`[TaskService] 截断完成: 移除了 ${messagesToRemove} 条消息, 剩余 ${this.apiConversationHistory.length} 条`);
 		}
@@ -3244,6 +3474,7 @@ case 'execute_command':
 
 			// 更新消息历史
 			this.apiConversationHistory = result.messages as MessageParam[];
+			this.rebuildCharCount();
 			const newTokens = this.estimateTokens(this.apiConversationHistory);
 
 			// 发出压缩完成事件

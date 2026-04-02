@@ -796,6 +796,9 @@ export class AiProxyHandler implements IApiHandler {
 		// 用于累积工具调用的参数（使用index作为key，与QwenHandler一致）
 		const toolCallsMap = new Map<string, { id: string; name: string; arguments: string }>();
 
+		// E2优化：追踪最终的 finish_reason，用于检测输出 token 达到上限
+		let finishReason = '';
+
 		try {
 			while (true) {
 				const { done, value } = await reader.read();
@@ -895,6 +898,12 @@ export class AiProxyHandler implements IApiHandler {
 							}
 						}
 
+						// E2优化：记录 finish_reason（用于后续检测输出 token 上限）
+						const choiceFinishReason = event.choices?.[0]?.finish_reason;
+						if (choiceFinishReason) {
+							finishReason = choiceFinishReason;
+						}
+
 						// 在finish_reason为tool_calls时，输出所有累积的工具调用（与QwenHandler一致）
 						if (event.choices?.[0]?.finish_reason === 'tool_calls') {
 							for (const [_, toolData] of toolCallsMap.entries()) {
@@ -930,8 +939,13 @@ export class AiProxyHandler implements IApiHandler {
 								type: 'usage',
 								inputTokens: event.usage.prompt_tokens,
 								outputTokens: event.usage.completion_tokens,
-								totalTokens: event.usage.total_tokens
+								totalTokens: event.usage.total_tokens,
+								// E2优化：当 finish_reason==='length' 时传递 stopReason，触发 TaskService 自动恢复
+								...(finishReason === 'length' ? { stopReason: 'length' } : {}),
 							};
+							if (finishReason === 'length') {
+								console.warn(`[Maxian] E2: finish_reason=length，输出 token 已达上限 (outputTokens=${event.usage.completion_tokens})`);
+							}
 							yield usageChunk;
 						}
 
