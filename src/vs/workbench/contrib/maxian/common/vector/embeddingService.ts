@@ -158,9 +158,11 @@ export class EmbeddingService {
 		await fs.promises.writeFile(scriptPath, WORKER_SCRIPT, 'utf-8');
 		this._workerScriptPath = scriptPath;
 
-		// 在主线程中直接构造 @xenova/transformers 入口文件的绝对路径
-		// ESM import() 可以用绝对路径绕过模块解析，不依赖 NODE_PATH
-		const transformersAbsPath = path.join(process.cwd(), 'node_modules', '@xenova', 'transformers', 'src', 'transformers.js');
+		// 解析 @xenova/transformers 入口文件绝对路径（Windows 下 process.cwd 可能不是应用根目录）
+		const transformersAbsPath = await this._resolveTransformersEntry();
+		if (!transformersAbsPath) {
+			throw new Error('[EmbeddingService] 未找到 @xenova/transformers 入口文件');
+		}
 
 		// 创建 Worker 线程，传入 transformers 绝对路径
 		const worker = new workerThreads.Worker(scriptPath, {
@@ -225,6 +227,61 @@ export class EmbeddingService {
 			};
 			worker.on('message', onMsg);
 		});
+	}
+
+	/**
+	 * 解析 transformers 入口路径（优先 require.resolve，失败则按候选目录查找）
+	 */
+	private async _resolveTransformersEntry(): Promise<string | null> {
+		const fs = await import('fs');
+		const path = await import('path');
+
+		try {
+			if (typeof require === 'function' && typeof require.resolve === 'function') {
+				return require.resolve('@xenova/transformers/src/transformers.js');
+			}
+		} catch {
+			// ignore
+		}
+
+		const candidates: string[] = [];
+		const entrySuffix = path.join('node_modules', '@xenova', 'transformers', 'src', 'transformers.js');
+
+		try {
+			if (typeof process !== 'undefined' && process.cwd) {
+				candidates.push(path.join(process.cwd(), entrySuffix));
+			}
+		} catch { /* ignore */ }
+
+		try {
+			if (typeof process !== 'undefined' && (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath) {
+				const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath!;
+				candidates.push(path.join(resourcesPath, 'app', entrySuffix));
+				candidates.push(path.join(resourcesPath, entrySuffix));
+			}
+		} catch { /* ignore */ }
+
+		try {
+			const fileRoot = FileAccess.asFileUri('').fsPath;
+			let dir = fileRoot;
+			for (let i = 0; i < 5; i++) {
+				candidates.push(path.join(dir, entrySuffix));
+				dir = path.dirname(dir);
+			}
+		} catch { /* ignore */ }
+
+		for (const candidate of candidates) {
+			try {
+				const stat = await fs.promises.stat(candidate).catch(() => null);
+				if (stat?.isFile()) {
+					return candidate;
+				}
+			} catch {
+				// ignore
+			}
+		}
+
+		return null;
 	}
 
 	/**

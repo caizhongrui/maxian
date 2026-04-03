@@ -33,6 +33,8 @@ export interface IIndexStats {
 	lastIndexedAt: number;
 	/** 嵌入模型是否已就绪 */
 	modelReady: boolean;
+	/** 嵌入模型加载失败信息（可选） */
+	modelError?: string;
 }
 
 /**

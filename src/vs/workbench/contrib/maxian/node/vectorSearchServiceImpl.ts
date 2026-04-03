@@ -20,6 +20,12 @@ export class VectorSearchServiceImpl implements IVectorSearchService {
 	private readonly _service: SemanticSearchService;
 	/** 模型是否已完成预热加载 */
 	private _modelReady = false;
+	/** 模型预热失败信息（用于状态栏展示） */
+	private _modelWarmupError: string | null = null;
+	/** 当前是否正在预热（避免并发预热） */
+	private _warmingUp = false;
+	/** 上次预热尝试时间（ms） */
+	private _lastWarmupAttemptAt = 0;
 
 	constructor() {
 		this._service = SemanticSearchService.getInstance();
@@ -28,12 +34,33 @@ export class VectorSearchServiceImpl implements IVectorSearchService {
 	}
 
 	private _warmUpModel(): void {
+		if (this._warmingUp) {
+			return;
+		}
+		this._warmingUp = true;
+		this._lastWarmupAttemptAt = Date.now();
 		EmbeddingService.getInstance().warmUp().then(() => {
 			this._modelReady = true;
+			this._modelWarmupError = null;
 			log.debug('embedding_model_warmup_completed');
 		}).catch((err) => {
-			log.warn('embedding_model_warmup_failed', { error: String(err?.message ?? err) });
+			this._modelReady = false;
+			this._modelWarmupError = String(err?.message ?? err);
+			log.warn('embedding_model_warmup_failed', { error: this._modelWarmupError });
+		}).finally(() => {
+			this._warmingUp = false;
 		});
+	}
+
+	private _maybeRetryWarmup(): void {
+		if (this._modelReady || this._warmingUp) {
+			return;
+		}
+		const RETRY_INTERVAL = 30_000;
+		if (Date.now() - this._lastWarmupAttemptAt >= RETRY_INTERVAL) {
+			log.info('embedding_model_warmup_retry');
+			this._warmUpModel();
+		}
 	}
 
 	async semanticSearch(query: string, cwd: string, maxResults: number): Promise<ISemanticSearchResult[]> {
@@ -49,10 +76,12 @@ export class VectorSearchServiceImpl implements IVectorSearchService {
 	}
 
 	async getIndexStats(cwd: string): Promise<IIndexStats> {
+		this._maybeRetryWarmup();
 		const stats = await this._service.getIndexStats(cwd);
 		return {
 			...stats,
 			modelReady: this._modelReady,
+			modelError: this._modelWarmupError ?? undefined,
 		};
 	}
 

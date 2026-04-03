@@ -118,6 +118,15 @@ export class VectorSearchStatusBarContribution extends Disposable implements IWo
 	}
 
 	private _updateStatusBar(stats: IIndexStats): void {
+		if (stats.modelError) {
+			this._setEntry({
+				text: '$(warning) 语义搜索不可用',
+				ariaLabel: '语义搜索模型加载失败',
+				tooltip: `语义搜索嵌入模型加载失败\n${stats.modelError}\n\n将自动重试加载`,
+			});
+			return;
+		}
+
 		if (!stats.modelReady && stats.itemCount === 0 && !stats.isIndexing) {
 			// 嵌入模型还在加载
 			this._setEntry({

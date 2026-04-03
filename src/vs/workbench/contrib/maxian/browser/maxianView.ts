@@ -67,6 +67,7 @@ export class MaxianView extends ViewPane {
 	private modeSelector!: HTMLDivElement; // 模式选择器显示框
 	private modeDropdown!: HTMLDivElement; // 模式下拉列表
 	private modeDropdownList!: HTMLUListElement; // 模式下拉列表ul
+	private modeSelectorIcon!: HTMLSpanElement; // 模式选择器图标
 	private modeSelectorArrow!: HTMLSpanElement; // 模式选择器箭头
 	private isModeDropdownOpeningUpward: boolean = false; // 模式下拉列表是否向上展开
 	private isModeDropdownOpen: boolean = false; // 模式下拉列表是否打开
@@ -521,9 +522,9 @@ export class MaxianView extends ViewPane {
 
 		// 模式选择器包装器
 		const modeSelectorWrapper = append(leftControls, $('div'));
-		modeSelectorWrapper.style.flexShrink = '1';
-		modeSelectorWrapper.style.minWidth = '60px';
-		modeSelectorWrapper.style.maxWidth = '110px';
+		modeSelectorWrapper.style.flex = '0 1 130px';
+		modeSelectorWrapper.style.minWidth = '96px';
+		modeSelectorWrapper.style.maxWidth = '156px';
 		modeSelectorWrapper.style.position = 'relative';
 		modeSelectorWrapper.style.display = 'flex';
 		modeSelectorWrapper.style.alignItems = 'center';
@@ -534,33 +535,45 @@ export class MaxianView extends ViewPane {
 		this.modeSelector.style.position = 'relative';
 		this.modeSelector.style.display = 'inline-flex';
 		this.modeSelector.style.alignItems = 'center';
-		this.modeSelector.style.height = '22px';
-		this.modeSelector.style.padding = '0 18px 0 7px';
-		this.modeSelector.style.fontSize = '11px';
-		this.modeSelector.style.fontWeight = '400';
-		this.modeSelector.style.borderRadius = '11px';
-		this.modeSelector.style.backgroundColor = 'transparent';
+		this.modeSelector.style.width = '100%';
+		this.modeSelector.style.height = '26px';
+		this.modeSelector.style.padding = '0 24px 0 9px';
+		this.modeSelector.style.fontSize = '12px';
+		this.modeSelector.style.fontWeight = '500';
+		this.modeSelector.style.borderRadius = '14px';
+		this.modeSelector.style.backgroundColor = 'var(--vscode-input-background, rgba(128, 128, 128, 0.08))';
 		this.modeSelector.style.color = 'var(--vscode-descriptionForeground)';
-		this.modeSelector.style.border = 'none';
+		this.modeSelector.style.border = '1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
 		this.modeSelector.style.cursor = 'pointer';
 		this.modeSelector.style.userSelect = 'none';
-		this.modeSelector.style.whiteSpace = 'nowrap';
-		this.modeSelector.style.overflow = 'hidden';
-		this.modeSelector.style.textOverflow = 'ellipsis';
-		this.modeSelector.style.transition = 'all 0.15s';
+		this.modeSelector.style.boxSizing = 'border-box';
+		this.modeSelector.style.transition = 'all 0.15s ease';
 		this.modeSelector.title = '选择模式';
+
+		this.modeSelectorIcon = append(this.modeSelector, $('span.codicon')) as HTMLSpanElement;
+		this.modeSelectorIcon.style.fontSize = '13px';
+		this.modeSelectorIcon.style.flexShrink = '0';
+		this.modeSelectorIcon.style.marginRight = '6px';
+		this.modeSelectorIcon.style.color = 'var(--vscode-descriptionForeground)';
+		this.modeSelectorIcon.style.transition = 'color 0.15s ease';
 
 		// 文本显示span
 		const modeTextSpan = append(this.modeSelector, $('span')) as HTMLSpanElement;
 		modeTextSpan.textContent = '加载中...';
+		modeTextSpan.style.flex = '1';
+		modeTextSpan.style.minWidth = '0';
+		modeTextSpan.style.overflow = 'hidden';
+		modeTextSpan.style.textOverflow = 'ellipsis';
+		modeTextSpan.style.whiteSpace = 'nowrap';
 		modeTextSpan.setAttribute('data-role', 'mode-text');
 
 		// 下拉箭头
 		this.modeSelectorArrow = append(this.modeSelector, $('span.codicon.codicon-chevron-down')) as HTMLSpanElement;
 		this.modeSelectorArrow.style.position = 'absolute';
-		this.modeSelectorArrow.style.right = '5px';
+		this.modeSelectorArrow.style.right = '7px';
 		this.modeSelectorArrow.style.fontSize = '10px';
 		this.modeSelectorArrow.style.transition = 'transform 0.2s ease';
+		this.modeSelectorArrow.style.color = 'var(--vscode-descriptionForeground)';
 		this.modeSelectorArrow.style.pointerEvents = 'none';
 
 		// 下拉列表容器（使用fixed定位）
@@ -636,8 +649,12 @@ export class MaxianView extends ViewPane {
 					this.modeDropdown.style.transform = 'translateY(0)';
 				}, 10);
 				this.modeSelectorArrow.style.transform = 'rotate(180deg)';
-				this.modeSelector.style.backgroundColor = 'rgba(128, 128, 128, 0.1)';
+				this.modeSelector.style.backgroundColor = 'var(--vscode-input-background, rgba(128, 128, 128, 0.12))';
 				this.modeSelector.style.color = 'var(--vscode-foreground)';
+				this.modeSelector.style.borderColor = 'var(--vscode-focusBorder, #007acc)';
+				this.modeSelector.style.boxShadow = '0 0 0 1px var(--vscode-focusBorder, #007acc)';
+				this.modeSelectorArrow.style.color = 'var(--vscode-focusBorder, #007acc)';
+				this.modeSelectorIcon.style.color = 'var(--vscode-focusBorder, #007acc)';
 			} else {
 				this.closeModeDropdown();
 			}
@@ -654,14 +671,19 @@ export class MaxianView extends ViewPane {
 		// Hover效果
 		this.modeSelector.onmouseenter = () => {
 			if (!this.isModeDropdownOpen) {
-				this.modeSelector.style.backgroundColor = 'rgba(128, 128, 128, 0.1)';
+				this.modeSelector.style.backgroundColor = 'var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.12))';
 				this.modeSelector.style.color = 'var(--vscode-foreground)';
+				this.modeSelectorIcon.style.color = 'var(--vscode-foreground)';
 			}
 		};
 		this.modeSelector.onmouseleave = () => {
 			if (!this.isModeDropdownOpen) {
-				this.modeSelector.style.backgroundColor = 'transparent';
+				this.modeSelector.style.backgroundColor = 'var(--vscode-input-background, rgba(128, 128, 128, 0.08))';
 				this.modeSelector.style.color = 'var(--vscode-descriptionForeground)';
+				this.modeSelector.style.borderColor = 'var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
+				this.modeSelector.style.boxShadow = 'none';
+				this.modeSelectorArrow.style.color = 'var(--vscode-descriptionForeground)';
+				this.modeSelectorIcon.style.color = 'var(--vscode-descriptionForeground)';
 			}
 		};
 
@@ -669,9 +691,9 @@ export class MaxianView extends ViewPane {
 
 		// 自定义知识库选择器
 		this.knowledgeBaseSelectorWrapper = append(leftControls, $('div')) as HTMLDivElement;
-		this.knowledgeBaseSelectorWrapper.style.flexShrink = '1';
-		this.knowledgeBaseSelectorWrapper.style.minWidth = '100px';
-		this.knowledgeBaseSelectorWrapper.style.maxWidth = '180px';
+		this.knowledgeBaseSelectorWrapper.style.flex = '1 1 220px';
+		this.knowledgeBaseSelectorWrapper.style.minWidth = '140px';
+		this.knowledgeBaseSelectorWrapper.style.maxWidth = '340px';
 		this.knowledgeBaseSelectorWrapper.style.position = 'relative';
 		this.knowledgeBaseSelectorWrapper.style.zIndex = '100'; // 确保高于其他元素
 
@@ -680,31 +702,26 @@ export class MaxianView extends ViewPane {
 		this.knowledgeBaseSelector.style.position = 'relative';
 		this.knowledgeBaseSelector.style.display = 'inline-flex';
 		this.knowledgeBaseSelector.style.alignItems = 'center';
-		this.knowledgeBaseSelector.style.height = '22px';
-		this.knowledgeBaseSelector.style.padding = '0 18px 0 24px';
-		this.knowledgeBaseSelector.style.backgroundColor = 'transparent';
+		this.knowledgeBaseSelector.style.width = '100%';
+		this.knowledgeBaseSelector.style.height = '26px';
+		this.knowledgeBaseSelector.style.padding = '0 26px 0 10px';
+		this.knowledgeBaseSelector.style.backgroundColor = 'var(--vscode-input-background, rgba(128, 128, 128, 0.08))';
 		this.knowledgeBaseSelector.style.color = 'var(--vscode-descriptionForeground)';
-		this.knowledgeBaseSelector.style.border = 'none';
-		this.knowledgeBaseSelector.style.borderRadius = '11px';
+		this.knowledgeBaseSelector.style.border = '1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
+		this.knowledgeBaseSelector.style.borderRadius = '14px';
 		this.knowledgeBaseSelector.style.fontFamily = 'var(--vscode-font-family)';
-		this.knowledgeBaseSelector.style.fontSize = '11px';
-		this.knowledgeBaseSelector.style.fontWeight = '400';
+		this.knowledgeBaseSelector.style.fontSize = '12px';
+		this.knowledgeBaseSelector.style.fontWeight = '500';
 		this.knowledgeBaseSelector.style.cursor = 'pointer';
-		this.knowledgeBaseSelector.style.transition = 'all 0.15s';
+		this.knowledgeBaseSelector.style.transition = 'all 0.15s ease';
 		this.knowledgeBaseSelector.style.userSelect = 'none';
+		this.knowledgeBaseSelector.style.boxSizing = 'border-box';
 		this.knowledgeBaseSelector.title = '点击选择知识库';
-
-		// 知识库图标
-		const kbIcon = append(this.knowledgeBaseSelector, $('span.codicon.codicon-database'));
-		kbIcon.style.position = 'absolute';
-		kbIcon.style.left = '8px';
-		kbIcon.style.color = 'var(--vscode-descriptionForeground)';
-		kbIcon.style.fontSize = '12px';
-		kbIcon.style.transition = 'all 0.2s ease';
 
 		// 文本显示span
 		const kbTextSpan = append(this.knowledgeBaseSelector, $('span')) as HTMLSpanElement;
 		kbTextSpan.textContent = '加载中...';
+		kbTextSpan.title = '加载中...';
 		kbTextSpan.style.flex = '1';
 		kbTextSpan.style.overflow = 'hidden';
 		kbTextSpan.style.textOverflow = 'ellipsis';
@@ -714,10 +731,11 @@ export class MaxianView extends ViewPane {
 		// 下拉箭头
 		this.knowledgeBaseSelectorArrow = append(this.knowledgeBaseSelector, $('span.codicon.codicon-chevron-down')) as HTMLSpanElement;
 		this.knowledgeBaseSelectorArrow.style.position = 'absolute';
-		this.knowledgeBaseSelectorArrow.style.right = '6px';
+		this.knowledgeBaseSelectorArrow.style.right = '8px';
 		this.knowledgeBaseSelectorArrow.style.fontSize = '10px';
 		this.knowledgeBaseSelectorArrow.style.color = 'var(--vscode-descriptionForeground)';
 		this.knowledgeBaseSelectorArrow.style.transition = 'transform 0.2s ease';
+		this.knowledgeBaseSelectorArrow.style.pointerEvents = 'none';
 
 		// 下拉列表容器（使用fixed定位，脱离文档流，不受父容器限制）
 		this.knowledgeBaseDropdown = append(this.knowledgeBaseSelectorWrapper, $('div')) as HTMLDivElement;
@@ -726,9 +744,10 @@ export class MaxianView extends ViewPane {
 		this.knowledgeBaseDropdown.style.maxHeight = '280px';
 		this.knowledgeBaseDropdown.style.backgroundColor = 'var(--vscode-dropdown-background)';
 		this.knowledgeBaseDropdown.style.border = '1px solid var(--vscode-dropdown-border, rgba(128, 128, 128, 0.4))';
-		this.knowledgeBaseDropdown.style.borderRadius = '8px';
-		this.knowledgeBaseDropdown.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.08)';
+		this.knowledgeBaseDropdown.style.borderRadius = '10px';
+		this.knowledgeBaseDropdown.style.boxShadow = '0 10px 28px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(0, 0, 0, 0.1)';
 		this.knowledgeBaseDropdown.style.overflowY = 'auto';
+		this.knowledgeBaseDropdown.style.overflowX = 'hidden';
 		this.knowledgeBaseDropdown.style.zIndex = '10000'; // 提高z-index确保在最顶层
 		this.knowledgeBaseDropdown.style.display = 'none';
 		this.knowledgeBaseDropdown.style.opacity = '0';
@@ -772,9 +791,9 @@ export class MaxianView extends ViewPane {
 				this.knowledgeBaseDropdown.style.left = '';
 				this.knowledgeBaseDropdown.style.right = '';
 
-				// 设置动态的maxHeight和宽度
+				// 设置动态的maxHeight和宽度（宽度按最长知识库名称自适应，避免内容显示不全）
 				this.knowledgeBaseDropdown.style.maxHeight = `${actualMaxHeight}px`;
-				this.knowledgeBaseDropdown.style.width = `${selectorRect.width}px`;
+				this.knowledgeBaseDropdown.style.width = `${this.computeKnowledgeBaseDropdownWidth(selectorRect.width)}px`;
 				this.knowledgeBaseDropdown.style.left = `${selectorRect.left}px`;
 
 				// 根据方向设置位置和初始transform（使用fixed定位的绝对坐标）
@@ -802,8 +821,7 @@ export class MaxianView extends ViewPane {
 					this.knowledgeBaseDropdown.style.transform = 'translateY(0)';
 				});
 				this.knowledgeBaseSelectorArrow.style.transform = 'rotate(180deg)';
-				this.knowledgeBaseSelector.style.backgroundColor = 'rgba(128, 128, 128, 0.1)';
-				this.knowledgeBaseSelector.style.color = 'var(--vscode-foreground)';
+				this.applyKnowledgeBaseSelectorVisualState('open');
 			} else {
 				this.closeKnowledgeBaseDropdown();
 			}
@@ -820,18 +838,15 @@ export class MaxianView extends ViewPane {
 		// Hover效果
 		this.knowledgeBaseSelector.onmouseenter = () => {
 			if (!this.isKnowledgeBaseDropdownOpen) {
-				this.knowledgeBaseSelector.style.backgroundColor = 'rgba(128, 128, 128, 0.1)';
-				this.knowledgeBaseSelector.style.color = 'var(--vscode-foreground)';
+				this.applyKnowledgeBaseSelectorVisualState('hover');
 			}
-			kbIcon.style.color = 'var(--vscode-foreground)';
 		};
 		this.knowledgeBaseSelector.onmouseleave = () => {
 			if (!this.isKnowledgeBaseDropdownOpen) {
-				this.knowledgeBaseSelector.style.backgroundColor = 'transparent';
-				this.knowledgeBaseSelector.style.color = 'var(--vscode-descriptionForeground)';
+				this.applyKnowledgeBaseSelectorVisualState('default');
 			}
-			kbIcon.style.color = 'var(--vscode-descriptionForeground)';
 		};
+		this.applyKnowledgeBaseSelectorVisualState('default');
 
 		// 加载知识库列表
 		this.loadKnowledgeBases();
@@ -6051,30 +6066,28 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		// 添加知识库列表项
 		this.knowledgeBases.forEach((kb, _index) => {
 			const li = append(this.knowledgeBaseDropdownList, $('li')) as HTMLLIElement;
-			li.style.padding = '10px 16px';
+			li.style.padding = '9px 12px';
 			li.style.cursor = 'pointer';
 			li.style.transition = 'all 0.15s ease';
 			li.style.display = 'flex';
 			li.style.alignItems = 'center';
-			li.style.gap = '10px';
-			li.style.borderRadius = '4px';
+			li.style.gap = '8px';
+			li.style.borderRadius = '6px';
 			li.style.margin = '2px 6px';
 			li.style.fontSize = '12px';
+			li.style.lineHeight = '1.3';
 			li.setAttribute('data-kb-id', kb.id);
-
-			// 知识库图标
-			const icon = append(li, $('span.codicon.codicon-database'));
-			icon.style.color = 'var(--vscode-charts-blue, #007ACC)';
-			icon.style.fontSize = '14px';
-			icon.style.flexShrink = '0';
 
 			// 知识库名称
 			const name = append(li, $('span'));
 			name.textContent = kb.applicationName;
+			name.title = kb.applicationName;
 			name.style.flex = '1';
+			name.style.minWidth = '0';
 			name.style.overflow = 'hidden';
 			name.style.textOverflow = 'ellipsis';
 			name.style.whiteSpace = 'nowrap';
+			name.style.fontWeight = '500';
 
 			// 选中标记（默认隐藏）
 			const checkmark = append(li, $('span.codicon.codicon-check'));
@@ -6104,6 +6117,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 				const textSpan = this.knowledgeBaseSelector.querySelector('[data-role="kb-text"]') as HTMLSpanElement;
 				if (textSpan) {
 					textSpan.textContent = kb.applicationName;
+					textSpan.title = kb.applicationName;
 				}
 
 				// 更新所有列表项的选中状态
@@ -6139,6 +6153,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			const textSpan = this.knowledgeBaseSelector.querySelector('[data-role="kb-text"]') as HTMLSpanElement;
 			if (textSpan) {
 				textSpan.textContent = this.knowledgeBases[0].applicationName;
+				textSpan.title = this.knowledgeBases[0].applicationName;
 			}
 
 			// 高亮第一项
@@ -6158,9 +6173,40 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			const textSpan = this.knowledgeBaseSelector.querySelector('[data-role="kb-text"]') as HTMLSpanElement;
 			if (textSpan) {
 				textSpan.textContent = '无可用知识库';
+				textSpan.title = '无可用知识库';
 			}
 			console.warn('[MaxianView] 没有可用的知识库');
 		}
+	}
+
+	/**
+	 * 根据知识库名称计算下拉列表宽度，尽量完整展示名称
+	 */
+	private computeKnowledgeBaseDropdownWidth(fallbackWidth: number): number {
+		const MIN_WIDTH = Math.max(220, fallbackWidth);
+		const MAX_WIDTH = Math.min(480, Math.max(260, window.innerWidth - 24));
+		if (this.knowledgeBases.length === 0) {
+			return MIN_WIDTH;
+		}
+
+		let longestNameWidth = 0;
+		const canvas = document.createElement('canvas');
+		const ctx = canvas.getContext('2d');
+		if (!ctx) {
+			return MIN_WIDTH;
+		}
+
+		ctx.font = `${getComputedStyle(this.knowledgeBaseSelector).fontSize} ${getComputedStyle(this.knowledgeBaseSelector).fontFamily}`;
+		for (const kb of this.knowledgeBases) {
+			const measured = ctx.measureText(kb.applicationName).width;
+			if (measured > longestNameWidth) {
+				longestNameWidth = measured;
+			}
+		}
+
+		const PADDING_AND_ICONS = 44; // 右对勾 + 左右间距
+		const calculated = Math.ceil(longestNameWidth + PADDING_AND_ICONS);
+		return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, calculated));
 	}
 
 	/**
@@ -6181,8 +6227,33 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			this.knowledgeBaseDropdown.style.display = 'none';
 		}, 200);
 		this.knowledgeBaseSelectorArrow.style.transform = 'rotate(0deg)';
-		this.knowledgeBaseSelector.style.backgroundColor = 'transparent';
+		this.applyKnowledgeBaseSelectorVisualState('default');
+	}
+
+	private applyKnowledgeBaseSelectorVisualState(state: 'default' | 'hover' | 'open'): void {
+		if (state === 'open') {
+			this.knowledgeBaseSelector.style.backgroundColor = 'var(--vscode-input-background, rgba(128, 128, 128, 0.12))';
+			this.knowledgeBaseSelector.style.color = 'var(--vscode-foreground)';
+			this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-focusBorder, #007acc)';
+			this.knowledgeBaseSelector.style.boxShadow = '0 0 0 1px var(--vscode-focusBorder, #007acc)';
+			this.knowledgeBaseSelectorArrow.style.color = 'var(--vscode-focusBorder, #007acc)';
+			return;
+		}
+
+		if (state === 'hover') {
+			this.knowledgeBaseSelector.style.backgroundColor = 'var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.12))';
+			this.knowledgeBaseSelector.style.color = 'var(--vscode-foreground)';
+			this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-input-border, rgba(128, 128, 128, 0.45))';
+			this.knowledgeBaseSelector.style.boxShadow = 'none';
+			this.knowledgeBaseSelectorArrow.style.color = 'var(--vscode-descriptionForeground)';
+			return;
+		}
+
+		this.knowledgeBaseSelector.style.backgroundColor = 'var(--vscode-input-background, rgba(128, 128, 128, 0.08))';
 		this.knowledgeBaseSelector.style.color = 'var(--vscode-descriptionForeground)';
+		this.knowledgeBaseSelector.style.borderColor = 'var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
+		this.knowledgeBaseSelector.style.boxShadow = 'none';
+		this.knowledgeBaseSelectorArrow.style.color = 'var(--vscode-descriptionForeground)';
 	}
 
 	/**
@@ -6196,8 +6267,12 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			this.modeDropdown.style.display = 'none';
 		}, 200);
 		this.modeSelectorArrow.style.transform = 'rotate(0deg)';
-		this.modeSelector.style.backgroundColor = 'transparent';
+		this.modeSelector.style.backgroundColor = 'var(--vscode-input-background, rgba(128, 128, 128, 0.08))';
 		this.modeSelector.style.color = 'var(--vscode-descriptionForeground)';
+		this.modeSelector.style.borderColor = 'var(--vscode-input-border, rgba(128, 128, 128, 0.35))';
+		this.modeSelector.style.boxShadow = 'none';
+		this.modeSelectorArrow.style.color = 'var(--vscode-descriptionForeground)';
+		this.modeSelectorIcon.style.color = 'var(--vscode-descriptionForeground)';
 	}
 
 	/**
@@ -6242,12 +6317,12 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 
 		// 模式图标映射
 		const modeIconMap: Record<string, string> = {
-			'code': '💻',
-			'architect': '🏗️',
-			'ask': '❓',
-			'debug': '🔧',
-			'orchestrator': '🎯',
-			'spec': '📋'
+			'code': 'codicon-code',
+			'architect': 'codicon-symbol-namespace',
+			'ask': 'codicon-comment-discussion',
+			'debug': 'codicon-bug',
+			'orchestrator': 'codicon-hubot',
+			'spec': 'codicon-checklist'
 		};
 
 		// 添加模式列表项
@@ -6264,10 +6339,10 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			li.style.margin = '0 4px';
 
 			// 模式图标
-			const icon = append(li, $('span'));
-			icon.textContent = modeIconMap[mode.slug] || '📝';
-			icon.style.fontSize = '14px';
+			const icon = append(li, $(`span.codicon.${modeIconMap[mode.slug] || 'codicon-circle-outline'}`));
+			icon.style.fontSize = '13px';
 			icon.style.flexShrink = '0';
+			icon.style.color = 'var(--vscode-descriptionForeground)';
 
 			// 模式名称
 			const name = append(li, $('span'));
@@ -6312,8 +6387,9 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 				// 更新显示文本
 				const textSpan = this.modeSelector.querySelector('[data-role="mode-text"]') as HTMLSpanElement;
 				if (textSpan) {
-					textSpan.textContent = `${modeIconMap[mode.slug] || '📝'} ${mode.name}`;
+					textSpan.textContent = mode.name;
 				}
+				this.modeSelectorIcon.className = `codicon ${modeIconMap[mode.slug] || 'codicon-circle-outline'}`;
 
 				// 控制连续对话复选框的显示（仅ask模式显示）
 				if (this.currentMode === 'ask') {
@@ -6364,9 +6440,9 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		if (currentModeInfo) {
 			const textSpan = this.modeSelector.querySelector('[data-role="mode-text"]') as HTMLSpanElement;
 			if (textSpan) {
-				const icon = modeIconMap[currentModeInfo.slug] || '📝';
-				textSpan.textContent = `${icon} ${currentModeInfo.name}`;
+				textSpan.textContent = currentModeInfo.name;
 			}
+			this.modeSelectorIcon.className = `codicon ${modeIconMap[currentModeInfo.slug] || 'codicon-circle-outline'}`;
 		}
 
 		// 根据当前模式更新知识库选择器显示状态
