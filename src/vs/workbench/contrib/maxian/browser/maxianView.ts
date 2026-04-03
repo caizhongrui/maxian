@@ -63,6 +63,10 @@ export class MaxianView extends ViewPane {
 	private currentAiMessageElement: HTMLElement | null = null;
 	private currentAiMessageText: string = ''; // 累积的原始文本
 	private currentStreamingMessageElement: HTMLElement | null = null; // 流式消息的外层容器（用于complete时替换）
+	private pendingTextStreamBuffer: string = ''; // 文本流缓冲区（用于节流渲染）
+	private pendingTextStreamPartial = false; // 缓冲区内是否包含 partial 片段
+	private pendingTextStreamFinalize = false; // 是否收到流结束信号
+	private textStreamFlushTimer: number | null = null; // 文本流节流定时器
 	private currentMode: Mode = DEFAULT_MODE;
 	private modeSelector!: HTMLDivElement; // 模式选择器显示框
 	private modeDropdown!: HTMLDivElement; // 模式下拉列表
@@ -524,7 +528,7 @@ export class MaxianView extends ViewPane {
 		const modeSelectorWrapper = append(leftControls, $('div'));
 		modeSelectorWrapper.style.flex = '0 1 130px';
 		modeSelectorWrapper.style.minWidth = '96px';
-		modeSelectorWrapper.style.maxWidth = '156px';
+		modeSelectorWrapper.style.maxWidth = '200px';
 		modeSelectorWrapper.style.position = 'relative';
 		modeSelectorWrapper.style.display = 'flex';
 		modeSelectorWrapper.style.alignItems = 'center';
@@ -537,7 +541,7 @@ export class MaxianView extends ViewPane {
 		this.modeSelector.style.alignItems = 'center';
 		this.modeSelector.style.width = '100%';
 		this.modeSelector.style.height = '26px';
-		this.modeSelector.style.padding = '0 24px 0 9px';
+		this.modeSelector.style.padding = '0 24px 0 10px';
 		this.modeSelector.style.fontSize = '12px';
 		this.modeSelector.style.fontWeight = '500';
 		this.modeSelector.style.borderRadius = '14px';
@@ -553,9 +557,10 @@ export class MaxianView extends ViewPane {
 		this.modeSelectorIcon = append(this.modeSelector, $('span.codicon')) as HTMLSpanElement;
 		this.modeSelectorIcon.style.fontSize = '13px';
 		this.modeSelectorIcon.style.flexShrink = '0';
-		this.modeSelectorIcon.style.marginRight = '6px';
+		this.modeSelectorIcon.style.marginRight = '0';
 		this.modeSelectorIcon.style.color = 'var(--vscode-descriptionForeground)';
 		this.modeSelectorIcon.style.transition = 'color 0.15s ease';
+		this.modeSelectorIcon.style.display = 'none';
 
 		// 文本显示span
 		const modeTextSpan = append(this.modeSelector, $('span')) as HTMLSpanElement;
@@ -599,55 +604,16 @@ export class MaxianView extends ViewPane {
 
 		// 点击显示框切换下拉列表
 		this.modeSelector.onclick = (e) => {
-				e.stopPropagation();
+			e.stopPropagation();
 			this.isModeDropdownOpen = !this.isModeDropdownOpen;
 
 			if (this.isModeDropdownOpen) {
-
-				// 判断应该向上还是向下展开
-				const selectorRect = this.modeSelector.getBoundingClientRect();
-				const viewportHeight = window.innerHeight;
-				const dropdownMaxHeight = 280;
-				const margin = 8;
-				const spaceBelow = viewportHeight - selectorRect.bottom - margin;
-				const spaceAbove = selectorRect.top - margin;
-
-				let actualMaxHeight = dropdownMaxHeight;
-
-				if (spaceBelow < dropdownMaxHeight && spaceAbove > spaceBelow) {
-					// 向上展开
-					this.isModeDropdownOpeningUpward = true;
-					actualMaxHeight = Math.min(dropdownMaxHeight, spaceAbove);
-				} else {
-					this.isModeDropdownOpeningUpward = false;
-					actualMaxHeight = Math.min(dropdownMaxHeight, spaceBelow);
-				}
-
-				// 设置动态的maxHeight和宽度
-				this.modeDropdown.style.maxHeight = `${actualMaxHeight}px`;
-				this.modeDropdown.style.minWidth = `${selectorRect.width}px`;
-				this.modeDropdown.style.width = 'auto';
-				this.modeDropdown.style.left = `${selectorRect.left}px`;
-
-				// 根据方向设置位置
-				if (this.isModeDropdownOpeningUpward) {
-					const bottomPosition = viewportHeight - selectorRect.top + 2;
-					this.modeDropdown.style.bottom = `${bottomPosition}px`;
-					this.modeDropdown.style.top = 'auto';
-					this.modeDropdown.style.transform = 'translateY(8px)';
-				} else {
-					const topPosition = selectorRect.bottom + 2;
-					this.modeDropdown.style.top = `${topPosition}px`;
-					this.modeDropdown.style.bottom = 'auto';
-					this.modeDropdown.style.transform = 'translateY(-8px)';
-				}
-
-				// 显示下拉列表
-				this.modeDropdown.style.display = 'block';
-				setTimeout(() => {
-					this.modeDropdown.style.opacity = '1';
-					this.modeDropdown.style.transform = 'translateY(0)';
-				}, 10);
+				const anchorRect = this.modeSelector.getBoundingClientRect();
+				const dropdownWidth = this.computeModeDropdownWidth(anchorRect.width);
+				this.isModeDropdownOpeningUpward = this.openFloatingDropdown(this.modeSelector, this.modeDropdown, {
+					maxHeight: 280,
+					width: dropdownWidth,
+				});
 				this.modeSelectorArrow.style.transform = 'rotate(180deg)';
 				this.modeSelector.style.backgroundColor = 'var(--vscode-input-background, rgba(128, 128, 128, 0.12))';
 				this.modeSelector.style.color = 'var(--vscode-foreground)';
@@ -766,59 +732,11 @@ export class MaxianView extends ViewPane {
 			this.isKnowledgeBaseDropdownOpen = !this.isKnowledgeBaseDropdownOpen;
 
 			if (this.isKnowledgeBaseDropdownOpen) {
-				// 判断应该向上还是向下展开
-				const selectorRect = this.knowledgeBaseSelector.getBoundingClientRect();
-				const viewportHeight = window.innerHeight;
-				const dropdownMaxHeight = 280; // 下拉列表默认最大高度
-				const margin = 8; // 与边界的安全边距
-				const spaceBelow = viewportHeight - selectorRect.bottom - margin; // 选择器下方的可用空间
-				const spaceAbove = selectorRect.top - margin; // 选择器上方的可用空间（避免被输入框挡住）
-
-				let actualMaxHeight = dropdownMaxHeight;
-
-				if (spaceBelow < dropdownMaxHeight && spaceAbove > spaceBelow) {
-					// 下方空间不足且上方空间更大，向上展开
-					this.isDropdownOpeningUpward = true;
-					actualMaxHeight = Math.min(dropdownMaxHeight, spaceAbove); // 使用上方实际可用空间
-				} else {
-					this.isDropdownOpeningUpward = false;
-					actualMaxHeight = Math.min(dropdownMaxHeight, spaceBelow); // 使用下方实际可用空间
-				}
-
-				// 清除之前的top/bottom设置
-				this.knowledgeBaseDropdown.style.top = '';
-				this.knowledgeBaseDropdown.style.bottom = '';
-				this.knowledgeBaseDropdown.style.left = '';
-				this.knowledgeBaseDropdown.style.right = '';
-
-				// 设置动态的maxHeight和宽度（宽度按最长知识库名称自适应，避免内容显示不全）
-				this.knowledgeBaseDropdown.style.maxHeight = `${actualMaxHeight}px`;
-				this.knowledgeBaseDropdown.style.width = `${this.computeKnowledgeBaseDropdownWidth(selectorRect.width)}px`;
-				this.knowledgeBaseDropdown.style.left = `${selectorRect.left}px`;
-
-				// 根据方向设置位置和初始transform（使用fixed定位的绝对坐标）
-				if (this.isDropdownOpeningUpward) {
-					// 向上展开：设置bottom为距离窗口底部的距离
-					const bottomPosition = viewportHeight - selectorRect.top + 2; // 2px间隙
-					this.knowledgeBaseDropdown.style.bottom = `${bottomPosition}px`;
-					this.knowledgeBaseDropdown.style.transform = 'translateY(8px)'; // 向下偏移8px（动画效果）
-				} else {
-					// 向下展开：设置top为选择器底部位置
-					const topPosition = selectorRect.bottom + 2; // 2px间隙
-					this.knowledgeBaseDropdown.style.top = `${topPosition}px`;
-					this.knowledgeBaseDropdown.style.transform = 'translateY(-8px)'; // 向上偏移8px（动画效果）
-				}
-
-				// 设置display: block（但保持opacity: 0）
-				this.knowledgeBaseDropdown.style.display = 'block';
-
-				// 强制浏览器重新计算布局（触发reflow）
-				void this.knowledgeBaseDropdown.offsetHeight;
-
-				// 使用requestAnimationFrame确保在下一帧设置opacity，让transition生效
-				requestAnimationFrame(() => {
-					this.knowledgeBaseDropdown.style.opacity = '1';
-					this.knowledgeBaseDropdown.style.transform = 'translateY(0)';
+				const anchorRect = this.knowledgeBaseSelector.getBoundingClientRect();
+				const dropdownWidth = this.computeKnowledgeBaseDropdownWidth(anchorRect.width);
+				this.isDropdownOpeningUpward = this.openFloatingDropdown(this.knowledgeBaseSelector, this.knowledgeBaseDropdown, {
+					maxHeight: 280,
+					width: dropdownWidth,
 				});
 				this.knowledgeBaseSelectorArrow.style.transform = 'rotate(180deg)';
 				this.applyKnowledgeBaseSelectorVisualState('open');
@@ -3961,11 +3879,18 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 	private renderSayMessage(message: ClineMessage): void {
 		const sayType = message.say;
 		if (!sayType) {return;}
+		if (sayType !== 'text' && (this.pendingTextStreamBuffer || this.pendingTextStreamFinalize || this.textStreamFlushTimer !== null)) {
+			if (this.textStreamFlushTimer !== null) {
+				clearTimeout(this.textStreamFlushTimer);
+				this.textStreamFlushTimer = null;
+			}
+			this.flushTextStreamBuffer();
+		}
 
 		switch (sayType) {
 			case 'text':
 				// 文本消息 - 使用Markdown渲染
-				this.renderTextMessage(message.text || '', message.partial);
+				this.enqueueTextMessageRender(message.text || '', message.partial);
 				break;
 
 			case 'reasoning':
@@ -4088,6 +4013,51 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			default:
 				// 未处理的ask消息类型
 				break;
+		}
+	}
+
+	private enqueueTextMessageRender(text: string, partial?: boolean): void {
+		// 流结束信号：立即标记 finalize，并尽快 flush
+		if (!text && !partial) {
+			this.pendingTextStreamFinalize = true;
+			this.scheduleTextStreamFlush(0);
+			return;
+		}
+
+		this.pendingTextStreamBuffer += text;
+		this.pendingTextStreamPartial = this.pendingTextStreamPartial || !!partial;
+		this.scheduleTextStreamFlush(50);
+	}
+
+	private scheduleTextStreamFlush(delay: number): void {
+		if (this.textStreamFlushTimer !== null) {
+			if (delay > 0) {
+				return;
+			}
+			clearTimeout(this.textStreamFlushTimer);
+			this.textStreamFlushTimer = null;
+		}
+
+		this.textStreamFlushTimer = window.setTimeout(() => {
+			this.textStreamFlushTimer = null;
+			this.flushTextStreamBuffer();
+		}, delay);
+	}
+
+	private flushTextStreamBuffer(): void {
+		const chunk = this.pendingTextStreamBuffer;
+		const hasPartial = this.pendingTextStreamPartial;
+		const shouldFinalize = this.pendingTextStreamFinalize;
+
+		this.pendingTextStreamBuffer = '';
+		this.pendingTextStreamPartial = false;
+		this.pendingTextStreamFinalize = false;
+
+		if (chunk) {
+			this.renderTextMessage(chunk, hasPartial);
+		}
+		if (shouldFinalize) {
+			this.renderTextMessage('', false);
 		}
 	}
 
@@ -6209,6 +6179,38 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, calculated));
 	}
 
+	private computeModeDropdownWidth(fallbackWidth: number): number {
+		const MIN_WIDTH = Math.max(280, fallbackWidth + 48);
+		const MAX_WIDTH = Math.min(560, Math.max(320, window.innerWidth - 16));
+		if (!this.modeDropdownList || this.modeDropdownList.children.length === 0) {
+			return MIN_WIDTH;
+		}
+
+		let longestNameWidth = 0;
+		const canvas = document.createElement('canvas');
+		const ctx = canvas.getContext('2d');
+		if (!ctx) {
+			return MIN_WIDTH;
+		}
+
+		ctx.font = `${getComputedStyle(this.modeSelector).fontSize} ${getComputedStyle(this.modeSelector).fontFamily}`;
+		for (const node of Array.from(this.modeDropdownList.children)) {
+			const nameEl = (node as HTMLElement).querySelector('span:not(.codicon)') as HTMLElement | null;
+			const label = nameEl?.textContent?.trim();
+			if (!label) {
+				continue;
+			}
+			const measured = ctx.measureText(label).width;
+			if (measured > longestNameWidth) {
+				longestNameWidth = measured;
+			}
+		}
+
+		const PADDING_AND_ICONS = 80; // 左侧图标 + 右侧对勾 + 间距
+		const calculated = Math.ceil(longestNameWidth + PADDING_AND_ICONS);
+		return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, calculated));
+	}
+
 	/**
 	 * 获取当前选中的知识库ID
 	 */
@@ -6228,6 +6230,54 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		}, 200);
 		this.knowledgeBaseSelectorArrow.style.transform = 'rotate(0deg)';
 		this.applyKnowledgeBaseSelectorVisualState('default');
+	}
+
+	private openFloatingDropdown(
+		anchorEl: HTMLElement,
+		dropdownEl: HTMLElement,
+		options: { maxHeight: number; width: number; margin?: number }
+	): boolean {
+		const anchorRect = anchorEl.getBoundingClientRect();
+		const viewportHeight = window.innerHeight;
+		const viewportWidth = window.innerWidth;
+		const margin = options.margin ?? 8;
+		const spaceBelow = viewportHeight - anchorRect.bottom - margin;
+		const spaceAbove = anchorRect.top - margin;
+
+		const openingUpward = spaceBelow < options.maxHeight && spaceAbove > spaceBelow;
+		const actualMaxHeight = Math.max(80, Math.min(options.maxHeight, openingUpward ? spaceAbove : spaceBelow));
+
+		dropdownEl.style.top = '';
+		dropdownEl.style.bottom = '';
+		dropdownEl.style.left = '';
+		dropdownEl.style.right = '';
+
+		dropdownEl.style.maxHeight = `${actualMaxHeight}px`;
+		dropdownEl.style.width = `${options.width}px`;
+		const constrainedLeft = Math.max(
+			margin,
+			Math.min(anchorRect.left, viewportWidth - options.width - margin)
+		);
+		dropdownEl.style.left = `${constrainedLeft}px`;
+
+		if (openingUpward) {
+			const bottomPosition = viewportHeight - anchorRect.top + 2;
+			dropdownEl.style.bottom = `${bottomPosition}px`;
+			dropdownEl.style.transform = 'translateY(8px)';
+		} else {
+			const topPosition = anchorRect.bottom + 2;
+			dropdownEl.style.top = `${topPosition}px`;
+			dropdownEl.style.transform = 'translateY(-8px)';
+		}
+
+		dropdownEl.style.display = 'block';
+		void dropdownEl.offsetHeight;
+		requestAnimationFrame(() => {
+			dropdownEl.style.opacity = '1';
+			dropdownEl.style.transform = 'translateY(0)';
+		});
+
+		return openingUpward;
 	}
 
 	private applyKnowledgeBaseSelectorVisualState(state: 'default' | 'hover' | 'open'): void {
@@ -6348,9 +6398,12 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			const name = append(li, $('span'));
 			name.textContent = mode.name;
 			name.style.flex = '1';
-			name.style.overflow = 'hidden';
-			name.style.textOverflow = 'ellipsis';
+			name.style.display = 'block';
+			name.style.overflow = 'visible';
+			name.style.textOverflow = 'clip';
 			name.style.whiteSpace = 'nowrap';
+			name.style.wordBreak = 'normal';
+			name.style.lineHeight = '1.2';
 
 			// 选中标记（默认隐藏）
 			const checkmark = append(li, $('span.codicon.codicon-check'));
@@ -6361,6 +6414,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			checkmark.style.flexShrink = '0';
 			checkmark.style.width = '14px';
 			checkmark.style.textAlign = 'center';
+			checkmark.style.marginTop = '1px';
 
 			// 如果是当前模式，高亮显示
 			if (mode.slug === this.currentMode) {
@@ -7627,6 +7681,10 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 	}
 
 	override dispose(): void {
+		if (this.textStreamFlushTimer !== null) {
+			clearTimeout(this.textStreamFlushTimer);
+			this.textStreamFlushTimer = null;
+		}
 		this.clearToolInputStreaming();
 		this.clearTodoList();
 		super.dispose();
