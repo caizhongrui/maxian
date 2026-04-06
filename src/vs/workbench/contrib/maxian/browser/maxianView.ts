@@ -5471,7 +5471,19 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 	private renderToolApproval(message: ClineMessage): void {
 		// 🔥 首先检查是否已设置自动批准
 		// 尝试解析工具信息以获取工具名称
-		let toolInfo: { tool?: string; path?: string; diff?: string; content?: string; command?: string; originalContent?: string; newContent?: string; operationCount?: number } | null = null;
+		let toolInfo: {
+			tool?: string;
+			path?: string;
+			diff?: string;
+			content?: string;
+			command?: string;
+			originalContent?: string;
+			newContent?: string;
+			operationCount?: number;
+			oldString?: string;
+			newString?: string;
+			edits?: Array<{ oldString?: string; newString?: string }>;
+		} | null = null;
 		try {
 			if (message.text) {
 				toolInfo = JSON.parse(message.text);
@@ -5481,11 +5493,37 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			toolInfo = null;
 		}
 
+		const isEditApproval = toolInfo?.tool === 'edit' || toolInfo?.tool === 'multiedit';
+		const getEditOps = () => {
+			if (!toolInfo || !isEditApproval) {
+				return [];
+			}
+			return toolInfo.tool === 'edit'
+				? [{ oldString: toolInfo.oldString || '', newString: toolInfo.newString || '' }]
+				: (toolInfo.edits || []).map(edit => ({
+					oldString: edit.oldString || '',
+					newString: edit.newString || ''
+				}));
+		};
+
 		// 如果已设置全局自动批准（始终允许），直接执行批准操作
 		const toolName = toolInfo?.tool || '';
 		if (this.maxianService.isToolAutoApproved('*') || (toolName && this.maxianService.isToolAutoApproved(toolName))) {
-			this.maxianService.saveDiffAndClose().then(() => {
-				this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
+			(async () => {
+				if (isEditApproval && toolInfo?.path) {
+					const previewResult = await this.maxianService.openEditPreviewDiff(toolInfo.path, getEditOps());
+					if (previewResult.blockingReason) {
+						this.maxianService.handleAskResponse(message.ts, 'messageResponse', previewResult.blockingReason);
+						return;
+					}
+				}
+
+				this.maxianService.closeDiffWithoutSave().then(() => {
+					this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
+				});
+			})().catch(error => {
+				console.error('[Maxian] 自动批准前预检查失败:', error);
+				this.maxianService.handleAskResponse(message.ts, 'messageResponse', '工具预检查失败，请重新读取文件并生成新的修改方案。');
 			});
 			return;
 		}
@@ -5595,6 +5633,10 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 
 		// 在内容区域添加详细信息
 		const contentArea = collapsible.content;
+		let pendingPreviewBlockReason: string | undefined;
+		let approveButton: HTMLButtonElement | undefined;
+		let alwaysAllowButton: HTMLButtonElement | undefined;
+		let applyPreviewGuard: ((reason: string) => void) | undefined;
 
 		if (toolInfo && toolInfo.tool) {
 			// 显示完整文件路径
@@ -5649,20 +5691,25 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 					infoLabel.textContent = '💡 请查看上方的变更详情';
 				} else if (toolInfo.tool === 'edit' || toolInfo.tool === 'multiedit') {
 					// edit/multiedit：在 VS Code diff 编辑器中打开对比视图（git diff 方式）
-					const ti = toolInfo as any;
-					const isSingleEdit = toolInfo.tool === 'edit';
-					const editOps: Array<{ oldString: string; newString: string }> = isSingleEdit
-						? [{ oldString: ti.oldString || '', newString: ti.newString || '' }]
-						: (ti.edits || []);
-					this.maxianService.openEditPreviewDiff(filePath, editOps).then(success => {
-						if (success) {
+					const editOps = getEditOps();
+					this.maxianService.openEditPreviewDiff(filePath, editOps).then(result => {
+						if (result.opened) {
 							infoLabel.textContent = '💡 差异视图已在左侧编辑器中打开（git diff 方式）';
+						} else if (result.blockingReason) {
+							infoLabel.textContent = `⛔ ${result.blockingReason}`;
+							infoLabel.style.color = 'var(--vscode-errorForeground)';
+							if (applyPreviewGuard) {
+								applyPreviewGuard(result.blockingReason);
+							} else {
+								pendingPreviewBlockReason = result.blockingReason;
+							}
 						} else {
 							// 降级：在确认卡片内显示内联 diff
 							infoLabel.style.display = 'none';
 							this.renderInlineEditDiff(contentArea, toolInfo);
 						}
-					}).catch(() => {
+					}).catch((error) => {
+						console.error('[Maxian] 打开 edit 预览失败:', error);
 						infoLabel.style.display = 'none';
 						this.renderInlineEditDiff(contentArea, toolInfo);
 					});
@@ -5688,7 +5735,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		buttonContainer.style.flexWrap = 'wrap';
 
 		// Approve按钮
-		const approveButton = append(buttonContainer, $('button')) as HTMLButtonElement;
+		approveButton = append(buttonContainer, $('button')) as HTMLButtonElement;
 		approveButton.textContent = '✅ 批准';
 		approveButton.style.padding = '6px 16px';
 		approveButton.style.backgroundColor = 'var(--vscode-button-background)';
@@ -5700,13 +5747,12 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		approveButton.onclick = async () => {
 			approveButton.disabled = true;
 			denyButton.disabled = true;
-			alwaysAllowButton.disabled = true;
-			approveButton.textContent = '正在保存...';
+			alwaysAllowButton!.disabled = true;
+			approveButton.textContent = '正在确认...';
 
 			try {
-				// 所有工具统一：saveDiffAndClose 保存文件并关闭 diff 视图
-				// edit/multiedit 的 executeEdit/executeMultiedit 会通过 consumePathSavedByDiff 检测并跳过重复写入
-				await this.maxianService.saveDiffAndClose();
+				// 预览仅用于确认，不提前写盘；真正的落盘由工具执行链统一提交。
+				await this.maxianService.closeDiffWithoutSave();
 				this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
 			} finally {
 				toolMsg.remove();
@@ -5725,7 +5771,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		denyButton.onclick = async () => {
 			approveButton.disabled = true;
 			denyButton.disabled = true;
-			alwaysAllowButton.disabled = true;
+			alwaysAllowButton!.disabled = true;
 			denyButton.textContent = '正在关闭...';
 
 			await this.maxianService.closeDiffWithoutSave();
@@ -5735,7 +5781,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 
 		// 始终允许按钮
 		const currentToolName = toolInfo?.tool || '';
-		const alwaysAllowButton = append(buttonContainer, $('button')) as HTMLButtonElement;
+		alwaysAllowButton = append(buttonContainer, $('button')) as HTMLButtonElement;
 		// 使用 DOM API 而非 innerHTML（避免 CSP 问题）
 		const alwaysAllowIcon = append(alwaysAllowButton, $('span.codicon.codicon-shield'));
 		alwaysAllowIcon.style.marginRight = '4px';
@@ -5763,12 +5809,28 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			this.maxianService.setToolAutoApprove('*', true);
 
 			try {
-				await this.maxianService.saveDiffAndClose();
+				await this.maxianService.closeDiffWithoutSave();
 				this.maxianService.handleAskResponse(message.ts, 'yesButtonClicked');
 			} finally {
 				toolMsg.remove();
 			}
 		};
+
+		applyPreviewGuard = (reason: string) => {
+			if (!approveButton || !alwaysAllowButton) {
+				pendingPreviewBlockReason = reason;
+				return;
+			}
+			approveButton.disabled = true;
+			approveButton.textContent = '⛔ 预检查失败';
+			approveButton.title = reason;
+			alwaysAllowButton.disabled = true;
+			alwaysAllowButton.title = reason;
+		};
+
+		if (pendingPreviewBlockReason) {
+			applyPreviewGuard(pendingPreviewBlockReason);
+		}
 
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;
 	}

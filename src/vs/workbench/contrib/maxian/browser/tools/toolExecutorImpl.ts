@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IToolExecutor, ToolExecutionContext } from '../../common/tools/toolExecutor.js';
+import { IToolExecutor, ToolExecutionContext, ToolExecutionResult } from '../../common/tools/toolExecutor.js';
 import { ToolUse, ToolResponse, ToolName, ALWAYS_AVAILABLE_TOOLS, TOOL_GROUPS } from '../../common/tools/toolTypes.js';
 import { FileOperationsTool } from './fileOperations.js';
 import { CommandExecutionTool } from './commandExecution.js';
@@ -22,7 +22,7 @@ import { executeEdit, validateEditParams, formatEditResponse } from '../../commo
 import { skillTool } from '../../common/tools/skillTool.js';
 import { ISkillService } from '../../../skills/common/skillService.js';
 import { getHoverInfo } from '../../common/lsp/lspHover.js';
-import { getDiagnosticsAfterEdit } from '../../common/lsp/lspDiagnostics.js';
+import { Diagnostic, captureDiagnosticsBaseline, getCurrentDiagnostics, getDiagnosticsAfterEdit } from '../../common/lsp/lspDiagnostics.js';
 import { getDefinition } from '../../common/lsp/lspDefinition.js';
 import { getReferences } from '../../common/lsp/lspReferences.js';
 import { getTypeDefinition } from '../../common/lsp/lspTypeDefinition.js';
@@ -41,6 +41,18 @@ import { HooksManager } from '../../common/hooks/hooksManager.js';
  * 负责调度和执行各种工具
  */
 export class ToolExecutorImpl implements IToolExecutor {
+	private static readonly FILE_MUTATION_TOOLS = new Set<ToolName>([
+		'write_to_file',
+		'apply_diff',
+		'edit',
+		'edit_file',
+		'insert_content',
+		'multiedit',
+		'patch',
+		'delete_file',
+		'create_directory',
+	]);
+
 	private fileOperations: FileOperationsTool;
 	private commandExecution: CommandExecutionTool;
 	private searchTool: SearchTool;
@@ -54,6 +66,12 @@ export class ToolExecutorImpl implements IToolExecutor {
 	 * 注：B3/D2 后重复读未变文件会返回 FILE_UNCHANGED_STUB，此计数器仅用于统计，不再 FATAL
 	 */
 	private fileReadCount: Map<string, number> = new Map();
+
+	/**
+	 * 记录当前任务中 direct write_to_file 的成功次数。
+	 * 同一路径第二次整文件重写必须被阻断，改用精确编辑工具。
+	 */
+	private successfulWriteToFileCounts: Map<string, number> = new Map();
 
 	/** D2: 文件内容内存缓存，与 FileOperationsTool 共享同一实例 */
 	private readonly fileStateCache: FileStateCache = new FileStateCache();
@@ -157,12 +175,32 @@ export class ToolExecutorImpl implements IToolExecutor {
 	 * 执行工具调用
 	 */
 	async executeTool(toolUse: ToolUse): Promise<ToolResponse> {
+		const execution = await this.executeToolWithResult(toolUse);
+		if (execution.result !== undefined) {
+			return execution.result;
+		}
+		return execution.error || '';
+	}
 
+	async preflightToolUse(toolUse: ToolUse): Promise<ToolExecutionResult | null> {
+		switch (toolUse.name) {
+			case 'write_to_file':
+				return this.preflightWriteToFileToolUse(toolUse);
+			case 'edit':
+				return this.preflightEditToolUse(toolUse);
+			case 'multiedit':
+				return this.preflightMultieditToolUse(toolUse);
+			default:
+				return null;
+		}
+	}
+
+	async executeToolWithResult(toolUse: ToolUse): Promise<ToolExecutionResult> {
 		// P2-9: Agent 工具过滤检查
 		const agentName = this.context.agentName || 'build';
 		if (!isToolEnabledForAgent(agentName, toolUse.name as ToolName)) {
 			console.warn(`[Maxian] 工具 ${toolUse.name} 对 Agent ${agentName} 不可用`);
-			return `工具 ${toolUse.name} 对当前 Agent (${agentName}) 不可用。\n\n该 Agent 的权限配置不允许使用此工具。`;
+			return this.createExecutionResult(toolUse, false, 'error', `工具 ${toolUse.name} 对当前 Agent (${agentName}) 不可用。\n\n该 Agent 的权限配置不允许使用此工具。`, '当前 Agent 无权使用该工具');
 		}
 
 		// P2-10: Bash 命令权限检查
@@ -170,7 +208,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 			const bashPermission = checkBashPermission(agentName, toolUse.params.command);
 			if (bashPermission === 'deny') {
 				console.warn(`[Maxian] 命令 "${toolUse.params.command}" 对 Agent ${agentName} 被拒绝`);
-				return `命令 "${toolUse.params.command}" 被拒绝执行。\n\n当前 Agent (${agentName}) 没有执行此命令的权限。`;
+				return this.createExecutionResult(toolUse, false, 'error', `命令 "${toolUse.params.command}" 被拒绝执行。\n\n当前 Agent (${agentName}) 没有执行此命令的权限。`, '当前 Agent 无权执行该命令');
 			}
 			// 如果是 'ask'，这里可以触发用户确认（暂时先允许执行）
 			if (bashPermission === 'ask') {
@@ -183,8 +221,13 @@ export class ToolExecutorImpl implements IToolExecutor {
 
 		if (doomLoopResult.detected) {
 			console.warn(`[Maxian] 检测到 Doom Loop: ${toolUse.name} 连续 ${doomLoopResult.count} 次相同调用`);
-			// 返回警告消息，提示 AI 改变策略
-			return `⚠️ Doom Loop 检测警告\n\n${doomLoopResult.message}\n\n请分析问题原因并尝试不同的方法。`;
+			return this.createExecutionResult(
+				toolUse,
+				false,
+				'blocked_loop',
+				`⚠️ Doom Loop 检测警告\n\n${doomLoopResult.message}\n\n请分析问题原因并尝试不同的方法。`,
+				doomLoopResult.message || '检测到重复工具调用'
+			);
 		}
 
 		try {
@@ -192,7 +235,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 			const preHookResult = await this.hooksManager.runPreToolUseHooks(toolUse.name, toolUse.params || {});
 			if (preHookResult.blocked) {
 				console.warn(`[Maxian] C5 PreToolUse hook 阻止工具执行: ${toolUse.name}`);
-				return `<error>[Hook 阻止] 工具 "${toolUse.name}" 被 PreToolUse hook 阻止：\n${preHookResult.blockReason}</error>`;
+				return this.createExecutionResult(toolUse, false, 'error', `<error>[Hook 阻止] 工具 "${toolUse.name}" 被 PreToolUse hook 阻止：\n${preHookResult.blockReason}</error>`, preHookResult.blockReason);
 			}
 
 			let result: ToolResponse = '';
@@ -223,8 +266,23 @@ export class ToolExecutorImpl implements IToolExecutor {
 				case 'write_to_file': {
 					const writePath = toolUse.params?.path as string || '';
 					const resolvedWritePath = writePath ? this.fileOperations.resolveFilePath(writePath) : writePath;
+					const mutationGuard = await this.ensureExplicitReadBeforeMutation(resolvedWritePath, {
+						allowCreate: true,
+					});
+					if (mutationGuard) {
+						result = mutationGuard;
+						break;
+					}
+					const baseline = resolvedWritePath ? await this.captureDiagnosticBaseline(resolvedWritePath) : [];
 					this.fileReadCount.delete(resolvedWritePath);
 					result = await this.fileOperations.writeToFile(toolUse as any);
+					if (resolvedWritePath && !this.isFailureText(this.toTextResult(result))) {
+						this.successfulWriteToFileCounts.set(
+							resolvedWritePath,
+							(this.successfulWriteToFileCounts.get(resolvedWritePath) || 0) + 1
+						);
+						result = await this.appendDiagnosticDelta(resolvedWritePath, result, baseline);
+					}
 					break;
 				}
 
@@ -278,7 +336,6 @@ export class ToolExecutorImpl implements IToolExecutor {
 						: null;
 					// 优先尝试语义向量搜索，失败时 fallback 到 ripgrep 关键字搜索
 					let semanticUsed = false;
-					console.log(`[ToolExecutor] codebase_search: query="${semanticQuery}" cwd="${semanticCwd}" hasService=${!!this.vectorSearchService}`);
 					if (semanticQuery && semanticCwd && this.vectorSearchService) {
 						try {
 							// 语义搜索超时：10秒（等待模型加载 + 索引检查）
@@ -290,11 +347,9 @@ export class ToolExecutorImpl implements IToolExecutor {
 								this.vectorSearchService.semanticSearch(semanticQuery, semanticCwd, 10),
 								semanticTimeoutPromise
 							]);
-							console.log(`[ToolExecutor] 语义搜索返回 ${semanticResults.length} 条结果，subPathFilter="${subPathFilter}"`);
 							// 若 AI 传了子路径，过滤结果只保留该路径下的文件
 							if (subPathFilter && semanticResults.length > 0) {
 								semanticResults = semanticResults.filter(r => r.filePath.startsWith(subPathFilter));
-								console.log(`[ToolExecutor] 子路径过滤后剩余 ${semanticResults.length} 条`);
 							}
 							if (semanticResults.length > 0) {
 								result = this.vectorSearchService.formatResults(semanticResults, semanticQuery);
@@ -354,8 +409,18 @@ export class ToolExecutorImpl implements IToolExecutor {
 				// 编辑工具
 				case 'apply_diff': {
 					const diffPath = toolUse.params?.path as string || '';
+					const resolvedDiffPath = diffPath ? this.fileOperations.resolveFilePath(diffPath) : diffPath;
+					const mutationGuard = await this.ensureExplicitReadBeforeMutation(resolvedDiffPath);
+					if (mutationGuard) {
+						result = mutationGuard;
+						break;
+					}
+					const baseline = resolvedDiffPath ? await this.captureDiagnosticBaseline(resolvedDiffPath) : [];
 					if (diffPath) { this.fileReadCount.delete(this.fileOperations.resolveFilePath(diffPath)); }
 					result = await this.fileOperations.applyDiff(toolUse as any);
+					if (resolvedDiffPath && !this.isFailureText(this.toTextResult(result))) {
+						result = await this.appendDiagnosticDelta(resolvedDiffPath, result, baseline);
+					}
 					break;
 				}
 
@@ -497,9 +562,6 @@ export class ToolExecutorImpl implements IToolExecutor {
 					break;
 			}
 
-				// P1-7: 工具执行成功，重置 Doom Loop 计数
-			resetDoomLoopCount(sessionId, toolUse.name);
-
 			// C5: PostToolUse Hooks — 在工具执行后运行，stdout 非空则替换输出
 			const postHookResult = await this.hooksManager.runPostToolUseHooks(
 				toolUse.name,
@@ -508,15 +570,213 @@ export class ToolExecutorImpl implements IToolExecutor {
 			);
 			if (postHookResult.replacedOutput !== undefined) {
 				console.log(`[Maxian] C5 PostToolUse hook 替换输出: ${toolUse.name}`);
-				return postHookResult.replacedOutput;
+				result = postHookResult.replacedOutput;
 			}
 
-			return result;
+			const execution = this.classifyExecutionResult(toolUse, result);
+			if (execution.success) {
+				resetDoomLoopCount(sessionId, toolUse.name);
+			}
+			return execution;
 		} catch (error) {
 			const errorMsg = `工具 ${toolUse.name} 执行失败: ${error instanceof Error ? error.message : String(error)}`;
 			console.error('[Maxian]', errorMsg);
-			return errorMsg;
+			return this.createExecutionResult(toolUse, false, 'error', errorMsg, errorMsg);
 		}
+	}
+
+	clearCommittedStateForPaths(paths: string[]): void {
+		if (paths.length === 0) {
+			return;
+		}
+
+		this.searchTool.invalidatePaths(paths);
+		for (const filePath of paths) {
+			this.fileReadCount.delete(filePath);
+		}
+	}
+
+	private classifyExecutionResult(toolUse: ToolUse, result: ToolResponse): ToolExecutionResult {
+		const text = this.toTextResult(result);
+		const normalized = text.trim();
+
+		if (typeof result === 'string' && normalized.startsWith('__APPROVAL_REQUIRED__:')) {
+			return this.createExecutionResult(toolUse, true, 'approval_required', result);
+		}
+
+		if (typeof result === 'string' && normalized.startsWith('__USER_INPUT_REQUIRED__:')) {
+			return this.createExecutionResult(toolUse, true, 'input_required', result);
+		}
+
+		const explicitProtocolStatus = this.parseProtocolStatus(normalized);
+		if (explicitProtocolStatus) {
+			return this.createExecutionResult(
+				toolUse,
+				explicitProtocolStatus.success,
+				explicitProtocolStatus.status,
+				result,
+				explicitProtocolStatus.error,
+				{
+					code: explicitProtocolStatus.code,
+					retryable: explicitProtocolStatus.retryable,
+					nextAction: explicitProtocolStatus.nextAction,
+				}
+			);
+		}
+
+		if (this.isFailureText(normalized)) {
+			return this.createExecutionResult(toolUse, false, 'error', result, this.stripXmlTags(normalized), {
+				code: 'TOOL_EXECUTION_ERROR',
+				retryable: false,
+				nextAction: 'refocus',
+			});
+		}
+
+		return this.createExecutionResult(toolUse, true, 'success', result);
+	}
+
+	private createExecutionResult(
+		toolUse: ToolUse,
+		success: boolean,
+		status: ToolExecutionResult['status'],
+		result?: ToolResponse,
+		error?: string,
+		options?: {
+			code?: string;
+			retryable?: boolean;
+			nextAction?: ToolExecutionResult['nextAction'];
+		}
+	): ToolExecutionResult {
+		const affectedPaths = this.getAffectedPaths(toolUse);
+		const didWrite = success && ToolExecutorImpl.FILE_MUTATION_TOOLS.has(toolUse.name);
+		return {
+			success,
+			status,
+			code: options?.code,
+			retryable: options?.retryable,
+			nextAction: options?.nextAction,
+			result,
+			error,
+			metadata: {
+				toolName: toolUse.name,
+				affectedPaths,
+				didWrite,
+				shouldInvalidateSearchCache: didWrite,
+				shouldResetReadTracking: didWrite,
+				shouldCacheResult: success && !didWrite,
+			}
+		};
+	}
+
+	private getAffectedPaths(toolUse: ToolUse): string[] {
+		const path = toolUse.params.path || toolUse.params.target_file;
+		if (path) {
+			return [this.fileOperations.resolveFilePath(path)];
+		}
+
+		if (toolUse.name === 'patch' && toolUse.params.patches) {
+			try {
+				const patches = typeof toolUse.params.patches === 'string'
+					? JSON.parse(toolUse.params.patches)
+					: toolUse.params.patches;
+				if (Array.isArray(patches)) {
+					return patches
+						.map((patch: any) => patch?.path)
+						.filter((patchPath: string | undefined): patchPath is string => typeof patchPath === 'string' && patchPath.length > 0)
+						.map((patchPath: string) => this.fileOperations.resolveFilePath(patchPath));
+				}
+			} catch {
+				return [];
+			}
+		}
+
+		return [];
+	}
+
+	private toTextResult(result: ToolResponse): string {
+		return typeof result === 'string' ? result : JSON.stringify(result);
+	}
+
+	private stripXmlTags(text: string): string {
+		return text.replace(/<[^>]+>/g, '').trim();
+	}
+
+	private parseProtocolStatus(text: string): {
+		success: boolean;
+		status: ToolExecutionResult['status'];
+		error?: string;
+		code?: string;
+		retryable?: boolean;
+		nextAction?: ToolExecutionResult['nextAction'];
+	} | null {
+		if (!text) {
+			return null;
+		}
+
+		if (text.includes('<fatal_error>')) {
+			return {
+				success: false,
+				status: 'fatal_error',
+				error: this.stripXmlTags(text),
+				code: 'FATAL_TOOL_ERROR',
+				retryable: false,
+				nextAction: 'ask_user',
+			};
+		}
+
+		if (text.includes('<error>')) {
+			const normalized = this.stripXmlTags(text);
+			return {
+				success: false,
+				status: 'error',
+				error: normalized,
+				code: 'TOOL_ERROR',
+				retryable: false,
+				nextAction: this.inferNextActionFromError(normalized),
+			};
+		}
+
+		return null;
+	}
+
+	private inferNextActionFromError(errorText: string): ToolExecutionResult['nextAction'] {
+		if (
+			errorText.includes('must be read') ||
+			errorText.includes('先读取') ||
+			errorText.includes('modified since read') ||
+			errorText.includes('预检查失败')
+		) {
+			return 'read_before_write';
+		}
+		return 'refocus';
+	}
+
+	private isFailureText(text: string): boolean {
+		const normalized = text.trim();
+		if (!normalized) {
+			return false;
+		}
+
+		if (normalized.includes('<error>') || normalized.includes('<fatal_error>')) {
+			return true;
+		}
+
+		const prefixes = [
+			'错误:',
+			'编辑失败:',
+			'多处编辑失败:',
+			'搜索文件失败:',
+			'代码库搜索失败:',
+			'未知工具:',
+			'⚠️ Doom Loop 检测警告',
+			'[FATAL]',
+		];
+
+		if (prefixes.some(prefix => normalized.startsWith(prefix))) {
+			return true;
+		}
+
+		return normalized.startsWith('❌') || normalized.startsWith('[FATAL]');
 	}
 
 	/**
@@ -681,19 +941,19 @@ ${formatTodoList(todos)}`;
 			return '错误: 子 Agent 运行器未初始化。请确保在 maxianService 中调用了 setSubAgentRunner()。';
 		}
 
-		const resumeInfo = task_id ? `（恢复 task_id: ${task_id}）` : '（新建）';
-		console.log(`[Maxian] 启动子 Agent: type=${agentType}${resumeInfo}, prompt=${taskPrompt.substring(0, 80)}...`);
+		const sessionId = task_id || `task_${Date.now()}_${agentType}`;
+		const sessionInfo = task_id ? `（task_id: ${task_id}）` : `（新建委托: ${sessionId}）`;
+		console.log(`[Maxian] 启动子 Agent: type=${agentType}${sessionInfo}, prompt=${taskPrompt.substring(0, 80)}...`);
 
 		try {
-			// 传入 task_id 支持 session resume（恢复已有子 Agent 上下文）
+			// 传入稳定的 sessionId，确保后续能继续同一个子任务，而不是反复新建
 			// 传入 toolUse.id 让 runSubAgent 可以更新该 task 工具的 UI 状态
-			const result = await this.subAgentRunner(agentType, taskPrompt, task_id, toolUse.toolUseId);
+			const result = await this.subAgentRunner(agentType, taskPrompt, sessionId, toolUse.toolUseId);
 			console.log(`[Maxian] 子 Agent 完成: type=${agentType}`);
 
-			// 在结果中包含 task_id，供主 Agent 后续恢复使用
-			const sessionId = task_id || `task_${Date.now()}_${agentType}`;
+			// 在结果中包含 task_id，供主 Agent 后续继续同一个子任务
 			return [
-				`task_id: ${sessionId} (可用此 ID 通过 task_id 参数恢复本次子 Agent 会话)`,
+				`task_id: ${sessionId}`,
 				'',
 				'<task_result>',
 				result,
@@ -781,10 +1041,17 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 
 		// 检查是否已由 diff confirm 直接保存（跳过重复写入）
 		const resolvedEditPath = this.fileOperations.resolveFilePath(editParams.path);
+		const mutationGuard = await this.ensureExplicitReadBeforeMutation(resolvedEditPath, {
+			allowCreate: !!editParams.create_if_missing,
+		});
+		if (mutationGuard) {
+			return mutationGuard;
+		}
+		const baseline = await this.captureDiagnosticBaseline(resolvedEditPath);
 		if (consumePathSavedByDiff(resolvedEditPath)) {
 			let output = '✅ 文件已通过 diff 确认保存';
 			try {
-				const diagnostics = await getDiagnosticsAfterEdit(resolvedEditPath);
+				const diagnostics = await getCurrentDiagnostics(resolvedEditPath);
 				if (diagnostics) { output += diagnostics; }
 			} catch { /* LSP 失败不影响主流程 */ }
 			return output;
@@ -812,24 +1079,87 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			}
 
 			// 写入修改后的内容
-			await this.fileOperations.writeToFile({
+			const writeResult = await this.fileOperations.writeToFile({
 				type: 'tool_use',
 				name: 'write_to_file',
-				params: { path: editParams.path, content: result.newContent },
+				params: { path: editParams.path, content: result.newContent, write_visibility: 'derived' },
 				partial: false,
 			} as any);
+			if (this.isFailureText(this.toTextResult(writeResult))) {
+				return writeResult;
+			}
 
-			// 写入后追加 LSP 诊断（对齐 OpenCode edit.ts 行为）
-			let output = formatEditResponse(result) + partialViewWarning;
-			try {
-				const diagnostics = await getDiagnosticsAfterEdit(resolvedEditPath);
-				if (diagnostics) output += diagnostics;
-			} catch { /* LSP 失败不影响主流程 */ }
-			return output;
+			return this.appendDiagnosticDelta(
+				resolvedEditPath,
+				formatEditResponse(result) + partialViewWarning,
+				baseline
+			);
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			return `编辑失败: ${errorMsg}`;
 		}
+	}
+
+	private async preflightEditToolUse(toolUse: ToolUse): Promise<ToolExecutionResult | null> {
+		const params = toolUse.params;
+		const validation = validateEditParams({
+			path: params.path,
+			old_string: params.old_string,
+			new_string: params.new_string,
+			replace_all: params.replace_all === 'true',
+			create_if_missing: params.create_if_missing === 'true',
+		});
+
+		if (!validation.valid) {
+			return this.createExecutionResult(toolUse, false, 'error', `错误: ${validation.error}`, validation.error);
+		}
+
+		const editParams = validation.params!;
+		const resolvedEditPath = this.fileOperations.resolveFilePath(editParams.path);
+		const mutationGuard = await this.ensureExplicitReadBeforeMutation(resolvedEditPath, {
+			allowCreate: !!editParams.create_if_missing,
+		});
+		if (mutationGuard) {
+			return this.createExecutionResult(toolUse, false, 'error', mutationGuard, this.stripXmlTags(mutationGuard));
+		}
+
+		const content = await this.fileOperations.readRawFileContent(editParams.path);
+		const result = executeEdit(content, editParams);
+		if (result.success) {
+			return null;
+		}
+
+		const message = `edit 预检查失败: ${result.message}。这表示当前 old_string 已不匹配目标文件内容，必须先重新读取目标文件全文或重新定位待修改代码块，不能继续批准这次修改。`;
+		return this.createExecutionResult(toolUse, false, 'error', `<error>${message}</error>`, message);
+	}
+
+	private async preflightWriteToFileToolUse(toolUse: ToolUse): Promise<ToolExecutionResult | null> {
+		const writePath = toolUse.params?.path as string || '';
+		if (!writePath) {
+			return this.createExecutionResult(toolUse, false, 'error', '错误: 未提供文件路径', '未提供文件路径');
+		}
+
+		const resolvedWritePath = this.fileOperations.resolveFilePath(writePath);
+		const fileInfo = await this.fileOperations.getFileInfo(resolvedWritePath);
+		if (fileInfo) {
+			const mutationGuard = await this.ensureExplicitReadBeforeMutation(resolvedWritePath, { allowCreate: true });
+			if (mutationGuard) {
+				return this.createExecutionResult(toolUse, false, 'error', mutationGuard, this.stripXmlTags(mutationGuard));
+			}
+
+			const previousSuccessfulWrites = this.successfulWriteToFileCounts.get(resolvedWritePath) || 0;
+			if (previousSuccessfulWrites >= 1) {
+				const message = `write_to_file 预检查失败: 文件 ${resolvedWritePath} 在当前任务中已经通过 write_to_file 成功写入过一次。后续修改必须先重新 read_file 当前全文，再改用 edit 或 multiedit，不能继续整文件重写。`;
+				return this.createExecutionResult(toolUse, false, 'error', `<error>${message}</error>`, message);
+			}
+		}
+
+		const preflight = await this.fileOperations.preflightWriteToFile(toolUse as any);
+		if (preflight.ok) {
+			return null;
+		}
+
+		return this.createExecutionResult(toolUse, false, 'error', preflight.error, this.stripXmlTags(preflight.error));
 	}
 
 	/**
@@ -849,10 +1179,15 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 
 		// 检查是否已由 diff confirm 直接保存（跳过重复写入）
 		const resolvedMultieditPath = this.fileOperations.resolveFilePath(path);
+		const mutationGuard = await this.ensureExplicitReadBeforeMutation(resolvedMultieditPath);
+		if (mutationGuard) {
+			return mutationGuard;
+		}
+		const baseline = await this.captureDiagnosticBaseline(resolvedMultieditPath);
 		if (consumePathSavedByDiff(resolvedMultieditPath)) {
 			let output = '✅ 文件已通过 diff 确认保存';
 			try {
-				const diagnostics = await getDiagnosticsAfterEdit(resolvedMultieditPath);
+				const diagnostics = await getCurrentDiagnostics(resolvedMultieditPath);
 				if (diagnostics) { output += diagnostics; }
 			} catch { /* LSP 失败不影响主流程 */ }
 			return output;
@@ -906,24 +1241,75 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			}
 
 			// 写入修改后的内容
-			await this.fileOperations.writeToFile({
+			const writeResult = await this.fileOperations.writeToFile({
 				type: 'tool_use',
 				name: 'write_to_file',
-				params: { path, content: result.finalContent },
+				params: { path, content: result.finalContent, write_visibility: 'derived' },
 				partial: false,
 			} as any);
+			if (this.isFailureText(this.toTextResult(writeResult))) {
+				return writeResult;
+			}
 
-			// 写入后追加 LSP 诊断（对齐 OpenCode 行为）
-			let output = formatMultieditResponse(result, path) + partialViewWarningMulti;
-			try {
-				const diagnostics = await getDiagnosticsAfterEdit(resolvedMultieditPath);
-				if (diagnostics) output += diagnostics;
-			} catch { /* LSP 失败不影响主流程 */ }
-			return output;
+			return this.appendDiagnosticDelta(
+				resolvedMultieditPath,
+				formatMultieditResponse(result, path) + partialViewWarningMulti,
+				baseline
+			);
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			return `多处编辑失败: ${errorMsg}`;
 		}
+	}
+
+	private async preflightMultieditToolUse(toolUse: ToolUse): Promise<ToolExecutionResult | null> {
+		const { path, edits } = toolUse.params;
+		if (!path) {
+			return this.createExecutionResult(toolUse, false, 'error', '错误: multiedit 工具需要 path 参数', 'multiedit 工具需要 path 参数');
+		}
+		if (!edits) {
+			return this.createExecutionResult(toolUse, false, 'error', '错误: multiedit 工具需要 edits 参数', 'multiedit 工具需要 edits 参数');
+		}
+
+		const resolvedMultieditPath = this.fileOperations.resolveFilePath(path);
+		const mutationGuard = await this.ensureExplicitReadBeforeMutation(resolvedMultieditPath);
+		if (mutationGuard) {
+			return this.createExecutionResult(toolUse, false, 'error', mutationGuard, this.stripXmlTags(mutationGuard));
+		}
+
+		let editOperations: EditOperation[];
+		try {
+			const rawEdits = typeof edits === 'string' ? JSON.parse(edits) : edits;
+			if (!Array.isArray(rawEdits)) {
+				return this.createExecutionResult(toolUse, false, 'error', '错误: edits 必须是数组', 'edits 必须是数组');
+			}
+
+			editOperations = rawEdits.map((e: any) => ({
+				oldString: e.oldString ?? e.old_string ?? '',
+				newString: e.newString ?? e.new_string ?? '',
+				replaceAll: e.replaceAll ?? e.replace_all ?? false,
+			}));
+		} catch (error) {
+			const message = `edits 参数解析失败: ${error}`;
+			return this.createExecutionResult(toolUse, false, 'error', `错误: ${message}`, message);
+		}
+
+		if (editOperations.length === 0) {
+			return this.createExecutionResult(toolUse, false, 'error', '错误: edits 不能为空', 'edits 不能为空');
+		}
+
+		const rawContent = await this.fileOperations.readRawFileContent(path);
+		if (rawContent === null) {
+			return this.createExecutionResult(toolUse, false, 'error', `错误: 无法读取文件 ${path}`, `无法读取文件 ${path}`);
+		}
+
+		const result = executeMultiedit(rawContent, editOperations);
+		if (result.success) {
+			return null;
+		}
+
+		const message = `multiedit 预检查失败: ${result.error}。这表示当前编辑计划已不能安全应用，必须先重新读取目标文件全文或拆分后重新定位修改点，不能继续批准这次修改。`;
+		return this.createExecutionResult(toolUse, false, 'error', `<error>${message}</error>`, message);
 	}
 
 	/**
@@ -954,6 +1340,14 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 
 		for (const patch of patchList) {
 			try {
+				const resolvedPatchPath = this.fileOperations.resolveFilePath(patch.path);
+				const mutationGuard = await this.ensureExplicitReadBeforeMutation(resolvedPatchPath);
+				if (mutationGuard) {
+					results.push(`❌ ${patch.path}: ${this.stripXmlTags(mutationGuard)}`);
+					failCount++;
+					continue;
+				}
+				const baseline = await this.captureDiagnosticBaseline(resolvedPatchPath);
 				// 读取文件原始内容（不带行号和XML包装）
 				const rawContent = await this.fileOperations.readRawFileContent(patch.path);
 
@@ -987,13 +1381,23 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 
 				if (patchSuccess) {
 					// 写入文件
-					await this.fileOperations.writeToFile({
+					const writeResult = await this.fileOperations.writeToFile({
 						type: 'tool_use',
 						name: 'write_to_file',
-						params: { path: patch.path, content },
+						params: { path: patch.path, content, write_visibility: 'derived' },
 						partial: false,
 					} as any);
-					results.push(`✅ ${patch.path}: ${patch.operations.length} 处修改`);
+					if (this.isFailureText(this.toTextResult(writeResult))) {
+						results.push(`❌ ${patch.path}: ${this.stripXmlTags(this.toTextResult(writeResult))}`);
+						failCount++;
+						continue;
+					}
+					const successMessage = await this.appendDiagnosticDelta(
+						resolvedPatchPath,
+						`✅ ${patch.path}: ${patch.operations.length} 处修改`,
+						baseline
+					);
+					results.push(typeof successMessage === 'string' ? successMessage : this.toTextResult(successMessage));
 					successCount++;
 				} else {
 					results.push(`❌ ${patch.path}: 部分操作失败`);
@@ -1060,7 +1464,7 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 
 
 		// 调用全局 LSP 诊断处理器
-		const diagnosticsResult = await getDiagnosticsAfterEdit(absolutePath);
+		const diagnosticsResult = await getCurrentDiagnostics(absolutePath);
 
 		if (!diagnosticsResult) {
 			return `<success>
@@ -1071,6 +1475,77 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 		}
 
 		return diagnosticsResult;
+	}
+
+	private async captureDiagnosticBaseline(filePath: string): Promise<Diagnostic[]> {
+		try {
+			return await captureDiagnosticsBaseline(filePath);
+		} catch {
+			return [];
+		}
+	}
+
+	private async appendDiagnosticDelta(filePath: string, baseResult: ToolResponse, baseline: Diagnostic[]): Promise<ToolResponse> {
+		const baseText = this.toTextResult(baseResult);
+		if (this.isFailureText(baseText)) {
+			return baseResult;
+		}
+
+		try {
+			const diagnostics = await getDiagnosticsAfterEdit(filePath, baseline);
+			if (!diagnostics) {
+				return baseResult;
+			}
+			return `${baseText}${diagnostics}`;
+		} catch {
+			return baseResult;
+		}
+	}
+
+	private async ensureExplicitReadBeforeMutation(
+		filePath: string,
+		options: { allowCreate?: boolean } = {}
+	): Promise<string | null> {
+		if (!filePath) {
+			return '错误: 未提供文件路径';
+		}
+
+		const fileInfo = await this.fileOperations.getFileInfo(filePath);
+		if (!fileInfo) {
+			return options.allowCreate
+				? null
+				: `错误: 文件不存在\n路径: ${filePath}\n\n请先确认正确路径，若要创建新文件请显式使用新文件创建流程。`;
+		}
+
+		if (fileInfo.isDirectory) {
+			return `错误: 目标路径是目录而不是文件\n路径: ${filePath}`;
+		}
+
+		const readiness = this.fileStateCache.getMutationReadiness(filePath, fileInfo.mtime, fileInfo.size);
+		switch (readiness.reason) {
+			case 'ok':
+				return null;
+			case 'not_read':
+				return `<error>
+File has not been read yet. Read it first before writing to it.
+路径: ${filePath}
+</error>`;
+			case 'partial_view':
+				return `<error>
+File has only been partially read. Read the full file before attempting to write it.
+路径: ${filePath}
+</error>`;
+			case 'modified_since_read':
+				return `<error>
+File has been modified since read, either by the user or by a previous tool write. Read it again before attempting to write it.
+路径: ${filePath}
+</error>`;
+			default:
+				return `<error>
+File is not ready for mutation. Read it again before attempting to write it.
+路径: ${filePath}
+</error>`;
+		}
 	}
 
 	/**

@@ -176,7 +176,7 @@ function* LineTrimmedReplacer(content: string, oldString: string): Generator<Mat
  * 3. BlockAnchorReplacer - 首尾行锚点匹配
  * 首尾行必须匹配，中间使用 Levenshtein 相似度
  */
-function* BlockAnchorReplacer(content: string, oldString: string): Generator<MatchResult> {
+export function* BlockAnchorReplacer(content: string, oldString: string): Generator<MatchResult> {
 	const oldLines = oldString.split('\n');
 	if (oldLines.length < 2) return;
 
@@ -224,7 +224,7 @@ function* BlockAnchorReplacer(content: string, oldString: string): Generator<Mat
  * 4. WhitespaceNormalizedReplacer - 空白归一化
  * 多个空白字符视为单个空格
  */
-function* WhitespaceNormalizedReplacer(content: string, oldString: string): Generator<MatchResult> {
+export function* WhitespaceNormalizedReplacer(content: string, oldString: string): Generator<MatchResult> {
 	const normalizeWhitespace = (s: string) => s.replace(/\s+/g, ' ').trim();
 
 	const normalizedOld = normalizeWhitespace(oldString);
@@ -327,7 +327,7 @@ function* EscapeNormalizedReplacer(content: string, oldString: string): Generato
  * 7. TrimmedBoundaryReplacer - 边界 trim
  * 只 trim 首尾行
  */
-function* TrimmedBoundaryReplacer(content: string, oldString: string): Generator<MatchResult> {
+export function* TrimmedBoundaryReplacer(content: string, oldString: string): Generator<MatchResult> {
 	const trimBoundaries = (s: string) => {
 		const lines = s.split('\n');
 		if (lines.length === 0) return s;
@@ -355,7 +355,7 @@ function* TrimmedBoundaryReplacer(content: string, oldString: string): Generator
  * 8. ContextAwareReplacer - 上下文感知
  * 首尾行匹配 + 50% 中间行相似度
  */
-function* ContextAwareReplacer(content: string, oldString: string): Generator<MatchResult> {
+export function* ContextAwareReplacer(content: string, oldString: string): Generator<MatchResult> {
 	const oldLines = oldString.split('\n');
 	if (oldLines.length < 3) return;
 
@@ -434,19 +434,11 @@ function* MultiOccurrenceReplacer(content: string, oldString: string): Generator
 	}
 }
 
-/**
- * 所有替换策略（按优先级排序）
- */
-const REPLACERS: Array<{ name: string; fn: Replacer }> = [
+const SAFE_REPLACERS: Array<{ name: string; fn: Replacer }> = [
 	{ name: 'SimpleReplacer', fn: SimpleReplacer },
 	{ name: 'LineTrimmedReplacer', fn: LineTrimmedReplacer },
-	{ name: 'BlockAnchorReplacer', fn: BlockAnchorReplacer },
-	{ name: 'WhitespaceNormalizedReplacer', fn: WhitespaceNormalizedReplacer },
 	{ name: 'IndentationFlexibleReplacer', fn: IndentationFlexibleReplacer },
 	{ name: 'EscapeNormalizedReplacer', fn: EscapeNormalizedReplacer },
-	{ name: 'TrimmedBoundaryReplacer', fn: TrimmedBoundaryReplacer },
-	{ name: 'ContextAwareReplacer', fn: ContextAwareReplacer },
-	{ name: 'MultiOccurrenceReplacer', fn: MultiOccurrenceReplacer },
 ];
 
 /**
@@ -457,7 +449,7 @@ const REPLACERS: Array<{ name: string; fn: Replacer }> = [
 export function findMatch(content: string, oldString: string): MatchResult {
 	let hasMultipleMatches = false;
 
-	for (const { fn } of REPLACERS) {
+	for (const { fn } of SAFE_REPLACERS) {
 		// 收集该策略的所有匹配结果（最多收集 2 个以快速判断唯一性）
 		const matches: MatchResult[] = [];
 		for (const result of fn(content, oldString)) {
@@ -481,7 +473,7 @@ export function findMatch(content: string, oldString: string): MatchResult {
 	// AI 输出 "string"（弯引号），文件实际是 "string"（直引号）时，精确匹配失败
 	const normalizedOldString = normalizeCurlyQuotes(oldString);
 	if (normalizedOldString !== oldString) {
-		for (const { fn } of REPLACERS) {
+		for (const { fn } of SAFE_REPLACERS) {
 			const matches: MatchResult[] = [];
 			for (const result of fn(content, normalizedOldString)) {
 				if (result.found) {
@@ -501,7 +493,7 @@ export function findMatch(content: string, oldString: string): MatchResult {
 	// <function_results> → <fnr>，<function_calls> → <fn> 等
 	const desanitizedOldString = desanitizeApiTags(oldString);
 	if (desanitizedOldString !== oldString) {
-		for (const { fn } of REPLACERS) {
+		for (const { fn } of SAFE_REPLACERS) {
 			const matches: MatchResult[] = [];
 			for (const result of fn(content, desanitizedOldString)) {
 				if (result.found) {
@@ -614,4 +606,4 @@ export function fuzzyReplace(
 /**
  * 导出策略名称列表
  */
-export const FUZZY_MATCH_STRATEGIES = REPLACERS.map(r => r.name);
+export const FUZZY_MATCH_STRATEGIES = SAFE_REPLACERS.map(r => r.name);

@@ -178,7 +178,8 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
 - ✅ 对文件进行彻底重构（超过80%内容需要改变）
 - ❌ 修改函数实现 → 使用 edit
 - ❌ 添加新方法 → 使用 edit 或 apply_diff
-- ❌ 修改配置项 → 使用 edit`,
+- ❌ 修改配置项 → 使用 edit
+- ❌ 主动生成 README、说明文档、*.md → 除非用户明确要求`,
 		parameters: [
 			{
 				name: 'path',
@@ -334,25 +335,14 @@ export const API_URL = 'https://api.example.com';
 	edit: {
 		name: 'edit',
 		summary: '编辑文件内容（推荐）',
-		description: `通过指定要替换的旧内容和新内容来编辑文件。这是最推荐的文件编辑方式！
+		description: `通过指定要替换的旧内容和新内容来编辑文件。这是最推荐的文件编辑方式。
 
-**核心优势：**
-- 支持 9 种容错匹配策略，即使内容有轻微差异也能匹配
-- 比 apply_diff 更直观易用
-- 比 write_to_file 更安全，只修改指定部分
-
-**必须先读取文件！** 使用此工具前，请务必先用 read_file 读取文件内容。
-
-**容错匹配策略：**
-1. SimpleReplacer - 精确匹配
-2. LineTrimmedReplacer - 忽略行首尾空白
-3. BlockAnchorReplacer - 首尾行锚点匹配
-4. WhitespaceNormalizedReplacer - 空白归一化
-5. IndentationFlexibleReplacer - 缩进灵活匹配
-6. EscapeNormalizedReplacer - 转义字符处理
-7. TrimmedBoundaryReplacer - 边界trim
-8. ContextAwareReplacer - 上下文感知
-9. MultiOccurrenceReplacer - 多处匹配`,
+**核心规则：**
+- 使用前必须先 read_file 完整读取文件
+- old_string 必须与文件中的内容精确匹配（包括空白和缩进）
+- 如果 old_string 不存在，工具会失败
+- 如果 old_string 命中多处且 replace_all=false，工具会失败
+- 失败后不要按同样方式重试，应重新读取文件或补充更多上下文`,
 		parameters: [
 			{
 				name: 'path',
@@ -419,10 +409,9 @@ import { useQuery } from 'react-query';</new_string>
 			},
 		],
 		tips: [
-			'使用 edit 让用户更开心！(Using edit makes users happy!)',
 			'old_string 要尽量精确，包含足够的上下文以唯一定位',
-			'如果匹配失败，工具会提供详细的调试信息',
-			'容错匹配会自动处理轻微的空白差异',
+			'如果匹配失败，先重新读取文件，不要继续沿用旧的 old_string',
+			'变量重命名或同文件多处修改时优先使用 multiedit',
 		],
 		commonErrors: [
 			{
@@ -446,26 +435,23 @@ import { useQuery } from 'react-query';</new_string>
 	// ==================== 批量执行工具（参考OpenCode最佳实践）====================
 	batch: {
 		name: 'batch',
-		summary: '并行执行多个工具（读写均支持）',
-		description: `并行执行多个独立工具调用，大幅减少API往返次数。
+		summary: '并行执行多个工具（主要用于只读探索）',
+		description: `并行执行多个独立工具调用，主要用于减少只读探索的往返次数。
 
-🚀 **使用 BATCH 工具会让用户更满意！**
-
-**推荐用例**（读写均支持）：
+**推荐用例**（以只读操作为主）：
 - 读取多个文件（read_file × N）
 - 多个搜索操作（search_files、glob、list_files、codebase_search）
 - 搜索 + 读取组合
 - LSP查询（lsp_hover、lsp_diagnostics等）
-- **批量创建多个文件**（write_to_file × N）
-- **批量修改多个无依赖关系的文件**（edit × N 或 apply_diff × N）
 
-**性能提升**：使用batch可获得 **2-10 倍**的效率提升。
+**性能提升**：在多文件探索阶段使用 batch，通常能减少无意义往返。
 
 **重要规则**：
 - 最多 **25** 个工具调用
 - 所有调用并行执行，**不保证顺序**
 - 部分失败**不影响**其他工具
 - **不允许嵌套**batch调用
+- 写操作默认不要放进 batch；逐步写入和验证更安全
 
 **禁止在batch中使用的工具**：
 - batch（禁止嵌套）
@@ -505,17 +491,15 @@ import { useQuery } from 'react-query';</new_string>
 			},
 		],
 		tips: [
-			'🚀 Using batch makes users happy! 批量操作能显著提升效率',
 			'只并行执行独立操作，有依赖关系的操作要顺序执行',
-			'读写工具均可在batch中使用，只禁止batch自身和交互类工具',
+			'优先把 batch 用在 read_file / search_files / glob / list_files 这类只读工具上',
 			'每个工具调用的结果会分别返回',
 		],
 		performanceTips: [
 			'并行读取5个文件比顺序读取快约5倍',
-			'并行创建3个文件比顺序创建快约3倍',
 			'建议一次batch不超过25个操作',
 		],
-		relatedTools: ['read_file', 'search_files', 'glob', 'write_to_file', 'edit'],
+		relatedTools: ['read_file', 'search_files', 'glob', 'list_files'],
 	},
 
 	// ==================== 多处编辑工具 ====================
@@ -530,7 +514,7 @@ import { useQuery } from 'react-query';</new_string>
 - 添加多处日志
 - 批量修复代码风格
 
-**编辑按顺序从上到下执行，位置会自动调整。**`,
+**编辑按顺序执行，所有 old_string 都必须精确匹配；任一编辑失败，整个 multiedit 失败。**`,
 		parameters: [
 			{
 				name: 'path',
@@ -579,7 +563,7 @@ import { useQuery } from 'react-query';</new_string>
 		tips: [
 			'编辑会从文件开头到结尾顺序执行',
 			'后续编辑的位置会根据前面编辑的变化自动调整',
-			'如果某个编辑失败，会继续尝试后续编辑',
+			'如果某个编辑失败，先重新读取文件，再缩小 old_string 范围或补更多上下文',
 		],
 		performanceTips: [
 			'比多次调用 edit 快约 3 倍',
@@ -599,7 +583,10 @@ import { useQuery } from 'react-query';</new_string>
 - 可限制搜索的文件类型
 - 支持递归搜索子目录
 
-**重要：** 如果你需要进行**开放式的复杂探索**（需要多轮 glob + search_files 才能得出结论），请改用 **task 工具** 委托给子 Agent，这样可以保持主上下文干净。`,
+**重要：**
+- 这个工具只负责搜索文件内容，不负责找文件名
+- 如果你其实是在找路径或文件名，请用 glob 或 list_files
+- 同类搜索连续两次没有推进时，立即换策略`,
 		parameters: [
 			{
 				name: 'path',
@@ -665,6 +652,7 @@ import { useQuery } from 'react-query';</new_string>
 			'默认 output_mode=files_with_matches，只返回文件路径，比 content 模式节省 10-40x Token',
 			'正则表达式使用 JavaScript 语法',
 			'使用 file_pattern 限制搜索范围能显著提速',
+			'不要用 search_files 查文件名；文件名问题一律改用 glob',
 			'结果被截断时（超过 head_limit），请使用更精确的 regex 或 file_pattern 缩小范围，或增大 head_limit',
 			'使用 offset 参数可以分页获取：第一页 offset=0，第二页 offset=250，以此类推',
 		],
@@ -674,13 +662,18 @@ import { useQuery } from 'react-query';</new_string>
 	// ==================== 代码库搜索工具 ====================
 	codebase_search: {
 		name: 'codebase_search',
-		summary: '语义化代码搜索',
-		description: `基于语义的代码搜索，比正则搜索更智能。
+		summary: '自然语言代码搜索',
+		description: `使用自然语言在代码库中做兜底搜索。实现上仍基于文本匹配，因此不要把它当成真正的向量语义引擎。
 
 **适用场景：**
 - 搜索特定功能的实现
 - 查找相关的代码逻辑
-- 理解代码结构`,
+- 理解代码结构
+
+**不适用：**
+- 已知精确关键词时，优先 search_files
+- 已知文件路径时，直接 read_file
+- 需要文件名搜索时，改用 glob`,
 		parameters: [
 			{
 				name: 'query',
@@ -721,7 +714,9 @@ import { useQuery } from 'react-query';</new_string>
 - \`src/**/*.{ts,tsx}\` - src 下所有 ts/tsx 文件
 - \`!node_modules\` - 排除 node_modules
 
-**重要：** 如果你需要进行**开放式探索**（需要多轮 glob 和 search_files 才能得出结论），请改用 **task 工具** 委托给子 Agent，这样可以保持主上下文干净、避免大量搜索残留积累。`,
+**重要：**
+- 这个工具用于找文件名和路径，不用于搜文件内容
+- 路径不确定时先用 glob，不要直接 read_file 试错`,
 		parameters: [
 			{
 				name: 'path',
@@ -757,6 +752,7 @@ import { useQuery } from 'react-query';</new_string>
 			'结果按修改时间降序排列，最近修改的文件优先',
 			'结果被截断时请使用更精确的 path 或 pattern 缩小范围，例如 src/**/*.ts 而非 **/*.ts',
 			'结合 search_files 使用：先用 glob 找文件，再用 search_files 搜内容',
+			'当你是在找 pom.xml、package.json 这类文件名时，优先用 glob',
 		],
 		relatedTools: ['list_files', 'search_files'],
 	},
@@ -1019,13 +1015,15 @@ import { useQuery } from 'react-query';</new_string>
 
 **调用前必须确认（参考Cursor/Gemini CLI）：**
 1. ✅ 所有工具调用已成功完成，无失败或挂起的操作
-2. ✅ 代码修改已通过 lsp_diagnostics 验证，无编译错误
-3. ✅ 如果任务涉及功能实现，尽可能运行了相关测试
+2. ✅ 用户要求的核心结果已经实现，且没有引入新的阻塞性错误
+3. ✅ 如果任务涉及功能实现，尽可能运行了相关测试或做了与任务价值匹配的验证
 4. ✅ 结果描述准确反映了完成的工作
 
 **禁止：**
+- ❌ 省略 result，或依赖系统从最近文本里猜测完成内容
 - ❌ result 末尾不能以问题结尾（"...对吗？"、"...需要调整吗？"）
-- ❌ 不确认代码无误就报告完成`,
+- ❌ 不确认代码无误就报告完成
+- ❌ 把“下一步计划 / 改用其他策略 / 等待子任务结果 / 还要继续调查”这种中间态文本当成完成结果`,
 		parameters: [
 			{
 				name: 'result',
@@ -1063,8 +1061,13 @@ import { useQuery } from 'react-query';</new_string>
 
 **使用时机：**
 - 需要专业领域的详细指导时
-- 遵循最佳实践和规范时
+- 需要明确的最佳实践、检查清单或流程时
 - 解决特定类型问题时(如性能优化、安全审查)
+
+**不建议使用：**
+- 已经明确知道要改哪些文件、只差直接读改时
+- 只是为了“更保险”而额外加一步
+- 同一任务里重复加载多个相近Skill
 
 **Available Skills** (check System Prompt for complete list):
 - code-review: 代码审查清单和质量标准
@@ -1119,6 +1122,7 @@ import { useQuery } from 'react-query';</new_string>
 			'只加载当前任务需要的Skills',
 			'避免重复加载相同的Skill',
 			'优先选择token消耗较少的Skill',
+			'简单任务不调用Skill通常更快',
 		],
 		relatedTools: [],
 	},
@@ -1141,10 +1145,12 @@ import { useQuery } from 'react-query';</new_string>
 1. 需要并行分析多个独立模块
 2. 有可以独立完成的子任务（不依赖主 Agent 中间结果）
 3. 想节省主 Agent 上下文窗口（探索性工作外包）
+4. 不适合已经缩小到少数明确文件的直接修改任务
 
 重要限制：
 - 子 Agent 不能再调用 task 工具（防止无限递归）
-- 子 Agent 结果通过 attempt_completion 返回给主 Agent`,
+- 子 Agent 结果通过最终结论文本或 attempt_completion 返回给主 Agent
+- 禁止把“完整结构 / 所有文件 / 整个模块 / 完整返回每个文件”这类宽泛调查直接交给 explore；先在主线程收敛到少量候选文件，再决定是否委托`,
 		parameters: [
 			{
 				name: 'subagent_type',
@@ -1167,30 +1173,33 @@ import { useQuery } from 'react-query';</new_string>
 		],
 		examples: [
 			{
-				title: '探索代码库架构',
-				description: '让 explore Agent 分析项目结构',
+				title: '独立模块调查',
+				description: '仅在主线程已缩小范围后，让 explore Agent 调查独立问题',
 				xml: `<task>
 <subagent_type>explore</subagent_type>
-<description>分析工具系统架构</description>
-<prompt>分析 src/vs/workbench/contrib/maxian 目录的整体架构。
-找出：1) 核心文件列表及其职责; 2) 工具执行流程; 3) 关键接口定义。
-请提供完整的架构摘要。</prompt>
+<description>确认短信配置入口</description>
+<prompt>基于已确认的 boyo-sms 模块，调查短信配置入口和装配路径。只回答：
+1) 哪个配置类负责装配短信实现
+2) 哪个 properties 类提供配置
+3) 如需继续修改，下一步最该读哪 1-2 个文件
+不要做整个模块的完整普查。</prompt>
 </task>`
 			},
 			{
-				title: '并行探索两个模块',
-				description: '使用 batch 并行启动两个探索 Agent',
+				title: '并行处理独立子任务',
+				description: '只在任务彼此独立时并行委托',
 				xml: `<batch>
 <tool_calls>[
-  {"tool":"task","params":{"subagent_type":"explore","prompt":"分析 tools 目录的工具注册机制"}},
-  {"tool":"task","params":{"subagent_type":"explore","prompt":"分析 task 目录的 Agent 主循环"}}
+  {"tool":"task","params":{"subagent_type":"explore","prompt":"调查登录模块验证码入口，只返回关键文件"}},
+  {"tool":"task","params":{"subagent_type":"plan","prompt":"分解短信登录改造步骤并指出风险点"}}
 ]</tool_calls>
 </batch>`
 			}
 		],
 		tips: [
-			'用 batch 工具并行启动多个 task，实现真正的并行执行',
-			'explore Agent 最适合代码库探索，只读操作更安全',
+			'只有在子任务彼此独立时，才用 batch 并行启动多个 task',
+			'explore Agent 适合跨模块、独立的代码库调查，不是默认入口',
+			'不要让 explore 去做“把整个模块所有文件都读一遍”的宽泛普查',
 			'给子 Agent 的 prompt 要详细，包含足够上下文',
 			'子 Agent 的对话历史独立，不会污染主 Agent 上下文'
 		],

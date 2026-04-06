@@ -32,7 +32,6 @@ export class LspDiagnosticsService extends Disposable implements ILspDiagnostics
 		@IModelService private readonly modelService: IModelService,
 	) {
 		super();
-		console.log('[LspDiagnosticsService] 服务已初始化');
 	}
 
 	/**
@@ -46,7 +45,6 @@ export class LspDiagnosticsService extends Disposable implements ILspDiagnostics
 			const model = this.modelService.getModel(uri);
 
 			if (!model) {
-				console.warn(`[LspDiagnosticsService] 文件未打开: ${filePath}`);
 				return;
 			}
 
@@ -56,7 +54,6 @@ export class LspDiagnosticsService extends Disposable implements ILspDiagnostics
 			if (forceRefresh) {
 				// 强制触发：通过获取内容来确保语言服务器已处理此文件
 				model.getValue();
-				console.log(`[LspDiagnosticsService] 已触发文件更新: ${filePath}`);
 			}
 		} catch (error) {
 			console.error(`[LspDiagnosticsService] 触发文件更新失败: ${filePath}`, error);
@@ -73,8 +70,6 @@ export class LspDiagnosticsService extends Disposable implements ILspDiagnostics
 
 			// 从 MarkerService 读取此文件的所有 markers
 			const markers = this.markerService.read({ resource: uri });
-
-			console.log(`[LspDiagnosticsService] 获取诊断: ${filePath}, 共 ${markers.length} 个`);
 
 			// 转换为 Diagnostic 格式
 			return markers.map(marker => this.convertMarkerToDiagnostic(marker));
@@ -93,8 +88,6 @@ export class LspDiagnosticsService extends Disposable implements ILspDiagnostics
 		try {
 			// 获取所有打开的模型
 			const models = this.modelService.getModels();
-
-			console.log(`[LspDiagnosticsService] 获取所有诊断，共 ${models.length} 个文件`);
 
 			// 为每个模型获取诊断
 			for (const model of models) {

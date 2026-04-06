@@ -144,7 +144,7 @@ ${options.memoryContent}`);
 
 AVAILABLE SKILLS
 
-根据任务类型主动调用对应skill工具（见TOOL USE GUIDELINES中的skill使用规则）。
+仅在明确需要某个领域的最佳实践、检查清单或专业流程时，才调用 skill 工具（见 TOOL USE GUIDELINES 中的 skill 使用规则）。
 
 可用Skills（共${allSkills.length}个）：
 ${skillNames}`;

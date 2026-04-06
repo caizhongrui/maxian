@@ -44,11 +44,17 @@ TOOL SELECTION DECISION TREE
 │   └── write_to_file
 │
 ├── 修改现有文件
-│   ├── 局部修改（任意大小）
-│   │   └── apply_diff（首选）
+│   ├── 单处明确文本替换
+│   │   └── edit（首选）
 │   │
-│   ├── 完全重写（变化>50%）
-│   │   └── write_to_file
+│   ├── 同文件多处修改
+│   │   └── multiedit（首选）
+│   │
+│   ├── 行号敏感 / 外部补丁
+│   │   └── apply_diff（特殊场景）
+│   │
+│   ├── 完全重写（变化极大）
+│   │   └── write_to_file（谨慎）
 │   │
 │
 └── 修改前必须先做
@@ -91,15 +97,16 @@ TOOL SELECTION DECISION TREE
    - 修改代码前，必须先理解现有代码
    - 使用 codebase_search 或 read_file 先了解上下文
 
-2. **apply_diff 优先于 write_to_file**
-   - 除非创建新文件或完全重写
-   - apply_diff 更精确、更安全
+2. **edit / multiedit 优先于 apply_diff / write_to_file**
+   - 普通文本替换先用 edit / multiedit
+   - apply_diff 只留给特殊补丁场景
+   - write_to_file 只留给新文件或极少数完整重写
 
 3. **codebase_search 优先于 search_files**
    - 当不确定关键词时
    - 探索未知代码区域时
 
 4. **一次做好**
-   - 多个相关修改用一次 apply_diff 完成
+   - 同文件多处修改优先一次 multiedit 完成
    - 减少工具调用次数`;
 }

@@ -47,7 +47,7 @@ import { ILspDefinitionService, globalLspDefinitionHandler } from '../common/lsp
 import { ILspReferencesService, globalLspReferencesHandler } from '../common/lsp/lspReferences.js';
 import { ILspTypeDefinitionService, globalLspTypeDefinitionHandler } from '../common/lsp/lspTypeDefinition.js';
 import { ITextFileService } from '../../../services/textfile/common/textfiles.js';
-import { AutoDiagnosticInjector, IDiagnosticInjectionEvent } from './lspIntegration/AutoDiagnosticInjector.js';
+import { AutoDiagnosticInjector } from './lspIntegration/AutoDiagnosticInjector.js';
 import { SteeringService } from '../common/steering/SteeringService.js';
 import { MemoryService } from '../common/services/memoryService.js';
 import { ICommandExecutionService } from '../common/services/commandExecutionService.js';
@@ -243,7 +243,7 @@ export interface IMaxianService {
 	 * @param filePath 文件路径
 	 * @param edits 编辑操作数组（每项含 oldString 和 newString）
 	 */
-	openEditPreviewDiff(filePath: string, edits: Array<{ oldString: string; newString: string }>): Promise<boolean>;
+	openEditPreviewDiff(filePath: string, edits: Array<{ oldString: string; newString: string }>): Promise<EditPreviewOpenResult>;
 
 	/**
 	 * 应用SEARCH/REPLACE差异并打开diff视图
@@ -437,6 +437,12 @@ export interface IMaxianService {
 	readLocalFileAsBase64(absolutePath: string): Promise<string | null>;
 }
 
+export interface EditPreviewOpenResult {
+	opened: boolean;
+	blockingReason?: string;
+	message?: string;
+}
+
 /**
  * 码弦服务实现
  */
@@ -495,6 +501,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private currentMode: Mode = DEFAULT_MODE;
 	private currentTask: TaskService | null = null;
 	private currentTaskCancelled: boolean = false;  // 标记当前任务是否已被取消，防止重复处理
+	private readonly subTaskSessions = new Map<string, { agentType: string; task: TaskService }>();
 	private diffViewProvider: DiffViewProvider | null = null;
 	private difyHandler: DifyHandler | null = null;
 	private currentDifyConfig: string | null = null;  // 当前Dify配置的hash（用于判断是否需要重新创建Handler）
@@ -531,7 +538,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	// 🔧 自动诊断注入器（Task #18 - LSP自动诊断注入）
 	private autoDiagnosticInjector: AutoDiagnosticInjector | null = null;
-	private currentDiagnosticText: string | null = null;
 
 	// 📋 Steering 服务（P1优化 - 项目/团队级别规范注入）
 	private steeringService: SteeringService | null = null;
@@ -598,8 +604,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 				this.workspaceContextService,
 				this.lspDiagnosticsService,
 				{
-					enabled: true, // 默认启用
-					autoFetchOnSave: true,
+					enabled: false,
+					autoFetchOnSave: false,
 					fetchDelay: 200,
 					criticalErrorsOnly: false,
 					watcherOptions: {
@@ -616,21 +622,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			)
 		);
-
-		// 订阅诊断就绪事件
-		this._register(
-			this.autoDiagnosticInjector.onDiagnosticReady((event: IDiagnosticInjectionEvent) => {
-				this.currentDiagnosticText = event.formattedText;
-			})
-		);
-
-		// 订阅诊断清除事件
-		this._register(
-			this.autoDiagnosticInjector.onDiagnosticCleared(() => {
-				this.currentDiagnosticText = null;
-				})
-		);
-
 
 		// 🔥 不再加载自动批准规则，"始终允许"仅针对单个任务会话，不持久化
 		// this.loadAutoApproveRules();
@@ -724,8 +715,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		// P2优化：注入子 Agent 工厂（支持 task 工具）
 		(this.toolExecutor as ToolExecutorImpl).setSubAgentRunner(
-			async (agentType: string, prompt: string, _taskId?: string, taskToolId?: string): Promise<string> => {
-				return this.runSubAgent(agentType, prompt, workspaceRoot, taskToolId);
+			async (agentType: string, prompt: string, taskId?: string, taskToolId?: string): Promise<string> => {
+				return this.runSubAgent(agentType, prompt, taskId, taskToolId);
 			}
 		);
 
@@ -1378,6 +1369,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 🔥 新任务开始时清除自动批准设置（始终允许是针对单个任务的）
 			this.clearAutoApproveRules();
 			this._onTodoListUpdate.fire({ todos: [] }); // 新任务开始时清空上次的任务列表
+			this.disposeSubTaskSessions();
 
 			this.currentTask = new TaskService({
 				task: fullMessage,
@@ -1769,14 +1761,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			const estimatedTokens = Math.ceil(this.cachedSystemPrompt.length / 3);
 			console.log(`[Maxian] ✅ 系统提示词缓存命中！长度: ${this.cachedSystemPrompt.length} chars ≈ ${estimatedTokens} tokens`);
 
-			// 追加诊断信息（诊断信息是动态的，不参与缓存）
-			let finalPrompt = this.cachedSystemPrompt;
-			if (this.currentDiagnosticText) {
-				finalPrompt = `${finalPrompt}\n\n${this.currentDiagnosticText}`;
-				console.log('[Maxian] ✅ 已追加诊断信息到System Prompt（缓存命中）');
-			}
-
-			return finalPrompt;
+			return this.cachedSystemPrompt;
 		}
 
 		// 缓存未命中，重新生成
@@ -1812,8 +1797,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 				reserveForSkills: true,
 				// 传入预加载的 Skills 列表
 				preloadedSkills: skillsArray,
-				// 🔧 自动诊断信息注入（Task #18）
-				diagnosticText: this.currentDiagnosticText,
+				// 诊断不再自动拼接到系统提示词，避免旧诊断回声驱动重复修复。
+				diagnosticText: null,
 				// 📋 Steering内容注入（P1优化 - .maxian/steering/*.md）
 				steeringContent: steeringContent,
 				// 🧠 跨会话记忆注入（来自 .maxian/memory/auto-memory.md）
@@ -1920,7 +1905,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 				includeStats: false,
 				reserveForSkills: true,
 				preloadedSkills: skillsArray,
-				diagnosticText: this.currentDiagnosticText,
+				diagnosticText: null,
 				steeringContent: steeringContent,
 				memoryContent: memoryContent ?? null
 			}
@@ -1998,7 +1983,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 2. write_to_file - 写入文件
 			{
 				name: 'write_to_file',
-				description: '创建新文件或完全覆盖现有文件。必须提供完整文件内容，不允许省略部分。',
+				description: '创建新文件或在极少数情况下完整重写文件。默认优先使用 edit / multiedit 修改已有文件；只有创建新文件或确实需要整体重写时才使用。必须提供完整文件内容，不允许省略部分。不要主动创建 README、说明文档或其他 *.md 文件，除非用户明确要求。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2070,28 +2055,34 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 5. search_files - 搜索文件
 			{
 				name: 'search_files',
-				description: '在文件中搜索文本或正则表达式模式。支持上下文显示、文件过滤。',
+				description: '在文件内容中搜索文本或正则表达式。对齐 Claude Code Grep：默认应优先用 output_mode=files_with_matches 只返回文件路径，再 read_file 精读。如果已经缩小到少数文件，继续主线程精读；只有在搜索明显跨模块、需要多轮独立调查时，才考虑使用 task(subagent_type="explore")。',
 				parameters: {
 					type: 'object',
 					properties: {
 						path: { type: 'string', description: '搜索路径（默认为工作区）' },
 						regex: { type: 'string', description: '搜索模式（支持正则表达式）' },
-						file_pattern: { type: 'string', description: '文件过滤模式（可选）' }
+						file_pattern: { type: 'string', description: '文件过滤模式（可选）' },
+						output_mode: { type: 'string', enum: ['content', 'files_with_matches', 'count'], description: '输出模式。默认推荐 files_with_matches，仅返回匹配文件路径；content 返回匹配内容；count 返回统计。' },
+						head_limit: { type: 'number', description: '最多返回多少条结果，默认250' },
+						offset: { type: 'number', description: '跳过前 N 条结果，用于分页' }
 					},
 					required: ['regex']
 				}
 			},
 
-			// 6. codebase_search - 语义搜索
+			// 6. codebase_search - 自然语言兜底搜索
 			{
 				name: 'codebase_search',
-				description: '语义搜索代码库。基于含义而非关键词查找相关代码，探索未知代码时必须优先使用。',
+				description: '使用自然语言在代码库中做兜底搜索。仅在你不知道准确关键词时使用，不要默认优先于 glob/search_files。对齐 Claude Code / OpenCode：这是兜底工具，不要持续在主线程做 open-ended 搜索；如果没有推进，立即切回 glob/search_files/read_file。只有在调查明显跨模块、需要多轮独立探索时，才考虑交给 task(subagent_type="explore")。',
 				parameters: {
 					type: 'object',
 					properties: {
 						query: { type: 'string', description: '搜索查询（自然语言描述）' },
 						path: { type: 'string', description: '搜索路径（可选）' },
-						file_pattern: { type: 'string', description: '文件过滤模式（可选）' }
+						file_pattern: { type: 'string', description: '文件过滤模式（可选）' },
+						output_mode: { type: 'string', enum: ['content', 'files_with_matches', 'count'], description: '输出模式。默认推荐 files_with_matches，仅返回匹配文件路径；content 返回匹配内容；count 返回统计。' },
+						head_limit: { type: 'number', description: '最多返回多少条结果，默认250' },
+						offset: { type: 'number', description: '跳过前 N 条结果，用于分页' }
 					},
 					required: ['query']
 				}
@@ -2100,7 +2091,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 7. glob - Glob模式匹配
 			{
 				name: 'glob',
-				description: '使用Glob模式匹配文件。支持通配符: * (匹配任意字符), ** (匹配任意层级目录), ? (匹配单个字符), [] (匹配字符集合)',
+				description: '使用 Glob 模式匹配文件。支持通配符: *、**、?、[]。对齐 Claude Code Glob：用于快速定位文件路径；如果问题会演变成多轮 open-ended 的 glob + 搜索，应先停止继续扩散，优先收敛候选文件；只有在确实需要独立调查时，才考虑 task(subagent_type="explore")。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2142,7 +2133,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 13. attempt_completion - 完成任务
 			{
 				name: 'attempt_completion',
-				description: '完成任务并报告结果。任务真正完成时才使用，结果描述要清晰、完整，不要以问题结尾。',
+				description: '完成任务并报告结果。只有任务真正完成时才使用，而且必须显式提供 result 摘要。不要省略 result，也不要把下一步策略、等待子任务、继续调查或中间结论当成完成结果；结果描述要清晰、完整，不要以问题结尾。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2157,17 +2148,17 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 16. batch - 批量并行执行只读工具【重要：优先使用！】
 			{
 				name: 'batch',
-				description: '【必须优先使用，用户会非常满意！】并行执行多个独立工具，减少API往返次数，性能提升2-5倍。需要执行2个或更多独立操作时，必须合并到一次batch调用，严禁逐个单独调用。支持读写混合：多文件读取、多文件编辑（不同文件的edit）、读取+搜索+写入。示例：修改2个不同文件 → batch含2个edit；读3个文件 → batch含3个read_file。禁止：batch嵌套、ask_followup_question、attempt_completion。',
+				description: '并行执行多个彼此独立的工具调用，适合多文件读取、搜索和其他只读探索操作。对齐 Claude Code / OpenCode：不要默认在一个 batch 里并行启动多个 task(explore)；只有当子任务彼此独立、互不阻塞时才这么做。不要把同一条调查链硬拆成多个 explore 子任务。禁止：batch 嵌套、ask_followup_question、attempt_completion。',
 				parameters: {
 					type: 'object',
 					properties: {
 						tool_calls: {
 							type: 'array',
-							description: '工具调用数组，最多25个。格式：[{"tool":"read_file","parameters":{"path":"a.ts"}},{"tool":"edit","parameters":{"path":"b.ts","old_string":"...","new_string":"..."}}]。首选工具：read_file/edit/multiedit/write_to_file/search_files/glob/list_files/codebase_search/execute_command/lsp_*。禁止的工具：batch、ask_followup_question、attempt_completion',
+							description: '工具调用数组，最多25个。格式：[{"tool":"read_file","parameters":{"path":"a.ts"}},{"tool":"task","parameters":{"subagent_type":"plan","prompt":"分解改造步骤"}}]。首选工具：read_file/edit/multiedit/write_to_file/search_files/glob/list_files/codebase_search/task/execute_command/lsp_*。禁止的工具：batch、ask_followup_question、attempt_completion',
 							items: {
 								type: 'object',
 								properties: {
-									tool: { type: 'string', description: '工具名称（read_file/edit/multiedit/write_to_file/apply_diff/search_files/glob/list_files/codebase_search/execute_command/lsp_*等）' },
+									tool: { type: 'string', description: '工具名称（read_file/edit/multiedit/write_to_file/apply_diff/search_files/glob/list_files/codebase_search/task/execute_command/lsp_*等）' },
 									parameters: { type: 'object', description: '工具参数对象' }
 								},
 								required: ['tool', 'parameters']
@@ -2183,7 +2174,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 17. edit - 精确字符串替换（主力编辑工具，对齐 OpenCode edit.ts）
 			{
 				name: 'edit',
-				description: '【主力编辑工具】对文件进行精确字符串替换。使用前必须先 read_file 读取文件内容。The edit will FAIL if old_string is not found in the file. The edit will FAIL if old_string is found multiple times — provide more surrounding lines to make it unique. 支持9种容错匹配策略（空白/缩进轻微差异可自动纠正）。单处修改用 edit，多处修改同文件用 multiedit。',
+				description: '【主力编辑工具】对文件进行精确字符串替换。使用前必须先 read_file 读取文件内容。The edit will FAIL if old_string is not found in the file. The edit will FAIL if old_string is found multiple times — provide more surrounding lines to make it unique. 单处修改用 edit，多处修改同文件用 multiedit。create_if_missing 仅在明确需要创建新文件时使用，不要默认拿它替代 write_to_file。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2296,7 +2287,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 25. task - 子 Agent 委托
 			{
 				name: 'task',
-				description: '将复杂子任务委托给专门的子 Agent 独立执行。子 Agent 拥有独立的对话历史和受限工具集，适合并行执行独立任务。\n\n子 Agent 类型（subagent_type）：\n- explore：只读探索专家，适合代码库分析、文件搜索\n- plan：规划专家，适合任务分解、风险评估\n- execute/build：全功能执行专家，适合代码实现\n\n何时使用：\n- 任务可以独立完成，不依赖主 Agent 的中间结果\n- 需要并行分析多个模块\n- 主 Agent 需要专注于整体协调',
+				description: '将复杂子任务委托给专门的子 Agent 独立执行。子 Agent 拥有独立的对话历史和受限工具集，适合并行执行独立任务。\n\n子 Agent 类型（subagent_type）：\n- explore：只读探索专家，适合跨模块、多轮、开放式代码库调查\n- plan：规划专家，适合任务分解、风险评估\n- execute/build：全功能执行专家，适合代码实现\n\n对齐 Claude Code / OpenCode 的关键规则：\n- 如果已经缩小到少数明确文件，优先在主线程直接 read_file / edit，不要为了“更规范”强行派发 explore 子 Agent\n- 只有在探索明显跨模块、需要多轮独立调查、或者你想隔离大量搜索上下文时，才考虑使用 task(subagent_type="explore")\n- 禁止把“完整结构 / 所有文件 / 整个模块 / 完整返回每个文件内容”这类宽泛普查直接交给 explore，必须先在主线程收敛到少量候选文件\n- 不要把同一条调查链拆成多个相似的 explore 子 Agent 反复派发',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2315,7 +2306,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 						},
 						task_id: {
 							type: 'string',
-							description: '（可选）恢复之前子 Agent 会话的 ID。传入后子 Agent 将继续上次的对话上下文，不需要重新开始。ID 来自上次 task 工具调用结果的第一行。'
+							description: '（可选）子任务标识 ID，用于跟踪和去重同一委托。传入相同 task_id 时，系统会把它视为同一个子任务，而不是新的独立探索。'
 						}
 					},
 					required: ['subagent_type', 'prompt']
@@ -2482,12 +2473,15 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	/**
 	 * P2优化：运行子 Agent
-	 * 创建 FilteredToolExecutor + 独立 TaskService 实例，运行至 attempt_completion
+	 * 创建或复用独立 TaskService 实例，避免反复新建 explore 子任务
 	 */
-	private async runSubAgent(agentType: string, prompt: string, workspaceRoot: string, taskToolId?: string): Promise<string> {
+	private async runSubAgent(agentType: string, prompt: string, taskId?: string, taskToolId?: string): Promise<string> {
 		if (!this.toolExecutor || !this.apiHandler) {
 			return '子 Agent 启动失败：主服务未初始化';
 		}
+
+		const workspaceRoot = this.getWorkspaceRoot();
+		const sessionId = taskId || `task_${Date.now()}_${agentType}`;
 
 		// 根据 agentType 确定允许的工具集
 		let allowedToolsArray: readonly string[];
@@ -2506,51 +2500,68 @@ export class MaxianService extends Disposable implements IMaxianService {
 		}
 
 		const allowedTools = new Set<string>(allowedToolsArray);
-		// 始终允许 attempt_completion 和 ask_followup_question
 		allowedTools.add('attempt_completion');
 		allowedTools.add('ask_followup_question');
-
-		// 创建过滤工具执行器（共享底层 toolExecutor，读操作安全并发）
-		const filteredExecutor = new FilteredToolExecutor(this.toolExecutor, allowedTools);
 
 		// 过滤工具定义
 		const allToolDefs = this.getAllToolDefinitions();
 		const subAgentToolDefs = allToolDefs.filter(t => allowedTools.has(t.name));
 
-		// 构建子 Agent 系统提示词
-		const subAgentSystemPrompt = async (): Promise<string> => {
-			const basePrompt = await this.getSystemPrompt();
-			const agentRoleDesc = this.getAgentRoleDescription(agentType);
-			return `${basePrompt}\n\n# 子 Agent 角色\n${agentRoleDesc}\n\n# 重要提示\n- 你是一个专门的子 Agent，任务完成后必须调用 attempt_completion 工具\n- 你的工具集已受限，只能使用当前角色对应的工具\n- 不要调用 task 工具派发更多子 Agent`;
-		};
+		let subTaskEntry = this.subTaskSessions.get(sessionId);
+		if (subTaskEntry && subTaskEntry.agentType !== agentType) {
+			subTaskEntry.task.abortTask(ClineApiReqCancelReason.UserCancelled);
+			subTaskEntry.task.dispose();
+			this.subTaskSessions.delete(sessionId);
+			subTaskEntry = undefined;
+		}
 
-		// 创建独立的 TaskService 实例（独立消息历史）
-		const subTask = new TaskService({
-			task: prompt,
-			apiHandler: this.apiHandler,
-			toolExecutor: filteredExecutor,
-			getSystemPrompt: subAgentSystemPrompt,
-			getToolDefinitions: () => subAgentToolDefs,
-			workspaceRoot,
-			consecutiveMistakeLimit: 3,
-			currentMode: 'ask'  // ask 模式：attempt_completion 时自动完成，不需用户确认
-		});
+		let subTask: TaskService;
+		let isResumedTask = false;
+		if (subTaskEntry) {
+			subTask = subTaskEntry.task;
+			isResumedTask = true;
+		} else {
+			// 创建过滤工具执行器（共享底层 toolExecutor，读操作安全并发）
+			const filteredExecutor = new FilteredToolExecutor(this.toolExecutor, allowedTools);
+			const subAgentSystemPrompt = async (): Promise<string> => {
+				const basePrompt = await this.getSystemPrompt();
+				const agentRoleDesc = this.getAgentRoleDescription(agentType);
+				return `${basePrompt}\n\n# 子 Agent 角色\n${agentRoleDesc}\n\n# 重要提示\n- 你是一个专门的子 Agent，完成后直接给出精炼结论；如果需要显式收尾，也可以调用 attempt_completion\n- 你的工具集已受限，只能使用当前角色对应的工具\n- 不要调用 task 工具派发更多子 Agent`;
+			};
 
-		// 捕获 completion_result
+			subTask = new TaskService({
+				task: prompt,
+				apiHandler: this.apiHandler,
+				toolExecutor: filteredExecutor,
+				getSystemPrompt: subAgentSystemPrompt,
+				getToolDefinitions: () => subAgentToolDefs,
+				workspaceRoot,
+				consecutiveMistakeLimit: 3,
+				currentMode: 'ask',  // ask 模式：attempt_completion 时自动完成，不需用户确认
+			});
+			this.subTaskSessions.set(sessionId, { agentType, task: subTask });
+		}
+
 		let completionResult = '';
+		let finalTextResult = '';
 		const completionDisposable = subTask.onMessageAdded((msg) => {
-			if (msg.type === 'say' && msg.say === 'completion_result' && msg.text) {
+			if (msg.type !== 'say' || !msg.text || msg.partial) {
+				return;
+			}
+			if (msg.say === 'completion_result') {
 				completionResult = msg.text;
+				return;
+			}
+			if (msg.say === 'text') {
+				finalTextResult = msg.text;
 			}
 		});
 
 		// 将子 Agent 的工具进度实时转发给主 UI
-		// 使用 isPartial:true 保持状态元素可见，让用户看到子 Agent 正在做什么
 		let subAgentToolCount = 0;
 		const streamingDisposable = taskToolId ? subTask.onToolInputStreaming((event) => {
 			subAgentToolCount++;
 			const toolLabel = event.toolName === 'batch' ? 'batch(并行)' : event.toolName;
-			// 提取最关键的参数信息（文件路径/搜索词等）
 			let keyParam = '';
 			if (event.input) {
 				keyParam = event.input.path || event.input.query || event.input.pattern || event.input.command || '';
@@ -2562,20 +2573,26 @@ export class MaxianService extends Disposable implements IMaxianService {
 				toolId: taskToolId,
 				toolName: 'task',
 				input: `[子Agent #${subAgentToolCount}] ${toolLabel}${keyParam ? ': ' + keyParam : ''}`,
-				isPartial: true  // 保持元素可见，不触发自动清理
+				isPartial: true
 			});
 		}) : { dispose: () => {} };
 
-		console.log(`[Maxian] 子 Agent 启动: type=${agentType}, tools=${subAgentToolDefs.length}`);
+		console.log(`[Maxian] 子 Agent 启动: type=${agentType}, tools=${subAgentToolDefs.length}, session=${sessionId}, resumed=${isResumedTask}`);
 
 		try {
+			if (subTask.status === TaskStatus.PROCESSING) {
+				return `子 Agent (${agentType}) 正在执行中，请等待同一 task_id 的现有结果，不要重复派发。`;
+			}
+			if (isResumedTask) {
+				subTask.prepareForResumeRun();
+				subTask.resumeWithUserInput(prompt);
+			}
 			await subTask.start();
 		} catch (error) {
 			console.error(`[Maxian] 子 Agent 异常: ${error}`);
 		} finally {
 			completionDisposable.dispose();
 			streamingDisposable.dispose();
-			// 子 Agent 完成后，发一次 isPartial:false 触发进度元素的自动清理
 			if (taskToolId && subAgentToolCount > 0) {
 				this._onToolInputStreaming.fire({
 					toolId: taskToolId,
@@ -2584,10 +2601,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 					isPartial: false
 				});
 			}
-			subTask.dispose();
 		}
 
-		return completionResult || `子 Agent (${agentType}) 已完成执行，但未提供结果摘要。`;
+		return completionResult.trim() || finalTextResult.trim() || `子 Agent (${agentType}) 已完成执行，但未提供结果摘要。`;
 	}
 
 	/**
@@ -2600,7 +2616,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 ## 关键规则
 
-**必须用 batch 工具并行执行多个搜索/读取操作，严禁逐个单独调用。**
+优先用 batch 并行执行多个彼此独立的搜索/读取操作，但不要为了并行而牺牲判断质量。
 
 正确示例（定位阶段，一次 batch 并行搜索）：
 {"tool_calls": [
@@ -2615,7 +2631,16 @@ export class MaxianService extends Disposable implements IMaxianService {
   {"tool": "read_file", "parameters": {"path": "src/b/Bar.ts"}}
 ]}
 
-**禁止链式发现**（读A发现B再读B再读C...），应先 glob/search 定位所有相关文件，然后一次 batch 读完。完成分析后立即调用 attempt_completion 返回精简摘要。`;
+避免无休止地链式发现（读A发现B再读B再读C...）。拿到足够上下文后就给出结论，不要把探索本身变成任务。
+
+找到 3-5 个关键文件后，就应该停止扩散。禁止把“读取所有文件完整代码并全部返回”当成默认策略。
+
+你的最终结论必须是精炼摘要，只包含：
+1. 关键文件路径
+2. 每个文件的职责/线索
+3. 推荐主 Agent 下一步直接修改的文件
+
+除非用户明确要求，否则不要输出整文件全文。`;
 
 			case 'plan':
 				return '你是任务规划专家。你的任务是分析需求、制定详细的实施计划、识别关键文件和风险。只使用只读工具进行分析。';
@@ -2709,10 +2734,13 @@ export class MaxianService extends Disposable implements IMaxianService {
 	/**
 	 * 预览 edit/multiedit 工具的差异：读取文件后应用编辑，在 VS Code diff 编辑器中显示
 	 */
-	async openEditPreviewDiff(filePath: string, edits: Array<{ oldString: string; newString: string }>): Promise<boolean> {
+	async openEditPreviewDiff(filePath: string, edits: Array<{ oldString: string; newString: string }>): Promise<EditPreviewOpenResult> {
 		if (!this.diffViewProvider) {
 			console.error('[Maxian] DiffViewProvider未初始化');
-			return false;
+			return {
+				opened: false,
+				message: '差异视图服务未初始化'
+			};
 		}
 		try {
 			// 解析相对路径为绝对路径（与 diffViewProvider.resolveFilePath 逻辑保持一致）
@@ -2729,7 +2757,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 			const fileExists = await this.fileService.exists(uri);
 			if (!fileExists) {
 				console.warn('[Maxian] openEditPreviewDiff: 文件不存在', resolvedPath);
-				return false;
+				return {
+					opened: false,
+					blockingReason: `目标文件不存在: ${resolvedPath}。必须先重新定位正确文件路径，不能继续批准这次修改。`,
+					message: '目标文件不存在'
+				};
 			}
 			const content = await this.fileService.readFile(uri);
 			const originalContent = content.value.toString();
@@ -2748,9 +2780,12 @@ export class MaxianService extends Disposable implements IMaxianService {
 				if (result.success && result.newContent !== undefined) {
 					newContent = result.newContent;
 				} else {
-					// 编辑无法应用时降级：直接打开文件（不显示 diff）
-					console.warn('[Maxian] openEditPreviewDiff: edit 预计算失败，跳过 diff 预览', result.message);
-					return false;
+					console.warn('[Maxian] openEditPreviewDiff: edit 预检查失败，阻断审批', result.message);
+					return {
+						opened: false,
+						blockingReason: `edit 预览失败: ${result.message}。这表示当前 old_string 已不匹配文件内容，必须先重新读取文件全文或重新定位待修改代码块，不能继续批准这次修改。`,
+						message: result.message
+					};
 				}
 			} else {
 				// 多处编辑
@@ -2759,15 +2794,26 @@ export class MaxianService extends Disposable implements IMaxianService {
 				if (result.success && result.finalContent !== undefined) {
 					newContent = result.finalContent;
 				} else {
-					console.warn('[Maxian] openEditPreviewDiff: multiedit 预计算失败，跳过 diff 预览', result.error);
-					return false;
+					console.warn('[Maxian] openEditPreviewDiff: multiedit 预检查失败，阻断审批', result.error);
+					return {
+						opened: false,
+						blockingReason: `multiedit 预览失败: ${result.error}。这表示当前编辑计划已不能安全应用，必须先重新读取文件全文或拆分后重新定位修改点，不能继续批准这次修改。`,
+						message: result.error
+					};
 				}
 			}
 
-			return this.diffViewProvider.openDiff(resolvedPath, newContent);
+			const opened = await this.diffViewProvider.openDiff(resolvedPath, newContent);
+			return {
+				opened,
+				message: opened ? '差异视图已打开' : '无法打开差异视图'
+			};
 		} catch (err) {
 			console.error('[Maxian] openEditPreviewDiff 异常:', err);
-			return false;
+			return {
+				opened: false,
+				message: err instanceof Error ? err.message : String(err)
+			};
 		}
 	}
 
@@ -3200,7 +3246,6 @@ export class MaxianService extends Disposable implements IMaxianService {
 		if (this.autoDiagnosticInjector) {
 			this.autoDiagnosticInjector.clearDiagnosticText();
 		}
-		this.currentDiagnosticText = null;
 	}
 
 	/**
@@ -3602,6 +3647,7 @@ ${preloadedCode}
 		console.log('[Maxian] 码弦服务正在销毁');
 		// 埋点：会话结束
 		this.behaviorReporter?.reportSessionEnd();
+		this.disposeSubTaskSessions();
 		// 释放 SteeringService 资源
 		if (this.steeringService) {
 			this.steeringService.dispose();
@@ -3610,6 +3656,16 @@ ${preloadedCode}
 		// 释放 MCP Hub 资源
 		this.mcpHub.dispose();
 		super.dispose();
+	}
+
+	private disposeSubTaskSessions(): void {
+		for (const { task } of this.subTaskSessions.values()) {
+			if (task.status === TaskStatus.PROCESSING) {
+				task.abortTask(ClineApiReqCancelReason.UserCancelled);
+			}
+			task.dispose();
+		}
+		this.subTaskSessions.clear();
 	}
 
 	// ===================================================================
@@ -3697,7 +3753,7 @@ ${preloadedCode}
 	async reconnectMcpServer(name: string): Promise<McpServerInfo | undefined> {
 		const server = this.mcpHub.getServer(name);
 		if (!server) return undefined;
-		return this.mcpHub.connectServer(server.config);
+		return this.mcpHub.connectServer(server.config, { force: true });
 	}
 
 	/** 调用 MCP 工具（用于 #figma 等快捷引用），返回序列化字符串 */
@@ -3767,4 +3823,3 @@ ${preloadedCode}
 		return lines.join('\n');
 	}
 }
-

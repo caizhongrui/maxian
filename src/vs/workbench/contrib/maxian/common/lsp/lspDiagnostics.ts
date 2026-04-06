@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
+import * as path from '../../../../../base/common/path.js';
 
 /**
  * LSP 诊断集成
@@ -51,6 +52,32 @@ export interface Diagnostic {
 	source?: string;
 	/** 错误代码 */
 	code?: string | number;
+}
+
+function getDiagnosticFingerprint(diagnostic: Diagnostic): string {
+	const code = diagnostic.code !== undefined ? String(diagnostic.code) : '';
+	const source = diagnostic.source ?? '';
+	const message = diagnostic.message.trim();
+	const range = [
+		diagnostic.range.startLine,
+		diagnostic.range.startColumn,
+		diagnostic.range.endLine,
+		diagnostic.range.endColumn,
+	].join(':');
+	return `${diagnostic.severity}|${source}|${code}|${range}|${message}`;
+}
+
+function normalizeDiagnosticFileKey(filePath: string): string {
+	return path.normalize(filePath).replace(/\\/g, '/');
+}
+
+function diffDiagnostics(baseline: Diagnostic[], current: Diagnostic[]): Diagnostic[] {
+	if (baseline.length === 0) {
+		return current;
+	}
+
+	const baselineSet = new Set(baseline.map(getDiagnosticFingerprint));
+	return current.filter(diagnostic => !baselineSet.has(getDiagnosticFingerprint(diagnostic)));
 }
 
 /**
@@ -289,11 +316,51 @@ export function createDiagnosticsAppendix(filePath: string, diagnostics: Diagnos
 	}
 }
 
+export function createDiagnosticsDeltaAppendix(filePath: string, diagnostics: Diagnostic[]): string {
+	if (diagnostics.length === 0) {
+		return '';
+	}
+
+	const filtered = filterDiagnostics(diagnostics);
+	if (filtered.length === 0) {
+		return '';
+	}
+
+	const errorCount = filtered.filter(d => d.severity === DiagnosticSeverity.Error).length;
+	const warningCount = filtered.filter(d => d.severity === DiagnosticSeverity.Warning).length;
+	const lines: string[] = [
+		'',
+		'',
+		`<diagnostic_delta path="${filePath}">`,
+		`本次修改新增问题：${errorCount} 个错误，${warningCount} 个警告`,
+		'',
+	];
+
+	for (const diagnostic of filtered) {
+		const icon = getSeverityIcon(diagnostic.severity);
+		const source = diagnostic.source ? `[${diagnostic.source}]` : '';
+		const code = diagnostic.code ? `(${diagnostic.code})` : '';
+		const location = `第 ${diagnostic.range.startLine} 行，第 ${diagnostic.range.startColumn} 列`;
+		lines.push(`${icon} ${location} ${source}${code}`);
+		lines.push(`   ${diagnostic.message}`);
+		lines.push('');
+	}
+
+	if (errorCount > 0) {
+		lines.push('仅需处理本次修改引入的阻塞错误；不要为了清空历史诊断而偏离当前任务。');
+	}
+
+	lines.push('</diagnostic_delta>');
+	return lines.join('\n');
+}
+
 /**
  * LSP 诊断处理器
  * 用于在文件编辑后获取并处理诊断信息
  */
 export class LspDiagnosticsHandler {
+	private readonly emittedDeltaFingerprints = new Map<string, Set<string>>();
+
 	constructor(private service?: ILspDiagnosticsService) {}
 
 	/**
@@ -309,9 +376,24 @@ export class LspDiagnosticsHandler {
 	 * @param filePath 文件路径
 	 * @returns 格式化的诊断信息，如果没有服务或没有诊断则返回空字符串
 	 */
-	async getDiagnosticsAfterEdit(filePath: string): Promise<string> {
+	async captureDiagnosticsBaseline(filePath: string): Promise<Diagnostic[]> {
 		if (!this.service) {
-			console.log('[LspDiagnostics] 服务未初始化');
+			return [];
+		}
+
+		try {
+			this.emittedDeltaFingerprints.delete(normalizeDiagnosticFileKey(filePath));
+			await this.service.touchFile(filePath, true);
+			await new Promise(resolve => setTimeout(resolve, LSP_DIAGNOSTICS_CONFIG.WAIT_TIME_MS));
+			return await this.service.getDiagnostics(filePath);
+		} catch (error) {
+			console.warn(`[LspDiagnostics] 捕获诊断基线失败: ${filePath}`, error);
+			return [];
+		}
+	}
+
+	async getDiagnosticsAfterEdit(filePath: string, baseline: Diagnostic[] = []): Promise<string> {
+		if (!this.service) {
 			return '';
 		}
 
@@ -322,53 +404,61 @@ export class LspDiagnosticsHandler {
 			// 等待诊断更新
 			await new Promise(resolve => setTimeout(resolve, LSP_DIAGNOSTICS_CONFIG.WAIT_TIME_MS));
 
-			// 获取当前文件的诊断
+			// 获取当前文件的诊断，并且只返回相对 baseline 的新增项
 			const diagnostics = await this.service.getDiagnostics(filePath);
-			const currentFileAppendix = createDiagnosticsAppendix(filePath, diagnostics);
-
-			// P1优化：获取项目其他文件的诊断（对齐 OpenCode MAX_PROJECT_DIAGNOSTICS_FILES）
-			let projectDiagnosticsAppendix = '';
-			try {
-				const allDiagnostics = await this.service.getAllDiagnostics();
-				const otherFilesWithErrors: string[] = [];
-
-				for (const [otherPath, otherDiags] of allDiagnostics) {
-					// 跳过当前文件（已在上面处理）
-					if (otherPath === filePath) continue;
-
-					const filtered = filterDiagnostics(otherDiags);
-					const hasError = filtered.some(d => d.severity === DiagnosticSeverity.Error);
-					if (hasError) {
-						otherFilesWithErrors.push(otherPath);
-					}
-
-					if (otherFilesWithErrors.length >= LSP_DIAGNOSTICS_CONFIG.MAX_PROJECT_DIAGNOSTICS_FILES) {
-						break;
-					}
-				}
-
-				if (otherFilesWithErrors.length > 0) {
-					const projectParts: string[] = ['\n\n<project_diagnostics>'];
-					projectParts.push(`以下文件在本次修改后出现错误（可能受当前文件影响）：`);
-					for (const otherPath of otherFilesWithErrors) {
-						const otherDiags = allDiagnostics.get(otherPath)!;
-						const filtered = filterDiagnostics(otherDiags);
-						const errorCount = filtered.filter(d => d.severity === DiagnosticSeverity.Error).length;
-						projectParts.push(`\n${formatDiagnostics(otherPath, otherDiags)}`);
-						console.log(`[LspDiagnostics] 项目文件 ${otherPath} 有 ${errorCount} 个错误`);
-					}
-					projectParts.push('</project_diagnostics>');
-					projectDiagnosticsAppendix = projectParts.join('\n');
-				}
-			} catch (projectErr) {
-				console.warn('[LspDiagnostics] 获取项目诊断失败（不影响主流程）:', projectErr);
+			const deltaDiagnostics = diffDiagnostics(baseline, diagnostics);
+			if (deltaDiagnostics.length === 0) {
+				return '';
 			}
 
-			return currentFileAppendix + projectDiagnosticsAppendix;
+			const fileKey = normalizeDiagnosticFileKey(filePath);
+			const emittedSet = this.emittedDeltaFingerprints.get(fileKey) ?? new Set<string>();
+			const unseenDelta = deltaDiagnostics.filter(diagnostic => {
+				const fingerprint = getDiagnosticFingerprint(diagnostic);
+				if (emittedSet.has(fingerprint)) {
+					return false;
+				}
+				emittedSet.add(fingerprint);
+				return true;
+			});
+			this.emittedDeltaFingerprints.set(fileKey, emittedSet);
+
+			// 自动回灌只关注新增的阻塞错误，普通 warning 交给显式 lsp_diagnostics 查询，
+			// 避免模型被同一文件的非阻塞提示反复拉回去做小补丁。
+			const blockingDelta = unseenDelta.filter(diagnostic => diagnostic.severity === DiagnosticSeverity.Error);
+			if (blockingDelta.length === 0) {
+				return '';
+			}
+
+			return createDiagnosticsDeltaAppendix(filePath, blockingDelta);
 		} catch (error) {
 			console.warn(`[LspDiagnostics] 获取诊断失败: ${filePath}`, error);
 			return '';
 		}
+	}
+
+	async getCurrentDiagnostics(filePath: string): Promise<string> {
+		if (!this.service) {
+			return '';
+		}
+
+		try {
+			await this.service.touchFile(filePath, true);
+			await new Promise(resolve => setTimeout(resolve, LSP_DIAGNOSTICS_CONFIG.WAIT_TIME_MS));
+			const diagnostics = await this.service.getDiagnostics(filePath);
+			return createDiagnosticsAppendix(filePath, diagnostics);
+		} catch (error) {
+			console.warn(`[LspDiagnostics] 获取当前诊断失败: ${filePath}`, error);
+			return '';
+		}
+	}
+
+	clearDiagnosticHistory(filePath?: string): void {
+		if (filePath) {
+			this.emittedDeltaFingerprints.delete(normalizeDiagnosticFileKey(filePath));
+			return;
+		}
+		this.emittedDeltaFingerprints.clear();
 	}
 
 	/**
@@ -405,6 +495,14 @@ export const globalLspDiagnosticsHandler = new LspDiagnosticsHandler();
 /**
  * 便捷函数：在文件编辑后获取诊断
  */
-export async function getDiagnosticsAfterEdit(filePath: string): Promise<string> {
-	return globalLspDiagnosticsHandler.getDiagnosticsAfterEdit(filePath);
+export async function getDiagnosticsAfterEdit(filePath: string, baseline: Diagnostic[] = []): Promise<string> {
+	return globalLspDiagnosticsHandler.getDiagnosticsAfterEdit(filePath, baseline);
+}
+
+export async function captureDiagnosticsBaseline(filePath: string): Promise<Diagnostic[]> {
+	return globalLspDiagnosticsHandler.captureDiagnosticsBaseline(filePath);
+}
+
+export async function getCurrentDiagnostics(filePath: string): Promise<string> {
+	return globalLspDiagnosticsHandler.getCurrentDiagnostics(filePath);
 }

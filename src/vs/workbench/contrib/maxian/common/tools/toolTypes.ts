@@ -67,7 +67,7 @@ export const toolParamNames = [
 	'create_if_missing', // edit 创建文件参数
 	'patches',        // patch 多文件补丁参数
 	'subagent_type',  // task 子Agent类型参数
-	'task_id',        // task resume 参数（恢复已有子Agent会话）
+	'task_id',        // task 子任务标识参数（跟踪/去重）
 	'column',         // LSP 列号参数
 	'skill_name',     // skill 工具参数
 	'requires_approval', // execute_command: 是否需要用户确认（参考Cline）
@@ -164,7 +164,7 @@ export interface InsertCodeBlockToolUse extends ToolUse {
 
 export interface CodebaseSearchToolUse extends ToolUse {
 	name: 'codebase_search';
-	params: Partial<Pick<Record<ToolParamName, string>, 'query' | 'path' | 'file_pattern'>>;
+	params: Partial<Pick<Record<ToolParamName, string>, 'query' | 'path' | 'file_pattern' | 'output_mode' | 'head_limit' | 'offset'>>;
 }
 
 export interface SearchFilesToolUse extends ToolUse {

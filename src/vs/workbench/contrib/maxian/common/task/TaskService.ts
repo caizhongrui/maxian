@@ -8,8 +8,9 @@
 
 import { Emitter, Event } from '../../../../../base/common/event.js';
 import { Disposable } from '../../../../../base/common/lifecycle.js';
+import * as path from '../../../../../base/common/path.js';
 import { IApiHandler, MessageParam, ToolDefinition, ContentBlock, ToolResultContentBlock, StreamChunk } from '../api/types.js';
-import { IToolExecutor } from '../tools/toolExecutor.js';
+import { IToolExecutor, ToolExecutionResult } from '../tools/toolExecutor.js';
 import { ToolName, toolNames as ALL_TOOL_NAMES } from '../tools/toolTypes.js';
 import { ToolRepetitionDetector } from '../tools/ToolRepetitionDetector.js';
 import { formatResponse } from '../prompts/formatResponse.js';
@@ -38,6 +39,7 @@ import {
 import { FocusChainManager } from '../focusChain/FocusChainManager.js';
 import { ModelContextTracker } from '../context-tracking/ModelContextTracker.js';
 import { ContextManager } from '../context/ContextManager.js';
+import { globalLspDiagnosticsHandler } from '../lsp/lspDiagnostics.js';
 import { StateMutex } from '../utils/StateMutex.js';
 import { CheckpointManager } from '../checkpoints/CheckpointManager.js';
 
@@ -83,6 +85,15 @@ const DEFAULT_AGENT_CONFIG: AgentConfig = {
 	verbose: true
 };
 
+interface DuplicateFileReadCheckResult {
+	filePath: string;
+	requestKey: string;
+	message: string;
+	isError: boolean;
+	preferCachedContent?: boolean;
+	activateRedirect?: boolean;
+}
+
 /**
  * TaskService配置选项
  */
@@ -94,6 +105,7 @@ export interface TaskServiceOptions extends CreateTaskOptions {
 	workspaceRoot?: string;
 	consecutiveMistakeLimit?: number;
 	currentMode?: string; // 当前模式，用于特殊处理（如ask模式）
+	requireExplicitCompletionAfterToolUse?: boolean; // 工具执行后，禁止纯文本直接结束
 	agentConfig?: Partial<AgentConfig>; // Agent 配置
 	behaviorReporter?: import('../../browser/behaviorReporter.js').BehaviorReporter; // 行为埋点上报器
 }
@@ -171,6 +183,7 @@ export class TaskService extends Disposable {
 
 	// Current mode (for special handling like ask mode)
 	private readonly currentMode: string;
+	private readonly requireExplicitCompletionAfterToolUse: boolean;
 
 	// Agent 编排器
 	private readonly agentOrchestrator: AgentOrchestrator;
@@ -184,9 +197,24 @@ export class TaskService extends Disposable {
 	// 错误处理器
 	private readonly errorHandler: ErrorHandler;
 
-	// P0优化：重复文件读取检测（借鉴Cline）
+	// P0优化：重复文件读取检测
 	private readonly fileReadTracker: Map<string, number> = new Map();
-	private readonly DUPLICATE_READ_THRESHOLD = 1; // 超过1次即为重复（第2次返回警告，第3次返回错误）
+	private readonly readFileRequestTracker: Map<string, number> = new Map();
+	private readonly duplicateReadRedirectTracker: Set<string> = new Set();
+	private readonly explorationFingerprintsSeen: Set<string> = new Set();
+	private consecutiveNoProgressExplorationRounds = 0;
+	private readonly NO_PROGRESS_EXPLORATION_THRESHOLD = 3;
+	private readonly EXPLORATION_REDIRECT_ROUNDS = 2;
+	private readonly EXPLORATION_REDIRECT_MIN_FILES = 2;
+	private readonly MAIN_THREAD_SEARCH_TOOLS = new Set(['search_files', 'codebase_search', 'glob', 'list_files']);
+	private mainThreadExplorationGuardActive = false;
+	private readonly explorationBudget = {
+		minFilesBeforeDelegation: 3,
+		minReadOnlyRoundsBeforeDelegation: 2,
+		maxMainThreadSearchBursts: 6,
+	};
+	private mainThreadSearchBurstCount = 0;
+	private readonly verboseRuntimeLogs = false;
 
 	// P0优化：上下文压缩器
 	private readonly contextCompactor: ContextCompactor;
@@ -217,15 +245,11 @@ export class TaskService extends Disposable {
 	// 文件变更追踪
 	private readonly fileChangesWritten: Set<string> = new Set();  // 写入/创建/修改的文件
 	private readonly fileChangesDeleted: Set<string> = new Set();  // 删除的文件
+	private readonly fileWriteCountTracker: Map<string, number> = new Map();
+	private static readonly MAX_WRITES_PER_FILE = 2;
 
-	// 效率优化：连续单工具调用计数器，用于自动注入batch提醒
-	private consecutiveSingleReadToolCount = 0;
-	// 效率优化：连续只读轮数计数器（包括batch只读），超过阈值强制要求开始写代码
+	// 效率优化：连续只读轮数计数器（包括batch只读），仅用于观测是否长时间停留在探索阶段
 	private consecutiveReadOnlyRounds = 0;
-	private static readonly MAX_EXPLORE_ROUNDS = 6; // 安全兜底上限（超过6轮只读就需要给出结论或开始修改）
-	// 连续阻断计数器：连续N次阻断仍无法让AI给出结论时，强制结束
-	private consecutiveBlockedRounds = 0;
-	private static readonly MAX_BLOCKED_ROUNDS = 2;
 
 	// 全局 API 轮次计数器：recursivelyMakeClineRequests 每次递归调用 +1，超过上限强制终止
 	private totalApiRounds = 0;
@@ -291,6 +315,7 @@ export class TaskService extends Disposable {
 		this.getToolDefinitions = options.getToolDefinitions;
 		this.consecutiveMistakeLimit = options.consecutiveMistakeLimit || MAX_CONSECUTIVE_MISTAKES;
 		this.currentMode = options.currentMode || 'code';
+		this.requireExplicitCompletionAfterToolUse = options.requireExplicitCompletionAfterToolUse ?? true;
 		this.workspaceRoot = options.workspaceRoot || '.';
 		this.behaviorReporter = options.behaviorReporter;
 
@@ -375,6 +400,30 @@ export class TaskService extends Disposable {
 				});
 			}
 		}
+	}
+
+	private debugLog(...args: any[]): void {
+		if (!this.verboseRuntimeLogs) {
+			return;
+		}
+		console.log(...args);
+	}
+
+	/**
+	 * 复用同一 task_id 时重置运行期瞬时状态，避免跨轮污染。
+	 * 保留对话历史与已写文件追踪，便于子任务继续上下文。
+	 */
+	public prepareForResumeRun(): void {
+		this.abort = false;
+		this.abortReason = undefined;
+		this.askResolve = undefined;
+		this.askResponse = undefined;
+		this.askResponseText = undefined;
+		this.askResponseImages = undefined;
+		this.consecutiveMistakeCount = 0;
+		this.mainThreadExplorationGuardActive = false;
+		this.mainThreadSearchBurstCount = 0;
+		this.resetExplorationProgress();
 	}
 
 	/**
@@ -730,34 +779,16 @@ export class TaskService extends Disposable {
 	 * 任务主循环 - 参照kilocode
 	 */
 	private async initiateTaskLoop(): Promise<void> {
+		globalLspDiagnosticsHandler.clearDiagnosticHistory();
 		while (!this.abort) {
 			const didEndLoop = await this.recursivelyMakeClineRequests();
 
 			if (didEndLoop) {
 				break;
 			} else {
-				// 对于问答模式，AI可以不使用工具直接回答，直接结束循环
-				if (this.currentMode === 'ask') {
-					break;
-				}
-
-				// AI没有使用工具 - 提示继续
-				// 🔧 使用 'system_internal' 类型，不显示在UI上（避免系统提示泄露）
-				await this.say('system_internal', formatResponse.noToolsUsed());
-
-				this.pushHistory({
-					role: 'user',
-					content: formatResponse.noToolsUsed()
-				});
-
-				this.consecutiveMistakeCount++;
-
-				// 超过连续错误限制时终止任务，防止无限循环（如API返回空响应时）
-				if (this.consecutiveMistakeCount >= this.consecutiveMistakeLimit) {
-					console.error(`[TaskService] AI连续${this.consecutiveMistakeCount}次未使用工具，终止任务`);
-					await this.say('error', `AI连续${this.consecutiveMistakeCount}次未使用工具，任务已终止。请检查API服务是否正常，或重新描述您的需求。`);
-					break;
-				}
+				// 不再在后台追加“必须继续用工具”的隐藏回环。
+				// 如果本轮既没有工具执行也没有可继续的完成信号，直接结束当前自动循环。
+				break;
 			}
 		}
 	}
@@ -873,12 +904,32 @@ export class TaskService extends Disposable {
 				// 没有工具调用 - 这是AI的最终回复，显示给用户
 				if (toolUses.length === 0) {
 					if (assistantMessage) {
+						const trimmedMessage = assistantMessage.trim();
+						const hasUsedTools = Object.values(this.toolUsage).some(count => (count || 0) > 0);
+						const shouldRequireExplicitCompletion = this.requireExplicitCompletionAfterToolUse && hasUsedTools;
+
+						if (shouldRequireExplicitCompletion && trimmedMessage.length > 0) {
+							console.warn('[TaskService] 工具执行后收到纯文本回复，不视为完成，要求显式调用 attempt_completion');
+							this.pushHistory({
+								role: 'user',
+								content: '[SYSTEM] 你刚刚在使用过工具后直接输出了文本，但这不会结束当前任务。若任务已完成，必须立即调用 attempt_completion，并用简洁结果摘要说明完成内容；若未完成，请继续使用必要工具。不要重复复述，不要重复派发相同的 task(explore)。'
+							});
+							continue;
+						}
+
+						if (hasUsedTools && this.isLikelyInternalMetaResponse(trimmedMessage)) {
+							console.warn('[TaskService] 工具执行后收到策略性/内部性文本，不视为完成，继续推进任务');
+							this.pushHistory({
+								role: 'user',
+								content: '[SYSTEM] 你刚刚输出的内容更像策略说明、内部纠偏提示或等待状态，而不是对用户的最终结果。不要结束任务，也不要把这种内部说明直接回复给用户。请基于当前已有结果继续推进：如果目标文件已明确，就继续修改或验证；如果只是需要补充少量依据，只读取明确文件；只有真正完成后，再给出面向用户的最终结果。'
+							});
+							continue;
+						}
+
 						// 显示AI的最终回复（不是工具调用前的"思考"文本）
 						await this.say('text', assistantMessage);
-						// 如果回复文本非常长（>500字符），说明AI在直接输出最终答案
-						// 直接结束循环，避免系统追加"noToolsUsed"提示导致模型反复调用 attempt_completion
-						if (assistantMessage.length > 500) {
-							console.log('[TaskService] AI输出了长文本回答（无工具调用），直接结束任务');
+						if (trimmedMessage.length > 0) {
+							console.log('[TaskService] AI输出了最终文本回答（无工具调用），直接结束任务');
 							return true;
 						}
 					}
@@ -1382,49 +1433,14 @@ export class TaskService extends Disposable {
 	}
 
 	/**
-	 * 混合模型调度：分析本轮工具调用，更新下一轮的模型档位
-	 * - 本轮全是探索类工具（读文件/搜索/LSP查询）→ 下一轮用 flash（快速）
-	 * - 本轮有写入/执行类工具 → 下一轮用 plus（高质量）
+	 * 固定使用高质量档位，避免在探索/执行间频繁切换模型导致上下文理解不稳定。
 	 */
-	private readonly FLASH_MODEL_TOOLS = new Set([
-		'read_file', 'list_files', 'search_files', 'list_code_definition_names',
-		'codebase_search', 'glob', 'lsp_hover', 'lsp_diagnostics',
-		'lsp_definition', 'lsp_references', 'lsp_type_definition',
-		'todoread', 'batch'
-	]);
-
 	private updateModelTierForNextRound(toolUses: Array<{ id: string; name: string; input: any }>): void {
+		void toolUses;
 		if (typeof (this.apiHandler as any).setModelTier !== 'function') {
-			return; // handler 不支持档位切换，跳过
+			return;
 		}
-
-		// 功能3: 完善混合模型调度，batch 内的子工具也参与判断
-		const isToolFast = (toolName: string): boolean => this.FLASH_MODEL_TOOLS.has(toolName);
-
-		const isBatchAllFast = (batchInput: any): boolean => {
-			try {
-				const rawCalls = batchInput?.tool_calls;
-				const calls: Array<{ tool: string; name?: string }> = typeof rawCalls === 'string'
-					? JSON.parse(rawCalls)
-					: (Array.isArray(rawCalls) ? rawCalls : []);
-				if (calls.length === 0) {
-					return true; // 空 batch 视为快速
-				}
-				return calls.every(c => isToolFast(c.tool || c.name || ''));
-			} catch {
-				return false; // 无法解析时保守处理，视为写入操作
-			}
-		};
-
-		const allFastTools = toolUses.length > 0 && toolUses.every(t => {
-			if (t.name === 'batch') {
-				return isBatchAllFast(t.input);
-			}
-			return isToolFast(t.name);
-		});
-
-		const tier = allFastTools ? 'flash' : 'plus';
-		(this.apiHandler as any).setModelTier(tier);
+		(this.apiHandler as any).setModelTier('plus');
 	}
 
 	/**
@@ -1452,47 +1468,10 @@ export class TaskService extends Disposable {
 			}
 		}
 
-		// ====== [Batch Monitor] 工具调用情况日志 ======
-		const toolNames = toolUses.map(t => t.name);
-		const hasBatch = toolNames.includes('batch');
-		const readOnlyToolNames = ['read_file', 'search_files', 'glob', 'list_files', 'codebase_search', 'list_code_definition_names', 'lsp_hover', 'lsp_diagnostics', 'lsp_definition', 'lsp_references', 'lsp_type_definition'];
-		const standaloneReadCalls = toolUses.filter(t => readOnlyToolNames.includes(t.name));
-		if (!hasBatch && standaloneReadCalls.length >= 2) {
-			console.log(`[Batch Monitor] 收到 ${standaloneReadCalls.length} 个独立只读调用，并行执行`);
-		}
-		// ====== [Batch Monitor] end ======
-
-		// 1. 并行执行只读工具（超过探索上限时强制阻断）
+		// 1. 并行执行只读工具
 		if (readOnlyTools.length > 0) {
-			if (this.consecutiveReadOnlyRounds >= TaskService.MAX_EXPLORE_ROUNDS && writeTools.length === 0 && specialTools.length === 0) {
-				// 超过探索上限且本轮没有写入工具 → 强制阻断只读工具，返回明确指令要求AI得出结论
-				this.consecutiveBlockedRounds++;
-				console.log(`[TaskService] 🚫 阻断只读工具执行：已超过 ${TaskService.MAX_EXPLORE_ROUNDS} 轮探索上限，连续阻断第${this.consecutiveBlockedRounds}次`);
-
-				// 连续阻断超过上限：说明AI一直无法自主结束，强制结束任务
-				if (this.consecutiveBlockedRounds >= TaskService.MAX_BLOCKED_ROUNDS) {
-					console.log(`[TaskService] 🔴 强制结束任务：连续 ${this.consecutiveBlockedRounds} 次阻断后AI仍未给出结论`);
-					// 返回一个合成的 attempt_completion 结果，直接结束循环
-					const alreadyReadFiles = Array.from(this.fileReadTracker.keys()).slice(0, 20).join('\n- ');
-					const forcedResult = `[系统强制结束探索]\n\n你已读取了以下文件但一直未给出结论：\n- ${alreadyReadFiles}\n\n请基于以上已读取的信息，给出你的分析和结论。`;
-					await this.say('completion_result', forcedResult);
-					return { shouldContinue: false, shouldEndLoop: true };
-				}
-
-				for (const toolUse of readOnlyTools) {
-					toolResults.push({
-						type: 'tool_result',
-						tool_use_id: toolUse.id,
-						content: `[探索阶段结束] 已完成 ${this.consecutiveReadOnlyRounds} 轮只读探索，禁止继续读取文件、搜索代码或访问网页。\n\n你已掌握足够信息，请立即行动：\n- 分析/问答任务：调用 attempt_completion 给出完整结论\n- 编码任务：调用 apply_diff/write_to_file/edit 开始修改代码\n\n这不是工具错误，是系统强制要求你给出结论或开始修改。`,
-						is_error: false
-					} as ContentBlock);
-					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: false });
-				}
-			} else {
-				this.consecutiveBlockedRounds = 0; // 正常执行时重置阻断计数
-				const readResults = await this.executeToolsInParallel(readOnlyTools);
-				toolResults.push(...readResults);
-			}
+			const readResults = await this.executeToolsInParallel(readOnlyTools);
+			toolResults.push(...readResults);
 		}
 
 		// 2. 顺序执行写入工具（需要用户确认）
@@ -1561,34 +1540,21 @@ export class TaskService extends Disposable {
 		});
 		if (allExploration) {
 			this.consecutiveReadOnlyRounds++;
-
-			// 单工具调用计数（不因batch重置，因为batch只读也是探索）
-			if (toolUses.length === 1 && toolUses[0].name !== 'batch') {
-				this.consecutiveSingleReadToolCount++;
-			}
-
-			// 连续2次单独只读调用，注入batch提醒（从3次降到2次，更早提醒）
-			if (this.consecutiveSingleReadToolCount >= 2) {
+			const noProgressReason = this.getExplorationBlockReason(toolUses);
+			if (noProgressReason) {
+				this.mainThreadExplorationGuardActive = true;
 				this.pushHistory({
 					role: 'user',
-					content: '[SYSTEM] 效率提醒：你已经连续' + this.consecutiveSingleReadToolCount + '次单独调用只读工具。请使用batch工具将多个操作合并为一次调用。'
+					content: `${noProgressReason}\n\n这是系统内部纠偏提示，不要把这段话原样回复给用户。请立即切换策略并继续完成用户请求；如果已确认目标文件，就直接修改，不要再次围绕同一批只读搜索打转。`
 				});
-				this.consecutiveSingleReadToolCount = 0; // 提醒后重置
-			}
-
-			// 超过安全兜底上限，强制要求给出结论
-			if (this.consecutiveReadOnlyRounds >= TaskService.MAX_EXPLORE_ROUNDS) {
-				this.pushHistory({
-					role: 'user',
-					content: '[SYSTEM] ⚠️ 你已经进行了' + this.consecutiveReadOnlyRounds + '轮只读探索，已拥有足够的上下文信息。请立即行动：\n- 如果任务是分析/解释/问答类：调用 attempt_completion 给出完整结论，不要继续读取文件\n- 如果任务是编码/修改类：直接调用 edit/apply_diff/write_to_file 开始修改代码\n禁止再次调用任何读取或搜索工具。'
-				});
-				console.log(`[TaskService] 🛑 强制停止探索：已达到 ${this.consecutiveReadOnlyRounds} 轮只读上限`);
+				this.debugLog('[TaskService] 只读探索无进展，已注入内部纠偏提示并继续下一轮');
+				return { shouldContinue: true, shouldEndLoop: false };
 			}
 		} else {
-			// 有实际写入操作（apply_diff/write_to_file/execute_command等），重置所有计数
+			// 有实际写入操作（apply_diff/write_to_file/execute_command等），重置探索计数
 			this.consecutiveReadOnlyRounds = 0;
-			this.consecutiveSingleReadToolCount = 0;
-			this.consecutiveBlockedRounds = 0;
+			this.mainThreadExplorationGuardActive = false;
+			this.resetExplorationProgress();
 		}
 
 		return { shouldContinue: true, shouldEndLoop: false };
@@ -1601,16 +1567,44 @@ export class TaskService extends Disposable {
 	private async executeToolsInParallel(toolUses: Array<{ id: string; name: string; input: any }>): Promise<ContentBlock[]> {
 		const promises = toolUses.map(async (toolUse) => {
 			try {
+				const searchBudgetGuardMessage = this.checkMainThreadExplorationGuard(toolUse);
+				if (searchBudgetGuardMessage) {
+					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: true });
+					return {
+						type: 'tool_result' as const,
+						tool_use_id: toolUse.id,
+						content: searchBudgetGuardMessage,
+						is_error: true
+					};
+				}
+
+				const repetitionCheck = this.toolRepetitionDetector.check({
+					type: 'tool_use',
+					name: toolUse.name as ToolName,
+					params: toolUse.input,
+					partial: false,
+					toolUseId: toolUse.id
+				});
+				if (!repetitionCheck.allowExecution) {
+					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: true });
+					return {
+						type: 'tool_result' as const,
+						tool_use_id: toolUse.id,
+						content: repetitionCheck.askUser?.messageDetail || '工具重复调用，请调整策略',
+						is_error: true
+					};
+				}
+
 				// 显示工具执行状态
 				const toolStatusText = this.formatToolStatusForDisplay(toolUse);
 				await this.say('tool', toolStatusText);
 
-				// 优先检查缓存（缓存命中直接返回内容，避免重复检测误拦截导致AI拿不到内容）
-				const cachedResult = this.toolCache.get(toolUse.name, toolUse.input);
+				// 优先检查缓存。read_file 的同一请求第 2 次应优先复用缓存，而不是再被上层拦截。
+				const cachedResult = this.toolCache.get(toolUse.name, this.normalizeToolCacheInput(toolUse.input));
 				if (cachedResult !== null) {
-					// 缓存命中时检查重复读取：第2次给警告(is_error:false)，第3次给错误(is_error:true)
 					const duplicateCheck = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
-					if (duplicateCheck) {
+					if (duplicateCheck && !duplicateCheck.preferCachedContent) {
+						this.handleDuplicateFileReadIntervention(duplicateCheck);
 						this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: duplicateCheck.isError });
 						return {
 							type: 'tool_result' as const,
@@ -1629,9 +1623,10 @@ export class TaskService extends Disposable {
 					};
 				}
 
-				// 检查重复文件读取（缓存未命中时检查并记录首次读取）
+				// 缓存未命中时，只拦截“已修改文件的确认性回读”或“同一 read_file 请求第 3 次以上”。
 				const duplicateCheck = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
-				if (duplicateCheck) {
+				if (duplicateCheck && !duplicateCheck.preferCachedContent) {
+					this.handleDuplicateFileReadIntervention(duplicateCheck);
 					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: duplicateCheck.isError });
 					return {
 						type: 'tool_result' as const,
@@ -1641,20 +1636,35 @@ export class TaskService extends Disposable {
 					};
 				}
 
-				const result = await this.toolExecutor.executeTool({
-					type: 'tool_use',
-					name: toolUse.name as ToolName,
-					params: toolUse.input,
-					partial: false,
-					toolUseId: toolUse.id
-				});
+					const execution = await this.executeToolWithStructuredResult({
+						type: 'tool_use',
+						name: toolUse.name as ToolName,
+						params: toolUse.input,
+						partial: false,
+						toolUseId: toolUse.id
+					});
+					if (!execution.success) {
+						const failureContent = typeof execution.result === 'string'
+							? execution.result
+							: formatResponse.toolError(execution.error || `${toolUse.name} 执行失败`);
+						this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: true });
+						return {
+							type: 'tool_result' as const,
+							tool_use_id: toolUse.id,
+							content: failureContent,
+							is_error: true
+						};
+					}
+					const result = execution.result ?? '';
 
-				// 截断大工具结果
-				const resultContent = typeof result === 'string' ? result : JSON.stringify(result);
-				const truncatedContent = this.truncateToolResult(resultContent);
+					// 截断大工具结果
+					const resultContent = typeof result === 'string' ? result : JSON.stringify(result);
+					const truncatedContent = this.truncateToolResult(resultContent);
 
-				// 设置缓存
-				this.toolCache.set(toolUse.name, toolUse.input, truncatedContent);
+					// 设置缓存（只缓存成功的只读结果）
+					if (execution.metadata?.shouldCacheResult !== false && this.shouldCacheReadOnlyResult(truncatedContent)) {
+						this.toolCache.set(toolUse.name, this.normalizeToolCacheInput(toolUse.input), truncatedContent);
+					}
 
 				// 更新工具使用统计
 				this.toolUsage[toolUse.name] = (this.toolUsage[toolUse.name] || 0) + 1;
@@ -1703,6 +1713,20 @@ export class TaskService extends Disposable {
 		shouldEndLoop: boolean;
 		toolResult?: ContentBlock;
 	}> {
+		const searchBudgetGuardMessage = this.checkMainThreadExplorationGuard(toolUse);
+		if (searchBudgetGuardMessage) {
+			return {
+				shouldContinue: true,
+				shouldEndLoop: false,
+				toolResult: {
+					type: 'tool_result',
+					tool_use_id: toolUse.id,
+					content: searchBudgetGuardMessage,
+					is_error: true
+				}
+			};
+		}
+
 		// 检查重复调用（batch 是元工具，重复检测交给子工具层面，此处跳过）
 		const repetitionCheck = toolUse.name === 'batch'
 			? { allowExecution: true }
@@ -1715,31 +1739,21 @@ export class TaskService extends Disposable {
 			});
 
 		if (!repetitionCheck.allowExecution) {
-			console.warn('[TaskService] 工具重复调用检测触发:', toolUse.name);
-			this.consecutiveMistakeCount++;
-
-			if (this.consecutiveMistakeCount >= this.consecutiveMistakeLimit) {
-				const { response, text } = await this.ask('mistake_limit_reached', '已达到连续错误限制。请提供指导以继续。');
-
-				if (response === 'messageResponse') {
-					this.consecutiveMistakeCount = 0;
-					return {
-						shouldContinue: true,
-						shouldEndLoop: false,
-						toolResult: {
-							type: 'tool_result',
-							tool_use_id: toolUse.id,
-							content: formatResponse.tooManyMistakes(text),
-							is_error: false
-						}
-					};
-				} else {
-					this.abortTask(ClineApiReqCancelReason.ReachedMistakeLimit);
-					return { shouldContinue: false, shouldEndLoop: true };
-				}
+			const isDoomLoopCorrection = repetitionCheck.askUser?.messageKey === 'doom_loop_detected';
+			if (isDoomLoopCorrection && repetitionCheck.askUser?.messageDetail) {
+				const correctionMessage = toolUse.name === 'task'
+					? `${repetitionCheck.askUser.messageDetail}\n\n这是系统内部纠偏提示，不要把这段话原样回复给用户。你已经派发过相同或等价的子任务，禁止再次启动/恢复同一 explore 子任务。下一步只能：\n1. 直接基于已有子任务结果做判断\n2. 继续读取已经明确的具体文件\n3. 直接修改已确认的目标文件`
+					: `${repetitionCheck.askUser.messageDetail}\n\n这是系统内部纠偏提示，不要把这段话原样回复给用户。你必须立即停止当前重复写入/重复读写策略，改为：\n1. 检查其他相关文件（调用方、配置入口、引用方）\n2. 如果核心改动已经完成，直接给用户结果\n3. 如果仍需继续实现，只能换文件或换策略，禁止再次对同一文件做同类写入`;
+				this.pushHistory({
+					role: 'user',
+					content: correctionMessage
+				});
 			}
 
-			// 返回告警信息（is_error: false 避免 AI 误判工具失败而重试相同操作）
+			// 运行时治理拦截属于“纠偏”而不是“执行错误”，不应累积到 mistake 限制导致任务停机。
+			this.consecutiveMistakeCount = 0;
+
+			// 返回阻断信息。重复调用不再伪装成成功，强制模型调整策略。
 			return {
 				shouldContinue: true,
 				shouldEndLoop: false,
@@ -1747,7 +1761,7 @@ export class TaskService extends Disposable {
 					type: 'tool_result',
 					tool_use_id: toolUse.id,
 					content: repetitionCheck.askUser?.messageDetail || '工具重复调用，请调整策略',
-					is_error: false
+					is_error: true
 				}
 			};
 		}
@@ -1776,11 +1790,12 @@ export class TaskService extends Disposable {
 		}
 
 		// P0优化：对只读工具检查缓存（与 executeToolsInParallel 保持一致）
-		const cachedResult = this.toolCache.get(toolUse.name, toolUse.input);
+		const cachedResult = this.toolCache.get(toolUse.name, this.normalizeToolCacheInput(toolUse.input));
 		if (cachedResult !== null) {
-			// 检查重复读取：第2次警告(is_error:false)，第3次错误(is_error:true)
 			const duplicateCheck = this.checkDuplicateFileRead(toolUse.name, toolUse.input);
-			if (duplicateCheck) {
+			if (duplicateCheck && !duplicateCheck.preferCachedContent) {
+				this.handleDuplicateFileReadIntervention(duplicateCheck);
+				this.consecutiveMistakeCount = 0;
 				this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: duplicateCheck.isError });
 				return {
 					shouldContinue: true,
@@ -1814,19 +1829,38 @@ export class TaskService extends Disposable {
 			const approvalResult = await this.requestToolApproval(toolUse);
 
 			if (!approvalResult.approved) {
+				const rejectionContent = approvalResult.failureKind === 'preflight_failed'
+					? (approvalResult.feedback || '工具预检查失败，请先重新读取目标文件或重新定位修改点。')
+					: approvalResult.feedback
+						? `用户拒绝了工具执行并提供了反馈: ${approvalResult.feedback}`
+						: '用户拒绝了工具执行';
 				return {
 					shouldContinue: true,
 					shouldEndLoop: false,
 					toolResult: {
 						type: 'tool_result',
 						tool_use_id: toolUse.id,
-						content: approvalResult.feedback
-							? `用户拒绝了工具执行并提供了反馈: ${approvalResult.feedback}`
-							: '用户拒绝了工具执行',
+						content: rejectionContent,
 						is_error: true
 					}
 				};
 			}
+		}
+
+		const sameFileWriteGuardMessage = this.checkSameFileWriteBudget(toolUse);
+		if (sameFileWriteGuardMessage) {
+			this.consecutiveMistakeCount = 0;
+			this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: true });
+			return {
+				shouldContinue: true,
+				shouldEndLoop: false,
+				toolResult: {
+					type: 'tool_result',
+					tool_use_id: toolUse.id,
+					content: sameFileWriteGuardMessage,
+					is_error: true
+				}
+			};
 		}
 
 		// 功能1: 写文件操作前自动创建 checkpoint（edit/multiedit/write_to_file/apply_diff）
@@ -1856,18 +1890,19 @@ export class TaskService extends Disposable {
 			const toolStatusText = this.formatToolStatusForDisplay(toolUse);
 			await this.say('tool', toolStatusText);
 
-			const result = await this.toolExecutor.executeTool({
-				type: 'tool_use',
-				name: toolUse.name as ToolName,
-				params: toolUse.input,
-				partial: false,
-				toolUseId: toolUse.id
-			});
+					const execution = await this.executeToolWithStructuredResult({
+						type: 'tool_use',
+						name: toolUse.name as ToolName,
+						params: toolUse.input,
+						partial: false,
+						toolUseId: toolUse.id
+					});
+					const result = execution.result ?? execution.error ?? '';
 
-			// 处理 ask_followup_question 的用户输入
-			if (typeof result === 'string' && result.startsWith('__USER_INPUT_REQUIRED__:')) {
-				const payload = result.substring('__USER_INPUT_REQUIRED__:'.length);
-				const { question } = JSON.parse(payload);
+					// 处理 ask_followup_question 的用户输入
+					if (execution.success && typeof result === 'string' && result.startsWith('__USER_INPUT_REQUIRED__:')) {
+						const payload = result.substring('__USER_INPUT_REQUIRED__:'.length);
+						const { question } = JSON.parse(payload);
 
 				const { response, text } = await this.ask('followup', question);
 
@@ -1886,34 +1921,35 @@ export class TaskService extends Disposable {
 			}
 
 			// 处理 execute_command requires_approval 用户确认（参考Cline）
-			if (typeof result === 'string' && result.startsWith('__APPROVAL_REQUIRED__:')) {
-				const payload = result.substring('__APPROVAL_REQUIRED__:'.length);
-				const { command, cwd } = JSON.parse(payload);
+					if (execution.success && typeof result === 'string' && result.startsWith('__APPROVAL_REQUIRED__:')) {
+						const payload = result.substring('__APPROVAL_REQUIRED__:'.length);
+						const { command, cwd } = JSON.parse(payload);
 
 				const approvalQuestion = `AI 请求执行以下命令，该命令可能产生副作用，请确认是否允许：\n\n\`\`\`\n${command}\n\`\`\`\n${cwd ? `工作目录：${cwd}` : ''}`;
 				const { response, text } = await this.ask('followup', approvalQuestion);
 
 				if (response === 'messageResponse' && text && (text.trim() === '是' || text.trim().toLowerCase() === 'yes' || text.trim() === '确认' || text.trim() === '允许')) {
 					// 用户确认，执行命令
-					const execResult = await this.toolExecutor.executeTool({
-						type: 'tool_use',
-						name: 'execute_command',
-						params: { command, cwd, requires_approval: 'false' },
-						partial: false,
-						toolUseId: toolUse.id
-					});
-					const execContent = typeof execResult === 'string' ? execResult : JSON.stringify(execResult);
-					return {
-						shouldContinue: true,
-						shouldEndLoop: false,
-						toolResult: {
-							type: 'tool_result',
-							tool_use_id: toolUse.id,
-							content: execContent,
-							is_error: false
-						}
-					};
-				} else {
+						const execExecution = await this.executeToolWithStructuredResult({
+							type: 'tool_use',
+							name: 'execute_command',
+							params: { command, cwd, requires_approval: 'false' },
+							partial: false,
+							toolUseId: toolUse.id
+						});
+						const execResult = execExecution.result ?? execExecution.error ?? '';
+						const execContent = typeof execResult === 'string' ? execResult : JSON.stringify(execResult);
+						return {
+							shouldContinue: true,
+							shouldEndLoop: false,
+							toolResult: {
+								type: 'tool_result',
+								tool_use_id: toolUse.id,
+								content: execContent,
+								is_error: !execExecution.success
+							}
+						};
+					} else {
 					// 用户拒绝
 					return {
 						shouldContinue: true,
@@ -1928,12 +1964,54 @@ export class TaskService extends Disposable {
 				}
 			}
 
-			// 截断大工具结果
-			const resultContent = typeof result === 'string' ? result : JSON.stringify(result);
-			let truncatedContent = this.truncateToolResult(resultContent);
+				if (!execution.success) {
+					if (this.shouldCountAsMistake(execution)) {
+						this.consecutiveMistakeCount++;
+					} else {
+						this.consecutiveMistakeCount = 0;
+					}
+					this._onToolCompleted.fire({
+						toolId: toolUse.id,
+						toolName: toolUse.name,
+						isError: true
+					});
+					const failureContent = typeof execution.result === 'string'
+						? execution.result
+						: formatResponse.toolError(execution.error || `${toolUse.name} 执行失败`);
+					const mutationRecoveryHint = this.buildMutationRecoveryHint(toolUse, failureContent);
+					if (mutationRecoveryHint) {
+						this.pushHistory({
+							role: 'user',
+							content: mutationRecoveryHint
+						});
+					}
+					return {
+						shouldContinue: true,
+						shouldEndLoop: false,
+						toolResult: {
+							type: 'tool_result',
+							tool_use_id: toolUse.id,
+							content: failureContent,
+							is_error: true
+						}
+					};
+				}
 
-			// 写入工具执行成功后，使相关缓存失效
-			this.invalidateCacheForWriteTool(toolUse);
+				// 截断大工具结果
+				const resultContent = typeof result === 'string' ? result : JSON.stringify(result);
+				let truncatedContent = this.truncateToolResult(resultContent);
+
+				// 写入工具执行成功后，使相关缓存失效
+				if (execution.metadata?.didWrite) {
+					this.mainThreadExplorationGuardActive = false;
+					this.invalidateCacheForWriteTool(toolUse, execution.metadata.affectedPaths);
+					await this.notifyCommittedFileChanges(execution.metadata.affectedPaths || []);
+					console.log('[TaskService] 文件写入已提交:', execution.metadata.affectedPaths || this.extractWriteToolFilePaths({ name: toolUse.name, input: toolUse.input }));
+				}
+
+				if (toolUse.name === 'task') {
+					this.mainThreadExplorationGuardActive = false;
+				}
 
 			// LSP 诊断由 AI 主动调用 lsp_diagnostics 工具获取，不再自动注入
 			// 避免每次 edit 后阻塞等待 LSP（0.5-2s），提升任务执行速度
@@ -1956,7 +2034,7 @@ export class TaskService extends Disposable {
 			}
 
 				// 🔧 追踪文件变更（仅记录成功执行的写操作）
-			this.trackFileChange(toolUse);
+				this.trackFileChange(toolUse, execution.metadata?.affectedPaths);
 
 			// 🔧 触发工具完成事件
 			this._onToolCompleted.fire({
@@ -2221,24 +2299,50 @@ export class TaskService extends Disposable {
 	/**
 	 * 追踪文件变更（write/delete工具执行成功后调用）
 	 */
-	private trackFileChange(toolUse: { name: string; input: any }): void {
+	private trackFileChange(toolUse: { name: string; input: any }, affectedPaths?: string[]): void {
 		const params = toolUse.input;
 		if (!params) { return; }
 
 		if (toolUse.name === 'delete_file') {
-			const path = params.path as string;
+			const path = this.normalizeWorkspacePath(params.path as string);
 			if (path) {
 				this.fileChangesDeleted.add(path);
 				this.fileChangesWritten.delete(path); // 先创建后删除 → 只保留删除
 			}
 		} else if (TaskService.WRITE_TOOLS.has(toolUse.name)) {
-			const paths = this.extractWriteToolFilePaths(toolUse);
+			const paths = (affectedPaths && affectedPaths.length > 0)
+				? affectedPaths.map(currentPath => this.normalizeWorkspacePath(currentPath)).filter(Boolean)
+				: this.extractWriteToolFilePaths(toolUse);
 			for (const p of paths) {
 				if (p) {
 					this.fileChangesWritten.add(p);
+					const prevWriteCount = this.fileWriteCountTracker.get(p) || 0;
+					this.fileWriteCountTracker.set(p, prevWriteCount + 1);
 				}
 			}
 		}
+	}
+
+	private checkSameFileWriteBudget(toolUse: { name: string; input: any }): string | null {
+		if (!TaskService.WRITE_TOOLS.has(toolUse.name)) {
+			return null;
+		}
+
+		const targetPaths = this.extractWriteToolFilePaths(toolUse)
+			.map(currentPath => this.normalizeWorkspacePath(currentPath))
+			.filter(Boolean);
+
+		if (targetPaths.length === 0) {
+			return null;
+		}
+
+		const overBudgetPath = targetPaths.find(currentPath => (this.fileWriteCountTracker.get(currentPath) || 0) >= TaskService.MAX_WRITES_PER_FILE);
+		if (!overBudgetPath) {
+			return null;
+		}
+
+		const writeCount = this.fileWriteCountTracker.get(overBudgetPath) || 0;
+		return `[FATAL] 文件 "${overBudgetPath}" 在本任务中已被写入 ${writeCount} 次。继续在同一文件反复 edit/multiedit 很容易进入长回路。\n\n请立即切换策略：\n1. 如果核心修改已完成：先 read_file 一次确认，再 attempt_completion\n2. 如果还有问题：优先修改调用方/配置入口/关联文件，而不是继续改这个文件\n3. 仅在你能明确说明“必须追加的最小改动点”时，才允许再改该文件`;
 	}
 
 	/**
@@ -2251,65 +2355,547 @@ export class TaskService extends Disposable {
 		};
 	}
 
-	private invalidateCacheForWriteTool(toolUse: { id: string; name: string; input: any }): void {
-		const params = toolUse.input;
-		const filePath = params.path || params.target_file;
+	private invalidateCacheForWriteTool(toolUse: { id: string; name: string; input: any }, affectedPaths?: string[]): void {
+		if (!TaskService.WRITE_TOOLS.has(toolUse.name) && toolUse.name !== 'delete_file' && toolUse.name !== 'create_directory') {
+			return;
+		}
 
-		if (filePath) {
+		const paths = (affectedPaths && affectedPaths.length > 0)
+			? affectedPaths
+			: this.extractWriteToolFilePaths(toolUse);
+
+		for (const path of paths) {
+			const filePath = this.normalizeWorkspacePath(path);
+			if (!filePath) {
+				continue;
+			}
+
 			this.toolCache.invalidateFile(filePath);
 
-			// 如果是目录相关操作，也使目录缓存失效
 			const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
 			if (dirPath) {
 				this.toolCache.invalidateDirectory(dirPath);
 			}
-
-			// P0优化：文件被修改后，清除其读取记录
-			this.fileReadTracker.delete(filePath);
 		}
 	}
 
 	/**
-	 * P0优化：检测并处理重复文件读取
-	 * 借鉴Cline的实现：跟踪文件读取次数，对重复读取返回简化通知
-	 * - 第2次：返回警告（is_error: false），提醒AI不要再读
-	 * - 第3次及以上：返回错误（is_error: true），强制AI停止循环
-	 * @returns { message, isError } 或 null（允许正常读取）
+	 * read_file 重复读取策略：
+	 * - 已修改文件：禁止再用 read_file 做确认性回读
+	 * - 同一路径同一范围：第 2 次优先复用缓存/底层 stub，第 3 次起视为循环
+	 * - 同一路径不同范围：允许继续读取，避免误伤正常的补充定位
 	 */
-	private checkDuplicateFileRead(toolName: string, params: any): { message: string; isError: boolean } | null {
-		// 只对 read_file 工具进行检测
+	private checkDuplicateFileRead(toolName: string, params: any): DuplicateFileReadCheckResult | null {
 		if (toolName !== 'read_file') {
 			return null;
 		}
 
-		const filePath = params.path;
+		const filePath = this.normalizeWorkspacePath(params.path);
 		if (!filePath) {
 			return null;
 		}
 
-		const readCount = this.fileReadTracker.get(filePath) || 0;
-		this.fileReadTracker.set(filePath, readCount + 1);
+		const fileReadCount = this.fileReadTracker.get(filePath) || 0;
+		this.fileReadTracker.set(filePath, fileReadCount + 1);
 
-		// 首次读取，返回null（允许正常读取）
-		if (readCount < this.DUPLICATE_READ_THRESHOLD) {
-			return null;
-		}
+		const requestKey = this.buildReadFileRequestKey(filePath, params);
+		const requestCount = this.readFileRequestTracker.get(requestKey) || 0;
+		this.readFileRequestTracker.set(requestKey, requestCount + 1);
 
-		console.log(`[TaskService] 检测到重复文件读取: ${filePath} (第${readCount + 1}次)`);
-
-		// 第2次：警告（is_error: false）——内容已在历史中，不返回内容节省 context
-		if (readCount === this.DUPLICATE_READ_THRESHOLD) {
+		if (this.fileChangesWritten.has(filePath)) {
+			if (requestCount === 0) {
+				return null;
+			}
 			return {
-				message: `[DUPLICATE_READ] 文件 "${filePath}" 已读取过，内容已在对话历史中，无需再次读取。请直接使用已有内容完成任务。`,
-				isError: false,
+				filePath,
+				requestKey,
+				message: `[FATAL] 文件 "${filePath}" 已在当前任务中被修改过，并且你已进行过一次确认读取。不要继续围绕同一文件反复 read_file。\n\n请立即改用其他推进方式：\n1. 直接基于当前修改继续后续步骤\n2. 如果还缺依据，去看调用方、引用方或报错来源文件\n3. 如果确实需要再次修改，请先说明上一次修改为什么不足，再直接 edit/multiedit`,
+				isError: true,
+				activateRedirect: true,
 			};
 		}
 
-		// 第3次及以上：错误（is_error: true）——强制AI停止循环
+		if (requestCount === 0) {
+			return null;
+		}
+
+		if (requestCount === 1) {
+			return {
+				filePath,
+				requestKey,
+				message: `[DUPLICATE_READ] 文件 "${filePath}" 的同一 read_file 请求已执行过一次。若缓存命中，请直接复用已有内容；若缓存未命中，本次只允许读取一次，不要继续围绕同一请求重试。`,
+				isError: false,
+				preferCachedContent: true,
+			};
+		}
+
 		return {
-			message: `[FATAL] 文件 "${filePath}" 已被重复读取 ${readCount + 1} 次。这是一个错误——你陷入了循环。\n\n**立即停止读取文件，直接根据对话历史中已有的内容执行修改操作。** 如果确实需要修改文件，请直接调用 edit 或 multiedit 工具。`,
+			filePath,
+			requestKey,
+			message: `[FATAL] 文件 "${filePath}" 的同一 read_file 请求已重复执行 ${requestCount + 1} 次。这说明你没有基于已有内容推进，而是在围绕同一读取动作打转。\n\n立即停止继续重复这个 read_file 请求，改为：\n1. 直接使用已有内容继续修改或总结\n2. 如果还缺信息，读取其他明确相关文件\n3. 不要再对同一路径同一范围重试`,
 			isError: true,
+			activateRedirect: true,
 		};
+	}
+
+	private buildReadFileRequestKey(filePath: string, params: any): string {
+		const startLine = params?.start_line ?? '';
+		const endLine = params?.end_line ?? '';
+		return `${filePath}::${startLine}-${endLine}`;
+	}
+
+	private handleDuplicateFileReadIntervention(result: DuplicateFileReadCheckResult): void {
+		if (!result.activateRedirect || this.duplicateReadRedirectTracker.has(result.requestKey)) {
+			return;
+		}
+
+		this.duplicateReadRedirectTracker.add(result.requestKey);
+		this.mainThreadExplorationGuardActive = true;
+		this.pushHistory({
+			role: 'user',
+			content: `你刚刚对 "${result.filePath}" 的 read_file 已经进入重复/空转状态。\n\n这是系统内部纠偏提示，不要把这段话原样回复给用户。下一步只能：\n1. 直接基于已拿到的内容继续修改或给出结论\n2. 如果仍缺依据，只去看调用方、引用方、配置入口或报错来源等其他明确文件\n3. 如果该文件已在本任务中修改过，禁止再用 read_file 回读确认\n\n不要再继续同一个 read_file 请求，也不要再围绕这个文件空转。`
+		});
+	}
+
+	private normalizeWorkspacePath(filePath?: string): string {
+		if (!filePath) {
+			return '';
+		}
+		const normalizedInput = filePath.replace(/^file:\/\//, '');
+		const absolutePath = normalizedInput.startsWith('/')
+			? normalizedInput
+			: `${this.workspaceRoot.replace(/\/$/, '')}/${normalizedInput.replace(/^\.\//, '')}`;
+		return path.normalize(absolutePath);
+	}
+
+	private normalizeToolCacheInput(input: any): any {
+		if (Array.isArray(input)) {
+			return input.map(item => this.normalizeToolCacheInput(item));
+		}
+
+		if (!input || typeof input !== 'object') {
+			return input;
+		}
+
+		const normalized: Record<string, any> = {};
+		for (const [key, value] of Object.entries(input)) {
+			if (typeof value === 'string' && ['path', 'cwd', 'target_file'].includes(key)) {
+				normalized[key] = this.normalizeWorkspacePath(value);
+				continue;
+			}
+			normalized[key] = this.normalizeToolCacheInput(value);
+		}
+
+		return normalized;
+	}
+
+	private buildExplorationFingerprints(toolUses: Array<{ id: string; name: string; input: any }>): string[] {
+		const fingerprints = new Set<string>();
+
+		const addFingerprint = (toolName: string, input: any) => {
+			switch (toolName) {
+				case 'read_file':
+					fingerprints.add(`read:${this.normalizeWorkspacePath(input?.path)}`);
+					break;
+				case 'list_files':
+					fingerprints.add(`list:${this.normalizeWorkspacePath(input?.path)}:${input?.recursive ?? 'false'}:${input?.max_depth ?? ''}`);
+					break;
+				case 'glob':
+					fingerprints.add(`glob:${this.normalizeWorkspacePath(input?.path)}:${input?.file_pattern ?? ''}`);
+					break;
+				case 'search_files':
+					fingerprints.add(`search:${this.normalizeWorkspacePath(input?.path)}:${input?.regex ?? ''}:${input?.file_pattern ?? ''}`);
+					break;
+				case 'codebase_search':
+					fingerprints.add(`codebase:${this.normalizeWorkspacePath(input?.path)}:${input?.query ?? ''}:${input?.file_pattern ?? ''}`);
+					break;
+				case 'skill':
+					fingerprints.add(`skill:${JSON.stringify(input ?? {})}`);
+					break;
+				default:
+					fingerprints.add(`${toolName}:${JSON.stringify(this.normalizeToolCacheInput(input))}`);
+					break;
+			}
+		};
+
+		for (const toolUse of toolUses) {
+			if (toolUse.name === 'batch') {
+				try {
+					const rawCalls = toolUse.input?.tool_calls;
+					const calls: Array<{ name: string; params?: any; input?: any }> = typeof rawCalls === 'string'
+						? JSON.parse(rawCalls)
+						: (Array.isArray(rawCalls) ? rawCalls : []);
+					for (const call of calls) {
+						addFingerprint(call.name, call.params ?? call.input ?? {});
+					}
+				} catch {
+					fingerprints.add(`batch:${JSON.stringify(this.normalizeToolCacheInput(toolUse.input))}`);
+				}
+				continue;
+			}
+
+			addFingerprint(toolUse.name, toolUse.input);
+		}
+
+		return Array.from(fingerprints);
+	}
+
+	private resetExplorationProgress(): void {
+		this.consecutiveNoProgressExplorationRounds = 0;
+		this.explorationFingerprintsSeen.clear();
+		this.mainThreadSearchBurstCount = 0;
+	}
+
+	private normalizeTextValue(value: unknown): string {
+		return typeof value === 'string' ? value.trim() : '';
+	}
+
+	private getExplorationBlockReason(toolUses: Array<{ id: string; name: string; input: any }>): string | null {
+		const fingerprints = this.buildExplorationFingerprints(toolUses);
+		const hasNewInformation = fingerprints.some(fingerprint => !this.explorationFingerprintsSeen.has(fingerprint));
+
+		for (const fingerprint of fingerprints) {
+			this.explorationFingerprintsSeen.add(fingerprint);
+		}
+
+		if (hasNewInformation) {
+			this.consecutiveNoProgressExplorationRounds = 0;
+			return null;
+		}
+
+		this.consecutiveNoProgressExplorationRounds++;
+		if (this.consecutiveNoProgressExplorationRounds < this.NO_PROGRESS_EXPLORATION_THRESHOLD) {
+			return null;
+		}
+
+		return `检测到连续 ${this.consecutiveNoProgressExplorationRounds} 轮只读探索都没有获得新的文件或搜索线索，当前策略已无进展。\n\n立即停止继续读取/搜索同一批目标，改用不同策略：\n1. 重新定位目标文件路径或模块边界\n2. 直接对已确认的目标文件执行修改\n3. 如果需要大范围重构或删功能，先询问用户`;
+	}
+
+	private isLikelyInternalMetaResponse(message: string): boolean {
+		if (!message) {
+			return false;
+		}
+
+		const suspiciousPatterns = [
+			/不要把这段话原样回复给用户/,
+			/系统内部纠偏提示/,
+			/只读探索/,
+			/主线程/,
+			/宽泛搜索/,
+			/task\(explore\)/,
+			/subagent_type="explore"/,
+			/下一轮必须/,
+			/改用不同策略/,
+			/继续读取\/搜索同一批目标/,
+			/等待同一 task_id/,
+			/不要重复派发/,
+			/子 Agent .*正在执行中/,
+		];
+
+		return suspiciousPatterns.some(pattern => pattern.test(message));
+	}
+
+	// @ts-ignore 保留这段策略文案，供后续重新启用更温和的探索重定向时复用
+	private getExplorationRedirectReason(toolUses: Array<{ id: string; name: string; input: any }>): string | null {
+		if (this.fileChangesWritten.size > 0) {
+			return null;
+		}
+
+		if (this.consecutiveReadOnlyRounds < this.EXPLORATION_REDIRECT_ROUNDS) {
+			return null;
+		}
+
+		const filesRead = this.fileReadTracker.size;
+		if (filesRead < this.EXPLORATION_REDIRECT_MIN_FILES) {
+			return null;
+		}
+
+		const containsBroadExploration = toolUses.some(toolUse => {
+			if (this.MAIN_THREAD_SEARCH_TOOLS.has(toolUse.name)) {
+				return true;
+			}
+			if (toolUse.name !== 'batch') {
+				return false;
+			}
+			try {
+				const rawCalls = toolUse.input?.tool_calls;
+				const calls: Array<{ tool?: string; name?: string }> = typeof rawCalls === 'string'
+					? JSON.parse(rawCalls)
+					: (Array.isArray(rawCalls) ? rawCalls : []);
+				return calls.some(call => this.MAIN_THREAD_SEARCH_TOOLS.has(call.tool || call.name || ''));
+			} catch {
+				return false;
+			}
+		});
+
+		if (!containsBroadExploration) {
+			return null;
+		}
+
+		return `你已经完成 ${this.consecutiveReadOnlyRounds} 轮只读探索，并且已读取 ${filesRead} 个文件。参照 Claude Code / OpenCode 的调度逻辑，不要继续在主线程做宽泛搜索（glob/search_files/codebase_search/list_files）。\n\n下一轮应优先基于已有结果推进：\n1. 如果目标文件已明确：直接修改已确认的目标文件\n2. 如果还缺少少量依据：只读取明确目标文件，不要继续宽搜\n3. 只有当调查明显跨模块、需要独立多轮探索时，才考虑使用 task 工具，subagent_type="explore"\n\n禁止继续在主线程里围绕同一批搜索工具兜圈子。`;
+	}
+
+	private checkMainThreadExplorationGuard(toolUse: { id: string; name: string; input: any }): string | null {
+		const prematureExploreMessage = this.checkPrematureExploreDelegation(toolUse);
+		if (prematureExploreMessage) {
+			return prematureExploreMessage;
+		}
+
+		const isBroadSearch = this.isBroadSearchToolCall(toolUse);
+		if (isBroadSearch) {
+			this.mainThreadSearchBurstCount++;
+		}
+
+		if (!this.mainThreadExplorationGuardActive) {
+			return null;
+		}
+
+		if (toolUse.name === 'task') {
+			return null;
+		}
+
+		if (!isBroadSearch) {
+			return null;
+		}
+
+		const maxBursts = this.explorationBudget.maxMainThreadSearchBursts;
+		if (this.mainThreadSearchBurstCount <= maxBursts) {
+			return null;
+		}
+
+		return `[FATAL] 主线程宽搜已触发 ${this.mainThreadSearchBurstCount} 次，超过预算 ${maxBursts}。参照 Claude Code / OpenCode 的调度逻辑，当前回合请停止继续调用 glob/search_files/codebase_search/list_files（包括 batch 中的这类调用）。\n\n下一步请优先基于已有结果推进：\n1. 直接修改已经确认的目标文件\n2. 如果只是想确认某个明确文件内容，只读那个具体文件\n3. 只有当调查明显跨模块、需要独立多轮探索时，才使用 task 工具，subagent_type="explore"\n\n不要再做宽泛搜索。`;
+	}
+
+	private checkPrematureExploreDelegation(toolUse: { id: string; name: string; input: any }): string | null {
+		if (toolUse.name !== 'task') {
+			return null;
+		}
+
+		const subagentType = this.normalizeTextValue(toolUse.input?.subagent_type ?? '');
+		if (subagentType !== 'explore') {
+			return null;
+		}
+
+		if (toolUse.input?.task_id) {
+			return null;
+		}
+
+		if (this.fileChangesWritten.size > 0) {
+			return null;
+		}
+
+		const filesRead = this.fileReadTracker.size;
+		const hasMainThreadNarrowing =
+			filesRead >= this.explorationBudget.minFilesBeforeDelegation &&
+			this.consecutiveReadOnlyRounds >= this.explorationBudget.minReadOnlyRoundsBeforeDelegation;
+		if (hasMainThreadNarrowing || this.mainThreadExplorationGuardActive) {
+			return null;
+		}
+
+		const rawPrompt = this.normalizeTextValue(toolUse.input?.prompt ?? toolUse.input?.task ?? '');
+		const asksForBroadSurvey = /(完整结构|整体架构|所有(?:java)?文件|所有实现|所有类|完整返回|全部文件|整个模块|模块的所有|完整分析)/.test(rawPrompt);
+		const firstRounds = this.totalApiRounds <= this.explorationBudget.maxMainThreadSearchBursts;
+		const hasAnyMainThreadWork = filesRead > 0 || this.consecutiveReadOnlyRounds > 0;
+
+		if (asksForBroadSurvey && hasAnyMainThreadWork) {
+			return null;
+		}
+
+		if (!firstRounds && !asksForBroadSurvey) {
+			return null;
+		}
+
+		return `[GUIDANCE] 当前不建议直接启动新的 task(explore)。参照 Claude Code / OpenCode 的调度逻辑，在主线程尚未完成至少 ${this.explorationBudget.minReadOnlyRoundsBeforeDelegation} 轮只读收敛、且未读到至少 ${this.explorationBudget.minFilesBeforeDelegation} 个关键文件之前，不要把调查整包外包给 explore 子 Agent。\n\n请先改用主线程收敛：\n1. 先用 glob / search_files / list_files 缩小范围\n2. 继续读取 1-${this.explorationBudget.minFilesBeforeDelegation} 个最关键文件确认边界\n3. 只有当仍然明显跨模块、需要独立多轮调查时，才启动 task(subagent_type="explore")`;
+	}
+
+	private isBroadSearchToolCall(toolUse: { name: string; input: any }): boolean {
+		if (this.MAIN_THREAD_SEARCH_TOOLS.has(toolUse.name)) {
+			return true;
+		}
+
+		if (toolUse.name !== 'batch') {
+			return false;
+		}
+
+		try {
+			const rawCalls = toolUse.input?.tool_calls;
+			const calls: Array<{ tool?: string; name?: string }> = typeof rawCalls === 'string'
+				? JSON.parse(rawCalls)
+				: (Array.isArray(rawCalls) ? rawCalls : []);
+			return calls.some(call => this.MAIN_THREAD_SEARCH_TOOLS.has(call.tool || call.name || ''));
+		} catch {
+			return false;
+		}
+	}
+
+	private shouldCacheReadOnlyResult(content: string): boolean {
+		const normalized = content.trim();
+		if (!normalized) {
+			return false;
+		}
+		return !(
+			normalized.includes('<error>') ||
+			normalized.includes('<fatal_error>') ||
+			normalized.startsWith('错误:') ||
+			normalized.startsWith('编辑失败:') ||
+			normalized.startsWith('多处编辑失败:') ||
+			normalized.startsWith('搜索文件失败:') ||
+			normalized.startsWith('代码库搜索失败:') ||
+			normalized.startsWith('工具 ')
+		);
+	}
+
+	private buildMutationRecoveryHint(toolUse: { name: string; input: any }, failureContent: string): string | null {
+		if (!TaskService.WRITE_TOOLS.has(toolUse.name)) {
+			return null;
+		}
+
+		const normalized = failureContent.trim();
+		const targetPath = this.extractWriteToolFilePaths(toolUse)[0] || toolUse.input?.path || toolUse.input?.target_file || '当前文件';
+
+		const staleContentFailure =
+			normalized.includes('oldString not found in content') ||
+			normalized.includes('Found multiple matches for oldString') ||
+			normalized.includes('SEARCH块') ||
+			normalized.includes('必须与文件内容完全匹配');
+
+		const mutationReadinessFailure =
+			normalized.includes('File has not been read yet') ||
+			normalized.includes('File has only been partially read') ||
+			normalized.includes('File has been modified since read') ||
+			normalized.includes('预检查失败');
+
+		const idempotentDiffFailure =
+			normalized.includes('apply_diff 未产生任何修改') ||
+			normalized.includes('最可能的原因：修改已存在于文件中');
+
+		if (!staleContentFailure && !mutationReadinessFailure && !idempotentDiffFailure) {
+			return null;
+		}
+
+		if (idempotentDiffFailure) {
+			return `[SYSTEM] 内部纠偏：你刚刚对 ${targetPath} 的修改很可能已经生效，不要继续对同一文件重复提交等价补丁。下一步只能二选一：\n1. read_file 确认当前版本，若目标已实现则直接 attempt_completion\n2. 如果问题已转移，改查调用方、配置入口或引用方\n不要再次围绕同一 SEARCH/REPLACE 块重试。`;
+		}
+
+		if (staleContentFailure) {
+			return `[SYSTEM] 内部纠偏：你刚刚对 ${targetPath} 的编辑使用了过期或不够精确的定位内容。不要继续拿旧 old_string / 旧 SEARCH 块重试。正确做法：\n1. 先完整 read_file 当前版本全文\n2. 如果同一文件还有多处修改，合并成一次 multiedit\n3. 如果新增错误已经不在这个文件，转去处理引用方或配置入口`;
+		}
+
+		return `[SYSTEM] 内部纠偏：${targetPath} 当前不满足安全修改条件。不要继续重复提交同类写入。正确做法：\n1. 先完整 read_file 当前版本全文，避免基于局部视图或旧版本继续改\n2. 如果当前文件刚改过但问题转移了，去查调用方、配置入口或引用方\n3. 如果只是补多个点，改用一次 multiedit 合并修改`;
+	}
+
+	private shouldCountAsMistake(execution: ToolExecutionResult): boolean {
+		if (
+			execution.status === 'blocked_loop' ||
+			execution.status === 'approval_required' ||
+			execution.status === 'input_required'
+		) {
+			return false;
+		}
+
+		if (execution.nextAction && execution.nextAction !== 'none') {
+			return false;
+		}
+
+		const code = (execution.code || '').toUpperCase();
+		if (
+			code.includes('LOOP') ||
+			code.includes('PRECHECK') ||
+			code.includes('READ_BEFORE_WRITE') ||
+			code.includes('STALE') ||
+			code.includes('UNCHANGED') ||
+			code.includes('BUDGET') ||
+			code.includes('REPETITION')
+		) {
+			return false;
+		}
+
+		const errorText = execution.error || '';
+		if (
+			errorText.includes('预检查失败') ||
+			errorText.includes('must be read') ||
+			errorText.includes('modified since read') ||
+			errorText.includes('oldString not found in content') ||
+			errorText.includes('同一 read_file 请求')
+		) {
+			return false;
+		}
+
+		return true;
+	}
+
+	private async executeToolWithStructuredResult(toolUse: { type: 'tool_use'; name: ToolName; params: any; partial: boolean; toolUseId?: string }): Promise<ToolExecutionResult> {
+		const detailedExecutor = this.toolExecutor as IToolExecutor & {
+			executeToolWithResult?: (toolUse: { type: 'tool_use'; name: ToolName; params: any; partial: boolean; toolUseId?: string }) => Promise<ToolExecutionResult>;
+		};
+
+		if (typeof detailedExecutor.executeToolWithResult === 'function') {
+			return detailedExecutor.executeToolWithResult(toolUse);
+		}
+
+		const result = await this.toolExecutor.executeTool(toolUse);
+		const text = typeof result === 'string' ? result : JSON.stringify(result);
+		const normalized = text.trim();
+		const protocolFatal = normalized.includes('<fatal_error>');
+		const protocolError = normalized.includes('<error>');
+		const isApprovalRequired = normalized.startsWith('__APPROVAL_REQUIRED__:');
+		const isInputRequired = normalized.startsWith('__USER_INPUT_REQUIRED__:');
+		const hasCommonErrorPrefix =
+			normalized.startsWith('错误:') ||
+			normalized.startsWith('编辑失败:') ||
+			normalized.startsWith('多处编辑失败:') ||
+			normalized.startsWith('搜索文件失败:') ||
+			normalized.startsWith('代码库搜索失败:') ||
+			normalized.startsWith('[FATAL]');
+		const hasError = protocolFatal || protocolError || hasCommonErrorPrefix;
+		const status: ToolExecutionResult['status'] = isApprovalRequired
+			? 'approval_required'
+			: isInputRequired
+				? 'input_required'
+				: protocolFatal
+					? 'fatal_error'
+					: hasError
+						? 'error'
+						: 'success';
+		const success = status === 'success' || status === 'approval_required' || status === 'input_required';
+		const cleanedError = hasError ? normalized.replace(/<[^>]+>/g, '').trim() : undefined;
+		const nextAction: ToolExecutionResult['nextAction'] = status === 'fatal_error'
+			? 'ask_user'
+			: status === 'error'
+				? (
+					cleanedError?.includes('预检查失败') ||
+					cleanedError?.includes('must be read') ||
+					cleanedError?.includes('modified since read')
+				) ? 'read_before_write' : 'refocus'
+				: undefined;
+		return {
+			success,
+			status,
+			result,
+			error: cleanedError,
+			code: hasError ? (protocolFatal ? 'FALLBACK_FATAL_ERROR' : 'FALLBACK_TOOL_ERROR') : undefined,
+			retryable: hasError ? false : undefined,
+			nextAction,
+			metadata: {
+				toolName: toolUse.name,
+				affectedPaths: TaskService.WRITE_TOOLS.has(toolUse.name)
+					? this.extractWriteToolFilePaths({ name: toolUse.name, input: toolUse.params })
+					: [],
+				didWrite: false,
+				shouldCacheResult: !hasError && status !== 'approval_required' && status !== 'input_required',
+			}
+		};
+	}
+
+	private async notifyCommittedFileChanges(paths: string[]): Promise<void> {
+		if (paths.length === 0) {
+			return;
+		}
+
+		const detailedExecutor = this.toolExecutor as IToolExecutor & {
+			clearCommittedStateForPaths?: (paths: string[]) => void;
+		};
+		detailedExecutor.clearCommittedStateForPaths?.(paths.map(path => this.normalizeWorkspacePath(path)).filter(Boolean));
 	}
 
 	/**
@@ -2333,6 +2919,10 @@ export class TaskService extends Disposable {
 	 */
 	public resetFileReadTracker(): void {
 		this.fileReadTracker.clear();
+		this.readFileRequestTracker.clear();
+		this.duplicateReadRedirectTracker.clear();
+		this.fileWriteCountTracker.clear();
+		this.resetExplorationProgress();
 	}
 
 	/**
@@ -2363,7 +2953,17 @@ export class TaskService extends Disposable {
 	private async requestToolApproval(toolUse: { id: string; name: string; input: any }): Promise<{
 		approved: boolean;
 		feedback?: string;
+		failureKind?: 'preflight_failed' | 'user_rejected';
 	}> {
+		const preflightFailure = await this.preflightApprovalToolUse(toolUse);
+		if (preflightFailure) {
+			return {
+				approved: false,
+				feedback: preflightFailure,
+				failureKind: 'preflight_failed'
+			};
+		}
+
 		// 构建工具描述信息
 		const toolDescription = this.formatToolForApproval(toolUse);
 
@@ -2377,11 +2977,39 @@ export class TaskService extends Disposable {
 			return { approved: true };
 		} else if (response === 'messageResponse' && text) {
 			// 用户提供了反馈，可能需要修改
-			return { approved: false, feedback: text };
+			return { approved: false, feedback: text, failureKind: 'user_rejected' };
 		} else {
 			// 用户拒绝
-			return { approved: false };
+			return { approved: false, failureKind: 'user_rejected' };
 		}
+	}
+
+	private async preflightApprovalToolUse(toolUse: { id: string; name: string; input: any }): Promise<string | null> {
+		if (typeof this.toolExecutor.preflightToolUse !== 'function') {
+			return null;
+		}
+
+		const preflight = await this.toolExecutor.preflightToolUse({
+			type: 'tool_use',
+			name: toolUse.name as ToolName,
+			params: toolUse.input,
+			partial: false,
+			toolUseId: toolUse.id
+		});
+
+		if (!preflight || preflight.success) {
+			return null;
+		}
+
+		if (typeof preflight.result === 'string' && preflight.result.trim()) {
+			return preflight.result;
+		}
+
+		if (preflight.error?.trim()) {
+			return formatResponse.toolError(preflight.error);
+		}
+
+		return formatResponse.toolError(`${toolUse.name} 预检查失败`);
 	}
 
 	/**
@@ -2696,34 +3324,32 @@ case 'execute_command':
 		shouldEndLoop: boolean;
 		toolResult?: ContentBlock;
 	}> {
-		let result = toolUse.input.result;
+		const result = typeof toolUse.input.result === 'string' ? toolUse.input.result.trim() : '';
 
 		if (!result) {
-			// attempt_completion 调用意味着 AI 已经完成任务。
-			// 无论 result 是否存在，都应该结束循环（AI 可能已将结果作为文本输出）。
-			// 策略：先在最近 5 条 assistant 消息里找文本作为结果，找不到就静默结束。
-			const recentAssistants = [...this.apiConversationHistory]
-				.reverse()
-				.filter(m => m.role === 'assistant')
-				.slice(0, 5);
-
-			for (const msg of recentAssistants) {
-				const content = msg.content;
-				if (typeof content === 'string' && content.trim()) {
-					result = content.trim();
-					break;
-				} else if (Array.isArray(content)) {
-					const textPart = content.find((c: any) => c.type === 'text' && c.text?.trim());
-					if (textPart) {
-						result = (textPart as any).text.trim();
-						break;
-					}
+			return {
+				shouldContinue: true,
+				shouldEndLoop: false,
+				toolResult: {
+					type: 'tool_result',
+					tool_use_id: toolUse.id,
+					content: '[FATAL] attempt_completion 缺少 result 摘要。不要省略结果，也不要依赖系统帮你从最近文本里猜测完成内容。请立即重试 attempt_completion，并用 3-8 行高信噪比摘要明确说明：改了什么、验证了什么、还剩什么（如果确实没有剩余就不要写“待办”）。',
+					is_error: true
 				}
-			}
+			};
+		}
 
-			// 无论是否找到文本，attempt_completion 调用都意味着任务完成，直接结束
-			console.log('[TaskService] attempt_completion 无 result 参数，静默结束任务（AI 已完成输出）');
-			return { shouldContinue: true, shouldEndLoop: true };
+		if (this.isLikelyInternalMetaResponse(result) || /[?？]\s*$/.test(result)) {
+			return {
+				shouldContinue: true,
+				shouldEndLoop: false,
+				toolResult: {
+					type: 'tool_result',
+					tool_use_id: toolUse.id,
+					content: '[FATAL] 当前 attempt_completion 的 result 更像内部策略说明、等待状态，或以问题结尾，不是可交付的最终结果。请只保留面向用户的完成摘要，再次调用 attempt_completion。',
+					is_error: true
+				}
+			};
 		}
 
 		// 功能2: Debug 模式自动测试循环
@@ -3237,7 +3863,7 @@ case 'execute_command':
 			console.log(`[TaskService] ContextCompactor 修剪完成: 修剪了 ${stats.compactedParts} 个工具输出, 节省 ${stats.savedTokens} tokens, 当前 ${newTokens} tokens`);
 
 			// 修剪后重置文件读取追踪器（部分工具输出已移除）
-			this.fileReadTracker.clear();
+			this.resetFileReadTracker();
 
 			// 如果修剪后仍在限制内，直接返回
 			if (newTokens <= allowedTokens) {
@@ -3321,7 +3947,7 @@ case 'execute_command':
 			}
 
 			// 分层压缩后重置文件读取追踪器（旧工具输出已移除，AI 可能需要重读某些文件）
-			this.fileReadTracker.clear();
+			this.resetFileReadTracker();
 			console.log('[TaskService] 上下文压缩完成，重置文件读取追踪器');
 
 			// 如果分层压缩后仍在限制内，直接返回

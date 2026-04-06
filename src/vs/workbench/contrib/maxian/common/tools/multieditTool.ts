@@ -167,36 +167,50 @@ export function executeMultiedit(content: string, edits: EditOperation[]): Multi
 			};
 		}
 
-		// 使用 fuzzyReplace 执行容错匹配替换（对齐 OpenCode multiedit.ts 调用 EditTool 的方式）
-		const fuzzyResult = fuzzyReplace(currentContent, edit.oldString, edit.newString, edit.replaceAll ?? false);
-
-		if (!fuzzyResult.success || fuzzyResult.matchCount === 0) {
-			const errMsg = fuzzyResult.error
-				? `${fuzzyResult.error}`
-				: `在文件中未找到匹配的内容 "${edit.oldString.substring(0, 30)}..."`;
+		const exactMatchCount = currentContent.split(edit.oldString).length - 1;
+		if (exactMatchCount > 1 && !(edit.replaceAll ?? false)) {
 			details.push({
 				index: i,
 				success: false,
 				oldString: edit.oldString.substring(0, 50),
-				matchCount: 0,
-				error: errMsg,
+				matchCount: exactMatchCount,
+				error: 'Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.',
 			});
 			return {
 				success: false,
 				successCount,
 				totalCount: edits.length,
-				error: `编辑 #${i + 1} 失败: ${errMsg}`,
+				error: `编辑 #${i + 1} 失败: Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.`,
 				details,
 			};
 		}
 
-		currentContent = fuzzyResult.result;
+		const fuzzy = fuzzyReplace(currentContent, edit.oldString, edit.newString, !!(edit.replaceAll ?? false));
+		if (!fuzzy.success) {
+			const failure = fuzzy.error || 'oldString not found in content';
+			details.push({
+				index: i,
+				success: false,
+				oldString: edit.oldString.substring(0, 50),
+				matchCount: 0,
+				error: failure,
+			});
+			return {
+				success: false,
+				successCount,
+				totalCount: edits.length,
+				error: `编辑 #${i + 1} 失败: ${failure}`,
+				details,
+			};
+		}
+
+		currentContent = fuzzy.result;
 
 		details.push({
 			index: i,
 			success: true,
 			oldString: edit.oldString.substring(0, 50),
-			matchCount: fuzzyResult.matchCount,
+			matchCount: fuzzy.matchCount,
 		});
 		successCount++;
 	}
@@ -241,7 +255,8 @@ export const MULTIEDIT_TOOL_DESCRIPTION = `## multiedit
 
 **规则**：
 - 编辑按顺序执行，每个基于前一个的结果
-- oldString 支持容错匹配（空格/缩进轻微不一致也能匹配）
+- oldString 必须与文件内容精确匹配
+- 任意一个 oldString 找不到或多匹配，整个 multiedit 直接失败
 - 最多支持 ${MULTIEDIT_CONFIG.MAX_EDITS} 个编辑操作
 
 **参数**：

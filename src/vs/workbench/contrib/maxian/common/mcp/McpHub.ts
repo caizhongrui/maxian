@@ -13,10 +13,19 @@ import { McpClient } from './McpClient.js';
 
 export type McpHubChangeListener = (servers: McpServerInfo[]) => void;
 
+interface McpRetryState {
+	failureCount: number;
+	nextRetryAt: number;
+	lastError: string;
+}
+
 export class McpHub {
 	private servers: Map<string, McpServerInfo> = new Map();
 	private clients: Map<string, McpClient> = new Map();
+	private retryStates: Map<string, McpRetryState> = new Map();
 	private changeListeners: McpHubChangeListener[] = [];
+	private static readonly RETRY_BASE_DELAY_MS = 3000;
+	private static readonly RETRY_MAX_DELAY_MS = 60000;
 
 	/**
 	 * 获取所有服务器状态
@@ -51,7 +60,28 @@ export class McpHub {
 	/**
 	 * 连接（或重连）指定服务器
 	 */
-	async connectServer(config: McpServerConfig): Promise<McpServerInfo> {
+	async connectServer(config: McpServerConfig, options?: { force?: boolean }): Promise<McpServerInfo> {
+		const forceRetry = options?.force === true;
+		const retryState = this.retryStates.get(config.name);
+		const now = Date.now();
+		if (!forceRetry && retryState && retryState.nextRetryAt > now) {
+			const existing = this.servers.get(config.name);
+			const waitSeconds = Math.ceil((retryState.nextRetryAt - now) / 1000);
+			const cooledDown: McpServerInfo = {
+				config,
+				tools: existing?.tools || [],
+				resources: existing?.resources || [],
+				resourceTemplates: existing?.resourceTemplates || [],
+				isConnected: false,
+				isConnecting: false,
+				error: `连接冷却中，请 ${waitSeconds}s 后重试。上次错误: ${retryState.lastError}`,
+				sessionId: undefined,
+			};
+			this.servers.set(config.name, cooledDown);
+			this.notifyChange();
+			return cooledDown;
+		}
+
 		const existing = this.servers.get(config.name);
 		const info: McpServerInfo = {
 			config,
@@ -90,9 +120,13 @@ export class McpHub {
 				sessionId: (client as any).sessionId,
 			};
 			this.servers.set(config.name, connected);
+			this.clearRetryState(config.name);
 			this.notifyChange();
 			return connected;
 		} catch (error: any) {
+			const errorMessage = error?.message || String(error);
+			const retryState = this.markRetryFailure(config.name, errorMessage);
+			const retryInSec = Math.ceil((retryState.nextRetryAt - Date.now()) / 1000);
 			const failed: McpServerInfo = {
 				config,
 				tools: [],
@@ -100,7 +134,7 @@ export class McpHub {
 				resourceTemplates: [],
 				isConnected: false,
 				isConnecting: false,
-				error: error?.message || String(error),
+				error: `${errorMessage}（${retryInSec}s 后自动允许重试）`,
 			};
 			this.servers.set(config.name, failed);
 			this.clients.delete(config.name);
@@ -115,6 +149,7 @@ export class McpHub {
 	disconnectServer(name: string): void {
 		this.servers.delete(name);
 		this.clients.delete(name);
+		this.retryStates.delete(name);
 		this.notifyChange();
 	}
 
@@ -124,7 +159,7 @@ export class McpHub {
 	async updateServer(config: McpServerConfig): Promise<McpServerInfo> {
 		this.disconnectServer(config.name);
 		if (config.enabled) {
-			return this.connectServer(config);
+			return this.connectServer(config, { force: true });
 		}
 		// 禁用：只存配置，不连接
 		const info: McpServerInfo = {
@@ -191,8 +226,24 @@ export class McpHub {
 	 * 从存储格式加载配置并批量连接
 	 */
 	async loadConfigs(configs: McpServerConfig[]): Promise<void> {
-		const promises = configs
-			.filter(c => c.enabled)
+		const uniqueEnabledConfigs: McpServerConfig[] = [];
+		const seenSignatures = new Set<string>();
+		for (const config of configs) {
+			if (!config.enabled) {
+				continue;
+			}
+			const signature = JSON.stringify({
+				url: config.url || '',
+				headers: config.headers || {},
+			});
+			if (seenSignatures.has(signature)) {
+				continue;
+			}
+			seenSignatures.add(signature);
+			uniqueEnabledConfigs.push(config);
+		}
+
+		const promises = uniqueEnabledConfigs
 			.map(c => this.connectServer(c).catch(err => {
 				console.error(`[McpHub] 连接服务器 ${c.name} 失败:`, err);
 			}));
@@ -205,6 +256,27 @@ export class McpHub {
 	dispose(): void {
 		this.servers.clear();
 		this.clients.clear();
+		this.retryStates.clear();
 		this.changeListeners = [];
+	}
+
+	private markRetryFailure(name: string, errorMessage: string): McpRetryState {
+		const previous = this.retryStates.get(name);
+		const failureCount = (previous?.failureCount || 0) + 1;
+		const delay = Math.min(
+			McpHub.RETRY_BASE_DELAY_MS * Math.pow(2, failureCount - 1),
+			McpHub.RETRY_MAX_DELAY_MS
+		);
+		const retryState: McpRetryState = {
+			failureCount,
+			nextRetryAt: Date.now() + delay,
+			lastError: errorMessage,
+		};
+		this.retryStates.set(name, retryState);
+		return retryState;
+	}
+
+	private clearRetryState(name: string): void {
+		this.retryStates.delete(name);
 	}
 }

@@ -72,8 +72,23 @@ export class ToolResultCache {
 	 * 生成缓存键
 	 */
 	private generateKey(toolName: string, params: any): string {
-		const paramStr = JSON.stringify(params, Object.keys(params).sort());
+		const paramStr = this.serializeCanonical(params);
 		return `${toolName}:${paramStr}`;
+	}
+
+	private serializeCanonical(value: any): string {
+		if (Array.isArray(value)) {
+			return `[${value.map(item => this.serializeCanonical(item)).join(',')}]`;
+		}
+
+		if (value && typeof value === 'object') {
+			const entries = Object.entries(value)
+				.sort(([a], [b]) => a.localeCompare(b))
+				.map(([key, nestedValue]) => `${JSON.stringify(key)}:${this.serializeCanonical(nestedValue)}`);
+			return `{${entries.join(',')}}`;
+		}
+
+		return JSON.stringify(value);
 	}
 
 	/**
@@ -109,8 +124,6 @@ export class ToolResultCache {
 		// 更新命中计数
 		entry.hitCount++;
 		this.stats.hits++;
-
-		console.log(`[ToolResultCache] 缓存命中: ${toolName}, key=${key.substring(0, 50)}...`);
 		return entry.result;
 	}
 
@@ -124,7 +137,6 @@ export class ToolResultCache {
 
 		// 检查结果大小
 		if (result.length > this.config.maxResultSize) {
-			console.log(`[ToolResultCache] 结果过大，不缓存: ${toolName}, size=${result.length}`);
 			return;
 		}
 
@@ -140,8 +152,6 @@ export class ToolResultCache {
 			timestamp: Date.now(),
 			hitCount: 0
 		});
-
-		console.log(`[ToolResultCache] 缓存设置: ${toolName}, key=${key.substring(0, 50)}...`);
 	}
 
 	/**
@@ -180,10 +190,6 @@ export class ToolResultCache {
 		for (const key of keysToDelete) {
 			this.cache.delete(key);
 		}
-
-		if (keysToDelete.length > 0) {
-			console.log(`[ToolResultCache] 文件缓存失效: ${filePath}, 清理了 ${keysToDelete.length} 条缓存`);
-		}
 	}
 
 	/**
@@ -202,10 +208,6 @@ export class ToolResultCache {
 		for (const key of keysToDelete) {
 			this.cache.delete(key);
 		}
-
-		if (keysToDelete.length > 0) {
-			console.log(`[ToolResultCache] 目录缓存失效: ${dirPath}, 清理了 ${keysToDelete.length} 条缓存`);
-		}
 	}
 
 	/**
@@ -213,7 +215,6 @@ export class ToolResultCache {
 	 */
 	clear(): void {
 		this.cache.clear();
-		console.log('[ToolResultCache] 缓存已清空');
 	}
 
 	/**
@@ -251,10 +252,6 @@ export class ToolResultCache {
 
 		for (const key of keysToDelete) {
 			this.cache.delete(key);
-		}
-
-		if (keysToDelete.length > 0) {
-			console.log(`[ToolResultCache] 清理过期缓存: ${keysToDelete.length} 条`);
 		}
 	}
 }

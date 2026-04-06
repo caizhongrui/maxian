@@ -534,7 +534,7 @@ export class DiffViewProvider extends Disposable {
 				console.log('[Maxian] 已打开原文件:', this.filePath);
 			}
 
-			console.log('[Maxian] Diff编辑器已关闭（未保存）');
+			console.log('[Maxian] Diff预览已关闭（预览未保存，不代表目标文件未写入）');
 
 			// 4. 清理状态
 			this.filePath = '';

@@ -146,17 +146,13 @@ export class VectorIndexFileWatcherContribution extends Disposable implements IW
 	}
 
 	private _indexFile(filePath: string, cwd: string): void {
-		this._vectorSearchService.indexFile(filePath, cwd).then(() => {
-			console.log('[VectorIndexWatcher] 文件索引已更新:', filePath);
-		}).catch((err) => {
+		void this._vectorSearchService.indexFile(filePath, cwd).catch((err) => {
 			console.warn('[VectorIndexWatcher] 文件索引更新失败:', filePath, err);
 		});
 	}
 
 	private _deleteFileIndex(filePath: string, cwd: string): void {
-		this._vectorSearchService.deleteFileIndex(filePath, cwd).then(() => {
-			console.log('[VectorIndexWatcher] 文件索引已删除:', filePath);
-		}).catch((err) => {
+		void this._vectorSearchService.deleteFileIndex(filePath, cwd).catch((err) => {
 			console.warn('[VectorIndexWatcher] 文件索引删除失败:', filePath, err);
 		});
 	}

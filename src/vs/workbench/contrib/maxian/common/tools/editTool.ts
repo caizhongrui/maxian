@@ -9,18 +9,18 @@
  *
  * 功能：
  * - 基于 old_string/new_string 的字符串替换
- * - 9 种容错匹配策略（fuzzyMatch.ts）
+ * - 精确匹配，找不到或多匹配直接失败
  * - 支持全局替换（replace_all）
  * - 自动创建不存在的文件
  * - 详细的执行结果反馈
  *
  * 优势：
  * - 比 apply_diff 更简单直观
- * - 容错能力强，适合 LLM 输出不精确的情况
+ * - 失败更早暴露，减少在错误上下文上继续误改
  * - 支持单处/多处替换
  */
 
-import { fuzzyReplace, FUZZY_MATCH_STRATEGIES } from '../diff/fuzzyMatch.js';
+import { fuzzyReplace } from '../diff/fuzzyMatch.js';
 
 /**
  * Edit 工具参数
@@ -64,9 +64,6 @@ export interface EditResult {
 export const EDIT_TOOL_CONFIG = {
 	/** 最大文件大小（字节） */
 	MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
-
-	/** 是否启用容错匹配 */
-	ENABLE_FUZZY_MATCH: true,
 
 	/** 是否自动创建目录 */
 	AUTO_CREATE_DIRECTORY: true,
@@ -168,31 +165,27 @@ export function executeEdit(
 		};
 	}
 
-	// 精确匹配检查
-	if (content.indexOf(old_string) === -1 && !EDIT_TOOL_CONFIG.ENABLE_FUZZY_MATCH) {
+	const exactMatchCount = content.split(old_string).length - 1;
+	if (exactMatchCount > 1 && !replace_all) {
 		return {
 			success: false,
-			message: `未找到匹配内容。\n\n要查找的内容:\n${old_string.substring(0, 200)}${old_string.length > 200 ? '...' : ''}`,
+			message: 'Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.',
 			path,
 		};
 	}
 
-	// 使用容错匹配执行替换
-	const result = fuzzyReplace(content, old_string, new_string, replace_all);
-
-	if (!result.success) {
-		if (result.error) {
-			// 多处匹配：对齐 OpenCode "Found multiple matches" 消息
+	const fuzzy = fuzzyReplace(content, old_string, new_string, !!replace_all);
+	if (!fuzzy.success) {
+		if (fuzzy.error) {
 			return {
 				success: false,
-				message: `Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.`,
+				message: fuzzy.error,
 				path,
 			};
 		}
-		// 未找到匹配：对齐 OpenCode "oldString not found in content"
 		return {
 			success: false,
-			message: `oldString not found in content`,
+			message: 'oldString not found in content',
 			path,
 		};
 	}
@@ -200,9 +193,9 @@ export function executeEdit(
 	return {
 		success: true,
 		message: `Edit applied successfully.`,
-		newContent: result.result,
-		strategy: result.strategy,
-		matchCount: result.matchCount,
+		newContent: fuzzy.result,
+		strategy: fuzzy.strategy || (exactMatchCount > 0 ? 'exact' : 'fuzzy'),
+		matchCount: fuzzy.matchCount,
 		path,
 	};
 }
@@ -220,12 +213,14 @@ export function formatEditResponse(result: EditResult): string {
  * 参考 OpenCode 的详细描述格式
  */
 export const EDIT_TOOL_DESCRIPTION = `## edit
-Description: 编辑文件内容。通过指定要替换的旧内容(old_string)和新内容(new_string)来修改文件。
+Performs robust string replacements in files.
 
-**重要使用说明：**
-1. 必须先使用 read_file 工具读取文件内容，然后再使用此工具
-2. old_string 必须与文件中的内容完全匹配（包括空白和缩进）
-3. new_string 包含替换后的完整内容
+Usage:
+- 必须先使用 read_file 完整读取文件，然后再编辑
+- 优先精确匹配；若精确匹配失败，会尝试安全容错（空白/缩进/引号归一）
+- 如果 old_string 在文件中不存在，编辑会失败并返回 "oldString not found in content"
+- 如果 old_string 命中多处且 replace_all=false，会失败并要求提供更多上下文
+- 优先编辑已有文件，只有在明确需要时才创建新文件
 
 **参数：**
 - path (必需): 要编辑的文件路径
@@ -263,12 +258,6 @@ Description: 编辑文件内容。通过指定要替换的旧内容(old_string)�
 <new_string>export const VERSION = '1.0.0';</new_string>
 <create_if_missing>true</create_if_missing>
 </edit>
-
-**容错匹配：**
-此工具支持 ${FUZZY_MATCH_STRATEGIES.length} 种容错匹配策略：
-${FUZZY_MATCH_STRATEGIES.map((s, i) => `${i + 1}. ${s}`).join('\n')}
-
-即使 old_string 与文件内容有轻微差异（如空白、缩进），也能尝试匹配成功。
 `;
 
 /**
@@ -276,7 +265,7 @@ ${FUZZY_MATCH_STRATEGIES.map((s, i) => `${i + 1}. ${s}`).join('\n')}
  */
 export const EDIT_TOOL_SCHEMA = {
 	name: 'edit',
-	description: '编辑文件内容，通过 old_string/new_string 进行字符串替换，支持容错匹配',
+	description: '编辑文件内容，通过 old_string/new_string 进行字符串替换（优先精确匹配，失败时安全容错）',
 	input_schema: {
 		type: 'object',
 		properties: {

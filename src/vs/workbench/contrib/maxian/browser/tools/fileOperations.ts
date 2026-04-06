@@ -14,8 +14,17 @@ import { addLineNumbers, stripLineNumbers, everyLineHasLineNumbers } from '../..
 import { normalizeString } from '../../common/utils/textNormalization.js';
 import * as path from '../../../../../base/common/path.js';
 import { trackFileRead, assertFileWritable, withFileLock, updateFileAfterWrite } from '../../common/file/fileTimeTracker.js';
-import { getDiagnosticsAfterEdit } from '../../common/lsp/lspDiagnostics.js';
-import { FileStateCache, FileStateEntry, FILE_UNCHANGED_STUB } from '../../common/file/fileStateCache.js';
+import { FileStateCache, FILE_UNCHANGED_STUB } from '../../common/file/fileStateCache.js';
+
+interface PreparedWriteToFile {
+	absolutePath: string;
+	exists: boolean;
+	processedContent: string;
+	actualLineCount: number;
+	predictedLineCount?: number;
+}
+
+type FileWriteVisibility = 'full' | 'derived' | 'internal';
 
 /**
  * apply_diff 工具专用错误类
@@ -165,6 +174,51 @@ export class FileOperationsTool {
 		return path.resolve(this.workspaceRoot, inputPath);
 	}
 
+	private resolveWriteVisibility(toolUse: WriteToFileToolUse): FileWriteVisibility {
+		const explicitVisibility = (toolUse.params as any).write_visibility;
+		if (explicitVisibility === 'full' || explicitVisibility === 'derived' || explicitVisibility === 'internal') {
+			return explicitVisibility;
+		}
+
+		const legacyModelVisible = (toolUse.params as any).model_visible !== false && (toolUse.params as any).model_visible !== 'false';
+		return legacyModelVisible ? 'full' : 'derived';
+	}
+
+	private recordWrittenFileState(
+		absolutePath: string,
+		content: string,
+		mtime: number,
+		size: number,
+		visibility: FileWriteVisibility
+	): void {
+		const entry = { content, mtime, size };
+		switch (visibility) {
+			case 'full':
+				this.fileStateCache.recordWrite(absolutePath, entry, true);
+				return;
+			case 'derived':
+				this.fileStateCache.recordWrite(absolutePath, entry, 'derived');
+				return;
+			case 'internal':
+				this.fileStateCache.recordInternalRefresh(absolutePath, entry);
+				return;
+		}
+	}
+
+	private async getPathSuggestions(targetPath: string, maxSuggestions: number = 3): Promise<string[]> {
+		const suggestions = new Set<string>();
+
+		for (const suggestion of await this.getSimilarFiles(targetPath, maxSuggestions)) {
+			suggestions.add(suggestion);
+		}
+
+		for (const suggestion of await this.getSimilarPathVariants(targetPath, maxSuggestions)) {
+			suggestions.add(suggestion);
+		}
+
+		return Array.from(suggestions).slice(0, maxSuggestions);
+	}
+
 	/**
 	 * 读取文件内容（增强版）
 	 * 支持：行范围、行号、二进制检测、大文件限制
@@ -187,8 +241,7 @@ export class FileOperationsTool {
 			// 检查文件是否存在
 			const exists = await this.fileService.exists(uri);
 			if (!exists) {
-				// "Did you mean?" - 模糊匹配同目录下相似文件名
-				const suggestions = await this.getSimilarFiles(absolutePath);
+				const suggestions = await this.getPathSuggestions(absolutePath);
 				if (suggestions.length > 0) {
 					return `错误: 文件不存在\n路径: ${absolutePath}\n\n你是否要找:\n${suggestions.map(s => `  - ${s}`).join('\n')}`;
 				}
@@ -212,33 +265,30 @@ export class FileOperationsTool {
 				}
 			}
 
-			// D2/B3: 全量读取时先检查缓存，文件未变则返回 FILE_UNCHANGED_STUB（零磁盘读）
+			// D2/B3: 全量读取时，只有“模型已看过当前版本全文”才允许返回 FILE_UNCHANGED_STUB
 			const isPartialRead = start_line !== undefined || end_line !== undefined;
-			if (!isPartialRead) {
-				const cached = this.fileStateCache.get(absolutePath);
-				if (cached && !cached.isPartialView) {
-					try {
-						const statForCache = await this.fileService.resolve(uri);
-						const diskMtime = statForCache.mtime ?? 0;
-						const diskSize = statForCache.size ?? 0;
-						if (diskMtime === cached.mtime && diskSize === cached.size) {
-							console.log(`[FileStateCache] B3 FILE_UNCHANGED_STUB: ${absolutePath}`);
-							return FILE_UNCHANGED_STUB;
+			const cached = this.fileStateCache.get(absolutePath);
+			if (cached) {
+				try {
+					const statForCache = await this.fileService.resolve(uri);
+					const diskMtime = statForCache.mtime ?? 0;
+					const diskSize = statForCache.size ?? 0;
+					if (this.fileStateCache.isFresh(absolutePath, diskMtime, diskSize)) {
+						if (!isPartialRead) {
+							if (this.fileStateCache.shouldReturnUnchangedStub(absolutePath, diskMtime, diskSize)) {
+								return FILE_UNCHANGED_STUB;
+							}
+
+							this.fileStateCache.recordFullModelRead(absolutePath, {
+								content: cached.content,
+								mtime: diskMtime,
+								size: diskSize,
+							});
+							return this.formatFullFileContent(absolutePath, cached.content);
 						}
-					} catch {
-						// stat 失败，降级到正常磁盘读取
-					}
-				}
-			} else if (isPartialRead) {
-				// 局部读取时，若缓存有完整内容且文件未变，直接从缓存切片，省去磁盘 IO
-				const cached = this.fileStateCache.get(absolutePath);
-				if (cached && !cached.isPartialView) {
-					try {
-						const statForCache = await this.fileService.resolve(uri);
-						const diskMtime = statForCache.mtime ?? 0;
-						const diskSize = statForCache.size ?? 0;
-						if (diskMtime === cached.mtime && diskSize === cached.size) {
-							// 从缓存内容中切片返回（不读磁盘）
+
+						const partialFromCache = this.formatPartialFileContent(absolutePath, cached.content, start_line, end_line);
+						if (partialFromCache) {
 							const cachedLines = cached.content.split(/\r?\n/);
 							if (cachedLines.length > 0 && cachedLines[cachedLines.length - 1] === '' && cached.content.endsWith('\n')) {
 								cachedLines.pop();
@@ -246,17 +296,19 @@ export class FileOperationsTool {
 							const totalLines = cachedLines.length;
 							const startIdx = start_line ? Math.max(0, parseInt(start_line, 10) - 1) : 0;
 							const endIdx = end_line ? Math.min(totalLines, parseInt(end_line, 10)) : totalLines;
-							if (startIdx < totalLines && startIdx <= endIdx) {
-								const selectedLines = cachedLines.slice(startIdx, endIdx);
-								const lineStart = startIdx + 1;
-								const numberedContent = addLineNumbers(selectedLines.join('\n'), lineStart);
-								console.log(`[FileStateCache] D2 partial-from-cache: ${absolutePath} lines ${lineStart}-${endIdx}`);
-								return `<file path="${absolutePath}">\n<content lines="${lineStart}-${endIdx}">\n${numberedContent}</content>\n</file>`;
-							}
+							this.fileStateCache.recordPartialModelRead(absolutePath, {
+								content: cached.content,
+								mtime: diskMtime,
+								size: diskSize,
+							}, {
+								startLine: startIdx + 1,
+								endLine: endIdx,
+							});
+							return partialFromCache;
 						}
-					} catch {
-						// stat 失败，降级到正常磁盘读取
 					}
+				} catch {
+					// stat 失败，降级到正常磁盘读取
 				}
 			}
 
@@ -277,19 +329,28 @@ export class FileOperationsTool {
 				// 忽略 stat 失败，不影响读取
 				console.warn(`[FileOperations] 获取文件 stat 失败: ${absolutePath}`, e);
 			}
-			// D2/B4: 更新内存缓存
-			// - 全量读取：isPartialView=false，供后续 edit 走缓存（D4）和 STUB 检测（B3）
-			// - 局部读取：isPartialView=true，记录 AI 只看到了部分内容（B4），edit 时会警告
-			{
-				const cacheEntry: FileStateEntry = {
+			if (isPartialRead) {
+				const allVisibleLines = text.split(/\r?\n/);
+				if (allVisibleLines.length > 0 && allVisibleLines[allVisibleLines.length - 1] === '' && text.endsWith('\n')) {
+					allVisibleLines.pop();
+				}
+				const totalLines = allVisibleLines.length;
+				const startIdx = start_line ? Math.max(0, parseInt(start_line, 10) - 1) : 0;
+				const endIdx = end_line ? Math.min(totalLines, parseInt(end_line, 10)) : totalLines;
+				this.fileStateCache.recordPartialModelRead(absolutePath, {
 					content: text,
 					mtime: cachedMtime,
 					size: cachedSize,
-					isPartialView: isPartialRead,
-					startLine: isPartialRead && start_line ? parseInt(start_line, 10) : undefined,
-					endLine: isPartialRead && end_line ? parseInt(end_line, 10) : undefined,
-				};
-				this.fileStateCache.set(absolutePath, cacheEntry);
+				}, {
+					startLine: startIdx + 1,
+					endLine: endIdx,
+				});
+			} else {
+				this.fileStateCache.recordFullModelRead(absolutePath, {
+					content: text,
+					mtime: cachedMtime,
+					size: cachedSize,
+				});
 			}
 
 			// 如果文件末尾有换行符，split会产生一个空字符串，需要移除
@@ -304,25 +365,15 @@ export class FileOperationsTool {
 
 			// 处理行范围读取
 			if (start_line !== undefined || end_line !== undefined) {
-				const startIdx = start_line ? Math.max(0, parseInt(start_line, 10) - 1) : 0;
-				const endIdx = end_line ? Math.min(totalLines, parseInt(end_line, 10)) : totalLines;
-
-				// 验证行范围
-				if (startIdx >= totalLines) {
-					return `错误: 起始行 ${start_line} 超出文件范围（文件共 ${totalLines} 行）`;
+				const partialContent = this.formatPartialFileContent(displayPath, text, start_line, end_line);
+				if (!partialContent) {
+					const startIdx = start_line ? Math.max(0, parseInt(start_line, 10) - 1) : 0;
+					if (startIdx >= totalLines) {
+						return `错误: 起始行 ${start_line} 超出文件范围（文件共 ${totalLines} 行）`;
+					}
+					return '错误: 起始行不能大于结束行';
 				}
-
-				if (startIdx > endIdx) {
-					return `错误: 起始行不能大于结束行`;
-				}
-
-				const selectedLines = allLines.slice(startIdx, endIdx);
-				const lineStart = startIdx + 1;
-
-				// 添加行号（P2优化：新格式 "N: content"）
-				const numberedContent = addLineNumbers(selectedLines.join('\n'), lineStart);
-
-				return `<file path="${displayPath}">\n<content lines="${lineStart}-${endIdx}">\n${numberedContent}</content>\n</file>`;
+				return partialContent;
 			}
 
 			// 大文件限制（对齐OpenCode的2000行限制，减少token消耗）
@@ -365,10 +416,7 @@ export class FileOperationsTool {
 				return `<file path="${displayPath}">\n<content lines="1-${shownLines}">\n${numberedContent}</content>\n<notice>文件内容较大（超过50KB），仅显示前 ${shownLines} 行（共 ${totalLines} 行）。使用 start_line 参数读取后续内容。</notice>\n</file>`;
 			}
 
-			// 正常读取整个文件（添加行号）
-			const numberedContent = addLineNumbers(processedLines.join('\n'), 1);
-
-			return `<file path="${displayPath}">\n<content lines="1-${totalLines}">\n${numberedContent}</content>\n<notice>(End of file - total ${totalLines} lines)</notice>\n</file>`;
+			return this.formatFullFileContent(displayPath, processedLines.join('\n'));
 
 		} catch (error) {
 			return `错误: 读取文件失败\n路径: ${absolutePath}\n详情: ${error instanceof Error ? error.message : String(error)}`;
@@ -382,128 +430,16 @@ export class FileOperationsTool {
 	 * @returns 执行结果
 	 */
 	async writeToFile(toolUse: WriteToFileToolUse): Promise<ToolResponse> {
-		const { path, content, line_count } = toolUse.params;
-
-		if (!path) {
-			return '错误: 未提供文件路径';
-		}
-
-		if (content === undefined) {
-			return '错误: 未提供文件内容';
-		}
-
-		// 使用统一的路径解析（模仿 Kilocode）
-		const absolutePath = this.resolveFilePath(path);
+		const writeVisibility = this.resolveWriteVisibility(toolUse);
+		const fallbackPath = toolUse.params.path ? this.resolveFilePath(toolUse.params.path) : '(unknown)';
 
 		try {
+			const prepared = await this.prepareWriteToFile(toolUse);
+			if ('error' in prepared) {
+				return prepared.error;
+			}
+			const { absolutePath, exists, processedContent, actualLineCount } = prepared;
 			const uri = URI.file(absolutePath);
-
-			// 检查文件是否存在
-			const exists = await this.fileService.exists(uri);
-
-			// P1-8: 文件时间戳校验（仅对已存在的文件）
-			if (exists) {
-				try {
-					const stat = await this.fileService.resolve(uri);
-					const currentMtime = stat.mtime ?? Date.now();
-					const currentSize = stat.size ?? 0;
-
-					const assertResult = assertFileWritable(this.sessionId, absolutePath, currentMtime, currentSize);
-					if (!assertResult.success) {
-						return `<error>
-${assertResult.message}
-
-提示：这是一个安全保护机制，防止覆盖您或其他程序对文件的修改。
-</error>`;
-					}
-				} catch (e) {
-					console.warn(`[FileOperations] 时间戳校验失败: ${absolutePath}`, e);
-					// 校验失败不阻止写入，只记录警告
-				}
-			}
-
-			// 预处理内容
-			let processedContent = content;
-
-			// 1. 移除Markdown代码块标记（弱模型可能会添加）
-			if (processedContent.startsWith('```')) {
-				processedContent = processedContent.split('\n').slice(1).join('\n');
-			}
-			if (processedContent.endsWith('```')) {
-				processedContent = processedContent.split('\n').slice(0, -1).join('\n');
-			}
-
-			// 2. 移除行号（如果存在）
-			if (everyLineHasLineNumbers(processedContent)) {
-				processedContent = stripLineNumbers(processedContent);
-			}
-
-			// 3. 标准化文本（处理智能引号、typographic字符等）
-			processedContent = normalizeString(processedContent, {
-				smartQuotes: true,
-				typographicChars: true,
-				extraWhitespace: false,
-				trim: false // 保留原始空白符
-			});
-
-			// 4. 代码省略检测（B6优化：强化检测，不依赖 line_count 也能拦截明显省略）
-			const actualLineCount = processedContent.split('\n').length;
-			const predictedLineCount = line_count ? parseInt(line_count, 10) : undefined;
-
-			// 高置信度省略标记：即使没有 line_count 也直接拒绝
-			const strongOmissionPatterns = [
-				/\/\/\s*(rest of|remaining|previous|existing)\s*(code|implementation|logic|methods?|functions?|content)/i,
-				/\/\*[\s\S]*?(rest of|remaining|previous|existing)\s*(code|implementation|logic|methods?|functions?|content)/i,
-				/#\s*(rest of|remaining|previous|existing)\s*(code|implementation|logic|content)/i,
-				/\/\/\s*\.\.\.\s*(rest|remaining|more)/i,
-				/\.\.\.\s*(rest of|remaining|previous)\s*(implementation|code)/i,
-			];
-
-			// 较低置信度省略标记：需配合行数验证才拒绝
-			const weakOmissionPatterns = [
-				/\/\/\s*\.\.\./,
-				/\/\*\s*\.\.\./,
-				/\/\/\s*unchanged/i,
-				/\/\*\s*unchanged/i,
-			];
-
-			const hasStrongOmission = strongOmissionPatterns.some(p => p.test(processedContent));
-			const hasWeakOmission = weakOmissionPatterns.some(p => p.test(processedContent));
-
-			if (hasStrongOmission) {
-				// 高置信度：直接拒绝
-				const matchedPattern = strongOmissionPatterns.find(p => p.test(processedContent));
-				return `<error>
-错误: 检测到代码内容被省略（B6）
-
-文件: ${absolutePath}
-发现了明显的省略标记（如 "// rest of code"、"// remaining implementation" 等）。
-写入操作已拒绝，请提供完整的文件内容，不要使用任何省略符号或占位符。
-
-如果只需要修改部分内容，请使用 edit 或 apply_diff 工具。
-匹配模式: ${matchedPattern?.toString()}
-</error>`;
-			}
-
-			if (hasWeakOmission && predictedLineCount && actualLineCount < predictedLineCount) {
-				return `<error>
-错误: 检测到代码内容可能被省略
-
-文件: ${absolutePath}
-实际行数: ${actualLineCount}
-预期行数: ${predictedLineCount}
-
-发现了代码省略标记（如 "// ..." 或 "/* unchanged */" 等）。
-请提供完整的文件内容，不要使用任何省略符号或占位符。
-
-如果只需要修改部分内容，建议使用 apply_diff 工具。
-</error>`;
-			}
-
-			// 5. 行数验证警告
-			if (predictedLineCount && Math.abs(actualLineCount - predictedLineCount) > 5) {
-				console.warn(`[writeToFile] 行数不匹配: 实际 ${actualLineCount} 行，预期 ${predictedLineCount} 行`);
-			}
 
 			// 写入文件（使用文件锁确保串行写入）
 			const buffer = VSBuffer.fromString(processedContent);
@@ -549,37 +485,24 @@ ${assertResult.message}
 					const newMtime = newStat.mtime ?? Date.now();
 					const newSize = newStat.size ?? processedContent.length;
 					updateFileAfterWrite(this.sessionId, absolutePath, newMtime, newSize);
-					// D2: 用实际写入的内容更新缓存，下次 readRaw/edit 直接走内存
-					this.fileStateCache.set(absolutePath, {
-						content: processedContent,
-						mtime: newMtime,
-						size: newSize,
-						isPartialView: false,
-					});
-				} catch (e) {
-					console.warn(`[FileOperations] 更新时间戳记录失败: ${absolutePath}`, e);
-				}
-
-				// P2-12: 获取 LSP 诊断（失败不影响主流程，文件已写入成功）
-				let diagnosticsAppendix = '';
-				try {
-					diagnosticsAppendix = await getDiagnosticsAfterEdit(absolutePath) ?? '';
-				} catch (diagErr) {
-					console.warn(`[FileOperations] LSP诊断获取失败（不影响文件写入结果）: ${absolutePath}`, diagErr);
-				}
+						// D2: 用实际写入的内容更新缓存，下次 readRaw/edit 直接走内存
+						this.recordWrittenFileState(absolutePath, processedContent, newMtime, newSize, writeVisibility);
+					} catch (e) {
+						console.warn(`[FileOperations] 更新时间戳记录失败: ${absolutePath}`, e);
+					}
 
 				if (exists) {
 					return `<success>
 文件已更新: ${absolutePath}
 操作: 修改现有文件
 行数: ${actualLineCount}
-</success>${diagnosticsAppendix}`;
+</success>`;
 				} else {
 					return `<success>
 文件已创建: ${absolutePath}
 操作: 创建新文件
 行数: ${actualLineCount}
-</success>${diagnosticsAppendix}`;
+</success>`;
 				}
 			});
 
@@ -603,7 +526,7 @@ ${assertResult.message}
 				// 使用 fatal_error 标签，告知 AI 这是不可重试的系统级错误
 				return `<fatal_error>
 ⛔ 系统安全限制：无法写入文件
-文件: ${absolutePath}
+文件: ${fallbackPath}
 错误码: ${errorCode || '未知'}
 详情: ${errorMessage}
 
@@ -618,7 +541,7 @@ ${assertResult.message}
 
 			return `<error>
 错误: 写入文件失败
-文件: ${absolutePath}
+文件: ${fallbackPath}
 详情: ${errorMessage}
 
 可能的原因:
@@ -627,6 +550,155 @@ ${assertResult.message}
 3. 磁盘空间不足
 </error>`;
 		}
+	}
+
+	async preflightWriteToFile(toolUse: WriteToFileToolUse): Promise<{ ok: true; prepared: PreparedWriteToFile } | { ok: false; error: string }> {
+		try {
+			const prepared = await this.prepareWriteToFile(toolUse);
+			if ('error' in prepared) {
+				return { ok: false, error: prepared.error };
+			}
+			return { ok: true, prepared };
+		} catch (error) {
+			return { ok: false, error: `<error>错误: 写入文件预检查失败\n详情: ${error instanceof Error ? error.message : String(error)}</error>` };
+		}
+	}
+
+	private async prepareWriteToFile(toolUse: WriteToFileToolUse): Promise<PreparedWriteToFile | { error: string }> {
+		const { path, content, line_count } = toolUse.params;
+		if (!path) {
+			return { error: '错误: 未提供文件路径' };
+		}
+		if (content === undefined) {
+			return { error: '错误: 未提供文件内容' };
+		}
+
+		const absolutePath = this.resolveFilePath(path);
+		const uri = URI.file(absolutePath);
+		const exists = await this.fileService.exists(uri);
+
+		if (exists) {
+			try {
+				const stat = await this.fileService.resolve(uri);
+				const currentMtime = stat.mtime ?? Date.now();
+				const currentSize = stat.size ?? 0;
+				const assertResult = assertFileWritable(this.sessionId, absolutePath, currentMtime, currentSize);
+				if (!assertResult.success) {
+					return {
+						error: `<error>
+${assertResult.message}
+
+提示：这是一个安全保护机制，防止覆盖您或其他程序对文件的修改。
+</error>`
+					};
+				}
+			} catch (e) {
+				console.warn(`[FileOperations] 时间戳校验失败: ${absolutePath}`, e);
+			}
+		}
+
+		const processedContent = this.normalizeWriteContent(content);
+		const actualLineCount = processedContent.split('\n').length;
+		const predictedLineCount = line_count ? parseInt(line_count, 10) : undefined;
+		const omissionError = this.getWriteOmissionError(absolutePath, processedContent, actualLineCount, predictedLineCount);
+		if (omissionError) {
+			return { error: omissionError };
+		}
+
+		if (predictedLineCount && !Number.isNaN(predictedLineCount) && Math.abs(actualLineCount - predictedLineCount) > 5) {
+			return {
+				error: `<error>
+错误: write_to_file 行数校验失败
+文件: ${absolutePath}
+实际行数: ${actualLineCount}
+预期行数: ${predictedLineCount}
+
+这通常表示整文件内容已经过期、被截断，或者你在基于旧版本继续重写文件。
+请先重新读取目标文件全文，再重新生成完整内容；如果只是修改局部，请改用 edit 或 multiedit。
+</error>`
+			};
+		}
+
+		return {
+			absolutePath,
+			exists,
+			processedContent,
+			actualLineCount,
+			predictedLineCount,
+		};
+	}
+
+	private normalizeWriteContent(content: string): string {
+		let processedContent = content;
+		if (processedContent.startsWith('```')) {
+			processedContent = processedContent.split('\n').slice(1).join('\n');
+		}
+		if (processedContent.endsWith('```')) {
+			processedContent = processedContent.split('\n').slice(0, -1).join('\n');
+		}
+		if (everyLineHasLineNumbers(processedContent)) {
+			processedContent = stripLineNumbers(processedContent);
+		}
+		return normalizeString(processedContent, {
+			smartQuotes: true,
+			typographicChars: true,
+			extraWhitespace: false,
+			trim: false
+		});
+	}
+
+	private getWriteOmissionError(
+		absolutePath: string,
+		processedContent: string,
+		actualLineCount: number,
+		predictedLineCount?: number
+	): string | null {
+		const strongOmissionPatterns = [
+			/\/\/\s*(rest of|remaining|previous|existing)\s*(code|implementation|logic|methods?|functions?|content)/i,
+			/\/\*[\s\S]*?(rest of|remaining|previous|existing)\s*(code|implementation|logic|methods?|functions?|content)/i,
+			/#\s*(rest of|remaining|previous|existing)\s*(code|implementation|logic|content)/i,
+			/\/\/\s*\.\.\.\s*(rest|remaining|more)/i,
+			/\.\.\.\s*(rest of|remaining|previous)\s*(implementation|code)/i,
+		];
+		const weakOmissionPatterns = [
+			/\/\/\s*\.\.\./,
+			/\/\*\s*\.\.\./,
+			/\/\/\s*unchanged/i,
+			/\/\*\s*unchanged/i,
+		];
+		const hasStrongOmission = strongOmissionPatterns.some(p => p.test(processedContent));
+		const hasWeakOmission = weakOmissionPatterns.some(p => p.test(processedContent));
+
+		if (hasStrongOmission) {
+			const matchedPattern = strongOmissionPatterns.find(p => p.test(processedContent));
+			return `<error>
+错误: 检测到代码内容被省略（B6）
+
+文件: ${absolutePath}
+发现了明显的省略标记（如 "// rest of code"、"// remaining implementation" 等）。
+写入操作已拒绝，请提供完整的文件内容，不要使用任何省略符号或占位符。
+
+如果只需要修改部分内容，请使用 edit 或 apply_diff 工具。
+匹配模式: ${matchedPattern?.toString()}
+</error>`;
+		}
+
+		if (hasWeakOmission && predictedLineCount && actualLineCount < predictedLineCount) {
+			return `<error>
+错误: 检测到代码内容可能被省略
+
+文件: ${absolutePath}
+实际行数: ${actualLineCount}
+预期行数: ${predictedLineCount}
+
+发现了代码省略标记（如 "// ..." 或 "/* unchanged */" 等）。
+请提供完整的文件内容，不要使用任何省略符号或占位符。
+
+如果只需要修改部分内容，建议使用 apply_diff 工具。
+</error>`;
+		}
+
+		return null;
 	}
 
 	/**
@@ -657,6 +729,14 @@ ${assertResult.message}
 
 		try {
 			const uri = URI.file(absolutePath);
+			const exists = await this.fileService.exists(uri);
+			if (!exists) {
+				const suggestions = await this.getPathSuggestions(absolutePath);
+				if (suggestions.length > 0) {
+					return `错误: 目录不存在\n路径: ${absolutePath}\n\n你是否要找:\n${suggestions.map(s => `  - ${s}`).join('\n')}`;
+				}
+				return `错误: 目录不存在\n路径: ${absolutePath}`;
+			}
 			const result: string[] = [];
 			const limit = 500;
 			let count = 0;
@@ -729,9 +809,6 @@ ${assertResult.message}
 
 			await listDir(uri, recursive === 'true');
 
-			const elapsed = Date.now() - startTime;
-			console.log('[FileOperations] listFiles 完成，耗时:', elapsed, 'ms，文件数:', count);
-
 			if (result.length === 0) {
 				return '目录为空或未找到匹配的文件';
 			}
@@ -763,13 +840,12 @@ ${assertResult.message}
 
 			// D2/D4: 先检查内存缓存，若文件未被外部修改则直接返回缓存内容（零磁盘 IO）
 			const cached = this.fileStateCache.get(absolutePath);
-			if (cached && !cached.isPartialView) {
+			if (cached) {
 				try {
 					const statCheck = await this.fileService.resolve(uri);
 					const diskMtime = statCheck.mtime ?? 0;
 					const diskSize = statCheck.size ?? 0;
-					if (diskMtime === cached.mtime && diskSize === cached.size) {
-						console.log(`[FileStateCache] D4 readRaw-from-cache: ${absolutePath}`);
+					if (this.fileStateCache.isFresh(absolutePath, diskMtime, diskSize)) {
 						return cached.content;
 					}
 				} catch {
@@ -784,18 +860,15 @@ ${assertResult.message}
 			const content = await this.fileService.readFile(uri);
 			const text = content.value.toString();
 
-			// 同时记录读取时间戳（与 readFile 行为一致），并更新内存缓存
+			// 仅刷新内部缓存，不把内部读取当成模型已读
 			try {
 				const stat = await this.fileService.resolve(uri);
 				const mtime = stat.mtime ?? Date.now();
 				const size = stat.size ?? text.length;
-				trackFileRead(this.sessionId, absolutePath, mtime, size);
-				// D2: 更新内存缓存
-				this.fileStateCache.set(absolutePath, {
+				this.fileStateCache.recordInternalRefresh(absolutePath, {
 					content: text,
 					mtime,
 					size,
-					isPartialView: false,
 				});
 			} catch (e) {
 				console.warn(`[FileOperations] readRawFileContent: 获取 stat 失败: ${absolutePath}`, e);
@@ -881,6 +954,71 @@ ${assertResult.message}
 		}
 	}
 
+	private async getSimilarPathVariants(targetPath: string, maxSuggestions: number = 3): Promise<string[]> {
+		try {
+			let probePath = this.resolveFilePath(targetPath);
+			const missingSegments: string[] = [];
+
+			while (!(await this.fileService.exists(URI.file(probePath)))) {
+				const currentSegment = path.basename(probePath);
+				const parentPath = path.dirname(probePath);
+				if (!currentSegment || !parentPath || parentPath === probePath) {
+					return [];
+				}
+				missingSegments.unshift(currentSegment);
+				probePath = parentPath;
+			}
+
+			if (missingSegments.length === 0) {
+				return [];
+			}
+
+			let candidates = [probePath];
+			for (let index = 0; index < missingSegments.length; index++) {
+				const expectedSegment = missingSegments[index].toLowerCase();
+				const isLastSegment = index === missingSegments.length - 1;
+				const nextCandidates: string[] = [];
+
+				for (const candidateBase of candidates) {
+					const baseStat = await this.fileService.resolve(URI.file(candidateBase));
+					if (!baseStat.children) {
+						continue;
+					}
+
+					const matches = baseStat.children
+						.filter(child => isLastSegment || child.isDirectory)
+						.filter(child => {
+							const childName = child.name.toLowerCase();
+							return childName.includes(expectedSegment) ||
+								expectedSegment.includes(childName) ||
+								levenshteinDistance(childName, expectedSegment) <= Math.max(2, Math.floor(expectedSegment.length * 0.3));
+						})
+						.slice(0, maxSuggestions)
+						.map(child => path.join(candidateBase, child.name));
+
+					nextCandidates.push(...matches);
+				}
+
+				if (nextCandidates.length === 0) {
+					return [];
+				}
+
+				candidates = Array.from(new Set(nextCandidates)).slice(0, maxSuggestions);
+			}
+
+			const resolved: string[] = [];
+			for (const candidate of candidates) {
+				if (await this.fileService.exists(URI.file(candidate))) {
+					resolved.push(candidate);
+				}
+			}
+
+			return resolved.slice(0, maxSuggestions);
+		} catch {
+			return [];
+		}
+	}
+
 	/**
 	 * 删除文件或目录（使用 VS Code IFileService，避免系统 rm 命令无法更新 VS Code 文件系统缓存的问题）
 	 * @param toolUse 删除文件工具使用信息
@@ -905,7 +1043,6 @@ ${assertResult.message}
 
 			await this.fileService.del(uri, { recursive, useTrash: false });
 
-			console.log(`[Maxian] 已删除: ${absolutePath}`);
 			return `文件已成功删除: ${filePath}`;
 		} catch (error) {
 			const errMsg = error instanceof Error ? error.message : String(error);
@@ -936,7 +1073,6 @@ ${assertResult.message}
 
 			await this.fileService.createFolder(uri);
 
-			console.log(`[Maxian] 已创建目录: ${absolutePath}`);
 			return `目录已成功创建: ${dirPath}`;
 		} catch (error) {
 			const errMsg = error instanceof Error ? error.message : String(error);
@@ -967,6 +1103,14 @@ ${assertResult.message}
 
 		try {
 			const uri = URI.file(absolutePath);
+			const pathExists = await this.fileService.exists(uri);
+			if (!pathExists) {
+				const suggestions = await this.getPathSuggestions(absolutePath);
+				if (suggestions.length > 0) {
+					return `错误: 路径不存在 "${absolutePath}"\n\n你是否要找:\n${suggestions.map(s => `  - ${s}`).join('\n')}`;
+				}
+				return `错误: 路径不存在 "${absolutePath}"\n请检查 path 参数是否正确`;
+			}
 
 			// 验证 path 参数必须是目录而非文件
 			try {
@@ -975,6 +1119,10 @@ ${assertResult.message}
 					return `错误: glob 的 path 参数必须是目录，"${dirPath}" 是一个文件\n提示: 请传入目录路径，并在 file_pattern 中使用匹配模式\n示例: path="${dirPath.substring(0, dirPath.lastIndexOf('/'))}", file_pattern="**/${dirPath.substring(dirPath.lastIndexOf('/') + 1)}"`;
 				}
 			} catch {
+				const suggestions = await this.getPathSuggestions(absolutePath);
+				if (suggestions.length > 0) {
+					return `错误: 路径不存在 "${absolutePath}"\n\n你是否要找:\n${suggestions.map(s => `  - ${s}`).join('\n')}`;
+				}
 				return `错误: 路径不存在 "${absolutePath}"\n请检查 path 参数是否正确`;
 			}
 
@@ -1063,9 +1211,6 @@ ${assertResult.message}
 			};
 
 			await listDir(uri);
-
-			const elapsed = Date.now() - startTime;
-			console.log('[FileOperations] glob 完成，耗时:', elapsed, 'ms，扫描:', scannedCount, '匹配:', matchedFiles.length);
 
 			if (matchedFiles.length === 0) {
 				return `未找到匹配模式 "${file_pattern}" 的文件（扫描了 ${scannedCount} 个文件）`;
@@ -1156,12 +1301,14 @@ ${assertResult.message}
 						await this.fileService.writeFile(uri, gitBuffer);
 						try {
 							const newStat = await this.fileService.resolve(uri);
-							updateFileAfterWrite(this.sessionId, absolutePath, newStat.mtime ?? Date.now(), newStat.size ?? gitResult.length);
+							const newMtime = newStat.mtime ?? Date.now();
+							const newSize = newStat.size ?? gitResult.length;
+							updateFileAfterWrite(this.sessionId, absolutePath, newMtime, newSize);
+								this.recordWrittenFileState(absolutePath, gitResult, newMtime, newSize, 'derived');
 						} catch (e) {
 							console.warn(`[FileOperations] 更新时间戳记录失败: ${absolutePath}`, e);
 						}
-						const diagnosticsAppendix = await getDiagnosticsAfterEdit(absolutePath);
-						return `成功应用git diff到文件: ${absolutePath}${diagnosticsAppendix}`;
+						return `成功应用git diff到文件: ${absolutePath}`;
 					});
 				}
 
@@ -1212,6 +1359,7 @@ ${assertResult.message}
 					const newMtime = newStat.mtime ?? Date.now();
 					const newSize = newStat.size ?? newContent.length;
 					updateFileAfterWrite(this.sessionId, absolutePath, newMtime, newSize);
+						this.recordWrittenFileState(absolutePath, newContent, newMtime, newSize, 'derived');
 				} catch (e) {
 					console.warn(`[FileOperations] 更新时间戳记录失败: ${absolutePath}`, e);
 				}
@@ -1234,10 +1382,7 @@ ${assertResult.message}
 					? '\n<notice>提示: 如果需要在此文件中进行多个相关更改，建议在单个 apply_diff 调用中使用多个 SEARCH/REPLACE 块，这样更高效。</notice>'
 					: '';
 
-				// P2-12: 获取 LSP 诊断
-				const diagnosticsAppendix = await getDiagnosticsAfterEdit(absolutePath);
-
-				return `${partialFailureHint}成功应用diff到文件: ${absolutePath}\n\n已应用 ${searchBlockCount} 个diff块${singleBlockNotice}${diagnosticsAppendix}`;
+				return `${partialFailureHint}成功应用diff到文件: ${absolutePath}\n\n已应用 ${searchBlockCount} 个diff块${singleBlockNotice}`;
 			});
 		} catch (error) {
 			// DiffApplicationError 穿透 → TaskService catch → is_error: true
@@ -1246,6 +1391,72 @@ ${assertResult.message}
 			}
 			return `应用diff失败: ${error instanceof Error ? error.message : String(error)}`;
 		}
+	}
+
+	private formatPartialFileContent(filePath: string, text: string, startLine?: string, endLine?: string): string | null {
+		const allLines = text.split(/\r?\n/);
+		if (allLines.length > 0 && allLines[allLines.length - 1] === '' && text.endsWith('\n')) {
+			allLines.pop();
+		}
+
+		const totalLines = allLines.length;
+		const startIdx = startLine ? Math.max(0, parseInt(startLine, 10) - 1) : 0;
+		const endIdx = endLine ? Math.min(totalLines, parseInt(endLine, 10)) : totalLines;
+
+		if (startIdx >= totalLines || startIdx > endIdx) {
+			return null;
+		}
+
+		const selectedLines = allLines.slice(startIdx, endIdx);
+		const lineStart = startIdx + 1;
+		const numberedContent = addLineNumbers(selectedLines.join('\n'), lineStart);
+		return `<file path="${filePath}">\n<content lines="${lineStart}-${endIdx}">\n${numberedContent}</content>\n</file>`;
+	}
+
+	private formatFullFileContent(filePath: string, text: string): string {
+		const allLines = text.split(/\r?\n/);
+		if (allLines.length > 0 && allLines[allLines.length - 1] === '' && text.endsWith('\n')) {
+			allLines.pop();
+		}
+
+		const totalLines = allLines.length;
+		const maxLines = 2000;
+		const maxBytesPerFile = 50 * 1024;
+		const maxLineLength = 2000;
+		const processedLines = allLines.map(line => {
+			if (line.length > maxLineLength) {
+				return line.substring(0, maxLineLength) + `... (行截断，共 ${line.length} 字符)`;
+			}
+			return line;
+		});
+
+		if (totalLines > maxLines) {
+			const truncatedLines = processedLines.slice(0, maxLines);
+			const numberedContent = addLineNumbers(truncatedLines.join('\n'), 1);
+			return `<file path="${filePath}">\n<content lines="1-${maxLines}">\n${numberedContent}</content>\n<notice>文件共 ${totalLines} 行，仅显示前 ${maxLines} 行。使用 start_line 和 end_line 参数读取其他部分。</notice>\n</file>`;
+		}
+
+		let byteCount = 0;
+		let truncatedByBytes = false;
+		const byteLines: string[] = [];
+		for (const line of processedLines) {
+			const lineBytes = estimateFileByteLengthForRead(line) + 1;
+			if (byteCount + lineBytes > maxBytesPerFile) {
+				truncatedByBytes = true;
+				break;
+			}
+			byteLines.push(line);
+			byteCount += lineBytes;
+		}
+
+		if (truncatedByBytes) {
+			const shownLines = byteLines.length;
+			const numberedContent = addLineNumbers(byteLines.join('\n'), 1);
+			return `<file path="${filePath}">\n<content lines="1-${shownLines}">\n${numberedContent}</content>\n<notice>文件内容较大（超过50KB），仅显示前 ${shownLines} 行（共 ${totalLines} 行）。使用 start_line 参数读取后续内容。</notice>\n</file>`;
+		}
+
+		const numberedContent = addLineNumbers(processedLines.join('\n'), 1);
+		return `<file path="${filePath}">\n<content lines="1-${totalLines}">\n${numberedContent}</content>\n<notice>(End of file - total ${totalLines} lines)</notice>\n</file>`;
 	}
 }
 

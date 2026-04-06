@@ -89,7 +89,6 @@ export class FileTimeTracker {
 			size,
 		});
 
-		console.log(`[FileTimeTracker] 记录文件读取: ${filePath} (session: ${sessionId})`);
 	}
 
 	/**

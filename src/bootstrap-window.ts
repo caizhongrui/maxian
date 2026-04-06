@@ -202,12 +202,15 @@
 				style.textContent += `@import url(${url});\n`;
 			};
 
-			const importMap: { imports: Record<string, string> } = { imports: {} };
+			const importMap: { imports: Record<string, string>; scopes?: Record<string, Record<string, string>> } = { imports: {} };
 			for (const cssModule of configuration.cssModules) {
-				const cssUrl = new URL(cssModule, baseUrl).href;
+				const normalizedCssModule = normalizeCssModulePath(cssModule);
+				const cssUrl = new URL(normalizedCssModule, baseUrl).href;
 				const jsSrc = `globalThis._VSCODE_CSS_LOAD('${cssUrl}');\n`;
 				const blob = new Blob([jsSrc], { type: 'application/javascript' });
-				importMap.imports[cssUrl] = URL.createObjectURL(blob);
+				const blobUrl = URL.createObjectURL(blob);
+				importMap.imports[cssUrl] = blobUrl;
+				registerScopedCssImport(importMap, normalizedCssModule, blobUrl, baseUrl);
 			}
 
 			const ttp = window.trustedTypes?.createPolicy('vscode-bootstrapImportMap', { createScript(value) { return value; }, });
@@ -220,6 +223,36 @@
 			document.head.appendChild(importMapScript);
 
 			performance.mark('code/didAddCssLoader');
+		}
+	}
+
+	function normalizeCssModulePath(cssModule: string): string {
+		const normalized = cssModule.replace(/\\/g, '/').replace(/^\.\//, '');
+		return normalized.startsWith('out/') ? normalized.slice(4) : normalized;
+	}
+
+	function registerScopedCssImport(
+		importMap: { imports: Record<string, string>; scopes?: Record<string, Record<string, string>> },
+		normalizedCssModule: string,
+		blobUrl: string,
+		baseUrl: URL
+	): void {
+		const pathSegments = normalizedCssModule.split('/').filter(Boolean);
+		if (pathSegments.length === 0) {
+			return;
+		}
+
+		importMap.scopes ??= {};
+		for (let depth = 0; depth < pathSegments.length; depth++) {
+			const scopeSegments = pathSegments.slice(0, depth);
+			const relativeSegments = pathSegments.slice(depth);
+			if (relativeSegments.length === 0) {
+				continue;
+			}
+
+			const scopeUrl = new URL(scopeSegments.length > 0 ? `${scopeSegments.join('/')}/` : './', baseUrl).href;
+			const scopedImports = importMap.scopes[scopeUrl] ??= {};
+			scopedImports[`./${relativeSegments.join('/')}`] = blobUrl;
 		}
 	}
 

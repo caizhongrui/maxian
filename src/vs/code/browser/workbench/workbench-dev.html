@@ -49,13 +49,28 @@
 			sheet.insertRule(`@import url(${url});`);
 		};
 
-		const importMap = { imports: {} };
+		const importMap = { imports: {}, scopes: {} };
 		const cssModules = JSON.parse('{{WORKBENCH_DEV_CSS_MODULES}}');
 		for (const cssModule of cssModules) {
-			const cssUrl = new URL(cssModule, globalThis._VSCODE_FILE_ROOT).href;
+			const normalizedCssModule = cssModule.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^out\//, '');
+			const cssUrl = new URL(normalizedCssModule, globalThis._VSCODE_FILE_ROOT).href;
 			const jsSrc = `globalThis._VSCODE_CSS_LOAD('${cssUrl}');\n`;
 			const blob = new Blob([jsSrc], { type: 'application/javascript' });
-			importMap.imports[cssUrl] = URL.createObjectURL(blob);
+			const blobUrl = URL.createObjectURL(blob);
+			importMap.imports[cssUrl] = blobUrl;
+
+			const pathSegments = normalizedCssModule.split('/').filter(Boolean);
+			for (let depth = 0; depth < pathSegments.length; depth++) {
+				const scopeSegments = pathSegments.slice(0, depth);
+				const relativeSegments = pathSegments.slice(depth);
+				if (relativeSegments.length === 0) {
+					continue;
+				}
+
+				const scopeUrl = new URL(scopeSegments.length > 0 ? `${scopeSegments.join('/')}/` : './', globalThis._VSCODE_FILE_ROOT).href;
+				const scopedImports = importMap.scopes[scopeUrl] || (importMap.scopes[scopeUrl] = {});
+				scopedImports[`./${relativeSegments.join('/')}`] = blobUrl;
+			}
 		}
 		const importMapElement = document.createElement('script');
 		importMapElement.type = 'importmap';

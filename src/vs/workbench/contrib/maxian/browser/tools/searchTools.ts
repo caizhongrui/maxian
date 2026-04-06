@@ -18,6 +18,7 @@ import * as glob from '../../../../../base/common/glob.js';
 interface SearchCacheEntry {
 	result: string;
 	timestamp: number;
+	searchPath: string;
 }
 
 /**
@@ -31,6 +32,10 @@ export class SearchTool {
 	private readonly searchCache: Map<string, SearchCacheEntry> = new Map();
 	private readonly CACHE_TTL = 30000; // 30秒缓存
 	private readonly MAX_CACHE_SIZE = 100;
+	private readonly MAX_CONTENT_OUTPUT_FILES = 8;
+	private readonly MAX_CONTENT_OUTPUT_MATCHES = 50;
+	private readonly MAX_PREVIEW_LINE_CHARS = 400;
+	private readonly verboseLogs = false;
 	private cacheHits = 0;
 	private cacheMisses = 0;
 
@@ -41,7 +46,22 @@ export class SearchTool {
 		private readonly workspaceRoot: string,
 		private readonly fileService?: IFileService
 	) {
-		console.log('[SearchTool] 初始化，工作区:', workspaceRoot);
+		this.debugLog('[SearchTool] 初始化，工作区:', workspaceRoot);
+	}
+
+	private debugLog(...args: any[]): void {
+		if (!this.verboseLogs) {
+			return;
+		}
+		console.log(...args);
+	}
+
+	private truncatePreviewLine(line: string): string {
+		const trimmed = line.trim();
+		if (trimmed.length <= this.MAX_PREVIEW_LINE_CHARS) {
+			return trimmed;
+		}
+		return `${trimmed.slice(0, this.MAX_PREVIEW_LINE_CHARS)}...`;
 	}
 
 	/**
@@ -56,7 +76,7 @@ export class SearchTool {
 
 		// output_mode 默认 'files_with_matches'（减少 token 消耗），可选 'content' / 'count'
 		const outputMode = (output_mode as 'content' | 'files_with_matches' | 'count') || 'files_with_matches';
-		const headLimit = head_limit ? parseInt(head_limit, 10) : 250;
+		const headLimit = head_limit ? parseInt(head_limit, 10) : 100;
 		const offsetVal = offset ? parseInt(offset, 10) : 0;
 
 		if (!regex && !file_pattern) {
@@ -88,7 +108,7 @@ export class SearchTool {
 			try {
 				// 如果提供了 regex，执行内容搜索（QueryType.Text，底层使用 ripgrep 搜索文件内容）
 				if (regex) {
-					console.log('[SearchTool] searchFiles 内容搜索，路径:', searchPath, 'regex:', regex, 'file_pattern:', file_pattern, 'isFilePath:', isFilePath);
+					this.debugLog('[SearchTool] searchFiles 内容搜索，路径:', searchPath, 'regex:', regex, 'file_pattern:', file_pattern, 'isFilePath:', isFilePath);
 
 					// 合并文件过滤：若path指向文件则用文件名，否则用file_pattern参数
 					const effectiveFilePattern = fileNameFilter || file_pattern;
@@ -100,7 +120,7 @@ export class SearchTool {
 
 					clearTimeout(timeoutId);
 					const elapsed = Date.now() - startTime;
-					console.log('[SearchTool] searchFiles 内容搜索完成，耗时:', elapsed, 'ms，匹配文件数:', new Set(Array.from(results.values()).map(r => r.filePath)).size);
+					this.debugLog('[SearchTool] searchFiles 内容搜索完成，耗时:', elapsed, 'ms，匹配文件数:', new Set(Array.from(results.values()).map(r => r.filePath)).size);
 
 					if (results.size === 0) {
 						return `❌ 未找到匹配正则表达式 "${regex}" 的内容\n\n📁 搜索路径: "${searchPath}"${file_pattern ? '\n📄 文件模式: ' + file_pattern : ''}\n\n💡 建议：\n1. 检查正则表达式语法是否正确\n2. 或使用 codebase_search 进行关键词搜索\n3. 或使用 glob 工具按文件名搜索`;
@@ -127,21 +147,27 @@ export class SearchTool {
 						return filePaths.join('\n');
 					}
 
+					if (!isFilePath && !effectiveFilePattern && resultsByFile.size > this.MAX_CONTENT_OUTPUT_FILES) {
+						const filePaths = sortedFiles.slice(0, headLimit);
+						return `检测到 content 模式会跨 ${resultsByFile.size} 个文件返回大量内容，已自动降级为文件路径列表以避免主线程卡住。\n\n请先从这些候选文件中选择目标文件再 read_file：\n\n${filePaths.join('\n')}`;
+					}
+
 					// content 模式：返回完整内容（filePath:lineNumber: content）
 					const allResults: string[] = [];
 					for (const filePath of sortedFiles) {
 						const fileResults = resultsByFile.get(filePath)!;
 						for (const { lineNumber, line } of fileResults) {
-							allResults.push(`${filePath}:${lineNumber}: ${line.trim()}`);
+							allResults.push(`${filePath}:${lineNumber}: ${this.truncatePreviewLine(line)}`);
 						}
 					}
-					const paged = allResults.slice(offsetVal, offsetVal + headLimit);
+					const contentLimit = Math.min(headLimit, this.MAX_CONTENT_OUTPUT_MATCHES);
+					const paged = allResults.slice(offsetVal, offsetVal + contentLimit);
 					return `找到 ${results.size} 个匹配 (显示 ${offsetVal + 1}-${offsetVal + paged.length} / ${allResults.length}):\n\n${paged.join('\n')}`;
 				}
 
 				// 只有 file_pattern，执行文件名搜索（QueryType.File）
 				const includePattern = file_pattern || '**/*';
-				console.log('[SearchTool] searchFiles 文件名搜索，路径:', folderPath, '模式:', includePattern);
+				this.debugLog('[SearchTool] searchFiles 文件名搜索，路径:', folderPath, '模式:', includePattern);
 
 				const result = await this.searchService.fileSearch({
 					type: QueryType.File,
@@ -152,15 +178,15 @@ export class SearchTool {
 
 				clearTimeout(timeoutId);
 				const elapsed = Date.now() - startTime;
-				console.log('[SearchTool] searchFiles 文件名搜索完成，耗时:', elapsed, 'ms，结果数:', result?.results?.length || 0);
+				this.debugLog('[SearchTool] searchFiles 文件名搜索完成，耗时:', elapsed, 'ms，结果数:', result?.results?.length || 0);
 
 				if (!result || !result.results || result.results.length === 0) {
 					// 🔥 优化：当搜索返回0结果时，给AI明确的指导，防止重复搜索
 					const dirExists = await this.checkDirectoryExists(searchPath);
 					if (!dirExists) {
-						return `❌ 未找到匹配的文件\n\n📁 目录 "${searchPath}" 不存在。\n\n💡 建议：如果你需要创建文件，请：\n1. 使用 write_to_file 创建单个文件\n2. 或使用 batch 工具批量创建多个文件（如开发游戏：HTML、CSS、JS同时创建）\n\n⚠️ 重要：不要再次搜索同一个不存在的目录，这会浪费时间和资源！`;
+						return `❌ 未找到匹配的文件\n\n📁 目录 "${searchPath}" 不存在。\n\n💡 建议：如果你需要创建文件，请逐步使用 write_to_file 创建，并在关键步骤后验证结果。\n\n⚠️ 重要：不要再次搜索同一个不存在的目录，这会浪费时间和资源！`;
 					} else {
-						return `❌ 未找到匹配的文件\n\n📁 目录 "${searchPath}" 存在但为空或没有匹配 "${includePattern}" 的文件。\n\n💡 建议：\n1. 检查目录路径是否正确\n2. 或使用 list_files 查看目录内容\n3. 或创建新文件（write_to_file 或 batch）\n\n⚠️ 重要：不要再次搜索同一个目录，请尝试其他策略！`;
+						return `❌ 未找到匹配的文件\n\n📁 目录 "${searchPath}" 存在但为空或没有匹配 "${includePattern}" 的文件。\n\n💡 建议：\n1. 检查目录路径是否正确\n2. 或使用 list_files 查看目录内容\n3. 或逐步创建所需文件并验证\n\n⚠️ 重要：不要再次搜索同一个目录，请尝试其他策略！`;
 					}
 				}
 
@@ -190,18 +216,22 @@ export class SearchTool {
 	 * @returns 搜索结果
 	 */
 	async codebaseSearch(toolUse: CodebaseSearchToolUse): Promise<ToolResponse> {
-		let { query, path, file_pattern } = toolUse.params;
+		let { query, path, file_pattern, output_mode, head_limit, offset } = toolUse.params;
 
 		if (!query) {
 			return '错误: 未提供搜索查询';
 		}
+
+		const outputMode = (output_mode as 'content' | 'files_with_matches' | 'count') || 'files_with_matches';
+		const headLimit = head_limit ? parseInt(head_limit, 10) : 100;
+		const offsetVal = offset ? parseInt(offset, 10) : 0;
 
 		// P1优化：清理query，移除AI错误传入的上下文标签
 		const originalQuery = query;
 		query = this.cleanSearchQuery(query);
 
 		if (query !== originalQuery) {
-			console.log('[SearchTool] Query已清理，原始长度:', originalQuery.length, '清理后:', query.length);
+			this.debugLog('[SearchTool] Query已清理，原始长度:', originalQuery.length, '清理后:', query.length);
 		}
 
 		const startTime = Date.now();
@@ -216,7 +246,7 @@ export class SearchTool {
 		const cachedResult = this.getFromCache(cacheKey);
 		if (cachedResult) {
 			this.cacheHits++;
-			console.log(`[SearchTool] 使用缓存结果 (命中率: ${this.getCacheHitRate()}%)`);
+			this.debugLog(`[SearchTool] 使用缓存结果 (命中率: ${this.getCacheHitRate()}%)`);
 			return cachedResult;
 		}
 		this.cacheMisses++;
@@ -228,48 +258,24 @@ export class SearchTool {
 				? { [file_pattern]: true }
 				: undefined;
 
-			console.log('[SearchTool] codebaseSearch 开始，查询:', query, '路径:', searchPath);
+			this.debugLog('[SearchTool] codebaseSearch 开始，查询:', query, '路径:', searchPath);
 
 			// 创建可取消的 token（30秒超时，大型项目 ripgrep 需要时间）
 			const cts = new CancellationTokenSource();
 			const timeoutId = setTimeout(() => cts.cancel(), 30000);
 
 			try {
-				// 策略1: 直接文本搜索（使用 ripgrep）
+				// 对齐 Claude Code / OpenCode：codebase_search 作为自然语言兜底搜索，不再在运行时二次拆词猜测。
 				const searchStart = Date.now();
 				const results = await this.performTextSearchDirect(folderUri, query, includePattern, false, cts.token);
 				const searchElapsed = Date.now() - searchStart;
-				console.log('[SearchTool] 直接搜索完成，耗时:', searchElapsed, 'ms，结果数:', results.size);
-
-				// 如果直接搜索有结果，直接返回
-				if (results.size > 0) {
-					clearTimeout(timeoutId);
-					const result = await this.formatSearchResults(query, results, startTime);
-					this.setCache(cacheKey, result);
-					return result;
-				}
-
-				// 策略2: 如果直接搜索无结果，使用智能关键词提取（支持中文）
-				const keywords = this.extractSearchKeywords(query);
-				if (keywords.length > 0) {
-					console.log('[SearchTool] 直接搜索无结果，尝试关键词搜索:', keywords.slice(0, 5));
-					const keywordStart = Date.now();
-
-					// 搜索提取的关键词（最多5个）
-					for (const keyword of keywords.slice(0, 5)) {
-						if (cts.token.isCancellationRequested) break;
-						if (results.size >= 50) break; // 足够结果就停止
-						const keywordResults = await this.performTextSearchDirect(folderUri, keyword, includePattern, false, cts.token);
-						keywordResults.forEach((v, k) => results.set(k, v));
-					}
-
-					const keywordElapsed = Date.now() - keywordStart;
-					console.log('[SearchTool] 关键词搜索完成，耗时:', keywordElapsed, 'ms，累计结果:', results.size);
-				}
+				this.debugLog('[SearchTool] 直接搜索完成，耗时:', searchElapsed, 'ms，结果数:', results.size);
 
 				clearTimeout(timeoutId);
-				const result = await this.formatSearchResults(query, results, startTime);
-				this.setCache(cacheKey, result);
+				const result = await this.formatSearchResults(query, results, startTime, outputMode, headLimit, offsetVal);
+				if (results.size > 0) {
+					this.setCache(cacheKey, result);
+				}
 				return result;
 			} finally {
 				clearTimeout(timeoutId);
@@ -288,10 +294,13 @@ export class SearchTool {
 	private async formatSearchResults(
 		query: string,
 		results: Map<string, { filePath: string; lineNumber: number; line: string }>,
-		startTime: number
+		startTime: number,
+		outputMode: 'content' | 'files_with_matches' | 'count',
+		headLimit: number,
+		offsetVal: number
 	): Promise<string> {
 		const elapsed = Date.now() - startTime;
-		console.log('[SearchTool] codebaseSearch 完成，总耗时:', elapsed, 'ms，最终结果:', results.size);
+		this.debugLog('[SearchTool] codebaseSearch 完成，总耗时:', elapsed, 'ms，最终结果:', results.size);
 
 		if (results.size === 0) {
 			return `未找到与 "${query}" 相关的结果。\n\n建议：\n- 尝试使用 glob 工具按文件名搜索\n- 尝试 search_files 进行正则表达式搜索`;
@@ -309,18 +318,32 @@ export class SearchTool {
 		// 按 mtime 排序文件（最近修改的在前，参考 OpenCode grep.ts）
 		const sortedFiles = await this.sortFilesByMtime([...resultsByFile.keys()]);
 
+		if (outputMode === 'count') {
+			return `${results.size} matches across ${resultsByFile.size} files`;
+		}
+
+		if (outputMode === 'files_with_matches') {
+			const pagedFiles = sortedFiles.slice(offsetVal, offsetVal + headLimit);
+			return pagedFiles.join('\n');
+		}
+
+		if (resultsByFile.size > this.MAX_CONTENT_OUTPUT_FILES) {
+			const pagedFiles = sortedFiles.slice(0, headLimit);
+			return `检测到语义搜索 content 模式会跨 ${resultsByFile.size} 个文件返回大量内容，已自动降级为文件路径列表以避免主线程卡住。\n\n请先选定候选文件再 read_file：\n\n${pagedFiles.join('\n')}`;
+		}
+
 		// 按文件 mtime 顺序展开结果
 		const allResults: string[] = [];
 		for (const filePath of sortedFiles) {
 			const fileResults = resultsByFile.get(filePath)!;
 			for (const { lineNumber, line } of fileResults) {
-				allResults.push(`${filePath}:${lineNumber}: ${line.trim()}`);
-				if (allResults.length >= 50) break;
+				allResults.push(`${filePath}:${lineNumber}: ${this.truncatePreviewLine(line)}`);
 			}
-			if (allResults.length >= 50) break;
 		}
 
-		return `找到 ${results.size} 个匹配 (显示前${allResults.length}个，耗时${elapsed}ms):\n\n${allResults.join('\n')}`;
+		const contentLimit = Math.min(headLimit, this.MAX_CONTENT_OUTPUT_MATCHES);
+		const paged = allResults.slice(offsetVal, offsetVal + contentLimit);
+		return `找到 ${results.size} 个匹配 (显示 ${offsetVal + 1}-${offsetVal + paged.length} / ${allResults.length}，耗时${elapsed}ms):\n\n${paged.join('\n')}`;
 	}
 
 	/**
@@ -385,7 +408,7 @@ export class SearchTool {
 
 						for (const textResult of fileMatch.results) {
 							if (resultIsMatch(textResult)) {
-								const line = textResult.previewText;
+								const line = this.truncatePreviewLine(textResult.previewText);
 								const lineNumber = textResult.rangeLocations[0]?.source.startLineNumber ?? 0;
 								const key = `${filePath}:${lineNumber}`;
 
@@ -580,51 +603,17 @@ export class SearchTool {
 		return cleaned || query;
 	}
 
-	/**
-	 * 提取搜索关键词
-	 * 支持中文分词和英文单词提取
-	 */
-	private extractSearchKeywords(query: string): string[] {
-		const keywords: string[] = [];
-
-		// 1. 提取英文单词（驼峰命名、下划线命名等）
-		const englishWords = query.match(/[a-zA-Z][a-zA-Z0-9_]*[a-zA-Z0-9]/g) || [];
-		keywords.push(...englishWords.filter(w => w.length >= 3));
-
-		// 2. 中文关键词提取 - 基于常见编程术语
-		const chineseTerms = [
-			'登录', '注册', '验证', '验证码', '短信', '用户', '密码',
-			'接口', '服务', '控制器', '配置', '参数', '请求', '响应',
-			'数据', '查询', '新增', '修改', '删除', '列表', '详情',
-			'权限', '角色', '菜单', '日志', '缓存', '任务', '定时',
-			'上传', '下载', '导入', '导出', '审核', '流程', '工作流',
-			'支付', '订单', '商品', '库存', '会员', '积分', '优惠',
-			'消息', '通知', '推送', '邮件', '模板', '配置', '系统'
-		];
-
-		for (const term of chineseTerms) {
-			if (query.includes(term)) {
-				keywords.push(term);
-			}
-		}
-
-		// 3. 如果没有找到关键词，尝试按常见分隔符分割中文
-		if (keywords.length === 0) {
-			const chineseWords = query.split(/[，。、；：！？\s]+/).filter(w => w.length >= 2 && w.length <= 10);
-			keywords.push(...chineseWords.slice(0, 5));
-		}
-
-		// 去重
-		return [...new Set(keywords)];
-	}
-
 	// ========== P1优化：搜索缓存方法 ==========
 
 	/**
 	 * 生成缓存键
 	 */
 	private getCacheKey(query: string, path: string, filePattern?: string): string {
-		return `${query}:${path}:${filePattern || ''}`;
+		return JSON.stringify({
+			query,
+			path,
+			filePattern: filePattern || '',
+		});
 	}
 
 	/**
@@ -656,8 +645,18 @@ export class SearchTool {
 
 		this.searchCache.set(key, {
 			result,
-			timestamp: Date.now()
+			timestamp: Date.now(),
+			searchPath: this.extractSearchPathFromKey(key),
 		});
+	}
+
+	private extractSearchPathFromKey(key: string): string {
+		try {
+			const parsed = JSON.parse(key);
+			return typeof parsed?.path === 'string' ? parsed.path : '';
+		} catch {
+			return '';
+		}
 	}
 
 	/**
@@ -713,7 +712,38 @@ export class SearchTool {
 		this.searchCache.clear();
 		this.cacheHits = 0;
 		this.cacheMisses = 0;
-		console.log('[SearchTool] 搜索缓存已清除');
+		this.debugLog('[SearchTool] 搜索缓存已清除');
+	}
+
+	public invalidatePaths(paths: string[]): void {
+		if (paths.length === 0) {
+			return;
+		}
+
+		const normalizedPaths = paths.map(p => p.replace(/\/$/, ''));
+		const keysToDelete: string[] = [];
+
+		for (const [key, entry] of this.searchCache.entries()) {
+			const cachedPath = entry.searchPath.replace(/\/$/, '');
+			if (!cachedPath) {
+				keysToDelete.push(key);
+				continue;
+			}
+
+			const shouldInvalidate = normalizedPaths.some(affectedPath =>
+				affectedPath === cachedPath ||
+				affectedPath.startsWith(`${cachedPath}/`) ||
+				cachedPath.startsWith(`${affectedPath}/`)
+			);
+
+			if (shouldInvalidate) {
+				keysToDelete.push(key);
+			}
+		}
+
+		for (const key of keysToDelete) {
+			this.searchCache.delete(key);
+		}
 	}
 
 	/**

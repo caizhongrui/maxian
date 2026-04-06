@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IToolExecutor } from './toolExecutor.js';
+import { IToolExecutor, ToolExecutionResult } from './toolExecutor.js';
 import { ToolUse, ToolResponse, ToolName } from './toolTypes.js';
 
 /**
@@ -73,10 +73,74 @@ export class FilteredToolExecutor implements IToolExecutor {
 		return this.inner.executeTool(toolUse);
 	}
 
+	async executeToolWithResult(toolUse: ToolUse): Promise<ToolExecutionResult> {
+		const detailedExecutor = this.inner as IToolExecutor & {
+			executeToolWithResult?: (toolUse: ToolUse) => Promise<ToolExecutionResult>;
+		};
+
+		if (toolUse.name === 'task') {
+			return {
+				success: false,
+				status: 'error',
+				result: `<error>
+子 Agent 不允许调用 task 工具，以防止无限递归。
+请直接完成分配给您的任务，而不是派发更多子 Agent。
+</error>`,
+				error: '子 Agent 不允许调用 task 工具',
+				metadata: { toolName: toolUse.name, shouldCacheResult: false }
+			};
+		}
+
+		if (toolUse.name === 'attempt_completion' || toolUse.name === 'ask_followup_question') {
+			if (typeof detailedExecutor.executeToolWithResult === 'function') {
+				return detailedExecutor.executeToolWithResult(toolUse);
+			}
+			return {
+				success: true,
+				status: 'success',
+				result: await this.inner.executeTool(toolUse),
+				metadata: { toolName: toolUse.name, shouldCacheResult: false }
+			};
+		}
+
+		if (!this.allowedTools.has(toolUse.name)) {
+			const allowedList = Array.from(this.allowedTools).sort().join(', ');
+			return {
+				success: false,
+				status: 'error',
+				result: `<error>
+子 Agent 无权使用工具 "${toolUse.name}"。
+此 Agent 类型仅允许以下工具: ${allowedList}
+</error>`,
+				error: `子 Agent 无权使用工具 "${toolUse.name}"`,
+				metadata: { toolName: toolUse.name, shouldCacheResult: false }
+			};
+		}
+
+		if (typeof detailedExecutor.executeToolWithResult === 'function') {
+			return detailedExecutor.executeToolWithResult(toolUse);
+		}
+
+		return {
+			success: true,
+			status: 'success',
+			result: await this.inner.executeTool(toolUse),
+			metadata: { toolName: toolUse.name }
+		};
+	}
+
 	/**
 	 * 获取允许的工具集（用于调试）
 	 */
 	getAllowedTools(): string[] {
 		return Array.from(this.allowedTools);
+	}
+
+	clearCommittedStateForPaths(paths: string[]): void {
+		this.inner.clearCommittedStateForPaths?.(paths);
+	}
+
+	async preflightToolUse(toolUse: ToolUse): Promise<ToolExecutionResult | null> {
+		return this.inner.preflightToolUse?.(toolUse) ?? null;
 	}
 }

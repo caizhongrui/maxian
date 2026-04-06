@@ -20,6 +20,24 @@ export interface IToolExecutor {
 	executeTool(toolUse: ToolUse): Promise<ToolResponse>;
 
 	/**
+	 * 执行工具调用并返回结构化结果。
+	 * TaskService 使用此接口判断工具是否真正成功，避免把错误字符串当作成功结果继续推进。
+	 */
+	executeToolWithResult?(toolUse: ToolUse): Promise<ToolExecutionResult>;
+
+	/**
+	 * 在文件真正提交后同步内部缓存状态。
+	 */
+	clearCommittedStateForPaths?(paths: string[]): void;
+
+	/**
+	 * 在进入用户审批前做轻量预检。
+	 * 主要用于 edit/multiedit 这类需要基于当前文件精确定位的工具。
+	 * 返回 null 表示预检通过；返回失败结果表示应直接阻断并把错误回给模型。
+	 */
+	preflightToolUse?(toolUse: ToolUse): Promise<ToolExecutionResult | null>;
+
+	/**
 	 * 检查工具是否可用
 	 * @param toolName 工具名称
 	 * @returns 是否可用
@@ -53,7 +71,19 @@ export interface ToolExecutionContext {
  */
 export interface ToolExecutionResult {
 	success: boolean;
+	status: 'success' | 'error' | 'fatal_error' | 'blocked_loop' | 'approval_required' | 'input_required';
+	code?: string;
+	retryable?: boolean;
+	nextAction?: 'retry' | 'read_before_write' | 'refocus' | 'ask_user' | 'none';
 	result?: ToolResponse;
 	error?: string;
-	metadata?: Record<string, any>;
+	metadata?: {
+		toolName?: ToolName;
+		affectedPaths?: string[];
+		didWrite?: boolean;
+		shouldInvalidateSearchCache?: boolean;
+		shouldResetReadTracking?: boolean;
+		shouldCacheResult?: boolean;
+		[key: string]: any;
+	};
 }

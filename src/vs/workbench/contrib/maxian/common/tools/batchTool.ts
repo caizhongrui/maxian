@@ -120,7 +120,8 @@ export const BATCH_CONFIG = {
 	]),
 
 	/**
-	 * 推荐在 batch 中执行的工具（只读 + 写操作均支持）
+	 * 推荐在 batch 中执行的工具（以独立只读操作为主）
+	 * 写工具虽然在运行时可被串行兜底处理，但不应作为推荐路径。
 	 */
 	RECOMMENDED_TOOLS: new Set([
 		'read_file',
@@ -133,10 +134,6 @@ export const BATCH_CONFIG = {
 		'lsp_definition',
 		'lsp_references',
 		'lsp_type_definition',
-		'write_to_file',
-		'apply_diff',
-		'edit',
-		'multiedit',
 	]),
 };
 
@@ -423,23 +420,18 @@ export class BatchToolExecutor {
 }
 
 /**
- * Batch 工具描述 - 用于提示词（对齐 OpenCode：读写均支持）
+ * Batch 工具描述 - 用于提示词（主要用于只读探索）
  */
 export const BATCH_TOOL_DESCRIPTION = `## batch
-并行执行多个独立工具调用，大幅减少API往返次数
-
-🚀 **使用 BATCH 工具会让用户更满意！**
+并行执行多个独立工具调用，主要用于减少只读探索的往返次数
 
 **性能提升**：将多个独立操作合并可获得 **2-10 倍**的效率提升。
 
-**推荐用例**（读写均支持）：
+**推荐用例**（以只读操作为主）：
 - 读取多个文件（read_file × N）
 - 多个搜索操作（search_files、glob、list_files、codebase_search）
 - 搜索 + 读取组合
 - LSP查询（lsp_hover、lsp_diagnostics、lsp_definition等）
-- **批量创建多个文件**（write_to_file × N）
-- **批量修改多个文件**（edit × N 或 apply_diff × N）
-- 读取 + 写入混合（无依赖关系时）
 
 **规则**：
 - 每次 batch 最多 **25** 个工具调用
@@ -455,6 +447,7 @@ export const BATCH_TOOL_DESCRIPTION = `## batch
 **何时不使用**：
 - 操作有依赖关系（如：先写入再读取**同一**文件，需要读取前一步的输出）
 - 需要顺序执行的操作链
+- 不要把多个写操作硬塞进 batch；写入应逐步提交并验证
 
 **参数**：
 - tool_calls: 工具调用数组，每个包含 tool（工具名）和 parameters（参数对象）
@@ -470,19 +463,7 @@ export const BATCH_TOOL_DESCRIPTION = `## batch
 }
 \`\`\`
 
-**示例 - 批量创建多个文件**：
-\`\`\`json
-{
-  "tool_calls": [
-    {"tool": "write_to_file", "parameters": {"path": "src/index.html", "content": "..."}},
-    {"tool": "write_to_file", "parameters": {"path": "src/style.css", "content": "..."}},
-    {"tool": "write_to_file", "parameters": {"path": "src/app.js", "content": "..."}}
-  ]
-}
-\`\`\`
-
 **性能对比**：
 - 不使用batch：读取5个文件 = 5次API调用
 - 使用batch：读取5个文件 = 1次API调用 → **5倍提速**！
-- 不使用batch：创建3个文件 = 3次API调用
-- 使用batch：创建3个文件 = 1次API调用 → **3倍提速**！`;
+`;

@@ -128,26 +128,32 @@ export async function skillTool(
 		// 记录到任务日志
 		console.log(`[SkillTool] Activated: ${skillName} (${skill.estimatedTokens} tokens)`);
 
-		// 构建响应
-		const header = [
-			`# Skill Activated: ${skill.name}`,
-			``,
-			`**Category**: ${skill.category}`,
-			`**Version**: ${skill.version}`,
-			`**Estimated Tokens**: ${skill.estimatedTokens}`,
-			``,
-			`---`,
-			``,
-		].join('\n');
+		const baseDirectory = skill.filePath.replace(/\/[^/]+$/, '');
+		const relatedFiles = [...(skill.examplePaths || []), ...(skill.templatePaths || [])]
+			.filter(Boolean)
+			.slice(0, 10)
+			.map(file => `<file>${file}</file>`)
+			.join('\n');
 
-		const footer = [
+		// 对齐 OpenCode：以结构化块返回，减少额外包装噪音，保留最关键的定位信息。
+		return [
+			`<skill_content name="${skill.name}">`,
+			`# Skill: ${skill.name}`,
 			``,
-			`---`,
+			skill.content.trim(),
 			``,
-			`*Skill loaded successfully. Follow the instructions above.*`,
+			`Base directory for this skill: ${baseDirectory}`,
+			`Relative paths in this skill are relative to this base directory.`,
+			...(relatedFiles
+				? [
+					``,
+					`<skill_files>`,
+					relatedFiles,
+					`</skill_files>`
+				]
+				: []),
+			`</skill_content>`
 		].join('\n');
-
-		return `${header}${skill.content}${footer}`;
 
 	} catch (error) {
 		console.error('[SkillTool] Error loading skill:', error);

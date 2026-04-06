@@ -9,6 +9,7 @@
 
 import { ToolUse } from './toolTypes.js';
 import { t } from '../i18n/index.js';
+import * as path from '../../../../../base/common/path.js';
 
 /**
  * P2优化：工具调用历史条目
@@ -16,6 +17,19 @@ import { t } from '../i18n/index.js';
 interface ToolCallHistoryEntry {
 	name: string;
 	paramsHash: string;
+	timestamp: number;
+}
+
+interface FileActivityEntry {
+	file: string;
+	kind: 'read' | 'write';
+	tool: string;
+	timestamp: number;
+}
+
+interface TaskDelegationEntry {
+	key: string;
+	subagentType: string;
 	timestamp: number;
 }
 
@@ -39,11 +53,14 @@ export class ToolRepetitionDetector {
 
 	// 同一文件反复写入检测
 	private fileWriteHistory: Array<{ file: string; tool: string; timestamp: number }> = [];
-	private readonly FILE_WRITE_LOOP_THRESHOLD = 3; // 同一文件写入3次触发检测
+	private readonly FILE_WRITE_LOOP_THRESHOLD = 4; // 允许合理的 2-3 次连续修改，只拦真正空转
+	private readonly SAME_FILE_SAME_TOOL_THRESHOLD = 3;
+	private readonly READ_WRITE_OSCILLATION_WINDOW = 6;
 	private readonly WRITE_TOOLS = new Set(['apply_diff', 'edit', 'write_to_file', 'multiedit', 'patch']);
-	// 写入循环警告后已重置的文件集合（每个文件只告警一次，告警后给 AI 重试机会）
-	private fileWriteWarnedAndReset: Set<string> = new Set();
-
+	private readonly READ_TOOLS = new Set(['read_file']);
+	private fileActivityHistory: FileActivityEntry[] = [];
+	private taskDelegationHistory: TaskDelegationEntry[] = [];
+	private readonly TASK_DELEGATION_LOOP_THRESHOLD = 2;
 	/**
 	 * Creates a new ToolRepetitionDetector
 	 * @param limit The maximum number of identical consecutive tool calls allowed (default: 3)
@@ -68,8 +85,9 @@ export class ToolRepetitionDetector {
 		};
 	} {
 		// Serialize the block to a canonical JSON string for comparison
-		const currentToolCallJson = this.serializeToolUse(currentToolCallBlock);
-		const paramsHash = this.hashParams(currentToolCallBlock.params);
+		const normalizedToolCall = this.normalizeToolUse(currentToolCallBlock);
+		const currentToolCallJson = JSON.stringify(normalizedToolCall);
+		const paramsHash = this.hashParams(normalizedToolCall.parameters);
 
 		// P2优化：记录到历史
 		this.addToHistory(currentToolCallBlock.name, paramsHash);
@@ -80,7 +98,6 @@ export class ToolRepetitionDetector {
 			if (fileWriteResult.detected) {
 				this.doomLoopDetected = true;
 				this.doomLoopCount++;
-				console.warn(`[ToolRepetitionDetector] 同一文件反复写入检测触发: ${currentToolCallBlock.name}`);
 				return {
 					allowExecution: false,
 					askUser: {
@@ -89,6 +106,34 @@ export class ToolRepetitionDetector {
 					},
 				};
 			}
+		}
+
+		if (currentToolCallBlock.name === 'task') {
+			const repeatedTaskResult = this.detectRepeatedTaskDelegation(currentToolCallBlock);
+			if (repeatedTaskResult.detected) {
+				this.doomLoopDetected = true;
+				this.doomLoopCount++;
+				return {
+					allowExecution: false,
+					askUser: {
+						messageKey: 'doom_loop_detected',
+						messageDetail: repeatedTaskResult.message,
+					},
+				};
+			}
+		}
+
+		const oscillationResult = this.detectFileReadWriteOscillation(currentToolCallBlock);
+		if (oscillationResult.detected) {
+			this.doomLoopDetected = true;
+			this.doomLoopCount++;
+			return {
+				allowExecution: false,
+				askUser: {
+					messageKey: 'doom_loop_detected',
+					messageDetail: oscillationResult.message,
+				},
+			};
 		}
 
 		// 连续相同检测
@@ -124,7 +169,6 @@ export class ToolRepetitionDetector {
 		if (doomLoopResult.detected) {
 			this.doomLoopDetected = true;
 			this.doomLoopCount++;
-			console.warn(`[ToolRepetitionDetector] Doom Loop检测触发: ${currentToolCallBlock.name} (第${this.doomLoopCount}次)`);
 
 			return {
 				allowExecution: false,
@@ -193,7 +237,7 @@ export class ToolRepetitionDetector {
 	 */
 	private detectSameFileWriteLoop(toolUse: ToolUse): { detected: boolean; message: string } {
 		// 提取目标文件路径
-		const filePath = (toolUse.params as any).path as string | undefined;
+		const filePath = this.normalizePathValue((toolUse.params as any).path as string | undefined);
 		if (!filePath) {
 			return { detected: false, message: '' };
 		}
@@ -211,18 +255,92 @@ export class ToolRepetitionDetector {
 			e => e.file === filePath && e.timestamp < now
 		);
 
-		if (previousWrites.length >= this.FILE_WRITE_LOOP_THRESHOLD) {
-			// 触发告警后，立即清空该文件的写入历史，给 AI 一次重试机会
-			// 避免每次写入都触发检测，导致 AI 永远无法继续
-			this.fileWriteHistory = this.fileWriteHistory.filter(e => e.file !== filePath);
-			this.fileWriteWarnedAndReset.add(filePath);
+		const sameToolWrites = previousWrites.filter(e => e.tool === toolUse.name);
+		if (
+			previousWrites.length >= this.FILE_WRITE_LOOP_THRESHOLD &&
+			sameToolWrites.length >= this.SAME_FILE_SAME_TOOL_THRESHOLD
+		) {
 			return {
 				detected: true,
-				message: `🔴 检测到对同一文件的重复修改！文件 "${filePath}" 已被写入 ${previousWrites.length} 次。\n\n⚠️ 你陷入了"改了又改"的死循环！这通常意味着：\n1. 你的修改策略有误——已修改的内容被你重新覆盖\n2. LSP 错误并非源于这个文件，而是其他文件引用了已被删除的字段\n\n💡 立即停止修改此文件，转向：\n1. 检查引用了该文件字段的其他文件（使用 search_files 搜索字段名）\n2. 使用 read_file 确认当前文件实际内容，再决定是否需要修改\n3. 如果不确定，使用 ask_followup_question 询问用户\n\n⚠️ 已重置该文件的写入计数，允许继续修改，但请改变策略！`
+				message: `🔴 检测到对同一文件的重复修改！文件 "${filePath}" 在短时间内已被写入 ${previousWrites.length} 次，其中同一种写入工具 "${toolUse.name}" 已重复 ${sameToolWrites.length} 次。\n\n这通常意味着你没有真正推进，只是在围绕同一个文件重试。\n\n请立即切换策略：\n1. 如果同一文件还要改多处，先完整读取当前版本，再合并成一次 multiedit\n2. 如果错误已经转移到其他文件，去查调用方、配置入口或引用方\n3. 如果当前修改实际上已经完成，直接总结并调用 attempt_completion`
 			};
 		}
 
 		return { detected: false, message: '' };
+	}
+
+	private detectFileReadWriteOscillation(toolUse: ToolUse): { detected: boolean; message: string } {
+		const filePath = this.normalizePathValue((toolUse.params as any).path as string | undefined);
+		if (!filePath) {
+			return { detected: false, message: '' };
+		}
+
+		const kind: 'read' | 'write' | null = this.READ_TOOLS.has(toolUse.name)
+			? 'read'
+			: (this.WRITE_TOOLS.has(toolUse.name) ? 'write' : null);
+
+		if (!kind) {
+			return { detected: false, message: '' };
+		}
+
+		const now = Date.now();
+		const windowStart = now - this.TIME_WINDOW_MS;
+		this.fileActivityHistory.push({ file: filePath, kind, tool: toolUse.name, timestamp: now });
+		this.fileActivityHistory = this.fileActivityHistory.filter(entry => entry.timestamp >= windowStart);
+
+		const recentSameFile = this.fileActivityHistory.filter(entry => entry.file === filePath).slice(-this.READ_WRITE_OSCILLATION_WINDOW);
+		if (recentSameFile.length < this.READ_WRITE_OSCILLATION_WINDOW) {
+			return { detected: false, message: '' };
+		}
+
+		const kinds = recentSameFile.map(entry => entry.kind);
+		const isAlternating = kinds.every((entryKind, index) => index === 0 || entryKind !== kinds[index - 1]);
+		const writeCount = recentSameFile.filter(entry => entry.kind === 'write').length;
+		const readCount = recentSameFile.filter(entry => entry.kind === 'read').length;
+
+		if (!isAlternating || writeCount < 3 || readCount < 3) {
+			return { detected: false, message: '' };
+		}
+
+		return {
+			detected: true,
+			message: `🔴 检测到同一文件的读写振荡！文件 "${filePath}" 在短时间内出现了 ${recentSameFile.map(entry => `${entry.kind}:${entry.tool}`).join(' → ')}。\n\n这表示你正在围绕同一文件反复读取、修改、再读取、再修改，而不是在推进任务。\n\n立即停止继续围绕这个文件打转，并改用不同策略：\n1. 先判断新增错误是否真的仍在这个文件中\n2. 如果同一文件还需要继续改，先完整 read_file 当前版本，再合并为一次 multiedit\n3. 如果错误已经在其他文件，转去查调用链或配置入口`
+		};
+	}
+
+	private detectRepeatedTaskDelegation(toolUse: ToolUse): { detected: boolean; message: string } {
+		const subagentType = this.normalizeTextValue((toolUse.params as any).subagent_type ?? '');
+		const prompt = this.normalizeTextValue((toolUse.params as any).prompt ?? (toolUse.params as any).task ?? '');
+		const taskId = this.normalizeTextValue((toolUse.params as any).task_id ?? '');
+
+		if (!subagentType && !prompt && !taskId) {
+			return { detected: false, message: '' };
+		}
+
+		// 显式 task_id 表示继续同一个子任务上下文，不应被视为“重复新建子任务”。
+		if (taskId) {
+			return { detected: false, message: '' };
+		}
+
+		const now = Date.now();
+		const windowStart = now - this.TIME_WINDOW_MS;
+		const key = `prompt:${subagentType}:${prompt}`;
+
+		this.taskDelegationHistory.push({ key, subagentType, timestamp: now });
+		this.taskDelegationHistory = this.taskDelegationHistory.filter(entry => entry.timestamp >= windowStart);
+
+		const previousDelegations = this.taskDelegationHistory.filter(
+			entry => entry.key === key && entry.timestamp < now
+		);
+
+		if (previousDelegations.length < this.TASK_DELEGATION_LOOP_THRESHOLD - 1) {
+			return { detected: false, message: '' };
+		}
+
+		return {
+			detected: true,
+			message: `🔴 检测到重复派发同一个子任务！你在短时间内重复启动了 ${subagentType || 'unknown'} 子 Agent（${taskId ? `task_id=${taskId}` : `prompt=${prompt.substring(0, 80)}` }）。\n\n这不会带来新的信息，只会继续消耗时间和上下文。\n\n立即停止再次派发相同子任务，并改用以下策略：\n1. 直接使用上一个子任务的结果做判断\n2. 只读取已经明确的具体文件，不要再开新的 explore 子任务\n3. 如果目标文件已明确，直接修改或调用 attempt_completion`
+		};
 	}
 
 	/**
@@ -269,7 +387,7 @@ export class ToolRepetitionDetector {
 	 * P2优化：计算参数哈希（用于快速比较）
 	 */
 	private hashParams(params: Record<string, any>): string {
-		const json = JSON.stringify(params, Object.keys(params).sort());
+		const json = this.stableStringify(params);
 		// 简单哈希
 		let hash = 0;
 		for (let i = 0; i < json.length; i++) {
@@ -295,34 +413,140 @@ export class ToolRepetitionDetector {
 	}
 	*/
 
-	/**
-	 * Serializes a ToolUse object into a canonical JSON string for comparison
-	 *
-	 * @param toolUse The ToolUse object to serialize
-	 * @returns JSON string representation of the tool use with sorted parameter keys
-	 */
-	private serializeToolUse(toolUse: ToolUse): string {
-		// Create a new parameters object with alphabetically sorted keys
-		const sortedParams: Record<string, unknown> = {};
+	private normalizeToolUse(toolUse: ToolUse): { name: string; parameters: Record<string, unknown> } {
+		return {
+			name: toolUse.name,
+			parameters: this.normalizeToolParams(toolUse),
+		};
+	}
 
-		// Get parameter keys and sort them alphabetically
-		const sortedKeys = Object.keys(toolUse.params).sort();
-
-		// Populate the sorted parameters object in a type-safe way
-		for (const key of sortedKeys) {
-			if (Object.prototype.hasOwnProperty.call(toolUse.params, key)) {
-				sortedParams[key] = toolUse.params[key as keyof typeof toolUse.params];
+	private normalizeToolParams(toolUse: ToolUse): Record<string, unknown> {
+		switch (toolUse.name) {
+			case 'edit':
+				return {
+					path: this.normalizePathValue(toolUse.params.path),
+					edits: [
+						this.normalizeEditSignature({
+							old_string: (toolUse.params as any).old_string,
+							new_string: (toolUse.params as any).new_string,
+							replace_all: (toolUse.params as any).replace_all,
+						}),
+					],
+				};
+			case 'multiedit': {
+				const rawEdits = this.parseJsonArray(toolUse.params.edits);
+				return {
+					path: this.normalizePathValue(toolUse.params.path),
+					edits: rawEdits.map((edit: any) => this.normalizeEditSignature({
+						old_string: edit.old_string ?? edit.oldString,
+						new_string: edit.new_string ?? edit.newString,
+						replace_all: edit.replace_all ?? edit.replaceAll,
+					})),
+				};
+			}
+			case 'patch': {
+				const rawPatches = this.parseJsonArray(toolUse.params.patches);
+				return {
+					patches: rawPatches.map((patch: any) => ({
+						path: this.normalizePathValue(patch.path),
+						operations: Array.isArray(patch.operations)
+							? patch.operations.map((operation: any) => this.normalizeEditSignature(operation))
+							: [],
+					})),
+				};
+			}
+			case 'write_to_file':
+				return {
+					path: this.normalizePathValue(toolUse.params.path),
+					content: this.normalizeTextValue((toolUse.params as any).content ?? ''),
+				};
+			case 'apply_diff':
+				return {
+					path: this.normalizePathValue(toolUse.params.path),
+					diff: this.normalizeTextValue((toolUse.params as any).diff ?? ''),
+				};
+			case 'read_file':
+				return {
+					path: this.normalizePathValue(toolUse.params.path),
+					start_line: toolUse.params.start_line ?? '',
+					end_line: toolUse.params.end_line ?? '',
+				};
+			case 'search_files':
+				return {
+					path: this.normalizePathValue(toolUse.params.path),
+					regex: this.normalizeTextValue((toolUse.params as any).regex ?? ''),
+					file_pattern: this.normalizeTextValue((toolUse.params as any).file_pattern ?? ''),
+				};
+			case 'glob':
+				return {
+					path: this.normalizePathValue(toolUse.params.path),
+					file_pattern: this.normalizeTextValue((toolUse.params as any).file_pattern ?? ''),
+				};
+			case 'task':
+				return {
+					subagent_type: this.normalizeTextValue((toolUse.params as any).subagent_type ?? ''),
+					prompt: this.normalizeTextValue((toolUse.params as any).prompt ?? (toolUse.params as any).task ?? ''),
+					has_task_id: Boolean((toolUse.params as any).task_id),
+				};
+			default: {
+				const sortedParams: Record<string, unknown> = {};
+				for (const key of Object.keys(toolUse.params).sort()) {
+					if (Object.prototype.hasOwnProperty.call(toolUse.params, key)) {
+						sortedParams[key] = toolUse.params[key as keyof typeof toolUse.params];
+					}
+				}
+				return sortedParams;
 			}
 		}
+	}
 
-		// Create the object with the tool name and sorted parameters
-		const toolObject = {
-			name: toolUse.name,
-			parameters: sortedParams,
+	private normalizeEditSignature(edit: { old_string?: string; new_string?: string; replace_all?: unknown }): Record<string, unknown> {
+		return {
+			old_string: this.normalizeTextValue(edit.old_string ?? ''),
+			new_string: this.normalizeTextValue(edit.new_string ?? ''),
+			replace_all: edit.replace_all === true || edit.replace_all === 'true',
 		};
+	}
 
-		// Convert to a canonical JSON string
-		return JSON.stringify(toolObject);
+	private normalizePathValue(value: unknown): string {
+		if (typeof value !== 'string' || value.length === 0) {
+			return '';
+		}
+		return path.normalize(value).replace(/\\/g, '/');
+	}
+
+	private normalizeTextValue(value: unknown): string {
+		if (typeof value !== 'string') {
+			return '';
+		}
+		return value.replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').trim();
+	}
+
+	private parseJsonArray(value: unknown): any[] {
+		if (Array.isArray(value)) {
+			return value;
+		}
+		if (typeof value !== 'string') {
+			return [];
+		}
+		try {
+			const parsed = JSON.parse(value);
+			return Array.isArray(parsed) ? parsed : [];
+		} catch {
+			return [];
+		}
+	}
+
+	private stableStringify(value: unknown): string {
+		if (Array.isArray(value)) {
+			return `[${value.map(item => this.stableStringify(item)).join(',')}]`;
+		}
+		if (value && typeof value === 'object') {
+			const objectValue = value as Record<string, unknown>;
+			const keys = Object.keys(objectValue).sort();
+			return `{${keys.map(key => `${JSON.stringify(key)}:${this.stableStringify(objectValue[key])}`).join(',')}}`;
+		}
+		return JSON.stringify(value);
 	}
 
 	/**
@@ -335,7 +559,7 @@ export class ToolRepetitionDetector {
 		this.consecutiveIdenticalToolCallCount = 0;
 		this.toolCallHistory = [];
 		this.fileWriteHistory = [];
-		this.fileWriteWarnedAndReset.clear();
+		this.taskDelegationHistory = [];
 		this.doomLoopDetected = false;
 		// 不重置doomLoopCount，保留统计
 	}
