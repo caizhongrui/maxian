@@ -53,7 +53,7 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 		]
 	},
 	browser: {
-		tools: ['browser_action']
+		tools: [] // P1对齐：不暴露未实现 browser_action
 	},
 	command: {
 		tools: ['execute_command']
@@ -62,12 +62,11 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 		tools: ['use_mcp_tool', 'access_mcp_resource']
 	},
 	web: {
-		tools: ['webfetch']  // P0优化：网页获取工具
+		tools: []  // P1对齐：不暴露未实现的 webfetch 幽灵工具
 	},
 	lsp: {
 		tools: [
-			'lsp_hover',       // P1优化：LSP悬停信息
-			'lsp_diagnostics'  // P1优化：LSP诊断信息
+			'lsp'              // P1对齐：统一 LSP 工具入口
 		]
 	},
 	agent: {
@@ -85,10 +84,8 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 export const ALWAYS_AVAILABLE_TOOLS = [
 	'ask_followup_question',
 	'attempt_completion',
-	'switch_mode',
-	'update_todo_list',  // P2优化：待办列表始终可用
 	'todowrite',
-	'todoread'
+	'skill'
 ] as const;
 
 /**
@@ -406,7 +403,7 @@ graph TD
 
 - **规格创建阶段**：此阶段仅创建规格文档，不实现功能代码
 - **任务执行阶段**：严格按照规格文档实现，一次一个任务
-- 若需要复杂的实现工作，可使用 switch_mode 切换到 code 模式
+- 若需要复杂的实现工作，直接给出明确实现指令并按任务推进
 - 每个阶段都必须获得用户明确批准才能推进到下一阶段
 - 保持规格文档与实现的一致性，如发现差异需回到相应阶段修正`
 	},

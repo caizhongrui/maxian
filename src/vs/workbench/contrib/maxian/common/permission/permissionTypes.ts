@@ -170,6 +170,10 @@ export const DEFAULT_PERMISSION_RULES: Record<ToolName, Record<string, Permissio
 		'*': 'allow'
 	},
 
+	lsp: {
+		'*': 'allow'
+	},
+
 	// 其他工具 (默认允许)
 	codebase_search: {
 		'*': 'allow'

@@ -163,7 +163,7 @@ const TOOL_DESCRIPTIONS: Partial<Record<ToolName, string>> = {
 - 读取多个文件（read_file × N）
 - 多个搜索操作（search_files、glob、list_files、codebase_search）
 - 搜索 + 读取组合
-- LSP查询（lsp_hover、lsp_diagnostics、lsp_definition等）
+- LSP查询（统一用 lsp，operation=hover/diagnostics/definition/references/type_definition）
 
 ✅ **正确示例 - 批量读取文件**：
 \`\`\`json
@@ -246,6 +246,31 @@ const TOOL_DESCRIPTIONS: Partial<Record<ToolName, string>> = {
 - content: 文件内容（create/modify）
 - new_path: 新路径（rename）`,
 
+
+	// P1优化：统一LSP工具
+	lsp: `## lsp
+统一 LSP 查询入口（推荐）
+
+**operation 可选值**：
+- hover：类型/签名/文档
+- diagnostics：错误和警告
+- definition：定义位置
+- references：引用位置
+- type_definition：类型定义位置
+
+**参数**：
+- operation: 必填，操作类型
+- path: 必填，文件路径
+- line/column: 在 hover/definition/references/type_definition 时必填
+
+**示例**：
+\`\`\`
+lsp(operation="hover", path="src/utils.ts", line=10, column=15)
+lsp(operation="diagnostics", path="src/example.ts")
+\`\`\`
+
+**提示**：
+- 兼容旧 lsp_* 调用，但默认应优先使用统一 lsp 工具`,
 
 	// LSP功能：Hover信息
 	lsp_hover: `## lsp_hover

@@ -120,7 +120,10 @@ export const PLAN_AGENT_TOOLS = [
 export const EXECUTE_AGENT_TOOLS = [
 	'read_file',
 	'write_to_file',
+	'edit',
+	'multiedit',
 	'apply_diff',
+	'patch',
 	'edit_file',
 	'insert_content',
 	'search_files',
@@ -128,10 +131,13 @@ export const EXECUTE_AGENT_TOOLS = [
 	'list_code_definition_names',
 	'codebase_search',
 	'glob',
+	'lsp',
 	'execute_command',
+	'task',
 	'ask_followup_question',
 	'attempt_completion',
 	'new_task',
+	'todowrite',
 	'update_todo_list'
 ] as const;
 

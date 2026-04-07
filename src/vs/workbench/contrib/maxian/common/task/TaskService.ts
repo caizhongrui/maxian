@@ -201,6 +201,7 @@ export class TaskService extends Disposable {
 	private readonly fileReadTracker: Map<string, number> = new Map();
 	private readonly readFileRequestTracker: Map<string, number> = new Map();
 	private readonly duplicateReadRedirectTracker: Set<string> = new Set();
+	private readonly runtimeGuidanceKeys: Set<string> = new Set();
 	private readonly explorationFingerprintsSeen: Set<string> = new Set();
 	private consecutiveNoProgressExplorationRounds = 0;
 	private readonly NO_PROGRESS_EXPLORATION_THRESHOLD = 3;
@@ -246,7 +247,8 @@ export class TaskService extends Disposable {
 	private readonly fileChangesWritten: Set<string> = new Set();  // 写入/创建/修改的文件
 	private readonly fileChangesDeleted: Set<string> = new Set();  // 删除的文件
 	private readonly fileWriteCountTracker: Map<string, number> = new Map();
-	private static readonly MAX_WRITES_PER_FILE = 2;
+	private static readonly MAX_WRITES_PER_FILE = 4;
+	private static readonly HARD_WRITE_BLOCK_AFTER = 6;
 
 	// 效率优化：连续只读轮数计数器（包括batch只读），仅用于观测是否长时间停留在探索阶段
 	private consecutiveReadOnlyRounds = 0;
@@ -423,6 +425,7 @@ export class TaskService extends Disposable {
 		this.consecutiveMistakeCount = 0;
 		this.mainThreadExplorationGuardActive = false;
 		this.mainThreadSearchBurstCount = 0;
+		this.runtimeGuidanceKeys.clear();
 		this.resetExplorationProgress();
 	}
 
@@ -780,16 +783,25 @@ export class TaskService extends Disposable {
 	 */
 	private async initiateTaskLoop(): Promise<void> {
 		globalLspDiagnosticsHandler.clearDiagnosticHistory();
+		let noProgressRounds = 0;
 		while (!this.abort) {
 			const didEndLoop = await this.recursivelyMakeClineRequests();
 
 			if (didEndLoop) {
 				break;
-			} else {
-				// 不再在后台追加“必须继续用工具”的隐藏回环。
-				// 如果本轮既没有工具执行也没有可继续的完成信号，直接结束当前自动循环。
-				break;
 			}
+
+			noProgressRounds++;
+			if (noProgressRounds <= 2) {
+				this.pushHistory({
+					role: 'user',
+					content: '[SYSTEM] 上一轮没有形成可交付结果。请立即选择一种推进方式：1) 若已完成，调用 attempt_completion 并给出结果摘要；2) 若未完成，调用必要工具继续推进（避免重复读写同一文件）。'
+				});
+				continue;
+			}
+
+			// 连续两轮无推进，停止自动循环，等待用户下一步指令
+			break;
 		}
 	}
 
@@ -1067,7 +1079,7 @@ export class TaskService extends Disposable {
 
 		// E1调试：每轮输出当前 context 大小（证明新代码已加载）
 		const _ctxTokens = this.estimateTokens(this.apiConversationHistory);
-		console.log(`[TaskService] E1 context: ${_ctxTokens} tokens | 有效窗口: ${EFFECTIVE_CONTEXT_WINDOW} | 警告线: ${CONTEXT_WARNING_THRESHOLD} | 压缩线: ${CONTEXT_AUTO_COMPACT_THRESHOLD}`);
+		this.debugLog(`[TaskService] E1 context: ${_ctxTokens} tokens | 有效窗口: ${EFFECTIVE_CONTEXT_WINDOW} | 警告线: ${CONTEXT_WARNING_THRESHOLD} | 压缩线: ${CONTEXT_AUTO_COMPACT_THRESHOLD}`);
 
 		// 埋点：记录 AI 调用开始时间
 		this._aiCallStartTime = Date.now();
@@ -1569,13 +1581,16 @@ export class TaskService extends Disposable {
 			try {
 				const searchBudgetGuardMessage = this.checkMainThreadExplorationGuard(toolUse);
 				if (searchBudgetGuardMessage) {
-					this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: true });
-					return {
-						type: 'tool_result' as const,
-						tool_use_id: toolUse.id,
-						content: searchBudgetGuardMessage,
-						is_error: true
-					};
+					if (this.isBlockingGuardMessage(searchBudgetGuardMessage)) {
+						this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: true });
+						return {
+							type: 'tool_result' as const,
+							tool_use_id: toolUse.id,
+							content: searchBudgetGuardMessage,
+							is_error: true
+						};
+					}
+					this.emitRuntimeGuidanceOnce('search_guard', searchBudgetGuardMessage);
 				}
 
 				const repetitionCheck = this.toolRepetitionDetector.check({
@@ -1715,16 +1730,19 @@ export class TaskService extends Disposable {
 	}> {
 		const searchBudgetGuardMessage = this.checkMainThreadExplorationGuard(toolUse);
 		if (searchBudgetGuardMessage) {
-			return {
-				shouldContinue: true,
-				shouldEndLoop: false,
-				toolResult: {
-					type: 'tool_result',
-					tool_use_id: toolUse.id,
-					content: searchBudgetGuardMessage,
-					is_error: true
-				}
-			};
+			if (this.isBlockingGuardMessage(searchBudgetGuardMessage)) {
+				return {
+					shouldContinue: true,
+					shouldEndLoop: false,
+					toolResult: {
+						type: 'tool_result',
+						tool_use_id: toolUse.id,
+						content: searchBudgetGuardMessage,
+						is_error: true
+					}
+				};
+			}
+			this.emitRuntimeGuidanceOnce('search_guard', searchBudgetGuardMessage);
 		}
 
 		// 检查重复调用（batch 是元工具，重复检测交给子工具层面，此处跳过）
@@ -1849,18 +1867,21 @@ export class TaskService extends Disposable {
 
 		const sameFileWriteGuardMessage = this.checkSameFileWriteBudget(toolUse);
 		if (sameFileWriteGuardMessage) {
-			this.consecutiveMistakeCount = 0;
-			this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: true });
-			return {
-				shouldContinue: true,
-				shouldEndLoop: false,
-				toolResult: {
-					type: 'tool_result',
-					tool_use_id: toolUse.id,
-					content: sameFileWriteGuardMessage,
-					is_error: true
-				}
-			};
+			if (this.isBlockingGuardMessage(sameFileWriteGuardMessage)) {
+				this.consecutiveMistakeCount = 0;
+				this._onToolCompleted.fire({ toolId: toolUse.id, toolName: toolUse.name, isError: true });
+				return {
+					shouldContinue: true,
+					shouldEndLoop: false,
+					toolResult: {
+						type: 'tool_result',
+						tool_use_id: toolUse.id,
+						content: sameFileWriteGuardMessage,
+						is_error: true
+					}
+				};
+			}
+			this.emitRuntimeGuidanceOnce(`write_guard:${toolUse.name}:${toolUse.input?.path || toolUse.input?.target_file || ''}:${this.totalApiRounds}`, sameFileWriteGuardMessage);
 		}
 
 		// 功能1: 写文件操作前自动创建 checkpoint（edit/multiedit/write_to_file/apply_diff）
@@ -1878,7 +1899,7 @@ export class TaskService extends Disposable {
 						filePath,
 					}
 				);
-				console.log(`[TaskService] 写文件前创建 checkpoint: ${toolUse.name} -> ${filePath}`);
+				this.debugLog(`[TaskService] 写文件前创建 checkpoint: ${toolUse.name} -> ${filePath}`);
 			} catch (checkpointError) {
 				// checkpoint 失败不影响主流程
 				console.warn('[TaskService] 写文件前创建 checkpoint 失败:', checkpointError);
@@ -2006,7 +2027,7 @@ export class TaskService extends Disposable {
 					this.mainThreadExplorationGuardActive = false;
 					this.invalidateCacheForWriteTool(toolUse, execution.metadata.affectedPaths);
 					await this.notifyCommittedFileChanges(execution.metadata.affectedPaths || []);
-					console.log('[TaskService] 文件写入已提交:', execution.metadata.affectedPaths || this.extractWriteToolFilePaths({ name: toolUse.name, input: toolUse.input }));
+					this.debugLog('[TaskService] 文件写入已提交:', execution.metadata.affectedPaths || this.extractWriteToolFilePaths({ name: toolUse.name, input: toolUse.input }));
 				}
 
 				if (toolUse.name === 'task') {
@@ -2342,7 +2363,11 @@ export class TaskService extends Disposable {
 		}
 
 		const writeCount = this.fileWriteCountTracker.get(overBudgetPath) || 0;
-		return `[FATAL] 文件 "${overBudgetPath}" 在本任务中已被写入 ${writeCount} 次。继续在同一文件反复 edit/multiedit 很容易进入长回路。\n\n请立即切换策略：\n1. 如果核心修改已完成：先 read_file 一次确认，再 attempt_completion\n2. 如果还有问题：优先修改调用方/配置入口/关联文件，而不是继续改这个文件\n3. 仅在你能明确说明“必须追加的最小改动点”时，才允许再改该文件`;
+		if (writeCount >= TaskService.HARD_WRITE_BLOCK_AFTER) {
+			return `[BLOCK] 文件 "${overBudgetPath}" 在当前任务已累计写入 ${writeCount} 次。系统判定存在高风险长回路，当前回合禁止继续写该文件。\n\n请改用以下路径推进：\n1. 若目标已完成：read_file 一次确认后 attempt_completion\n2. 若问题转移：优先修改调用方、配置入口、引用方\n3. 若必须继续改该文件：先说明上次修改为何不足，再给出最小新增改动点`;
+		}
+
+		return `[GUIDANCE] 文件 "${overBudgetPath}" 已写入 ${writeCount} 次，接近循环风险。\n\n建议先做一次策略切换：\n1. 优先检查调用方/配置入口/引用方\n2. 同文件后续修改尽量合并为一次 multiedit\n3. 若已完成主要目标，优先 read_file 确认后 attempt_completion`;
 	}
 
 	/**
@@ -2406,10 +2431,28 @@ export class TaskService extends Disposable {
 			if (requestCount === 0) {
 				return null;
 			}
+			if (requestCount === 1) {
+				return {
+					filePath,
+					requestKey,
+					message: `[GUIDANCE] 文件 "${filePath}" 本轮已被修改。你已完成一次确认读取，请优先基于当前内容继续推进，不要再次围绕同一 read_file 重试。`,
+					isError: false,
+					preferCachedContent: true,
+				};
+			}
+			if (requestCount === 2) {
+				return {
+					filePath,
+					requestKey,
+					message: `[GUIDANCE] 文件 "${filePath}" 已出现“修改后反复确认读取”的趋势。下一步请直接修改关联文件或总结结果，不要继续对同一路径重复 read_file。`,
+					isError: false,
+					activateRedirect: true,
+				};
+			}
 			return {
 				filePath,
 				requestKey,
-				message: `[FATAL] 文件 "${filePath}" 已在当前任务中被修改过，并且你已进行过一次确认读取。不要继续围绕同一文件反复 read_file。\n\n请立即改用其他推进方式：\n1. 直接基于当前修改继续后续步骤\n2. 如果还缺依据，去看调用方、引用方或报错来源文件\n3. 如果确实需要再次修改，请先说明上一次修改为什么不足，再直接 edit/multiedit`,
+				message: `[BLOCK] 文件 "${filePath}" 已在修改后被重复 read_file ${requestCount + 1} 次。系统判定为回读空转，当前回合禁止继续该读取请求。\n\n请改用其他推进方式：\n1. 基于已有修改继续后续步骤\n2. 查调用方/引用方/配置入口等其他明确文件\n3. 必要时直接 edit/multiedit，不要再回读确认`,
 				isError: true,
 				activateRedirect: true,
 			};
@@ -2423,16 +2466,26 @@ export class TaskService extends Disposable {
 			return {
 				filePath,
 				requestKey,
-				message: `[DUPLICATE_READ] 文件 "${filePath}" 的同一 read_file 请求已执行过一次。若缓存命中，请直接复用已有内容；若缓存未命中，本次只允许读取一次，不要继续围绕同一请求重试。`,
+				message: `[DUPLICATE_READ] 文件 "${filePath}" 的同一 read_file 请求已执行过一次。若缓存命中请直接复用；若缓存未命中，本次读取后请立即推进，不要继续重试同一请求。`,
 				isError: false,
 				preferCachedContent: true,
+			};
+		}
+
+		if (requestCount === 2) {
+			return {
+				filePath,
+				requestKey,
+				message: `[GUIDANCE] 文件 "${filePath}" 的同一 read_file 请求已重复 3 次。请停止同请求重试，改为读取其他相关文件或直接基于已有内容继续修改。`,
+				isError: false,
+				activateRedirect: true,
 			};
 		}
 
 		return {
 			filePath,
 			requestKey,
-			message: `[FATAL] 文件 "${filePath}" 的同一 read_file 请求已重复执行 ${requestCount + 1} 次。这说明你没有基于已有内容推进，而是在围绕同一读取动作打转。\n\n立即停止继续重复这个 read_file 请求，改为：\n1. 直接使用已有内容继续修改或总结\n2. 如果还缺信息，读取其他明确相关文件\n3. 不要再对同一路径同一范围重试`,
+			message: `[BLOCK] 文件 "${filePath}" 的同一 read_file 请求已重复执行 ${requestCount + 1} 次。系统判定为读取空转，当前回合禁止继续同一路径同一范围重试。\n\n请改为：\n1. 直接使用已有内容继续修改或总结\n2. 如仍缺信息，读取其他明确相关文件`,
 			isError: true,
 			activateRedirect: true,
 		};
@@ -2635,6 +2688,21 @@ export class TaskService extends Disposable {
 		return `你已经完成 ${this.consecutiveReadOnlyRounds} 轮只读探索，并且已读取 ${filesRead} 个文件。参照 Claude Code / OpenCode 的调度逻辑，不要继续在主线程做宽泛搜索（glob/search_files/codebase_search/list_files）。\n\n下一轮应优先基于已有结果推进：\n1. 如果目标文件已明确：直接修改已确认的目标文件\n2. 如果还缺少少量依据：只读取明确目标文件，不要继续宽搜\n3. 只有当调查明显跨模块、需要独立多轮探索时，才考虑使用 task 工具，subagent_type="explore"\n\n禁止继续在主线程里围绕同一批搜索工具兜圈子。`;
 	}
 
+	private isBlockingGuardMessage(message: string): boolean {
+		return message.startsWith('[BLOCK]');
+	}
+
+	private emitRuntimeGuidanceOnce(key: string, message: string): void {
+		if (this.runtimeGuidanceKeys.has(key)) {
+			return;
+		}
+		this.runtimeGuidanceKeys.add(key);
+		this.pushHistory({
+			role: 'user',
+			content: message
+		});
+	}
+
 	private checkMainThreadExplorationGuard(toolUse: { id: string; name: string; input: any }): string | null {
 		const prematureExploreMessage = this.checkPrematureExploreDelegation(toolUse);
 		if (prematureExploreMessage) {
@@ -2663,7 +2731,11 @@ export class TaskService extends Disposable {
 			return null;
 		}
 
-		return `[FATAL] 主线程宽搜已触发 ${this.mainThreadSearchBurstCount} 次，超过预算 ${maxBursts}。参照 Claude Code / OpenCode 的调度逻辑，当前回合请停止继续调用 glob/search_files/codebase_search/list_files（包括 batch 中的这类调用）。\n\n下一步请优先基于已有结果推进：\n1. 直接修改已经确认的目标文件\n2. 如果只是想确认某个明确文件内容，只读那个具体文件\n3. 只有当调查明显跨模块、需要独立多轮探索时，才使用 task 工具，subagent_type="explore"\n\n不要再做宽泛搜索。`;
+		if (this.mainThreadSearchBurstCount <= maxBursts + 2) {
+			return `[GUIDANCE] 主线程宽搜已触发 ${this.mainThreadSearchBurstCount} 次，超过预算 ${maxBursts}。请立即收敛：\n1. 优先修改已确认目标文件\n2. 如仅需补证据，只读明确文件\n3. 仅在确实跨模块多轮调查时，再用 task(subagent_type="explore")`;
+		}
+
+		return `[BLOCK] 主线程宽搜已触发 ${this.mainThreadSearchBurstCount} 次，连续超预算且未收敛。当前回合禁止继续 glob/search_files/codebase_search/list_files（含 batch 中同类调用）。\n\n请先基于已有结果推进实现或总结。`;
 	}
 
 	private checkPrematureExploreDelegation(toolUse: { id: string; name: string; input: any }): string | null {
@@ -4171,7 +4243,7 @@ case 'execute_command':
 				result = this.truncateDefault(content);
 		}
 
-		console.log(`[TaskService] 工具结果截断: ${originalLength} -> ${result.length} 字符, 类型: ${contentType}`);
+		this.debugLog(`[TaskService] 工具结果截断: ${originalLength} -> ${result.length} 字符, 类型: ${contentType}`);
 		return result;
 	}
 

@@ -14,7 +14,7 @@ export const BATCH_TOOL_DESCRIPTION = `并行执行2-25个工具调用，用于�
 - 读取多个文件（read_file × N）
 - 多个搜索操作组合（search_files、glob、list_files、codebase_search）
 - 搜索 + 读取组合
-- LSP查询（lsp_hover、lsp_diagnostics、lsp_definition等）
+- LSP查询（统一使用 lsp，operation=...）
 
 ❌ **不能在batch中使用的工具**:
 - batch（禁止嵌套）

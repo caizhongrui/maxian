@@ -68,6 +68,7 @@ export const toolParamNames = [
 	'patches',        // patch 多文件补丁参数
 	'subagent_type',  // task 子Agent类型参数
 	'task_id',        // task 子任务标识参数（跟踪/去重）
+	'operation',      // lsp: 操作类型（hover/diagnostics/definition/references/type_definition）
 	'column',         // LSP 列号参数
 	'skill_name',     // skill 工具参数
 	'requires_approval', // execute_command: 是否需要用户确认（参考Cline）
@@ -108,6 +109,7 @@ export const toolNames = [
 	'multiedit',    // P1优化：单文件多处编辑
 	'task',         // P1优化：子Agent委托
 	'patch',        // P1优化：多文件批量操作
+	'lsp',          // P1优化：统一LSP工具（推荐）
 	'lsp_hover',    // LSP功能：悬停信息
 	'lsp_diagnostics', // LSP功能：诊断信息
 	'lsp_definition', // LSP功能：定义位置
@@ -217,6 +219,11 @@ export interface LspHoverToolUse extends ToolUse {
 	params: Partial<Pick<Record<ToolParamName, string>, 'path' | 'line' | 'column'>>;
 }
 
+export interface LspToolUse extends ToolUse {
+	name: 'lsp';
+	params: Partial<Pick<Record<ToolParamName, string>, 'operation' | 'path' | 'line' | 'column'>>;
+}
+
 export interface LspDiagnosticsToolUse extends ToolUse {
 	name: 'lsp_diagnostics';
 	params: Partial<Pick<Record<ToolParamName, string>, 'path'>>;
@@ -261,6 +268,7 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 	multiedit: '多处编辑',        // P1优化
 	task: '子任务委托',           // P1优化
 	patch: '多文件补丁',          // P1优化
+	lsp: 'LSP查询',              // P1优化：统一LSP工具
 	lsp_hover: 'LSP悬停',        // LSP功能
 	lsp_diagnostics: 'LSP诊断',  // LSP功能
 	lsp_definition: 'LSP定义',   // LSP功能
@@ -299,12 +307,10 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 	edit: {
 		tools: [
 			'apply_diff',
-			'edit_file',
 			'edit',           // 独立edit工具
 			'write_to_file',
 			'delete_file',      // 删除文件
 			'create_directory', // 创建目录
-			'insert_content',
 			'multiedit',      // 多处编辑
 			'patch',          // 多文件补丁
 		],
@@ -314,11 +320,7 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 	},
 	lsp: {
 		tools: [
-			'lsp_hover',
-			'lsp_diagnostics',
-			'lsp_definition',
-			'lsp_references',
-			'lsp_type_definition',
+			'lsp',
 		],
 	},
 	agent: {
@@ -350,8 +352,6 @@ export const ALWAYS_AVAILABLE_TOOLS: ToolName[] = [
 	'ask_followup_question',
 	'attempt_completion',
 	'new_task',
-	'update_todo_list',
-	'todowrite',       // 待办写入始终可用
-	'todoread',        // 待办读取始终可用
+	'todowrite',       // 统一待办写入口
 	'skill',           // Skills始终可用
 ] as const;

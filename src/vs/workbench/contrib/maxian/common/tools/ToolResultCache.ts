@@ -45,6 +45,7 @@ const CACHEABLE_TOOLS = new Set([
 	'glob',
 	'search_files',
 	'codebase_search',
+	'lsp',
 	'lsp_hover',
 	'lsp_diagnostics',
 	'lsp_definition',

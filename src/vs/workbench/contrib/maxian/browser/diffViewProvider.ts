@@ -75,6 +75,7 @@ export class DiffViewProvider extends Disposable {
 	private filePath: string = '';
 	private isNewFile: boolean = false;
 	private readonly diffStrategy: MultiSearchReplaceDiffStrategy;
+	private readonly verboseDiffLogs = false;
 
 	constructor(
 		@IEditorService private readonly editorService: IEditorService,
@@ -84,6 +85,13 @@ export class DiffViewProvider extends Disposable {
 	) {
 		super();
 		this.diffStrategy = new MultiSearchReplaceDiffStrategy(0.9, 40);
+	}
+
+	private debugLog(...args: any[]): void {
+		if (!this.verboseDiffLogs) {
+			return;
+		}
+		console.log(...args);
 	}
 
 	/**
@@ -120,46 +128,46 @@ export class DiffViewProvider extends Disposable {
 	 */
 	async openDiff(filePath: string, newContent: string): Promise<boolean> {
 		try {
-			console.log('[Maxian] DiffViewProvider.openDiff 开始, filePath:', filePath);
-			console.log('[Maxian] DiffViewProvider.openDiff newContent长度:', newContent?.length || 0);
+			this.debugLog('[Maxian] DiffViewProvider.openDiff 开始, filePath:', filePath);
+			this.debugLog('[Maxian] DiffViewProvider.openDiff newContent长度:', newContent?.length || 0);
 
 			// 解析相对路径为绝对路径
 			const resolvedPath = this.resolveFilePath(filePath);
-			console.log('[Maxian] 解析文件路径:', filePath, '->', resolvedPath);
+			this.debugLog('[Maxian] 解析文件路径:', filePath, '->', resolvedPath);
 
 			this.filePath = resolvedPath;
 			this.modifiedContent = newContent;
 
 			const fileUri = URI.file(resolvedPath);
-			console.log('[Maxian] 文件URI:', fileUri.toString());
+			this.debugLog('[Maxian] 文件URI:', fileUri.toString());
 
 			// 检查文件是否存在
 			const fileExists = await this.fileService.exists(fileUri);
 			this.isNewFile = !fileExists;
-			console.log('[Maxian] 文件存在:', fileExists, '是新文件:', this.isNewFile);
+			this.debugLog('[Maxian] 文件存在:', fileExists, '是新文件:', this.isNewFile);
 
 			if (fileExists) {
 				// 读取原始文件内容
 				const content = await this.fileService.readFile(fileUri);
 				this.originalContent = content.value.toString();
-				console.log('[Maxian] 原始内容长度:', this.originalContent.length);
+				this.debugLog('[Maxian] 原始内容长度:', this.originalContent.length);
 			} else {
 				// 新文件，原始内容为空
 				this.originalContent = '';
-				console.log('[Maxian] 新文件，原始内容为空');
+				this.debugLog('[Maxian] 新文件，原始内容为空');
 
 				// 确保父目录存在
 				const parentDir = dirname(fileUri);
 				if (!(await this.fileService.exists(parentDir))) {
-					console.log('[Maxian] 创建父目录:', parentDir.toString());
+					this.debugLog('[Maxian] 创建父目录:', parentDir.toString());
 					await this.fileService.createFolder(parentDir);
 				}
 			}
 
 			// 打开diff编辑器
-			console.log('[Maxian] 准备打开diff编辑器...');
+			this.debugLog('[Maxian] 准备打开diff编辑器...');
 			await this.openDiffEditor(fileUri);
-			console.log('[Maxian] diff编辑器打开成功');
+			this.debugLog('[Maxian] diff编辑器打开成功');
 			return true;
 		} catch (error) {
 			console.error('[Maxian] DiffViewProvider.openDiff 失败:', error);
@@ -172,38 +180,38 @@ export class DiffViewProvider extends Disposable {
 	 */
 	private async openDiffEditor(fileUri: URI): Promise<void> {
 		const fileName = basename(fileUri);
-		console.log('[Maxian] openDiffEditor 开始, fileName:', fileName);
+		this.debugLog('[Maxian] openDiffEditor 开始, fileName:', fileName);
 
 		// 创建稳定的 originalUri（不含 query，避免 URI 因内容不同而变化导致模型无法复用/销毁）
 		// 原始内容存储在模块级 Map 中，由 MaxianDiffContentProvider 通过 getStoredOriginalContent 查询
 		const originalUri = URI.parse(`${MAXIAN_DIFF_VIEW_URI_SCHEME}:${fileName}`);
 		_originalContentStore.set(originalUri.toString(), this.originalContent);
-		console.log('[Maxian] originalUri:', originalUri.toString());
+		this.debugLog('[Maxian] originalUri:', originalUri.toString());
 
 		// 如果 originalUri 对应的模型已存在（上次 diff 未通过 saveAndClose/closeWithoutSave 关闭），
 		// 必须主动更新其内容，否则 diff 左侧将显示上次的旧内容（VS Code 不会再次调用 provideTextContent）
 		const existingOriginalModel = this.modelService.getModel(originalUri);
 		if (existingOriginalModel) {
 			existingOriginalModel.setValue(this.originalContent);
-			console.log('[Maxian] 已更新已存在的originalModel');
+			this.debugLog('[Maxian] 已更新已存在的originalModel');
 		}
 
 		// 创建稳定的 modifiedUri（不含 timestamp query）
 		// 与 saveAndClose/closeWithoutSave 中使用相同的 URI，确保模型可被正确找到和销毁
 		const modifiedUri = fileUri.with({ scheme: 'maxian-modified' });
-		console.log('[Maxian] modifiedUri:', modifiedUri.toString());
+		this.debugLog('[Maxian] modifiedUri:', modifiedUri.toString());
 
 		// 在模型服务中注册修改后的内容（先查再建，避免重复创建）
 		let modifiedModel: ITextModel | null = this.modelService.getModel(modifiedUri);
 		if (!modifiedModel) {
-			console.log('[Maxian] 创建新的modifiedModel');
+			this.debugLog('[Maxian] 创建新的modifiedModel');
 			modifiedModel = this.modelService.createModel(
 				this.modifiedContent,
 				null,
 				modifiedUri
 			);
 		} else {
-			console.log('[Maxian] 更新已存在的modifiedModel');
+			this.debugLog('[Maxian] 更新已存在的modifiedModel');
 			modifiedModel.setValue(this.modifiedContent);
 		}
 
@@ -211,9 +219,9 @@ export class DiffViewProvider extends Disposable {
 		const diffTitle = this.isNewFile
 			? `${fileName}: 新文件 (可编辑)`
 			: `${fileName}: 原始 ↔ 码弦的修改 (可编辑)`;
-		console.log('[Maxian] diffTitle:', diffTitle);
+		this.debugLog('[Maxian] diffTitle:', diffTitle);
 
-		console.log('[Maxian] 调用editorService.openEditor...');
+		this.debugLog('[Maxian] 调用editorService.openEditor...');
 		const editor = await this.editorService.openEditor({
 			original: { resource: originalUri },
 			modified: { resource: modifiedUri },
@@ -224,9 +232,9 @@ export class DiffViewProvider extends Disposable {
 				revealIfVisible: true
 			}
 		});
-		console.log('[Maxian] editorService.openEditor 返回:', editor ? '成功' : '失败');
+		this.debugLog('[Maxian] editorService.openEditor 返回:', editor ? '成功' : '失败');
 
-		console.log('[Maxian] Diff编辑器已打开:', this.filePath);
+		this.debugLog('[Maxian] Diff编辑器已打开:', this.filePath);
 	}
 
 	/**
@@ -239,7 +247,7 @@ export class DiffViewProvider extends Disposable {
 		try {
 			// 解析相对路径为绝对路径
 			const resolvedPath = this.resolveFilePath(filePath);
-			console.log('[Maxian] applyDiff 解析文件路径:', filePath, '->', resolvedPath);
+			this.debugLog('[Maxian] applyDiff 解析文件路径:', filePath, '->', resolvedPath);
 
 			const fileUri = URI.file(resolvedPath);
 
@@ -247,7 +255,7 @@ export class DiffViewProvider extends Disposable {
 			const fileExists = await this.fileService.exists(fileUri);
 			if (!fileExists) {
 				// 如果文件不存在，将diff内容视为新文件内容
-				console.log('[Maxian] 文件不存在，将diff视为新文件内容:', resolvedPath);
+				this.debugLog('[Maxian] 文件不存在，将diff视为新文件内容:', resolvedPath);
 				return await this.openDiff(resolvedPath, diff);
 			}
 
@@ -270,12 +278,12 @@ export class DiffViewProvider extends Disposable {
 			// 尝试解析git unified diff格式
 			const gitDiffResult = this.applyGitUnifiedDiff(originalContent, diff);
 			if (gitDiffResult !== null) {
-				console.log('[Maxian] 检测到git unified diff格式，已成功应用');
+				this.debugLog('[Maxian] 检测到git unified diff格式，已成功应用');
 				return await this.openDiff(resolvedPath, gitDiffResult);
 			}
 
 			// 既不是SEARCH/REPLACE也不是git diff，兜底：将diff内容作为新文件内容直接展示diff视图
-			console.log('[Maxian] diff格式不识别，兜底将内容作为新文件内容展示diff视图');
+			this.debugLog('[Maxian] diff格式不识别，兜底将内容作为新文件内容展示diff视图');
 			return await this.openDiff(resolvedPath, diff);
 		} catch (error) {
 			console.error('[Maxian] applyDiff失败:', error);
@@ -338,7 +346,7 @@ export class DiffViewProvider extends Disposable {
 			// 写入文件
 			await this.fileService.writeFile(fileUri, VSBuffer.fromString(this.modifiedContent));
 
-			console.log('[Maxian] 文件已保存:', this.filePath);
+			this.debugLog('[Maxian] 文件已保存:', this.filePath);
 			return true;
 		} catch (error) {
 			console.error('[Maxian] 保存文件失败:', error);
@@ -367,7 +375,7 @@ export class DiffViewProvider extends Disposable {
 				await this.fileService.writeFile(fileUri, VSBuffer.fromString(this.originalContent));
 			}
 
-			console.log('[Maxian] 修改已撤销:', this.filePath);
+			this.debugLog('[Maxian] 修改已撤销:', this.filePath);
 			return true;
 		} catch (error) {
 			console.error('[Maxian] 撤销修改失败:', error);
@@ -411,7 +419,7 @@ export class DiffViewProvider extends Disposable {
 
 			// 1. 保存修改内容
 			await this.fileService.writeFile(fileUri, VSBuffer.fromString(this.modifiedContent));
-			console.log('[Maxian] 文件已保存:', this.filePath);
+			this.debugLog('[Maxian] 文件已保存:', this.filePath);
 
 
 			// 立即同步内存中的编辑器模型（避免编辑器显示旧内容）
@@ -432,7 +440,7 @@ export class DiffViewProvider extends Disposable {
 				};
 				// 关闭 diff 编辑器
 				await this.editorService.closeEditor(editorIdentifier);
-				console.log('[Maxian] Diff编辑器已关闭');
+				this.debugLog('[Maxian] Diff编辑器已关闭');
 			}
 
 			// 3. 清理 diff 相关的模型
@@ -463,7 +471,7 @@ export class DiffViewProvider extends Disposable {
 				}
 			});
 
-			console.log('[Maxian] 已打开文件:', this.filePath);
+			this.debugLog('[Maxian] 已打开文件:', this.filePath);
 
 			// 5. 清理状态
 			this.filePath = '';
@@ -501,7 +509,7 @@ export class DiffViewProvider extends Disposable {
 				};
 				// 关闭 diff 编辑器
 				await this.editorService.closeEditor(editorIdentifier);
-				console.log('[Maxian] Diff编辑器已关闭');
+				this.debugLog('[Maxian] Diff编辑器已关闭');
 			}
 
 			// 2. 清理 diff 相关的模型
@@ -531,10 +539,10 @@ export class DiffViewProvider extends Disposable {
 						revealIfVisible: true
 					}
 				});
-				console.log('[Maxian] 已打开原文件:', this.filePath);
+				this.debugLog('[Maxian] 已打开原文件:', this.filePath);
 			}
 
-			console.log('[Maxian] Diff预览已关闭（预览未保存，不代表目标文件未写入）');
+			this.debugLog('[Maxian] Diff预览已关闭（预览未保存，不代表目标文件未写入）');
 
 			// 4. 清理状态
 			this.filePath = '';

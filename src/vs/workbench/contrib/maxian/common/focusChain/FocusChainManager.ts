@@ -29,6 +29,14 @@ export class FocusChainManager {
 	private apiCallCount: number = 0;
 	private lastReminderAt: number = 0;
 	private taskDescription: string = '';
+	private readonly verboseLogs = false;
+
+	private debugLog(...args: any[]): void {
+		if (!this.verboseLogs) {
+			return;
+		}
+		console.log(...args);
+	}
 
 	/**
 	 * 设置任务描述
@@ -56,7 +64,7 @@ export class FocusChainManager {
 	 */
 	updateChecklist(items: FocusChainItem[]): void {
 		this.checklist = items;
-		console.log('[FocusChain] 任务清单已更新，共', items.length, '项');
+		this.debugLog('[FocusChain] 任务清单已更新，共', items.length, '项');
 	}
 
 	/**
@@ -171,7 +179,7 @@ export class FocusChainManager {
 		this.apiCallCount = 0;
 		this.lastReminderAt = 0;
 		this.taskDescription = '';
-		console.log('[FocusChain] 状态已重置');
+		this.debugLog('[FocusChain] 状态已重置');
 	}
 }
 

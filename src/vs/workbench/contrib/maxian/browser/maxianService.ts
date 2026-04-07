@@ -1961,7 +1961,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	/**
 	 * 获取所有工具定义
-	 * 包含所有23个工具的完整定义（含P0/P1优化新增的8个工具）
+	 * 单一真源：返回当前内置工具的完整定义（含兼容别名和 MCP 动态工具）
 	 */
 	private getAllToolDefinitions(): ToolDefinition[] {
 		return [
@@ -2036,6 +2036,19 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
+			// 5.1 list_code_definition_names - 代码定义快速索引（兼容旧工具名）
+			{
+				name: 'list_code_definition_names',
+				description: '列出文件中的主要代码定义名称（类、函数、接口等）。这是兼容旧调用链的只读工具，优先使用 search_files/read_file 或 codebase_search。',
+				parameters: {
+					type: 'object',
+					properties: {
+						path: { type: 'string', description: '目标文件路径' }
+					},
+					required: ['path']
+				}
+			},
+
 			// 4. execute_command - 执行命令
 			{
 				name: 'execute_command',
@@ -2102,6 +2115,21 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
+			// 7.1 insert_content - 按行插入内容（兼容旧工具名）
+			{
+				name: 'insert_content',
+				description: '在指定文件的指定行附近插入内容。兼容旧工具名，推荐优先使用 edit / multiedit。',
+				parameters: {
+					type: 'object',
+					properties: {
+						path: { type: 'string', description: '文件路径' },
+						line: { type: 'number', description: '插入位置行号（从1开始）' },
+						content: { type: 'string', description: '要插入的内容' }
+					},
+					required: ['path', 'content']
+				}
+			},
+
 			// 8. apply_diff - 应用差异（⚠️ 非首选工具）
 			{
 				name: 'apply_diff',
@@ -2116,6 +2144,21 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
+			// 8.1 edit_file - 旧版编辑工具（兼容入口）
+			{
+				name: 'edit_file',
+				description: '旧版编辑工具兼容入口。推荐优先使用 edit / multiedit；仅当上游仍发送 edit_file 格式时使用。',
+				parameters: {
+					type: 'object',
+					properties: {
+						target_file: { type: 'string', description: '目标文件路径' },
+						instructions: { type: 'string', description: '编辑意图描述' },
+						code_edit: { type: 'string', description: '编辑内容或片段' }
+					},
+					required: ['target_file', 'code_edit']
+				}
+			},
+
 			// 9. ask_followup_question - 提问
 			{
 				name: 'ask_followup_question',
@@ -2127,6 +2170,21 @@ export class MaxianService extends Disposable implements IMaxianService {
 						follow_up: { type: 'string', description: '后续行动（可选）' }
 					},
 					required: ['question']
+				}
+			},
+
+			// 9.1 new_task - 兼容旧任务入口
+			{
+				name: 'new_task',
+				description: '兼容旧版任务委托入口。推荐使用 task 工具；当上游仍输出 new_task 时由系统兼容处理。',
+				parameters: {
+					type: 'object',
+					properties: {
+						mode: { type: 'string', description: '目标模式（可选）' },
+						message: { type: 'string', description: '任务描述' },
+						todos: { type: 'string', description: '可选待办列表 JSON' }
+					},
+					required: ['message']
 				}
 			},
 
@@ -2154,11 +2212,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 					properties: {
 						tool_calls: {
 							type: 'array',
-							description: '工具调用数组，最多25个。格式：[{"tool":"read_file","parameters":{"path":"a.ts"}},{"tool":"task","parameters":{"subagent_type":"plan","prompt":"分解改造步骤"}}]。首选工具：read_file/edit/multiedit/write_to_file/search_files/glob/list_files/codebase_search/task/execute_command/lsp_*。禁止的工具：batch、ask_followup_question、attempt_completion',
+							description: '工具调用数组，最多25个。格式：[{"tool":"read_file","parameters":{"path":"a.ts"}},{"tool":"task","parameters":{"subagent_type":"plan","prompt":"分解改造步骤"}}]。首选工具：read_file/edit/multiedit/write_to_file/search_files/glob/list_files/codebase_search/task/execute_command/lsp。禁止的工具：batch、ask_followup_question、attempt_completion',
 							items: {
 								type: 'object',
 								properties: {
-									tool: { type: 'string', description: '工具名称（read_file/edit/multiedit/write_to_file/apply_diff/search_files/glob/list_files/codebase_search/task/execute_command/lsp_*等）' },
+									tool: { type: 'string', description: '工具名称（read_file/edit/multiedit/write_to_file/apply_diff/search_files/glob/list_files/codebase_search/task/execute_command/lsp 等）' },
 									parameters: { type: 'object', description: '工具参数对象' }
 								},
 								required: ['tool', 'parameters']
@@ -2240,7 +2298,27 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
-			// 20. lsp_hover - LSP悬停信息
+			// 20. lsp - 统一LSP查询入口（推荐）
+			{
+				name: 'lsp',
+				description: '统一 LSP 查询入口。operation 可选：hover | diagnostics | definition | references | type_definition。优先使用该工具，兼容旧 lsp_* 调用。',
+				parameters: {
+					type: 'object',
+					properties: {
+						operation: {
+							type: 'string',
+							enum: ['hover', 'diagnostics', 'definition', 'references', 'type_definition'],
+							description: 'LSP 操作类型'
+						},
+						path: { type: 'string', description: '文件路径' },
+						line: { type: 'number', description: '行号（operation 为 hover/definition/references/type_definition 时必需）' },
+						column: { type: 'number', description: '列号（operation 为 hover/definition/references/type_definition 时必需）' }
+					},
+					required: ['operation', 'path']
+				}
+			},
+
+			// 21. lsp_hover - LSP悬停信息（兼容旧工具名）
 			{
 				name: 'lsp_hover',
 				description: '获取代码位置的LSP悬停信息，包括类型、函数签名、文档等。',
@@ -2255,7 +2333,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
-			// 23. lsp_diagnostics - LSP诊断信息
+			// 22. lsp_diagnostics - LSP诊断信息（兼容旧工具名）
 			{
 				name: 'lsp_diagnostics',
 				description: '获取文件的LSP诊断信息，包括编译错误、类型错误、lint警告等。',
@@ -2268,7 +2346,52 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
-			// 24. skill - Skills系统：按需加载专业知识
+			// 23. lsp_definition - 跳转定义（兼容旧工具名）
+			{
+				name: 'lsp_definition',
+				description: '查询符号定义位置（兼容旧工具名，推荐使用 lsp(operation="definition")）。',
+				parameters: {
+					type: 'object',
+					properties: {
+						path: { type: 'string', description: '文件路径' },
+						line: { type: 'number', description: '行号（从1开始）' },
+						column: { type: 'number', description: '列号（从1开始）' }
+					},
+					required: ['path', 'line', 'column']
+				}
+			},
+
+			// 24. lsp_references - 查找引用（兼容旧工具名）
+			{
+				name: 'lsp_references',
+				description: '查询符号引用位置（兼容旧工具名，推荐使用 lsp(operation="references")）。',
+				parameters: {
+					type: 'object',
+					properties: {
+						path: { type: 'string', description: '文件路径' },
+						line: { type: 'number', description: '行号（从1开始）' },
+						column: { type: 'number', description: '列号（从1开始）' }
+					},
+					required: ['path', 'line', 'column']
+				}
+			},
+
+			// 25. lsp_type_definition - 跳转类型定义（兼容旧工具名）
+			{
+				name: 'lsp_type_definition',
+				description: '查询符号类型定义位置（兼容旧工具名，推荐使用 lsp(operation="type_definition")）。',
+				parameters: {
+					type: 'object',
+					properties: {
+						path: { type: 'string', description: '文件路径' },
+						line: { type: 'number', description: '行号（从1开始）' },
+						column: { type: 'number', description: '列号（从1开始）' }
+					},
+					required: ['path', 'line', 'column']
+				}
+			},
+
+			// 26. skill - Skills系统：按需加载专业知识
 			{
 				name: 'skill',
 				description: '加载并使用专业领域的Skill，获取详细指导和最佳实践。使用此工具可以显著提升特定领域任务的质量。',

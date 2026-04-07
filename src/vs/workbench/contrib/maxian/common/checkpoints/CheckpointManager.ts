@@ -29,6 +29,14 @@ export interface Checkpoint {
 export class CheckpointManager {
 	private checkpoints: Map<string, Checkpoint> = new Map();
 	private maxCheckpoints: number = 20;  // 最多保留20个检查点
+	private readonly verboseLogs = false;
+
+	private debugLog(...args: any[]): void {
+		if (!this.verboseLogs) {
+			return;
+		}
+		console.log(...args);
+	}
 
 	constructor(_taskDirectory?: string, maxCheckpoints: number = 20) {
 		this.maxCheckpoints = maxCheckpoints;
@@ -40,7 +48,7 @@ export class CheckpointManager {
 	 */
 	async initialize(_taskDirectory: string): Promise<void> {
 		await this.loadCheckpoints();
-		console.log('[CheckpointManager] 初始化完成，检查点数:', this.checkpoints.size);
+		this.debugLog('[CheckpointManager] 初始化完成，检查点数:', this.checkpoints.size);
 	}
 
 	/**
@@ -62,11 +70,11 @@ export class CheckpointManager {
 			const oldest = Array.from(this.checkpoints.values())
 				.sort((a, b) => a.timestamp - b.timestamp)[0];
 			this.checkpoints.delete(oldest.id);
-			console.log('[CheckpointManager] 删除最旧检查点:', oldest.id);
+			this.debugLog('[CheckpointManager] 删除最旧检查点:', oldest.id);
 		}
 
 		await this.saveCheckpoints();
-		console.log('[CheckpointManager] 创建检查点:', checkpoint.id, description);
+		this.debugLog('[CheckpointManager] 创建检查点:', checkpoint.id, description);
 
 		return checkpoint.id;
 	}
@@ -82,7 +90,7 @@ export class CheckpointManager {
 			return null;
 		}
 
-		console.log('[CheckpointManager] 恢复检查点:', checkpointId, checkpoint.description);
+		this.debugLog('[CheckpointManager] 恢复检查点:', checkpointId, checkpoint.description);
 		return checkpoint.data;
 	}
 
@@ -110,7 +118,7 @@ export class CheckpointManager {
 
 		if (deleted) {
 			await this.saveCheckpoints();
-			console.log('[CheckpointManager] 删除检查点:', checkpointId);
+			this.debugLog('[CheckpointManager] 删除检查点:', checkpointId);
 		}
 
 		return deleted;
@@ -122,7 +130,7 @@ export class CheckpointManager {
 	async clearAll(): Promise<void> {
 		this.checkpoints.clear();
 		await this.saveCheckpoints();
-		console.log('[CheckpointManager] 所有检查点已清除');
+		this.debugLog('[CheckpointManager] 所有检查点已清除');
 	}
 
 	/**
@@ -130,7 +138,7 @@ export class CheckpointManager {
 	 */
 	private async saveCheckpoints(): Promise<void> {
 		// TODO: 持久化需要移到node层或通过service
-		console.log('[CheckpointManager] 保存跳过（持久化待实现）');
+		this.debugLog('[CheckpointManager] 保存跳过（持久化待实现）');
 	}
 
 	/**

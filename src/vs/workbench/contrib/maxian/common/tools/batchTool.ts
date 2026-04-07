@@ -115,8 +115,8 @@ export const BATCH_CONFIG = {
 		'patch',
 		'delete_file',
 		'create_directory',
-		'insert_content',
-		'edit_file',
+		'insert_content', // 兼容旧别名
+		'edit_file',      // 兼容旧别名
 	]),
 
 	/**
@@ -129,6 +129,7 @@ export const BATCH_CONFIG = {
 		'search_files',
 		'codebase_search',
 		'glob',
+		'lsp',
 		'lsp_hover',
 		'lsp_diagnostics',
 		'lsp_definition',

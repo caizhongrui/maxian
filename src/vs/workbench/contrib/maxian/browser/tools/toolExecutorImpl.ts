@@ -450,7 +450,12 @@ export class ToolExecutorImpl implements IToolExecutor {
 					result = await this.executePatch(toolUse);
 					break;
 
-				// P1优化：LSP工具
+				// P1优化：统一LSP工具（推荐入口）
+				case 'lsp':
+					result = await this.executeLsp(toolUse);
+					break;
+
+				// 兼容旧 LSP 工具名
 				case 'lsp_hover':
 					result = await this.executeLspHover(toolUse);
 					break;
@@ -769,6 +774,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 			'代码库搜索失败:',
 			'未知工具:',
 			'⚠️ Doom Loop 检测警告',
+			'[BLOCK]',
 			'[FATAL]',
 		];
 
@@ -1410,6 +1416,31 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 		}
 
 		return `多文件补丁完成: ${successCount}/${patchList.length} 成功\n\n${results.join('\n')}`;
+	}
+
+	/**
+	 * LSP功能：统一查询入口（对齐 Claude Code / OpenCode 单工具风格）
+	 */
+	private async executeLsp(toolUse: ToolUse): Promise<ToolResponse> {
+		const operationRaw = (toolUse.params.operation || '').toString().trim().toLowerCase();
+		const operation = operationRaw || 'hover';
+
+		switch (operation) {
+			case 'hover':
+				return this.executeLspHover(toolUse);
+			case 'diagnostics':
+				return this.executeLspDiagnostics(toolUse);
+			case 'definition':
+				return this.executeLspDefinition(toolUse);
+			case 'references':
+				return this.executeLspReferences(toolUse);
+			case 'type_definition':
+			case 'type-definition':
+			case 'typedefinition':
+				return this.executeLspTypeDefinition(toolUse);
+			default:
+				return `<error>lsp 工具的 operation 无效: "${operationRaw || '(empty)'}"。可选值: hover | diagnostics | definition | references | type_definition</error>`;
+		}
 	}
 
 	/**

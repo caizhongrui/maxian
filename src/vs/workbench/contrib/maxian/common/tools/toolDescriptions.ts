@@ -442,7 +442,7 @@ import { useQuery } from 'react-query';</new_string>
 - 读取多个文件（read_file × N）
 - 多个搜索操作（search_files、glob、list_files、codebase_search）
 - 搜索 + 读取组合
-- LSP查询（lsp_hover、lsp_diagnostics等）
+- LSP查询（统一使用 lsp，operation=...）
 
 **性能提升**：在多文件探索阶段使用 batch，通常能减少无意义往返。
 
