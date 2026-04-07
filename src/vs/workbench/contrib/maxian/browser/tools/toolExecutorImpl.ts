@@ -239,6 +239,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 			}
 
 			let result: ToolResponse = '';
+			let executionToolUse: ToolUse = toolUse;
 
 			// 埋点：工具使用事件（在分发前统一上报，使用可选链静默处理）
 			this.context.behaviorReporter?.reportToolUse(toolUse.name);
@@ -304,6 +305,31 @@ export class ToolExecutorImpl implements IToolExecutor {
 
 				// 命令执行工具（requires_approval机制参考Cline）
 				case 'execute_command': {
+					const deleteCommandIntent = this.inspectDeleteCommandIntent(toolUse.params.command || '');
+					if (deleteCommandIntent) {
+						if (deleteCommandIntent.kind === 'block') {
+							result = `错误: 检测到删除命令，请勿使用 execute_command 删除文件。\n${deleteCommandIntent.reason}\n请改用 delete_file 工具。`;
+							break;
+						}
+
+						executionToolUse = {
+							...toolUse,
+							name: 'delete_file',
+							params: {
+								path: deleteCommandIntent.path,
+								recursive: deleteCommandIntent.recursive ? 'true' : 'false',
+							} as any,
+						};
+						const deleteResult = await this.fileOperations.deleteFile(executionToolUse);
+						const deleteText = typeof deleteResult === 'string' ? deleteResult : JSON.stringify(deleteResult);
+						if (deleteText.startsWith('错误:') || deleteText.startsWith('删除失败:')) {
+							result = deleteText;
+						} else {
+							result = `已将删除命令重定向为 delete_file 工具执行（避免 shell 删除后 VS Code 文件系统状态不同步）。\n${deleteText}`;
+						}
+						break;
+					}
+
 					// AI自声明命令是否需要用户确认：true=有副作用，false=只读操作
 					const requiresApproval = toolUse.params.requires_approval;
 					if (requiresApproval === 'true') {
@@ -569,18 +595,18 @@ export class ToolExecutorImpl implements IToolExecutor {
 
 			// C5: PostToolUse Hooks — 在工具执行后运行，stdout 非空则替换输出
 			const postHookResult = await this.hooksManager.runPostToolUseHooks(
-				toolUse.name,
-				toolUse.params || {},
+				executionToolUse.name,
+				executionToolUse.params || {},
 				typeof result === 'string' ? result : JSON.stringify(result)
 			);
 			if (postHookResult.replacedOutput !== undefined) {
-				console.log(`[Maxian] C5 PostToolUse hook 替换输出: ${toolUse.name}`);
+				console.log(`[Maxian] C5 PostToolUse hook 替换输出: ${executionToolUse.name}`);
 				result = postHookResult.replacedOutput;
 			}
 
-			const execution = this.classifyExecutionResult(toolUse, result);
+			const execution = this.classifyExecutionResult(executionToolUse, result);
 			if (execution.success) {
-				resetDoomLoopCount(sessionId, toolUse.name);
+				resetDoomLoopCount(sessionId, executionToolUse.name);
 			}
 			return execution;
 		} catch (error) {
@@ -599,6 +625,91 @@ export class ToolExecutorImpl implements IToolExecutor {
 		for (const filePath of paths) {
 			this.fileReadCount.delete(filePath);
 		}
+	}
+
+	private inspectDeleteCommandIntent(commandRaw: string): { kind: 'rewrite'; path: string; recursive: boolean } | { kind: 'block'; reason: string } | null {
+		const command = (commandRaw || '').trim();
+		if (!command) {
+			return null;
+		}
+
+		const lower = command.toLowerCase();
+		const commandHead = lower.split(/\s+/, 1)[0];
+		const isDeleteCommand = commandHead === 'rm' || commandHead === 'del' || commandHead === 'rmdir' || commandHead === 'rd';
+		if (!isDeleteCommand) {
+			return null;
+		}
+
+		if (command.includes('&&') || command.includes('||') || command.includes('|') || command.includes(';')) {
+			return { kind: 'block', reason: '删除命令包含管道或多段命令，无法安全改写。' };
+		}
+
+		let optionPart = '';
+		let pathPart = '';
+		let recursive = false;
+
+		if (commandHead === 'rm') {
+			const match = command.match(/^rm\s+((?:-\S+\s+)*)?(.+)$/i);
+			if (!match) {
+				return { kind: 'block', reason: 'rm 命令格式不正确。' };
+			}
+			optionPart = (match[1] || '').trim();
+			pathPart = (match[2] || '').trim();
+			recursive = /(^|\s)--recursive(\s|$)/i.test(optionPart) || /(^|\s)-[^\s]*r[^\s]*/i.test(optionPart);
+		} else if (commandHead === 'del') {
+			const match = command.match(/^del\s+((?:\/\S+\s+)*)?(.+)$/i);
+			if (!match) {
+				return { kind: 'block', reason: 'del 命令格式不正确。' };
+			}
+			optionPart = (match[1] || '').trim();
+			pathPart = (match[2] || '').trim();
+			recursive = /(^|\s)\/s(\s|$)/i.test(optionPart);
+		} else {
+			const match = command.match(/^(?:rmdir|rd)\s+((?:\/\S+\s+)*)?(.+)$/i);
+			if (!match) {
+				return { kind: 'block', reason: 'rmdir/rd 命令格式不正确。' };
+			}
+			optionPart = (match[1] || '').trim();
+			pathPart = (match[2] || '').trim();
+			recursive = /(^|\s)\/s(\s|$)/i.test(optionPart);
+		}
+
+		const normalizedPath = this.extractSinglePathToken(pathPart);
+		if (!normalizedPath) {
+			return { kind: 'block', reason: '删除命令必须只包含一个明确路径（含空格时需用引号包裹）。' };
+		}
+		if (normalizedPath.includes('*') || normalizedPath.includes('?')) {
+			return { kind: 'block', reason: '删除命令包含通配符，无法安全改写。' };
+		}
+
+		return {
+			kind: 'rewrite',
+			path: normalizedPath,
+			recursive
+		};
+	}
+
+	private extractSinglePathToken(rawPathPart: string): string | null {
+		const raw = rawPathPart.trim();
+		if (!raw) {
+			return null;
+		}
+
+		const doubleQuotedMatch = raw.match(/^"([^"]+)"$/);
+		if (doubleQuotedMatch) {
+			return doubleQuotedMatch[1];
+		}
+
+		const singleQuotedMatch = raw.match(/^'([^']+)'$/);
+		if (singleQuotedMatch) {
+			return singleQuotedMatch[1];
+		}
+
+		if (/\s/.test(raw)) {
+			return null;
+		}
+
+		return raw;
 	}
 
 	private classifyExecutionResult(toolUse: ToolUse, result: ToolResponse): ToolExecutionResult {
@@ -830,8 +941,27 @@ export class ToolExecutorImpl implements IToolExecutor {
 		if (!question) {
 			return '错误: 未提供问题';
 		}
+		let options: string[] = [];
+		const rawOptions = toolUse.params.options;
+		if (Array.isArray(rawOptions)) {
+			options = rawOptions.map(v => String(v).trim()).filter(Boolean);
+		} else if (typeof rawOptions === 'string' && rawOptions.trim().length > 0) {
+			try {
+				const parsed = JSON.parse(rawOptions);
+				if (Array.isArray(parsed)) {
+					options = parsed.map(v => String(v).trim()).filter(Boolean);
+				}
+			} catch {
+				// 非 JSON 时降级按分号/换行切分
+				options = rawOptions
+					.split(/\r?\n|;/)
+					.map(v => v.trim())
+					.filter(Boolean);
+			}
+		}
+		options = options.slice(0, 6);
 		// 返回特殊格式，TaskService会检测这个前缀并触发用户输入请求
-		return `__USER_INPUT_REQUIRED__:${JSON.stringify({ question, toolUseId: toolUse.toolUseId })}`;
+		return `__USER_INPUT_REQUIRED__:${JSON.stringify({ question, options, toolUseId: toolUse.toolUseId })}`;
 	}
 
 	/**

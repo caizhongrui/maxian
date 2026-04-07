@@ -19,8 +19,10 @@ export interface SystemInfo {
  * 获取系统信息section
  */
 export function getSystemInfoSection(workspaceRoot: string, systemInfo: SystemInfo): string {
-	const isWindows = systemInfo.platform.toLowerCase().includes('win');
-	const isMac = systemInfo.platform.toLowerCase().includes('darwin');
+	const normalizedPlatform = systemInfo.platform.toLowerCase();
+	// 注意：不能用 includes('win')，否则 "darwin" 会被误判为 Windows
+	const isWindows = normalizedPlatform === 'win32' || normalizedPlatform === 'windows' || normalizedPlatform.startsWith('win');
+	const isMac = normalizedPlatform === 'darwin' || normalizedPlatform === 'macos' || normalizedPlatform === 'mac';
 
 	// 人类可读的 OS 名称（参考 Cline）
 	const osDisplayName = isWindows ? `Windows (${systemInfo.platform})`

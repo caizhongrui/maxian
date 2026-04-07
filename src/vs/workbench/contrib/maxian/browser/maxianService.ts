@@ -2167,7 +2167,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 					type: 'object',
 					properties: {
 						question: { type: 'string', description: '要问的问题' },
-						follow_up: { type: 'string', description: '后续行动（可选）' }
+						follow_up: { type: 'string', description: '后续行动（可选）' },
+						options: { type: 'string', description: '备选答案数组（JSON 字符串，例如 ["A","B"]）' }
 					},
 					required: ['question']
 				}

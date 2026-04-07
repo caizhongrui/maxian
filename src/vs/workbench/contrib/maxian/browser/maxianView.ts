@@ -79,6 +79,9 @@ export class MaxianView extends ViewPane {
 	private currentToolStatusElement: HTMLElement | null = null; // 当前工具状态元素（更新而非新建）
 	private toolStatusElements: Map<string, HTMLElement> = new Map(); // 工具ID到状态元素的映射（支持并行工具）
 	private thinkingMessageElement: HTMLElement | null = null; // "正在思考"消息元素（避免重复显示）
+	private apiRequestStartAt: number | null = null; // 当前 API 请求开始时间
+	private apiRequestProgressTimer: number | null = null; // API 请求进度刷新定时器
+	private apiRequestRetryCount = 0; // 当前请求重试次数
 	private waitingIndicatorElement: HTMLElement | null = null; // 发送后"等待中"三点动画气泡
 	private codeContextBar: HTMLElement | null = null; // 代码片段预览卡片容器
 	private codeContextCards: Map<string, HTMLElement> = new Map(); // relativePath → 卡片元素
@@ -3887,21 +3890,26 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			this.flushTextStreamBuffer();
 		}
 
-		switch (sayType) {
-			case 'text':
-				// 文本消息 - 使用Markdown渲染
-				this.enqueueTextMessageRender(message.text || '', message.partial);
-				break;
+			switch (sayType) {
+				case 'text':
+					// 一旦收到文本流，说明请求已经有实质性进展，结束“思考中”提示
+					this.stopApiRequestProgress(true);
+					// 文本消息 - 使用Markdown渲染
+					this.enqueueTextMessageRender(message.text || '', message.partial);
+					break;
 
-			case 'reasoning':
-				// Reasoning/思考过程 - 使用可折叠的思考块展示
-				this.renderReasoningMessage(message.reasoning || message.text || '', message.partial);
-				break;
+				case 'reasoning':
+					// Reasoning 到达也视为已进入响应阶段，结束“思考中”提示
+					this.stopApiRequestProgress(true);
+					// Reasoning/思考过程 - 使用可折叠的思考块展示
+					this.renderReasoningMessage(message.reasoning || message.text || '', message.partial);
+					break;
 
-			case 'completion_result':
-				// 任务完成时，移除最后一轮API调用的流式气泡（与case 'tool'相同）
-				// attempt_completion不调用say('tool')，所以流式气泡未被case 'tool'清理
-				if (this.currentStreamingMessageElement) {
+				case 'completion_result':
+					this.stopApiRequestProgress(true);
+					// 任务完成时，移除最后一轮API调用的流式气泡（与case 'tool'相同）
+					// attempt_completion不调用say('tool')，所以流式气泡未被case 'tool'清理
+					if (this.currentStreamingMessageElement) {
 					this.currentStreamingMessageElement.remove();
 					this.currentStreamingMessageElement = null;
 				}
@@ -3909,48 +3917,43 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 				this.renderCompletionResult(message.text || '');
 				break;
 
-			case 'error':
-				// 错误时也清理流式气泡
-				if (this.currentStreamingMessageElement) {
-					this.currentStreamingMessageElement.remove();
+				case 'error':
+					this.stopApiRequestProgress(true);
+					// 错误时也清理流式气泡
+					if (this.currentStreamingMessageElement) {
+						this.currentStreamingMessageElement.remove();
 					this.currentStreamingMessageElement = null;
 				}
 				// 错误消息
 				this.renderErrorMessage(message.text || '未知错误');
 				break;
 
-			case 'api_req_started':
-				// API请求开始 - 显示思考状态，避免前端卡住的感觉
-				// 如果已有思考消息，先移除旧的
-				if (this.thinkingMessageElement && this.thinkingMessageElement.parentNode) {
-					this.thinkingMessageElement.parentNode.removeChild(this.thinkingMessageElement);
-				}
-				// 显示新的思考消息
-				this.thinkingMessageElement = this.renderSystemMessage('🤔 码弦正在思考...');
-				break;
+				case 'api_req_started':
+					// API 请求开始：显示动态进度文案，避免长时间只看到固定“思考中”
+					this.startApiRequestProgress();
+					break;
 
-			case 'api_req_finished':
-				// API请求完成 - 移除思考状态消息
-				if (this.thinkingMessageElement && this.thinkingMessageElement.parentNode) {
-					this.thinkingMessageElement.parentNode.removeChild(this.thinkingMessageElement);
-					this.thinkingMessageElement = null;
-				}
-				break;
+				case 'api_req_finished':
+					// API请求完成 - 移除思考状态消息与定时器
+					this.stopApiRequestProgress(true);
+					break;
 
-			case 'api_req_retried':
-				// API请求重试
-				this.renderSystemMessage('🔄 正在重试API请求...');
-				break;
+				case 'api_req_retried':
+					// API请求重试：在同一条进度消息里更新阶段，不额外刷屏
+					this.apiRequestRetryCount++;
+					this.updateApiRequestProgressText();
+					break;
 
 			case 'user_feedback':
 				// 用户反馈
 				this.renderUserFeedback(message.text || '', message.images);
 				break;
 
-			case 'tool':
-				// 工具执行时，立即移除上一轮API调用的流式气泡（AI的思考文本不应保留）
-				if (this.currentStreamingMessageElement) {
-					this.currentStreamingMessageElement.remove();
+				case 'tool':
+					this.stopApiRequestProgress(true);
+					// 工具执行时，立即移除上一轮API调用的流式气泡（AI的思考文本不应保留）
+					if (this.currentStreamingMessageElement) {
+						this.currentStreamingMessageElement.remove();
 					this.currentStreamingMessageElement = null;
 				}
 				// 工具执行状态 - 显示正在执行什么工具
@@ -4529,6 +4532,68 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 	}
 
 	/**
+	 * 启动 API 请求进度提示（动态文案 + 秒级更新）
+	 */
+	private startApiRequestProgress(): void {
+		this.apiRequestStartAt = Date.now();
+		this.apiRequestRetryCount = 0;
+		this.updateApiRequestProgressText();
+		if (this.apiRequestProgressTimer !== null) {
+			clearInterval(this.apiRequestProgressTimer);
+		}
+		this.apiRequestProgressTimer = window.setInterval(() => {
+			this.updateApiRequestProgressText();
+		}, 1000);
+	}
+
+	/**
+	 * 停止 API 请求进度提示
+	 */
+	private stopApiRequestProgress(removeElement: boolean): void {
+		if (this.apiRequestProgressTimer !== null) {
+			clearInterval(this.apiRequestProgressTimer);
+			this.apiRequestProgressTimer = null;
+		}
+		this.apiRequestStartAt = null;
+		this.apiRequestRetryCount = 0;
+		if (removeElement && this.thinkingMessageElement && this.thinkingMessageElement.parentNode) {
+			this.thinkingMessageElement.parentNode.removeChild(this.thinkingMessageElement);
+			this.thinkingMessageElement = null;
+		}
+	}
+
+	/**
+	 * 更新 API 请求进度提示文本
+	 */
+	private updateApiRequestProgressText(): void {
+		if (!this.thinkingMessageElement) {
+			this.thinkingMessageElement = this.renderSystemMessage('');
+		}
+		if (!this.thinkingMessageElement) {
+			return;
+		}
+
+		const elapsedSec = this.apiRequestStartAt ? Math.max(1, Math.floor((Date.now() - this.apiRequestStartAt) / 1000)) : 0;
+		let text: string;
+
+		if (elapsedSec < 3) {
+			text = '🤔 码弦正在分析你的请求...';
+		} else if (elapsedSec < 8) {
+			text = `🔎 码弦正在检索上下文（已 ${elapsedSec}s）...`;
+		} else if (elapsedSec < 15) {
+			text = `🧠 码弦正在规划执行步骤（已 ${elapsedSec}s）...`;
+		} else {
+			text = `⏳ 码弦仍在处理中（已等待 ${elapsedSec}s）...`;
+		}
+
+		if (this.apiRequestRetryCount > 0) {
+			text += `（重试 ${this.apiRequestRetryCount} 次）`;
+		}
+
+		this.thinkingMessageElement.textContent = text;
+	}
+
+	/**
 	 * 显示"等待中"三点动画气泡（发送消息后、首个响应到达前）
 	 */
 	private showWaitingIndicator(): void {
@@ -5031,6 +5096,9 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 	 * 处理对话清空事件
 	 */
 	private handleConversationCleared(): void {
+		this.stopApiRequestProgress(false);
+		this.thinkingMessageElement = null;
+
 		// 重置所有状态
 		this.currentAiMessageElement = null;
 		this.currentAiMessageText = '';
@@ -5178,6 +5246,34 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		questionContent.style.lineHeight = '1.6';
 		questionContent.style.marginBottom = '12px';
 		questionContent.textContent = message.text || '';
+
+		const followupOptionsRaw = (message.metadata?.kiloCode as any)?.options;
+		const followupOptions: string[] = Array.isArray(followupOptionsRaw)
+			? followupOptionsRaw.map((value: unknown) => String(value).trim()).filter(Boolean).slice(0, 6)
+			: [];
+		if (followupOptions.length > 0) {
+			const optionsContainer = append(questionMsg, $('div'));
+			optionsContainer.style.display = 'flex';
+			optionsContainer.style.flexWrap = 'wrap';
+			optionsContainer.style.gap = '8px';
+			optionsContainer.style.marginBottom = '12px';
+
+			followupOptions.forEach((optionText) => {
+				const optionButton = append(optionsContainer, $('button')) as HTMLButtonElement;
+				optionButton.textContent = optionText;
+				optionButton.style.padding = '6px 12px';
+				optionButton.style.backgroundColor = 'var(--vscode-button-secondaryBackground)';
+				optionButton.style.color = 'var(--vscode-button-secondaryForeground)';
+				optionButton.style.border = '1px solid var(--vscode-contrastBorder)';
+				optionButton.style.borderRadius = '4px';
+				optionButton.style.cursor = 'pointer';
+				optionButton.style.fontSize = '12px';
+				optionButton.onclick = () => {
+					this.maxianService.handleAskResponse(message.ts, 'messageResponse', optionText);
+					questionMsg.remove();
+				};
+			});
+		}
 
 		// 输入框
 		const inputArea = append(questionMsg, $('textarea')) as HTMLTextAreaElement;
@@ -7743,6 +7839,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 	}
 
 	override dispose(): void {
+		this.stopApiRequestProgress(true);
 		if (this.textStreamFlushTimer !== null) {
 			clearTimeout(this.textStreamFlushTimer);
 			this.textStreamFlushTimer = null;

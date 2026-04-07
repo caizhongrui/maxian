@@ -324,6 +324,7 @@ export class Task {
 		partial?: boolean,
 		progressStatus?: any,
 		isProtected?: boolean,
+		extra?: Partial<ClineMessage>,
 	): Promise<ClineAskResponse> {
 		if (this.abort) {
 			throw new Error(`[Task#ask] task ${this.taskId}.${this.instanceId} aborted`);
@@ -357,6 +358,7 @@ export class Task {
 						text: question,
 						partial,
 						isProtected,
+						...(extra || {}),
 					} as any);
 					throw new Error('Current ask promise was ignored (#2)');
 				}
@@ -388,6 +390,7 @@ export class Task {
 						ask: type,
 						text: question,
 						isProtected,
+						...(extra || {}),
 					} as any);
 				}
 			}
@@ -404,6 +407,7 @@ export class Task {
 				ask: type,
 				text: question,
 				isProtected,
+				...(extra || {}),
 			} as any);
 		}
 

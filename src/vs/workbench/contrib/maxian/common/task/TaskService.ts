@@ -472,7 +472,8 @@ export class TaskService extends Disposable {
 		type: ClineAsk,
 		text?: string,
 		partial?: boolean,
-		progressStatus?: ToolProgressStatus
+		progressStatus?: ToolProgressStatus,
+		extra?: Partial<ClineMessage>
 	): Promise<{ response: ClineAskResponse; text?: string; images?: string[] }> {
 		if (this.abort) {
 			throw new Error(`[TaskService#ask] task ${this.taskId} aborted`);
@@ -498,7 +499,7 @@ export class TaskService extends Disposable {
 					// 新的partial消息
 					askTs = this.nextClineMessageTimestamp();
 					this.lastMessageTs = askTs;
-					const message: ClineMessage = { ts: askTs, type: 'ask', ask: type, text, partial };
+					const message: ClineMessage = { ts: askTs, type: 'ask', ask: type, text, partial, ...(extra || {}) };
 					this.clineMessages.push(message);
 					this._onMessageAdded.fire(message);
 					throw new Error('Current ask promise was ignored (#2)');
@@ -523,7 +524,7 @@ export class TaskService extends Disposable {
 					this.askResponseImages = undefined;
 					askTs = this.nextClineMessageTimestamp();
 					this.lastMessageTs = askTs;
-					const message: ClineMessage = { ts: askTs, type: 'ask', ask: type, text };
+					const message: ClineMessage = { ts: askTs, type: 'ask', ask: type, text, ...(extra || {}) };
 					this.clineMessages.push(message);
 					this._onMessageAdded.fire(message);
 				}
@@ -535,7 +536,7 @@ export class TaskService extends Disposable {
 			this.askResponseImages = undefined;
 			askTs = this.nextClineMessageTimestamp();
 			this.lastMessageTs = askTs;
-			const message: ClineMessage = { ts: askTs, type: 'ask', ask: type, text };
+			const message: ClineMessage = { ts: askTs, type: 'ask', ask: type, text, ...(extra || {}) };
 			this.clineMessages.push(message);
 			this._onMessageAdded.fire(message);
 		}
@@ -1923,9 +1924,21 @@ export class TaskService extends Disposable {
 					// 处理 ask_followup_question 的用户输入
 					if (execution.success && typeof result === 'string' && result.startsWith('__USER_INPUT_REQUIRED__:')) {
 						const payload = result.substring('__USER_INPUT_REQUIRED__:'.length);
-						const { question } = JSON.parse(payload);
+						const { question, options } = JSON.parse(payload);
+						const normalizedOptions: string[] = Array.isArray(options)
+							? options.map((value: unknown) => String(value).trim()).filter(Boolean).slice(0, 6)
+							: [];
+						const askExtra: Partial<ClineMessage> | undefined = normalizedOptions.length > 0
+							? {
+								metadata: {
+									kiloCode: {
+										options: normalizedOptions
+									}
+								}
+							}
+							: undefined;
 
-				const { response, text } = await this.ask('followup', question);
+				const { response, text } = await this.ask('followup', question, undefined, undefined, askExtra);
 
 				if (response === 'messageResponse') {
 					return {
