@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/jsonFormatter.js","code":"export function $Rw(text, offset) {\n    return '\\r\\n'.indexOf(text.charAt(offset)) !== -1;\n}\n//# sourceMappingURL=jsonFormatter.js.map","startLine":203,"endLine":206,"chunkType":"block","mtime":1772878378236.3533}

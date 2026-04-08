@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/uriIpc.js","code":"transformIncoming(uri) {\n        const result = this.a.transformIncoming(uri);\n        return (result === uri ? uri : toJSON(URI.from(result)));\n    }","startLine":14,"endLine":17,"chunkType":"function","mtime":1772878378386.944}

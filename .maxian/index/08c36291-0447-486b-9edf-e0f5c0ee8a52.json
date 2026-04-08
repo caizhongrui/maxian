@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/intervalTree.js","code":"detach() {\n        this.parent = null;\n        this.left = null;\n        this.right = null;\n    }","startLine":156,"endLine":160,"chunkType":"function","mtime":1772878380724.168}

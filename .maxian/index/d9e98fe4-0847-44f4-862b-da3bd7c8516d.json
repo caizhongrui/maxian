@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/lineSelection/test/browser/lineSelection.test.js","code":"function executeAction(action, editor) {\n    action.run(null, editor, undefined);\n}","startLine":11,"endLine":13,"chunkType":"function","mtime":1772878383401.6885}

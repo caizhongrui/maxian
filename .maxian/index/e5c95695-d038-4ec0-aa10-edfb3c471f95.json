@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/docs/superpowers/plans/2026-03-13-trae-ui-redesign.md","code":"card.appendChild(header);\n  card.appendChild(detail);\n\n  return card;\n}","startLine":1244,"endLine":1249,"chunkType":"block","mtime":1773386054304.422}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/task/taskProvider.ts","code":"export function register(\n\tlazyClient: Lazy<ITypeScriptServiceClient>,","startLine":297,"endLine":298,"chunkType":"function","mtime":1762250468330.8584}

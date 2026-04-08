@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"static fromPromise(promise) {\n        return new $ii(async (emitter) => {\n            emitter.emitMany(await promise);\n        });\n    }","startLine":1405,"endLine":1409,"chunkType":"function","mtime":1772878378139.2854}

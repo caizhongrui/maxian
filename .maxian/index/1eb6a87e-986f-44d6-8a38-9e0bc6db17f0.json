@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test-issue11.ts","code":"if(!(keyCode === 8 || (keyCode>=48 && keyCode<=57))) {}\nfor (let i=0; i<5; i++) {}","startLine":2,"endLine":3,"chunkType":"function","mtime":1762250468356.097}

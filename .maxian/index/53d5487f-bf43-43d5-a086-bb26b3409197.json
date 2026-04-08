@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/bootstrap-fork.js","code":"if (!!process.send && process.env['VSCODE_PIPE_LOGGING'] === 'true') {\n    pipeLoggingToParent();\n}","startLine":181,"endLine":183,"chunkType":"function","mtime":1772878377404.6196}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/peek/referencesWidget.js","code":"C(width) {\n        if (this.eb) {\n            this.X(this.eb.height, width);\n        }\n    }","startLine":336,"endLine":340,"chunkType":"function","mtime":1772878382753.5593}

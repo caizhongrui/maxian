@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/ipc/ipcServer.ts","code":"handle(request: any): Promise<any>;\n}","startLine":28,"endLine":29,"chunkType":"function","mtime":1762250468218.7202}

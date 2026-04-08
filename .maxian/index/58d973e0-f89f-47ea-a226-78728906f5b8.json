@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/viewLines/rangeUtil.js","code":"static b() {\n        if (!this.a) {\n            this.a = document.createRange();\n        }\n        return this.a;\n    }","startLine":7,"endLine":12,"chunkType":"function","mtime":1772878380217.981}

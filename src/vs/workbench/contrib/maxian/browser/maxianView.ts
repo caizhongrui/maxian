@@ -49,6 +49,7 @@ import {
 	// createProgressBar,
 	// type TokenStats,
 } from './uiUtils.js';
+import { ensureFollowupOptions } from '../common/tools/toolExecutionProtocol.js';
 
 /**
  * 码弦 Agent 视图面板
@@ -82,6 +83,7 @@ export class MaxianView extends ViewPane {
 	private apiRequestStartAt: number | null = null; // 当前 API 请求开始时间
 	private apiRequestProgressTimer: number | null = null; // API 请求进度刷新定时器
 	private apiRequestRetryCount = 0; // 当前请求重试次数
+	private apiRequestBackendHint: string | null = null; // 后端心跳提示
 	private waitingIndicatorElement: HTMLElement | null = null; // 发送后"等待中"三点动画气泡
 	private codeContextBar: HTMLElement | null = null; // 代码片段预览卡片容器
 	private codeContextCards: Map<string, HTMLElement> = new Map(); // relativePath → 卡片元素
@@ -3694,6 +3696,9 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 
 			// 用户消息渲染完成后，立即显示"等待中"气泡（在用户消息下方）
 			this.showWaitingIndicator();
+		} else if (event.type === 'progress') {
+			this.apiRequestBackendHint = event.content;
+			this.updateApiRequestProgressText();
 		} else if (event.type === 'assistant') {
 			// 如果是流式消息
 			if (event.isPartial) {
@@ -3845,6 +3850,34 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		questionContent.style.fontSize = '13px';
 		questionContent.style.fontWeight = '500';
 		questionContent.textContent = event.question;
+
+		const quickOptions = ensureFollowupOptions(event.options);
+		if (quickOptions.length > 0) {
+			const optionsContainer = append(questionMsg, $('div'));
+			optionsContainer.style.display = 'flex';
+			optionsContainer.style.flexWrap = 'wrap';
+			optionsContainer.style.gap = '8px';
+			optionsContainer.style.marginTop = '10px';
+
+			for (const option of quickOptions) {
+				const optionButton = append(optionsContainer, $('button')) as HTMLButtonElement;
+				optionButton.textContent = option.label;
+				optionButton.style.padding = '6px 12px';
+				optionButton.style.backgroundColor = 'var(--vscode-button-secondaryBackground)';
+				optionButton.style.color = 'var(--vscode-button-secondaryForeground)';
+				optionButton.style.border = '1px solid var(--vscode-contrastBorder)';
+				optionButton.style.borderRadius = '4px';
+				optionButton.style.cursor = 'pointer';
+				optionButton.style.fontSize = '12px';
+				if (option.description) {
+					optionButton.title = option.description;
+				}
+				optionButton.onclick = () => {
+					this.inputBox.textContent = option.value || option.label;
+					this.sendButton.click();
+				};
+			}
+		}
 
 		// 添加提示文本
 		const hintText = append(questionMsg, $('div'));
@@ -4537,6 +4570,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 	private startApiRequestProgress(): void {
 		this.apiRequestStartAt = Date.now();
 		this.apiRequestRetryCount = 0;
+		this.apiRequestBackendHint = null;
 		this.updateApiRequestProgressText();
 		if (this.apiRequestProgressTimer !== null) {
 			clearInterval(this.apiRequestProgressTimer);
@@ -4556,6 +4590,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		}
 		this.apiRequestStartAt = null;
 		this.apiRequestRetryCount = 0;
+		this.apiRequestBackendHint = null;
 		if (removeElement && this.thinkingMessageElement && this.thinkingMessageElement.parentNode) {
 			this.thinkingMessageElement.parentNode.removeChild(this.thinkingMessageElement);
 			this.thinkingMessageElement = null;
@@ -4588,6 +4623,9 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 
 		if (this.apiRequestRetryCount > 0) {
 			text += `（重试 ${this.apiRequestRetryCount} 次）`;
+		}
+		if (this.apiRequestBackendHint) {
+			text += `\n${this.apiRequestBackendHint}`;
 		}
 
 		this.thinkingMessageElement.textContent = text;
@@ -5248,9 +5286,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		questionContent.textContent = message.text || '';
 
 		const followupOptionsRaw = (message.metadata?.kiloCode as any)?.options;
-		const followupOptions: string[] = Array.isArray(followupOptionsRaw)
-			? followupOptionsRaw.map((value: unknown) => String(value).trim()).filter(Boolean).slice(0, 6)
-			: [];
+		const followupOptions = ensureFollowupOptions(followupOptionsRaw);
 		if (followupOptions.length > 0) {
 			const optionsContainer = append(questionMsg, $('div'));
 			optionsContainer.style.display = 'flex';
@@ -5258,9 +5294,9 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			optionsContainer.style.gap = '8px';
 			optionsContainer.style.marginBottom = '12px';
 
-			followupOptions.forEach((optionText) => {
+			followupOptions.forEach((option) => {
 				const optionButton = append(optionsContainer, $('button')) as HTMLButtonElement;
-				optionButton.textContent = optionText;
+				optionButton.textContent = option.label;
 				optionButton.style.padding = '6px 12px';
 				optionButton.style.backgroundColor = 'var(--vscode-button-secondaryBackground)';
 				optionButton.style.color = 'var(--vscode-button-secondaryForeground)';
@@ -5268,8 +5304,11 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 				optionButton.style.borderRadius = '4px';
 				optionButton.style.cursor = 'pointer';
 				optionButton.style.fontSize = '12px';
+				if (option.description) {
+					optionButton.title = option.description;
+				}
 				optionButton.onclick = () => {
-					this.maxianService.handleAskResponse(message.ts, 'messageResponse', optionText);
+					this.maxianService.handleAskResponse(message.ts, 'messageResponse', option.value || option.label);
 					questionMsg.remove();
 				};
 			});

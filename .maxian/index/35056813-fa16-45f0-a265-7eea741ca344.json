@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/sync.rs","code":"let (barrier, opener) = new_barrier::<u32>();\n\t\tlet (tx1, rx1) = tokio::sync::oneshot::channel::<u32>();","startLine":204,"endLine":205,"chunkType":"function","mtime":1762250468187.6062}

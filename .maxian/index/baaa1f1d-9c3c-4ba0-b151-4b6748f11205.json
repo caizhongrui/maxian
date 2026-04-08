@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/test/pasteUrl.test.ts","code":"function makeTestDoc(contents: string) {\n\treturn new InMemoryDocument(vscode.Uri.file('test.md'), contents);\n}","startLine":16,"endLine":18,"chunkType":"function","mtime":1762250468271.6003}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/modelService.js","code":"F(disposedModelData) {\n        this.m.set(MODEL_ID(disposedModelData.uri), disposedModelData);\n        this.n += disposedModelData.heapSize;\n    }","startLine":220,"endLine":223,"chunkType":"function","mtime":1772878381035.162}

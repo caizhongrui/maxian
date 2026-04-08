@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/npm/src/readScripts.ts","code":"onObjectEnd(offset) {\n\t\t\tif (inScripts) {\n\t\t\t\tend = document.positionAt(offset);\n\t\t\t\tinScripts = false;\n\t\t\t}\n\t\t\tlevel--;\n\t\t},","startLine":36,"endLine":42,"chunkType":"function","mtime":1762250468289.2502}

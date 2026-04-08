@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/util/codeAction.ts","code":"export function getEditForCodeAction(\n\tclient: ITypeScriptServiceClient,","startLine":11,"endLine":12,"chunkType":"function","mtime":1762250468329.5872}

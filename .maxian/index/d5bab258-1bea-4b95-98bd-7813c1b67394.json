@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/services/hoverService/hoverService.js","code":"hideHover() {\n        if (this.c?.isLocked || !this.b) {\n            return;\n        }\n        this.r();\n    }","startLine":123,"endLine":128,"chunkType":"function","mtime":1772878379796.8015}

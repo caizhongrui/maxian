@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"if (str[idx - 1] === '\\r') {\n        idx--;\n    }","startLine":750,"endLine":752,"chunkType":"function","mtime":1772878378348.6172}

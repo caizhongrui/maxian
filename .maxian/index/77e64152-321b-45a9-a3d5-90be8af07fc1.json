@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/toggle/toggle.js","code":"enable() {\n        this.domNode.setAttribute('aria-disabled', String(false));\n    }","startLine":146,"endLine":148,"chunkType":"function","mtime":1772878378113.2153}

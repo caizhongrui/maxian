@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/web/src/serverHost.ts","code":"clearImmediate(timeoutId: any): void {\n\t\t\tthis.clearTimeout(timeoutId);\n\t\t},","startLine":71,"endLine":73,"chunkType":"function","mtime":1762250468340.7437}

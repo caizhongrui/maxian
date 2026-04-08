@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/collections.js","code":"add(value) {\n        const key = this.b(value);\n        this.a.set(key, value);\n        return this;\n    }","startLine":81,"endLine":85,"chunkType":"function","mtime":1772878378169.347}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/OpenCode架构分析与优化建议.md","code":"executeBatch(calls: ToolCall[]): Promise<BatchResult>;\n}","startLine":795,"endLine":796,"chunkType":"function","mtime":1772782077285.7097}

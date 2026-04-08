@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModel.js","code":"_isDisposing() { return this.I; }\n    get tokenization() { return this.bb; }","startLine":184,"endLine":185,"chunkType":"function","mtime":1772878380728.0076}

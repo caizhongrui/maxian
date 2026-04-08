@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/browser/browser.test.js","code":"suite('Browsers', () => {\n    $43();\n    test('all', () => {\n        assert(!($l && $m));\n    });\n});","startLine":8,"endLine":13,"chunkType":"function","mtime":1772878378554.7136}

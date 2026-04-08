@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/color.js","code":"static equals(a, b) {\n        return a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a;\n    }","startLine":17,"endLine":19,"chunkType":"function","mtime":1772878378169.5872}

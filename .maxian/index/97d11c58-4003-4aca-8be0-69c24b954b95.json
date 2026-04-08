@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/observable.test.js","code":"constructor(debugName, b) {\n        this.debugName = debugName;\n        this.b = b;\n        this.a = 0;\n    }","startLine":1247,"endLine":1251,"chunkType":"function","mtime":1772878379002.9128}

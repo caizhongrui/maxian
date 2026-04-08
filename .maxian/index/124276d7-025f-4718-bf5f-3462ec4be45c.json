@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/package.json","code":"},\n        {\n          \"command\": \"git.revealInExplorer\",\n          \"when\": \"scmProvider == git && scmResourceGroup == workingTree\",","startLine":1932,"endLine":1935,"chunkType":"block","mtime":1773492854666.838}

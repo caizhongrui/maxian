@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-api-tests/testWorkspace/10linefile.ts","code":"function foo(): void {\n    var a = 1;\n    a = 1;\n    a = 1;\n    a = 1;\n    a = 1;\n    a = 1;\n    a = 1;\n    a = 1;\n}","startLine":1,"endLine":10,"chunkType":"function","mtime":1762250468349.7295}

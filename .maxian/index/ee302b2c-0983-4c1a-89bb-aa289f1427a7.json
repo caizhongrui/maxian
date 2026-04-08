@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/bootstrap-import.js","code":"if (newSpecifier !== undefined) {\n        return {\n            format: 'commonjs',\n            shortCircuit: true,\n            url: newSpecifier\n        };\n    }","startLine":42,"endLine":48,"chunkType":"function","mtime":1772878377405.2588}

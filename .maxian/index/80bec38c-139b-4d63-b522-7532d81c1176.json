@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/overviewRuler/decorationsOverviewRuler.js","code":"onScrollChanged(e) {\n        return e.scrollHeightChanged ? this.y() : false;\n    }","startLine":259,"endLine":261,"chunkType":"function","mtime":1772878380213.6191}

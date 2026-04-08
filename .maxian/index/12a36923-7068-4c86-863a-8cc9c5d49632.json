@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneThemeService.js","code":"setAutoDetectHighContrast(autoDetectHighContrast) {\n        this.h = autoDetectHighContrast;\n        this.D();\n    }","startLine":308,"endLine":311,"chunkType":"function","mtime":1772878383802.582}

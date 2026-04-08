@@ -977,8 +977,11 @@ import { useQuery } from 'react-query';</new_string>
 				name: 'options',
 				type: 'array (JSON)',
 				required: true,
-				description: '建议答案数组（2-4个选项），JSON 格式。帮助用户快速选择而无需手动输入',
-				examples: ['["选项A", "选项B", "选项C"]', '["是，继续", "否，取消"]'],
+				description: '建议答案数组（2-4个选项），推荐对象格式：[{label,description,value}]；也兼容字符串数组',
+				examples: [
+					'[{"label":"JWT（推荐）","description":"无状态，服务端易扩展","value":"JWT"},{"label":"Session","description":"传统会话方案","value":"Session"}]',
+					'["确认删除", "取消操作"]'
+				],
 			},
 		],
 		examples: [
@@ -987,7 +990,7 @@ import { useQuery } from 'react-query';</new_string>
 				description: '提供具体的选项让用户快速选择',
 				xml: `<ask_followup_question>
 <question>这个 API 需要身份验证，请选择认证方式：</question>
-<options>["JWT Token（推荐，无状态）", "Session Cookie（传统方式）", "API Key（简单直接）", "OAuth2（第三方登录）"]</options>
+<options>[{"label":"JWT Token（推荐）","description":"无状态，服务端易扩展","value":"JWT"},{"label":"Session Cookie","description":"传统会话方式","value":"Session"},{"label":"API Key","description":"接入简单","value":"ApiKey"}]</options>
 </ask_followup_question>`,
 			},
 			{

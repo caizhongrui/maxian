@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/lua/syntaxes/lua.tmLanguage.json","code":"{\n\t\t\t\t\t\t\t\"match\": \"[\\\\(\\\\),:\\\\?][ \\\\t]*\",\n\t\t\t\t\t\t\t\"name\": \"keyword.operator.lua\"\n\t\t\t\t\t\t},","startLine":901,"endLine":904,"chunkType":"block","mtime":1762250468262.7092}

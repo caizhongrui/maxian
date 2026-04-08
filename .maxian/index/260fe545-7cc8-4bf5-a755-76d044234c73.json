@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidget.js","code":"getActiveControl() {\n        return this.j.get();\n    }","startLine":51,"endLine":53,"chunkType":"function","mtime":1772878380369.6719}

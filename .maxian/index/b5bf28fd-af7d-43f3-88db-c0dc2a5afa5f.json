@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestWidget.js","code":"setPreference(preference) {\n        if (!this.c) {\n            this.b = preference;\n        }\n    }","startLine":873,"endLine":877,"chunkType":"function","mtime":1772878383697.8738}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/github-authentication/src/common/env.ts","code":"export function isHostedGitHubEnterprise(uri: Uri): boolean {\n\treturn /\\.ghe\\.com$/.test(uri.authority);\n}","startLine":36,"endLine":38,"chunkType":"function","mtime":1762250468225.526}

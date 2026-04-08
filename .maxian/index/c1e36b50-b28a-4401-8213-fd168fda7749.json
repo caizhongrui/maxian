@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/search-result/src/extension.ts","code":"decorate(editor);\n\t\t\t}\n\t\t}),\n\n\t\t{ dispose() { cachedLastParse = undefined; documentChangeListener?.dispose(); } }\n\t);\n}","startLine":120,"endLine":127,"chunkType":"block","mtime":1762250468304.525}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/editContext/native/nativeEditContext.js","code":"onConfigurationChanged(e) {\n        this.b.onConfigurationChanged(e);\n        this.z();\n        return true;\n    }","startLine":130,"endLine":134,"chunkType":"function","mtime":1772878379331.4082}

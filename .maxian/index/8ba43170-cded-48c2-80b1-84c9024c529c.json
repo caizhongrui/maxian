@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/config/editorOptions.js","code":"export class ApplyUpdateResult {\n    constructor(newValue, didChange) {\n        this.newValue = newValue;\n        this.didChange = didChange;\n    }\n}","startLine":69,"endLine":74,"chunkType":"class","mtime":1772878380375.1514}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/repository.ts","code":"getRepository(path: string): Repository | undefined;\n\tgetRepository(resource: Uri): Repository | undefined;","startLine":671,"endLine":672,"chunkType":"function","mtime":1773492747785.0356}

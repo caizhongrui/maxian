@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/amdX.js","code":"if (cache.has(nodeModulePath)) {\n        return cache.get(nodeModulePath);\n    }","startLine":182,"endLine":184,"chunkType":"function","mtime":1772878377505.6775}

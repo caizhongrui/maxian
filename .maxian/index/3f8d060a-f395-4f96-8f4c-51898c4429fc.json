@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"getPrimaryConfusable(codePoint) {\n        return this.f.get(codePoint);\n    }","startLine":1048,"endLine":1050,"chunkType":"function","mtime":1772878378348.6172}

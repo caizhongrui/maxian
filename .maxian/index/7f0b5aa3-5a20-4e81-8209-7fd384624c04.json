@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestWidgetDetails.js","code":"getPosition() {\n        return this.j ? { preference: this.j } : null;\n    }","startLine":282,"endLine":284,"chunkType":"function","mtime":1772878383698.2637}

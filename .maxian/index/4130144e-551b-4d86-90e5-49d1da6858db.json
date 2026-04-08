@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/range.js","code":"intersectRanges(range) {\n        return $gD.intersectRanges(this, range);\n    }","startLine":166,"endLine":168,"chunkType":"function","mtime":1772878380413.052}

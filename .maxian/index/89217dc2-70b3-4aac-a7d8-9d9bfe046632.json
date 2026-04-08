@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/diffEditorWidget.js","code":"layout(dimension) {\n        this.z.observe(dimension);\n    }","startLine":275,"endLine":277,"chunkType":"function","mtime":1772878380287.317}

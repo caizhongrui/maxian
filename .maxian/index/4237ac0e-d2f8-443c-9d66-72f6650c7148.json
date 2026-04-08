@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestWidget.js","code":"getId() {\n        return 'editor.widget.suggestWidget';\n    }","startLine":834,"endLine":836,"chunkType":"function","mtime":1772878383697.8738}

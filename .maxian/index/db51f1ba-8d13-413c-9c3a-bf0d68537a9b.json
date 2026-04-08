@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/emmet/src/test/reflectCssValue.test.ts","code":"function reflectCssValue(): Thenable<boolean> {\n\tconst result = reflectCssValueImpl();\n\tassert.ok(result);\n\treturn result!;\n}","startLine":12,"endLine":16,"chunkType":"function","mtime":1762250468208.0774}

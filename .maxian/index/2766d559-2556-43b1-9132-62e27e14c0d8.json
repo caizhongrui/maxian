@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/media-preview/media/videoPreview.js","code":"if (settings.src === null) {\n\t\tonLoaded();\n\t} else {\n\t\tvideo.addEventListener('canplaythrough', () => {\n\t\t\tonLoaded();\n\t\t});\n\t}","startLine":61,"endLine":67,"chunkType":"function","mtime":1762250468276.8691}

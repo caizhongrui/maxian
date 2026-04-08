@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/uri.js","code":"if (!keepDriveLetterCasing) {\n            // windows drive letter: file:///c:/far/boo\n            value = uri.path[1].toLowerCase() + uri.path.substr(2);\n        }","startLine":506,"endLine":509,"chunkType":"function","mtime":1772878378386.6084}

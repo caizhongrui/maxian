@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/map.js","code":"get(first, second, third) {\n        return this.c[first]?.get(second, third);\n    }","startLine":762,"endLine":764,"chunkType":"function","mtime":1772878378277.2786}

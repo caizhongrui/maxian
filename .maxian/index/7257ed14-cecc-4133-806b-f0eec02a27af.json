@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/common/ipc.net.js","code":"sendControl(buffer) {\n        const msg = new ProtocolMessage(2 /* ProtocolMessageType.Control */, 0, 0, buffer);\n        this.q.write(msg);\n    }","startLine":813,"endLine":816,"chunkType":"function","mtime":1772878378491.1975}

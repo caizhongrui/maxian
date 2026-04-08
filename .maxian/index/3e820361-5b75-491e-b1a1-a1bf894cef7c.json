@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/utils/arrays.ts","code":"export function equals<T>(\n\ta: ReadonlyArray<T>,","startLine":8,"endLine":9,"chunkType":"function","mtime":1762250468338.8157}

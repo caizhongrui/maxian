@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/linesDecorations/linesDecorations.js","code":"onFlushed(e) {\n        return true;\n    }","startLine":34,"endLine":36,"chunkType":"function","mtime":1772878380164.5603}

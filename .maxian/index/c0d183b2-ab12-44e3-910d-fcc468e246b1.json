@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestMemory.js","code":"constructor() {\n        super('recentlyUsedByPrefix');\n        this.c = $2k.forStrings();\n        this.d = 0;\n    }","startLine":128,"endLine":132,"chunkType":"function","mtime":1772878383694.0967}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/mouseTarget.js","code":"isInBottomPadding(mouseVerticalOffset) {\n        return this.c.viewLayout.isInBottomPadding(mouseVerticalOffset);\n    }","startLine":261,"endLine":263,"chunkType":"function","mtime":1772878379372.1423}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/diffAlgorithm.js","code":"equals(other) {\n        return this.offset1 === other.offset1 && this.offset2 === other.offset2;\n    }","startLine":112,"endLine":114,"chunkType":"function","mtime":1772878380534.47}

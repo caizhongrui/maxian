@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/dom.js","code":"while (result?.shadowRoot) {\n        result = result.shadowRoot.activeElement;\n    }","startLine":670,"endLine":672,"chunkType":"function","mtime":1772878377510.8274}

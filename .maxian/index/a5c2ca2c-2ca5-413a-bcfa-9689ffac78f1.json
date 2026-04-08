@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.js","code":"if (positions.length === 1) {\n        // No secondary cursor positions\n        return [];\n    }","startLine":574,"endLine":577,"chunkType":"function","mtime":1772878383189.4229}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/unc.js","code":"if (allowlist) {\n        return Array.from(allowlist);\n    }","startLine":7,"endLine":9,"chunkType":"function","mtime":1772878378448.671}

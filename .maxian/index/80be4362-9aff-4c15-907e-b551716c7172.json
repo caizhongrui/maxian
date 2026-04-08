@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/microsoft-authentication/src/common/publicClientCache.ts","code":"initialize(): Promise<void>;\n\tonDidAccountsChange: Event<{ added: AccountInfo[]; changed: AccountInfo[]; deleted: AccountInfo[] }>;","startLine":9,"endLine":10,"chunkType":"function","mtime":1762250468282.9082}

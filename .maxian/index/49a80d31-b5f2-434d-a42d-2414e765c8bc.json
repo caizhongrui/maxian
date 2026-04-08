@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/util/copilot.ts","code":"if (response.type !== 'response' || !response.body?.childItems) {\n\t\treturn;\n\t}","startLine":147,"endLine":149,"chunkType":"function","mtime":1762250468329.6802}

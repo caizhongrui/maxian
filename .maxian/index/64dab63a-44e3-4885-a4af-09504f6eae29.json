@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/errors.rs","code":"UnsupportedPlatform(String),\n\t#[error(\"This machine does not meet {name}'s prerequisites, expected either...\\n{bullets}\")]","startLine":470,"endLine":471,"chunkType":"function","mtime":1762250468186.8193}

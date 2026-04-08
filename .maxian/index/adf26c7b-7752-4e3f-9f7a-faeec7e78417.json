@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/editContext/textArea/textAreaEditContext.js","code":"onZonesChanged(e) {\n        return true;\n    }","startLine":510,"endLine":512,"chunkType":"function","mtime":1772878379333.763}

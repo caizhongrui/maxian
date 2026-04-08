@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/textEdit.js","code":"getLineLength(lineNumber) {\n        return this.d(lineNumber).length;\n    }","startLine":307,"endLine":309,"chunkType":"function","mtime":1772878380471.9346}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/folding/browser/foldingRanges.js","code":"getEndLineNumber(index) {\n        return this.b[index] & $8fb;\n    }","startLine":84,"endLine":86,"chunkType":"function","mtime":1772878382590.9312}

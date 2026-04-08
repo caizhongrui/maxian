@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/codelens/browser/codelens.js","code":"dispose() {\n        this.c.dispose();\n    }","startLine":18,"endLine":20,"chunkType":"function","mtime":1772878381997.5256}

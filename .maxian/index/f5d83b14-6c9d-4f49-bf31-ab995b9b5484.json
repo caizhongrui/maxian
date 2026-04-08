@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/extpath.js","code":"if (code !== 92 /* CharCode.Backslash */) {\n        return false;\n    }","startLine":124,"endLine":126,"chunkType":"function","mtime":1772878378208.665}

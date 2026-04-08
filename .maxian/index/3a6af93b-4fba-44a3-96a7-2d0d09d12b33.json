@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test.c","code":"printf(\"Enter coefficients a, b and c: \");\n  scanf(\"%f%f%f\",&a,&b,&c);","startLine":9,"endLine":10,"chunkType":"function","mtime":1762250468357.136}

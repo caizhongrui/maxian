@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/dnd/browser/dnd.js","code":"function hasTriggerModifier(e) {\n    if ($m) {\n        return e.altKey;\n    }\n    else {\n        return e.ctrlKey;\n    }\n}","startLine":14,"endLine":21,"chunkType":"function","mtime":1772878382319.1167}

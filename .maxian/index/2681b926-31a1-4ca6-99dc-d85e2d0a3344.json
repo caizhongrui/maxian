@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/color.js","code":"static k(color) {\n        const c = color / 255;\n        return (c <= 0.03928) ? c / 12.92 : Math.pow(((c + 0.055) / 1.055), 2.4);\n    }","startLine":279,"endLine":282,"chunkType":"function","mtime":1772878378169.5872}

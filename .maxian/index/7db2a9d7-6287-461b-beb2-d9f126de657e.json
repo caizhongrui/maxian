@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/map.js","code":"toJSON() {\n        const data = [];\n        this.forEach((value, key) => {\n            data.push([key, value]);\n        });\n        return data;\n    }","startLine":508,"endLine":514,"chunkType":"function","mtime":1772878378277.2786}

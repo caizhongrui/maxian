@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test.py","code":"reduce(lambda x,y: x+y, [47,11,42,13])\nwoerter = {\"house\" : \"Haus\", \"cat\":\"Katze\", \"black\":\"schwarz\"}","startLine":28,"endLine":29,"chunkType":"function","mtime":1762250468359.8481}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/media-preview/media/imagePreview.js","code":"if (!image || !hasLoadedImage || !image.parentElement || scale === 'fit') {\n\t\t\treturn;\n\t\t}","startLine":268,"endLine":270,"chunkType":"function","mtime":1762250468276.502}

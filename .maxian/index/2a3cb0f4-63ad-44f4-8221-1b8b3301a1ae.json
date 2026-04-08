@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/range.js","code":"static fromPositions(start, end = start) {\n        return new $gD(start.lineNumber, start.column, end.lineNumber, end.column);\n    }","startLine":297,"endLine":299,"chunkType":"function","mtime":1772878380413.052}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/stream.js","code":"if (chunks.length > 0) {\n                return chunks.shift();\n            }","startLine":258,"endLine":260,"chunkType":"function","mtime":1772878378348.1633}

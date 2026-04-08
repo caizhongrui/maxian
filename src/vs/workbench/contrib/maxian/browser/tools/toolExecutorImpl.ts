@@ -35,6 +35,25 @@ import { URI } from '../../../../../base/common/uri.js';
 import { McpHub } from '../../common/mcp/McpHub.js';
 import { FileStateCache } from '../../common/file/fileStateCache.js';
 import { HooksManager } from '../../common/hooks/hooksManager.js';
+import {
+	ensureFollowupOptions,
+	parseLegacyApprovalRequired,
+	parseLegacyFollowupRequired,
+	type ToolInteractionRequest
+} from '../../common/tools/toolExecutionProtocol.js';
+
+interface FileMutationSnapshot {
+	exists: boolean;
+	size: number;
+	mtime: number;
+	isDirectory: boolean;
+}
+
+interface MutationObservation {
+	fileSystemMutated: boolean;
+	changedPaths: string[];
+	unknownWrite: boolean;
+}
 
 /**
  * 工具执行器实现类
@@ -240,6 +259,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 
 			let result: ToolResponse = '';
 			let executionToolUse: ToolUse = toolUse;
+			const mutationBaseline = await this.captureMutationBaseline(toolUse);
 
 			// 埋点：工具使用事件（在分发前统一上报，使用可选链静默处理）
 			this.context.behaviorReporter?.reportToolUse(toolUse.name);
@@ -307,41 +327,62 @@ export class ToolExecutorImpl implements IToolExecutor {
 				case 'execute_command': {
 					const deleteCommandIntent = this.inspectDeleteCommandIntent(toolUse.params.command || '');
 					if (deleteCommandIntent) {
-						if (deleteCommandIntent.kind === 'block') {
-							result = `错误: 检测到删除命令，请勿使用 execute_command 删除文件。\n${deleteCommandIntent.reason}\n请改用 delete_file 工具。`;
-							break;
-						}
-
-						executionToolUse = {
-							...toolUse,
-							name: 'delete_file',
-							params: {
-								path: deleteCommandIntent.path,
-								recursive: deleteCommandIntent.recursive ? 'true' : 'false',
-							} as any,
-						};
-						const deleteResult = await this.fileOperations.deleteFile(executionToolUse);
-						const deleteText = typeof deleteResult === 'string' ? deleteResult : JSON.stringify(deleteResult);
-						if (deleteText.startsWith('错误:') || deleteText.startsWith('删除失败:')) {
-							result = deleteText;
+						if (deleteCommandIntent.kind === 'rewrite') {
+							const rewrittenDeleteToolUse: ToolUse = {
+								...toolUse,
+								name: 'delete_file',
+								params: {
+									path: deleteCommandIntent.path,
+									recursive: deleteCommandIntent.recursive ? 'true' : 'false'
+								}
+							};
+							executionToolUse = rewrittenDeleteToolUse;
+							const deleteResult = await this.fileOperations.deleteFile(rewrittenDeleteToolUse);
+							result = `已将删除命令自动改写为 delete_file 执行。\n${deleteResult}`;
 						} else {
-							result = `已将删除命令重定向为 delete_file 工具执行（避免 shell 删除后 VS Code 文件系统状态不同步）。\n${deleteText}`;
+							const deleteHint = `请改用 delete_file 工具。${deleteCommandIntent.reason}`;
+							result = `错误: 检测到删除命令，execute_command 不允许删除文件或目录。\n${deleteHint}`;
 						}
+						break;
+					}
+					const mutationCommandIntent = this.inspectMutationCommandIntent(toolUse.params.command || '');
+					if (mutationCommandIntent) {
+						result = `错误: execute_command 不允许通过 shell 直接修改项目文件。\n${mutationCommandIntent.reason}\n请改用 edit / multiedit / write_to_file / delete_file / create_directory 工具。`;
 						break;
 					}
 
 					// AI自声明命令是否需要用户确认：true=有副作用，false=只读操作
 					const requiresApproval = toolUse.params.requires_approval;
+					const normalizedCwd = (toolUse.params.cwd || '').trim();
+					const effectiveCwd = normalizedCwd || this.context.workspaceRoot || '';
+					executionToolUse = {
+						...toolUse,
+						params: {
+							...toolUse.params,
+							cwd: effectiveCwd
+						}
+					};
 					if (requiresApproval === 'true') {
-						// 返回特殊前缀，TaskService检测后弹出用户确认
-						result = '__APPROVAL_REQUIRED__:' + JSON.stringify({
-							command: toolUse.params.command || '',
-							cwd: toolUse.params.cwd || '',
-							toolUseId: toolUse.toolUseId
-						});
-					} else {
-						result = await this.commandExecution.executeCommand(toolUse as any);
+						return this.createExecutionResult(
+							executionToolUse,
+							true,
+							'approval_required',
+							'等待用户确认执行命令',
+							undefined,
+							{
+								nextAction: 'ask_user',
+								interaction: {
+									type: 'approval',
+									payload: {
+										command: toolUse.params.command || '',
+										cwd: effectiveCwd,
+										toolUseId: toolUse.toolUseId
+									}
+								}
+							}
+						);
 					}
+					result = await this.commandExecution.executeCommand(executionToolUse as any);
 					break;
 				}
 
@@ -401,8 +442,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 
 				// Agent控制工具
 				case 'ask_followup_question':
-					result = this.handleFollowupQuestion(toolUse);
-					break;
+					return this.handleFollowupQuestion(toolUse);
 
 				case 'attempt_completion':
 					// 由 TaskService.handleAttemptCompletion 处理，此分支不应被到达
@@ -604,7 +644,8 @@ export class ToolExecutorImpl implements IToolExecutor {
 				result = postHookResult.replacedOutput;
 			}
 
-			const execution = this.classifyExecutionResult(executionToolUse, result);
+			const mutationObservation = await this.observeMutation(executionToolUse, mutationBaseline);
+			const execution = this.classifyExecutionResult(executionToolUse, result, mutationObservation);
 			if (execution.success) {
 				resetDoomLoopCount(sessionId, executionToolUse.name);
 			}
@@ -633,23 +674,71 @@ export class ToolExecutorImpl implements IToolExecutor {
 			return null;
 		}
 
-		const lower = command.toLowerCase();
-		const commandHead = lower.split(/\s+/, 1)[0];
-		const isDeleteCommand = commandHead === 'rm' || commandHead === 'del' || commandHead === 'rmdir' || commandHead === 'rd';
-		if (!isDeleteCommand) {
+		const segments = command
+			.split(/&&|\|\||;|\|/)
+			.map(segment => segment.trim())
+			.filter(Boolean);
+		if (segments.length === 0) {
 			return null;
 		}
 
-		if (command.includes('&&') || command.includes('||') || command.includes('|') || command.includes(';')) {
-			return { kind: 'block', reason: '删除命令包含管道或多段命令，无法安全改写。' };
+		const parseDeleteHead = (segmentRaw: string): {
+			head: 'rm' | 'del' | 'rmdir' | 'rd';
+			rest: string;
+		} | null => {
+			let segment = segmentRaw.trim();
+			if (!segment) {
+				return null;
+			}
+
+			segment = segment.replace(/^sudo\s+/i, '').trim();
+			segment = segment.replace(/^command\s+/i, '').trim();
+			segment = segment.replace(/^env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*/i, '').trim();
+
+			const cmdShellMatch = segment.match(/^cmd(?:\.exe)?\s+\/c\s+(.+)$/i);
+			if (cmdShellMatch) {
+				segment = cmdShellMatch[1].trim();
+			}
+
+			const pwshMatch = segment.match(/^(?:powershell|pwsh)(?:\.exe)?\s+(?:-Command|-c)\s+(.+)$/i);
+			if (pwshMatch) {
+				segment = pwshMatch[1].trim();
+			}
+
+			if ((segment.startsWith('"') && segment.endsWith('"')) || (segment.startsWith('\'') && segment.endsWith('\''))) {
+				segment = segment.slice(1, -1).trim();
+			}
+
+			const headMatch = segment.match(/^(rm|del|rmdir|rd)\b\s*(.*)$/i);
+			if (!headMatch) {
+				return null;
+			}
+
+			return {
+				head: headMatch[1].toLowerCase() as 'rm' | 'del' | 'rmdir' | 'rd',
+				rest: (headMatch[2] || '').trim()
+			};
+		};
+
+		const deleteSegments = segments
+			.map((segment) => parseDeleteHead(segment))
+			.filter((item): item is { head: 'rm' | 'del' | 'rmdir' | 'rd'; rest: string } => !!item);
+		if (deleteSegments.length === 0) {
+			return null;
+		}
+
+		// 只要出现多段命令或管道，统一阻断，不做自动改写
+		if (segments.length > 1 || deleteSegments.length > 1) {
+			return { kind: 'block', reason: '删除命令包含多段子命令或管道，必须改用 delete_file 工具单独执行。' };
 		}
 
 		let optionPart = '';
 		let pathPart = '';
 		let recursive = false;
+		const { head: commandHead, rest: commandRest } = deleteSegments[0];
 
 		if (commandHead === 'rm') {
-			const match = command.match(/^rm\s+((?:-\S+\s+)*)?(.+)$/i);
+			const match = commandRest.match(/^((?:-\S+\s+)*)?(.+)$/i);
 			if (!match) {
 				return { kind: 'block', reason: 'rm 命令格式不正确。' };
 			}
@@ -657,7 +746,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 			pathPart = (match[2] || '').trim();
 			recursive = /(^|\s)--recursive(\s|$)/i.test(optionPart) || /(^|\s)-[^\s]*r[^\s]*/i.test(optionPart);
 		} else if (commandHead === 'del') {
-			const match = command.match(/^del\s+((?:\/\S+\s+)*)?(.+)$/i);
+			const match = commandRest.match(/^((?:\/\S+\s+)*)?(.+)$/i);
 			if (!match) {
 				return { kind: 'block', reason: 'del 命令格式不正确。' };
 			}
@@ -665,7 +754,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 			pathPart = (match[2] || '').trim();
 			recursive = /(^|\s)\/s(\s|$)/i.test(optionPart);
 		} else {
-			const match = command.match(/^(?:rmdir|rd)\s+((?:\/\S+\s+)*)?(.+)$/i);
+			const match = commandRest.match(/^((?:\/\S+\s+)*)?(.+)$/i);
 			if (!match) {
 				return { kind: 'block', reason: 'rmdir/rd 命令格式不正确。' };
 			}
@@ -687,6 +776,42 @@ export class ToolExecutorImpl implements IToolExecutor {
 			path: normalizedPath,
 			recursive
 		};
+	}
+
+	private inspectMutationCommandIntent(commandRaw: string): { kind: 'block'; reason: string } | null {
+		const command = (commandRaw || '').trim();
+		if (!command) {
+			return null;
+		}
+
+			const mutationRules: Array<{ regex: RegExp; reason: string }> = [
+				{ regex: /\bsed\s+-i(?:\s|$)/i, reason: '检测到 sed -i 原地改写命令。' },
+				{ regex: /\bperl\s+-pi(?:\s|$)/i, reason: '检测到 perl -pi 原地改写命令。' },
+				{ regex: /\bawk\b[^\n]*\b-i\s+inplace\b/i, reason: '检测到 awk inplace 原地改写命令。' },
+				{ regex: /\bpython(?:3)?\b[\s\S]*\bopen\s*\([^)]*,\s*['"](w|a|x|wb|ab|xb|w\+|a\+)['"]/i, reason: '检测到 Python 写文件操作。' },
+				{ regex: /\bpython(?:3)?\b[\s\S]*\b(write_text|write_bytes)\s*\(/i, reason: '检测到 Python 文件写入操作。' },
+				{ regex: /\bnode\b[\s\S]*\bwritefile(?:sync)?\s*\(/i, reason: '检测到 Node.js 写文件操作。' },
+				{ regex: /\bnode\b[\s\S]*\bappendfile(?:sync)?\s*\(/i, reason: '检测到 Node.js 追加写文件操作。' },
+				{ regex: /\btee\b(?!\s*\/dev\/null\b)/i, reason: '检测到 tee 写文件操作。' },
+				{ regex: /\bdd\b[^\n]*\bof\s*=/i, reason: '检测到 dd 写文件操作。' },
+			{ regex: /\bmv\b[^\n]*(?:\bsrc\/|\.java\b|\.kt\b|\.ts\b|\.tsx\b|\.js\b|\.json\b|\.xml\b|\.ya?ml\b|\.md\b)/i, reason: '检测到 mv 可能改写源码文件。' },
+			{ regex: /\bcp\b[^\n]*(?:\bsrc\/|\.java\b|\.kt\b|\.ts\b|\.tsx\b|\.js\b|\.json\b|\.xml\b|\.ya?ml\b|\.md\b)/i, reason: '检测到 cp 可能覆盖源码文件。' },
+			{ regex: /\bmove\b[^\n]*(?:\\src\\|\.java\b|\.kt\b|\.ts\b|\.tsx\b|\.js\b|\.json\b|\.xml\b|\.ya?ml\b|\.md\b)/i, reason: '检测到 move 可能改写源码文件。' },
+			{ regex: /\bcopy\b[^\n]*(?:\\src\\|\.java\b|\.kt\b|\.ts\b|\.tsx\b|\.js\b|\.json\b|\.xml\b|\.ya?ml\b|\.md\b)/i, reason: '检测到 copy 可能覆盖源码文件。' },
+		];
+
+		for (const rule of mutationRules) {
+			if (rule.regex.test(command)) {
+				return { kind: 'block', reason: rule.reason };
+			}
+		}
+
+		// 阻断重定向写文件: > / >>，但放过 2>&1 / 1>/dev/null 这类重定向
+		if (/(^|[^0-9])>>?\s*(?!&\d)/.test(command)) {
+			return { kind: 'block', reason: '检测到 > / >> 重定向写文件。' };
+		}
+
+		return null;
 	}
 
 	private extractSinglePathToken(rawPathPart: string): string | null {
@@ -712,16 +837,32 @@ export class ToolExecutorImpl implements IToolExecutor {
 		return raw;
 	}
 
-	private classifyExecutionResult(toolUse: ToolUse, result: ToolResponse): ToolExecutionResult {
+	private classifyExecutionResult(
+		toolUse: ToolUse,
+		result: ToolResponse,
+		mutationObservation?: MutationObservation
+	): ToolExecutionResult {
 		const text = this.toTextResult(result);
 		const normalized = text.trim();
 
-		if (typeof result === 'string' && normalized.startsWith('__APPROVAL_REQUIRED__:')) {
-			return this.createExecutionResult(toolUse, true, 'approval_required', result);
-		}
+		if (typeof result === 'string') {
+			const approvalPayload = parseLegacyApprovalRequired(normalized);
+			if (approvalPayload) {
+				return this.createExecutionResult(toolUse, true, 'approval_required', result, undefined, {
+					nextAction: 'ask_user',
+					interaction: { type: 'approval', payload: approvalPayload },
+					mutationObservation
+				});
+			}
 
-		if (typeof result === 'string' && normalized.startsWith('__USER_INPUT_REQUIRED__:')) {
-			return this.createExecutionResult(toolUse, true, 'input_required', result);
+			const followupPayload = parseLegacyFollowupRequired(normalized);
+			if (followupPayload) {
+				return this.createExecutionResult(toolUse, true, 'input_required', result, undefined, {
+					nextAction: 'ask_user',
+					interaction: { type: 'followup', payload: followupPayload },
+					mutationObservation
+				});
+			}
 		}
 
 		const explicitProtocolStatus = this.parseProtocolStatus(normalized);
@@ -736,8 +877,21 @@ export class ToolExecutorImpl implements IToolExecutor {
 					code: explicitProtocolStatus.code,
 					retryable: explicitProtocolStatus.retryable,
 					nextAction: explicitProtocolStatus.nextAction,
+					mutationObservation
 				}
 			);
+		}
+
+		if (toolUse.name === 'execute_command') {
+			const commandExitCode = this.extractCommandExitCode(normalized);
+			if (commandExitCode !== null && commandExitCode !== 0) {
+				return this.createExecutionResult(toolUse, false, 'error', result, `命令执行失败，退出码: ${commandExitCode}`, {
+					code: 'COMMAND_EXIT_NON_ZERO',
+					retryable: false,
+					nextAction: 'refocus',
+					mutationObservation
+				});
+			}
 		}
 
 		if (this.isFailureText(normalized)) {
@@ -745,10 +899,11 @@ export class ToolExecutorImpl implements IToolExecutor {
 				code: 'TOOL_EXECUTION_ERROR',
 				retryable: false,
 				nextAction: 'refocus',
+				mutationObservation
 			});
 		}
 
-		return this.createExecutionResult(toolUse, true, 'success', result);
+		return this.createExecutionResult(toolUse, true, 'success', result, undefined, { mutationObservation });
 	}
 
 	private createExecutionResult(
@@ -761,10 +916,22 @@ export class ToolExecutorImpl implements IToolExecutor {
 			code?: string;
 			retryable?: boolean;
 			nextAction?: ToolExecutionResult['nextAction'];
+			interaction?: ToolInteractionRequest;
+			mutationObservation?: MutationObservation;
 		}
 	): ToolExecutionResult {
 		const affectedPaths = this.getAffectedPaths(toolUse);
-		const didWrite = success && ToolExecutorImpl.FILE_MUTATION_TOOLS.has(toolUse.name);
+		const observedChangedPaths = options?.mutationObservation?.changedPaths || [];
+		const resultText = result !== undefined ? this.toTextResult(result) : '';
+		const heuristicDidWrite = success && this.didToolActuallyMutate(toolUse.name, resultText);
+		const fileSystemDidWrite = success && !!options?.mutationObservation?.fileSystemMutated;
+		const unknownWrite = success && !!options?.mutationObservation?.unknownWrite;
+		const didWrite = fileSystemDidWrite || heuristicDidWrite;
+		const mutationEvidence: 'none' | 'filesystem' | 'heuristic' | 'command-unknown' =
+			fileSystemDidWrite ? 'filesystem'
+				: heuristicDidWrite ? 'heuristic'
+					: unknownWrite ? 'command-unknown'
+						: 'none';
 		return {
 			success,
 			status,
@@ -773,15 +940,172 @@ export class ToolExecutorImpl implements IToolExecutor {
 			nextAction: options?.nextAction,
 			result,
 			error,
+			interaction: options?.interaction,
 			metadata: {
 				toolName: toolUse.name,
-				affectedPaths,
+				affectedPaths: observedChangedPaths.length > 0 ? observedChangedPaths : affectedPaths,
 				didWrite,
-				shouldInvalidateSearchCache: didWrite,
-				shouldResetReadTracking: didWrite,
-				shouldCacheResult: success && !didWrite,
+				unknownWrite,
+				mutationEvidence,
+				shouldInvalidateSearchCache: didWrite || unknownWrite,
+				shouldResetReadTracking: didWrite || unknownWrite,
+				shouldCacheResult: success && !didWrite && !unknownWrite,
 			}
 		};
+	}
+
+	private async captureMutationBaseline(toolUse: ToolUse): Promise<Map<string, FileMutationSnapshot>> {
+		const baseline = new Map<string, FileMutationSnapshot>();
+		const paths = this.getAffectedPaths(toolUse);
+		if (paths.length === 0) {
+			return baseline;
+		}
+
+		for (const currentPath of paths) {
+			baseline.set(currentPath, await this.capturePathSnapshot(currentPath));
+		}
+		return baseline;
+	}
+
+	private async observeMutation(toolUse: ToolUse, baseline: Map<string, FileMutationSnapshot>): Promise<MutationObservation> {
+		let fileSystemMutated = false;
+		const changedPaths: string[] = [];
+		for (const [currentPath, beforeSnapshot] of baseline.entries()) {
+			const afterSnapshot = await this.capturePathSnapshot(currentPath);
+			if (this.hasSnapshotChanged(beforeSnapshot, afterSnapshot)) {
+				fileSystemMutated = true;
+				changedPaths.push(currentPath);
+			}
+		}
+
+		let unknownWrite = false;
+		if (toolUse.name === 'execute_command') {
+			const command = (toolUse.params?.command || '').toString();
+			unknownWrite = this.shouldAssumeUnknownMutationForCommand(command);
+		}
+
+		return {
+			fileSystemMutated,
+			changedPaths,
+			unknownWrite
+		};
+	}
+
+	private async capturePathSnapshot(targetPath: string): Promise<FileMutationSnapshot> {
+		try {
+			const stat = await this.fileService.stat(URI.file(targetPath));
+			const rawMtime = Number((stat as any).mtime ?? (stat as any).mtimeMs ?? 0);
+			return {
+				exists: true,
+				size: Number(stat.size || 0),
+				mtime: Number.isFinite(rawMtime) ? rawMtime : 0,
+				isDirectory: !!stat.isDirectory
+			};
+		} catch {
+			return {
+				exists: false,
+				size: 0,
+				mtime: 0,
+				isDirectory: false
+			};
+		}
+	}
+
+	private hasSnapshotChanged(before: FileMutationSnapshot, after: FileMutationSnapshot): boolean {
+		if (before.exists !== after.exists) {
+			return true;
+		}
+		if (!before.exists && !after.exists) {
+			return false;
+		}
+		return before.size !== after.size || before.mtime !== after.mtime || before.isDirectory !== after.isDirectory;
+	}
+
+	private shouldAssumeUnknownMutationForCommand(commandRaw: string): boolean {
+		const command = (commandRaw || '').trim().toLowerCase();
+		if (!command) {
+			return false;
+		}
+
+		const readOnlyPatterns: RegExp[] = [
+			/^(pwd|cd)\b/,
+			/^(ls|dir|tree)\b/,
+			/^(cat|type|head|tail)\b/,
+			/^(rg|grep|findstr|find)\b/,
+			/^git\s+(status|diff|show|log|branch|rev-parse)\b/,
+			/^mvn\s+(-q\s+)?help:/,
+			/^echo\b/,
+			/^which\b|^where\b/,
+			/^java\s+-version\b/,
+			/^node\s+(-v|--version)\b/,
+			/^npm\s+(-v|--version)\b/,
+			/^pnpm\s+(-v|--version)\b/,
+			/^yarn\s+(-v|--version)\b/
+		];
+		if (readOnlyPatterns.some(pattern => pattern.test(command))) {
+			return false;
+		}
+
+		const likelyMutatingPatterns: RegExp[] = [
+			/^mvn\b/,
+			/^npm\b/,
+			/^pnpm\b/,
+			/^yarn\b/,
+			/^gradle\b/,
+			/^go\s+(build|test)\b/,
+			/^cargo\s+(build|test)\b/,
+			/^pytest\b/,
+			/^python\b/,
+			/^python3\b/,
+			/^node\b/,
+			/^java\b/,
+			/^git\s+(checkout|switch|pull|merge|rebase|cherry-pick)\b/
+		];
+
+		if (likelyMutatingPatterns.some(pattern => pattern.test(command))) {
+			return true;
+		}
+
+		// 非明显只读命令，保守判定为未知写入风险，避免读到旧缓存。
+		return true;
+	}
+
+	private didToolActuallyMutate(toolName: ToolName, resultText: string): boolean {
+		if (!ToolExecutorImpl.FILE_MUTATION_TOOLS.has(toolName)) {
+			return false;
+		}
+
+		const raw = (resultText || '').toLowerCase();
+		const normalized = this.stripXmlTags(resultText || '').toLowerCase();
+		if (!normalized) {
+			return false;
+		}
+
+		if (raw.includes('<file_unchanged>')) {
+			return false;
+		}
+
+		const commonNoopMarkers = [
+			'未产生任何修改',
+			'内容完全一致',
+			'no changes',
+			'no change',
+			'identical',
+			'already exists',
+			'already deleted',
+		];
+		if (commonNoopMarkers.some(marker => normalized.includes(marker))) {
+			return false;
+		}
+
+		if (toolName === 'create_directory' && normalized.includes('目录已存在')) {
+			return false;
+		}
+		if (toolName === 'delete_file' && normalized.includes('文件不存在')) {
+			return false;
+		}
+
+		return true;
 	}
 
 	private getAffectedPaths(toolUse: ToolUse): string[] {
@@ -815,6 +1139,21 @@ export class ToolExecutorImpl implements IToolExecutor {
 
 	private stripXmlTags(text: string): string {
 		return text.replace(/<[^>]+>/g, '').trim();
+	}
+
+	private extractCommandExitCode(text: string): number | null {
+		const metadataMatch = text.match(/<command_metadata>([\s\S]*?)<\/command_metadata>/);
+		if (!metadataMatch) {
+			return null;
+		}
+
+		const exitCodeMatch = metadataMatch[1]?.match(/退出码:\s*(-?\d+)/);
+		if (!exitCodeMatch) {
+			return null;
+		}
+
+		const parsed = Number(exitCodeMatch[1]);
+		return Number.isFinite(parsed) ? parsed : null;
 	}
 
 	private parseProtocolStatus(text: string): {
@@ -936,32 +1275,37 @@ export class ToolExecutorImpl implements IToolExecutor {
 	 * 处理跟进问题
 	 * 返回特殊格式的响应，TaskService会检测并触发用户输入请求
 	 */
-	private handleFollowupQuestion(toolUse: ToolUse): ToolResponse {
+	private handleFollowupQuestion(toolUse: ToolUse): ToolExecutionResult {
 		const { question } = toolUse.params;
 		if (!question) {
-			return '错误: 未提供问题';
+			return this.createExecutionResult(
+				toolUse,
+				false,
+				'error',
+				'错误: 未提供问题',
+				'未提供问题'
+			);
 		}
-		let options: string[] = [];
-		const rawOptions = toolUse.params.options;
-		if (Array.isArray(rawOptions)) {
-			options = rawOptions.map(v => String(v).trim()).filter(Boolean);
-		} else if (typeof rawOptions === 'string' && rawOptions.trim().length > 0) {
-			try {
-				const parsed = JSON.parse(rawOptions);
-				if (Array.isArray(parsed)) {
-					options = parsed.map(v => String(v).trim()).filter(Boolean);
+		const normalizedQuestion = String(question).trim();
+		const options = ensureFollowupOptions(toolUse.params.options);
+		return this.createExecutionResult(
+			toolUse,
+			true,
+			'input_required',
+			`等待用户回答问题: ${normalizedQuestion}`,
+			undefined,
+			{
+				nextAction: 'ask_user',
+				interaction: {
+					type: 'followup',
+					payload: {
+						question: normalizedQuestion,
+						options,
+						toolUseId: toolUse.toolUseId
+					}
 				}
-			} catch {
-				// 非 JSON 时降级按分号/换行切分
-				options = rawOptions
-					.split(/\r?\n|;/)
-					.map(v => v.trim())
-					.filter(Boolean);
 			}
-		}
-		options = options.slice(0, 6);
-		// 返回特殊格式，TaskService会检测这个前缀并触发用户输入请求
-		return `__USER_INPUT_REQUIRED__:${JSON.stringify({ question, options, toolUseId: toolUse.toolUseId })}`;
+		);
 	}
 
 	/**
@@ -1458,7 +1802,13 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			return '错误: patch 工具需要 patches 参数';
 		}
 
-		let patchList: Array<{ path: string; operations: Array<{ old_string: string; new_string: string }> }>;
+		let patchList: Array<{
+			path: string;
+			operations?: Array<{ old_string: string; new_string: string }>;
+			action?: 'create' | 'modify' | 'delete' | 'rename';
+			content?: string;
+			new_path?: string;
+		}>;
 		try {
 			patchList = typeof patches === 'string' ? JSON.parse(patches) : patches;
 
@@ -1483,6 +1833,63 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 					failCount++;
 					continue;
 				}
+					if (patch.action === 'delete' && !patch.operations) {
+						const deleteResult = await this.fileOperations.deleteFile({
+							type: 'tool_use',
+							name: 'delete_file',
+						params: {
+							path: patch.path,
+							recursive: 'false'
+						},
+						partial: false
+					} as any);
+					if (this.isFailureText(this.toTextResult(deleteResult))) {
+						results.push(`❌ ${patch.path}: ${this.stripXmlTags(this.toTextResult(deleteResult))}`);
+						failCount++;
+						continue;
+					}
+					results.push(`✅ ${patch.path}: 已删除`);
+						successCount++;
+						continue;
+					}
+
+					if ((patch.action === 'create' || patch.action === 'modify' || (!patch.action && typeof patch.content === 'string'))
+						&& !patch.operations
+						&& typeof patch.content === 'string') {
+						const baseline = await this.captureDiagnosticBaseline(resolvedPatchPath);
+						const writeResult = await this.fileOperations.writeToFile({
+							type: 'tool_use',
+							name: 'write_to_file',
+							params: { path: patch.path, content: patch.content, write_visibility: 'derived' },
+							partial: false,
+						} as any);
+						if (this.isFailureText(this.toTextResult(writeResult))) {
+							results.push(`❌ ${patch.path}: ${this.stripXmlTags(this.toTextResult(writeResult))}`);
+							failCount++;
+							continue;
+						}
+						const successMessage = await this.appendDiagnosticDelta(
+							resolvedPatchPath,
+							`✅ ${patch.path}: 已按 patch.content 整体写入`,
+							baseline
+						);
+						results.push(typeof successMessage === 'string' ? successMessage : this.toTextResult(successMessage));
+						successCount++;
+						continue;
+					}
+
+					if (patch.action === 'rename' && patch.new_path && !patch.operations) {
+						results.push(`❌ ${patch.path}: 暂不支持 patch(action=rename)。请改用 patch(delete+create) 或专用重命名工具。`);
+						failCount++;
+						continue;
+					}
+
+					if (!Array.isArray(patch.operations)) {
+						results.push(`❌ ${patch.path}: patch 格式无效，缺少 operations（若要删除请使用 action=delete）`);
+						failCount++;
+						continue;
+				}
+
 				const baseline = await this.captureDiagnosticBaseline(resolvedPatchPath);
 				// 读取文件原始内容（不带行号和XML包装）
 				const rawContent = await this.fileOperations.readRawFileContent(patch.path);

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/main.ts","code":"export function getExtensionContext(): ExtensionContext {\n\treturn _context;\n}","startLine":243,"endLine":245,"chunkType":"function","mtime":1762250468218.83}

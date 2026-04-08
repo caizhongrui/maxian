@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/utils.js","code":"if ($l) {\n        return URI.file($nc('C:\\\\', btoa(this.test.fullTitle()), path));\n    }","startLine":10,"endLine":12,"chunkType":"function","mtime":1772878379174.5796}

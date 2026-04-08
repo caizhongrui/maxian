@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test.cpp","code":"class Rectangle {\n    int width, height;\n  public:\n    void set_values (int,int);\n    int area() {return width*height;}\n};","startLine":7,"endLine":12,"chunkType":"class","mtime":1762250468357.4895}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/peekView/browser/media/peekViewWidget.css","code":"align-self: center;\n}\n\n.monaco-editor .peekview-widget .monaco-list .monaco-list-row.focused .codicon {\n\tcolor: inherit !important;\n}","startLine":76,"endLine":83,"chunkType":"block","mtime":1762250468558}

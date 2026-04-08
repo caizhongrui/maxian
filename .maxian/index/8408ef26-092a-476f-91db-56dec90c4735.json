@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/model/suggestWidgetAdaptor.js","code":"toSingleTextEdit() {\n        return new $tD(this.range, this.insertText);\n    }","startLine":168,"endLine":170,"chunkType":"function","mtime":1772878383191.3872}

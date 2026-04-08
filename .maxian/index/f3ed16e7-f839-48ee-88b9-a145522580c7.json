@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/editorState/browser/keybindingCancellation.js","code":"runEditorCommand(accessor, editor) {\n        accessor.get(IEditorCancellationTokens).cancel(editor);\n    }","startLine":75,"endLine":77,"chunkType":"function","mtime":1772878382471.659}

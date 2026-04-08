@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/nosleep_linux.rs","code":"Ok(proxy) => proxy.inhibit(APPLICATION_NAME, \"running tunnel\").await,\n\t\t\t\t\tErr(e) => Err(e),","startLine":56,"endLine":57,"chunkType":"function","mtime":1762250468184.815}

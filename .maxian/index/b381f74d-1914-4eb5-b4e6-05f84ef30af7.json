@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/quickInput/standaloneQuickInputService.js","code":"createQuickWidget() {\n        return this.b.createQuickWidget();\n    }","startLine":109,"endLine":111,"chunkType":"function","mtime":1772878383798.8425}

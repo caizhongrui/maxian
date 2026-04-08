@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/csharp/syntaxes/csharp.tmLanguage.json","code":"\"patterns\": [\n\t\t\t\t{\n\t\t\t\t\t\"name\": \"string.quoted.single.cs\",\n\t\t\t\t\t\"begin\": \"\\\\'\",","startLine":5668,"endLine":5671,"chunkType":"block","mtime":1762250468195.5227}

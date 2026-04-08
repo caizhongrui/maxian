@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/uint.js","code":"if (v < 0) {\n        return 0;\n    }","startLine":36,"endLine":38,"chunkType":"function","mtime":1772878378386.3513}

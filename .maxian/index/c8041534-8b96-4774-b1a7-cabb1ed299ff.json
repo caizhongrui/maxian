@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/lazyClientHost.ts","code":"export function createLazyClientHost(\n\tcontext: vscode.ExtensionContext,","startLine":23,"endLine":24,"chunkType":"function","mtime":1762250468330.4062}

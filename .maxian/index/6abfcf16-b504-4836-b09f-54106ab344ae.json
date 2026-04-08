@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/lifecycle.test.js","code":"class Disposable {\n    constructor() {\n        this.isDisposed = false;\n    }\n    dispose() { this.isDisposed = true; }\n}","startLine":9,"endLine":14,"chunkType":"class","mtime":1772878378887.1907}

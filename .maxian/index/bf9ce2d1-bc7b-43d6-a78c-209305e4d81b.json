@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/code/browser/workbench/callback.html","code":"function decode(value) {\n\t\t\t\treturn value === null ? null : decodeURIComponent(value);\n\t\t\t}","startLine":15,"endLine":17,"chunkType":"function","mtime":1762250468473.999}

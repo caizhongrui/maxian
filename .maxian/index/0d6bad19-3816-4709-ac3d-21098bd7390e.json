@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/map.js","code":"set(resource, value) {\n        this.d.set(this.e(resource), new ResourceMapEntry(resource, value));\n        return this;\n    }","startLine":57,"endLine":60,"chunkType":"function","mtime":1772878378277.2786}

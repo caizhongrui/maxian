@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/stream.js","code":"if (!prefixHandled) {\n                prefixHandled = true;\n                target.write(prefix);\n            }","startLine":454,"endLine":457,"chunkType":"function","mtime":1772878378348.1633}

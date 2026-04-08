@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/json-language-features/server/src/jsonServer.ts","code":"getContent(uri: string): Promise<string>;\n}","startLine":66,"endLine":67,"chunkType":"function","mtime":1762250468255.1338}

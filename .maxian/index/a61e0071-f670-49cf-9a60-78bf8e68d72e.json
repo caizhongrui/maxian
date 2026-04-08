@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/overviewRuler/decorationsOverviewRuler.js","code":"render(editorCtx) {\n        this.C();\n        this.c = 0 /* ShouldRenderValue.NotNeeded */;\n    }","startLine":275,"endLine":278,"chunkType":"function","mtime":1772878380213.6191}

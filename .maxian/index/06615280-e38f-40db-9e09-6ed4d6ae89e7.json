@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/embeddedDiffEditorWidget.js","code":"updateOptions(newOptions) {\n        objects.$Kv(this.db, newOptions, true);\n        super.updateOptions(this.db);\n    }","startLine":37,"endLine":40,"chunkType":"function","mtime":1772878380288.2512}

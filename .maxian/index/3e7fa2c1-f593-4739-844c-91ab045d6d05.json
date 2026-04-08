@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/features/gutterFeature.js","code":"layout(left) {\n        this.t.gutter.style.left = left + 'px';\n    }","startLine":134,"endLine":136,"chunkType":"function","mtime":1772878380288.5396}

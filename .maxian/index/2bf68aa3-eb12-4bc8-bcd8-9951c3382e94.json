@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewEventHandler.js","code":"onDecorationsChanged(e) {\n        return false;\n    }","startLine":36,"endLine":38,"chunkType":"function","mtime":1772878381183.9006}

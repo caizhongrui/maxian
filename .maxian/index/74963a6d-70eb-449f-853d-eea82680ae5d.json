@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/diff/syntaxes/diff.tmLanguage.json","code":"},\n\t\t\t\"match\": \"(^(((-{3}) .+)|((\\\\*{3}) .+))$\\\\n?|^(={4}) .+(?= - ))\",\n\t\t\t\"name\": \"meta.diff.header.from-file\"","startLine":76,"endLine":78,"chunkType":"block","mtime":1762250468203.6873}

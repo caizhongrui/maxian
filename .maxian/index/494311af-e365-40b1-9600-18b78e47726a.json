@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/indentation/browser/indentation.js","code":"constructor(b, c) {\n        this.b = b;\n        this.c = c;\n        this.a = null;\n    }","startLine":561,"endLine":565,"chunkType":"function","mtime":1772878382944.546}

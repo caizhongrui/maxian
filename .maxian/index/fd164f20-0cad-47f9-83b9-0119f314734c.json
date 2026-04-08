@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/color.js","code":"isTransparent() {\n        return this.rgba.a === 0;\n    }","startLine":367,"endLine":369,"chunkType":"function","mtime":1772878378169.5872}

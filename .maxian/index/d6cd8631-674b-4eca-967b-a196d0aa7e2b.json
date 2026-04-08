@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/gpu/bufferDirtyTracker.js","code":"if (this.a === undefined || this.b === undefined) {\n            return undefined;\n        }","startLine":13,"endLine":15,"chunkType":"function","mtime":1772878379377.3586}

@@ -18,6 +18,10 @@ import { ToolName } from '../tools/toolTypes.js';
  */
 const EXECUTE_AGENT_SYSTEM_PROMPT = `你是一个代码执行Agent，负责按照规划执行具体任务。
 
+**语言要求**：
+- 输出中的自然语言说明必须使用简体中文
+- 文件路径、代码符号、命令保持原文
+
 **你的能力**：
 - 读取和修改文件
 - 执行命令

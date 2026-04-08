@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/languages/languageConfigurationRegistry.js","code":"if (indentation.length > column - 1) {\n        indentation = indentation.substring(0, column - 1);\n    }","startLine":134,"endLine":136,"chunkType":"function","mtime":1772878380582.3398}

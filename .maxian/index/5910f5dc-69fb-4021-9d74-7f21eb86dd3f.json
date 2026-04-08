@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/producticons/index.html","code":"if (target.tagName === \"INPUT\") {\n\t\t\t\ttarget.select();\n\t\t\t}","startLine":3042,"endLine":3044,"chunkType":"function","mtime":1762250468352.7432}

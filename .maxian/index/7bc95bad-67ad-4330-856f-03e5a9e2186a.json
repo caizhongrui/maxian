@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/colorPicker/browser/standaloneColorPicker/standaloneColorPickerActions.js","code":"run(_accessor, editor) {\n        $7eb.get(editor)?.insertColor();\n    }","startLine":77,"endLine":79,"chunkType":"function","mtime":1772878382215.4275}

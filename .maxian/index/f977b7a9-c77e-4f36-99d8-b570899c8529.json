@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/microsoft-authentication/src/browser/authServer.ts","code":"export function createServer(_: any): any {\n\tthrow new Error('Not implemented');\n}","startLine":10,"endLine":12,"chunkType":"function","mtime":1762250468282.0547}

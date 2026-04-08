@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import { Disposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { ITerminalService } from '../../terminal/browser/terminal.js';
@@ -17,7 +17,7 @@ import { ToolExecutorImpl } from './tools/toolExecutorImpl.js';
 import { IToolExecutor } from '../common/tools/toolExecutor.js';
 import { ToolUse, ToolResponse, ToolName } from '../common/tools/toolTypes.js';
 import { ApiFactory } from '../common/api/apiFactory.js';
-import { IApiHandler, ToolDefinition } from '../common/api/types.js';
+import { IApiHandler, MessageParam, ToolDefinition } from '../common/api/types.js';
 import { SystemPromptGenerator } from '../common/prompts/systemPrompt.js';
 import { Mode, DEFAULT_MODE, getModeBySlug, getToolsForMode } from '../common/modes/modeTypes.js';
 import { type SystemInfo } from '../common/prompts/sections/systemInfo.js';
@@ -61,6 +61,8 @@ import { executeMultiedit, EditOperation } from '../common/tools/multieditTool.j
 import { BehaviorReporter } from './behaviorReporter.js';
 import { McpHub } from '../common/mcp/McpHub.js';
 import { McpServerConfig, McpServerInfo } from '../common/mcp/McpTypes.js';
+import { estimateTokensFromChars } from '../common/utils/tokenEstimate.js';
+import { stringHash } from '../../../../base/common/hash.js';
 
 
 export const IMaxianService = createDecorator<IMaxianService>('maxianService');
@@ -69,7 +71,7 @@ export const IMaxianService = createDecorator<IMaxianService>('maxianService');
  * 消息事件类型 - 保留向后兼容
  */
 export interface IMessageEvent {
-	type: 'user' | 'assistant' | 'tool' | 'error';
+	type: 'user' | 'assistant' | 'tool' | 'error' | 'progress';
 	content: string;
 	isPartial?: boolean;
 }
@@ -87,6 +89,11 @@ export interface IClineMessageEvent {
 export interface IQuestionAskedEvent {
 	question: string;
 	toolUseId: string;
+	options?: Array<{
+		label: string;
+		description?: string;
+		value?: string;
+	}>;
 }
 
 /**
@@ -500,8 +507,15 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private apiFactory: ApiFactory;
 	private currentMode: Mode = DEFAULT_MODE;
 	private currentTask: TaskService | null = null;
+	private currentTaskMode: Mode | null = null;
 	private currentTaskCancelled: boolean = false;  // 标记当前任务是否已被取消，防止重复处理
-	private readonly subTaskSessions = new Map<string, { agentType: string; task: TaskService }>();
+	private readonly taskHistoryByMode: Map<Mode, MessageParam[]> = new Map();
+	private readonly taskEventDisposables = this._register(new DisposableStore());
+	private taskHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
+	private taskLastStreamActivityTime: number = 0;
+	private pendingUserInputRequestCount: number = 0;
+	private activeSubAgentCount: number = 0;
+	private allowExploreSubAgentForCurrentTask: boolean = false;
 	private diffViewProvider: DiffViewProvider | null = null;
 	private difyHandler: DifyHandler | null = null;
 	private currentDifyConfig: string | null = null;  // 当前Dify配置的hash（用于判断是否需要重新创建Handler）
@@ -529,9 +543,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	// 🚀 系统提示词缓存（P0优化：减少重复生成）
 	private cachedSystemPrompt: string | null = null;
-	private cachedSystemPromptKey: string | null = null; // 缓存键：workspaceRoot + mode + toolCount
+	private cachedSystemPromptKey: string | null = null; // 缓存键：workspaceRoot + mode + toolsHash + mcpHash + profile
 	private readonly SYSTEM_PROMPT_CACHE_TTL = 5 * 60 * 1000; // 5分钟TTL
 	private cachedSystemPromptTime: number = 0;
+	private readonly toolDefinitionsCacheByKey: Map<string, ToolDefinition[]> = new Map();
+	private static readonly MAX_TOOL_DEFINITION_CACHE_ENTRIES = 24;
 
 	// 🚀 认证凭据缓存（P1优化：避免每次从StorageService读取）
 	private _cachedCredentials: { username: string; password: string } | null | undefined = undefined;
@@ -550,6 +566,29 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	// 🔌 MCP Hub（管理所有 MCP 服务器连接）
 	public mcpHub: McpHub = new McpHub();
+	private consoleSilenceInstalled = false;
+	private originalConsoleMethods: Partial<Pick<Console, 'log' | 'warn' | 'error' | 'info' | 'debug'>> | null = null;
+	private static readonly TOOL_TRACE_CONSOLE_PREFIX = '[ToolTrace]';
+	private static readonly HISTORY_SEED_MAX_MESSAGES = 24;
+	private static readonly HISTORY_SEED_MAX_CHARS = 80000;
+	private static readonly PROMPT_PROFILE: 'full' | 'lean' = 'lean';
+	private static readonly TASK_STREAM_STALL_TIMEOUT_MS = 90000;
+	private static readonly SUB_AGENT_MAX_RUNTIME_MS = 120000;
+	private static readonly SUB_AGENT_IDLE_TIMEOUT_MS = 90000;
+	private static readonly EXPLORE_SUB_AGENT_OPT_IN_MARKERS = [
+		'启用子任务',
+		'允许子任务',
+		'开启子任务',
+		'启用 explore 子任务',
+		'允许 explore 子任务',
+		'开启 explore 子任务',
+		'enable explore subagent',
+		'enable explore sub-agent',
+		'use explore subagent',
+		'use explore sub-agent',
+		'allow explore subagent',
+		'allow explore sub-agent'
+	];
 
 	constructor(
 		@IFileService private readonly fileService: IFileService,
@@ -669,6 +708,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 		if (this._initialized) {
 			return;
 		}
+
+		this.installConsoleSilence();
 
 		console.log('[Maxian] 码弦服务初始化...');
 
@@ -1208,8 +1249,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 					// 记录AI调用日志（失败）
 					await this.logAICall({
-						inputTokens: Math.ceil(inputLength / 3), // 估算
-						outputTokens: Math.ceil(outputLength / 3), // 估算
+						inputTokens: estimateTokensFromChars(inputLength), // 估算
+						outputTokens: estimateTokensFromChars(outputLength), // 估算
 						status: 'failed',
 						errorMessage: chunk.error,
 						requestSummary: message
@@ -1242,8 +1283,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 				// 记录AI调用日志（失败）
 				await this.logAICall({
-					inputTokens: Math.ceil(inputLength / 3),
-					outputTokens: Math.ceil(outputLength / 3),
+					inputTokens: estimateTokensFromChars(inputLength),
+					outputTokens: estimateTokensFromChars(outputLength),
 					status: 'failed',
 					errorMessage: error instanceof Error ? error.message : String(error),
 					requestSummary: message
@@ -1253,8 +1294,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 如果被中止且有部分输出，记录估算的token使用量
 			if (wasAborted && (inputLength > 0 || outputLength > 0)) {
 				// 粗略估算：1个token ≈ 4个字符（中文约2-3字符，英文约4字符）
-				const estimatedInputTokens = Math.ceil(inputLength / 3);
-				const estimatedOutputTokens = Math.ceil(outputLength / 3);
+				const estimatedInputTokens = estimateTokensFromChars(inputLength);
+				const estimatedOutputTokens = estimateTokensFromChars(outputLength);
 
 				const usageEvent: ITokenUsageEvent = {
 					promptTokens: estimatedInputTokens,
@@ -1320,34 +1361,58 @@ export class MaxianService extends Disposable implements IMaxianService {
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
 		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
 
-		try {
-			// Figma 设计任务检测：跳过所有代码库上下文，只保留设计数据
-			const isFigmaTask = message.includes('<figma_design');
+		// 任务执行中时禁止重复发起
+		if (this.currentTask && this.currentTask.status === TaskStatus.PROCESSING) {
+			this._onMessage.fire({
+				type: 'error',
+				content: '当前任务正在执行中，请等待完成后再发送新消息。'
+			});
+			return;
+		}
 
-			// P0优化：生成 environment_details 并附加到用户消息（Figma任务跳过，避免干扰）
-			const recentlyModifiedFiles = this.fileTracker?.getAndClearRecentlyModifiedFiles() || [];
-			const environmentDetails = isFigmaTask
-				? ''
-				: await this.environmentTracker.generateEnvironmentDetails(recentlyModifiedFiles);
+			try {
+				// Figma 设计任务检测：跳过所有代码库上下文，只保留设计数据
+				const isFigmaTask = message.includes('<figma_design');
+				this.allowExploreSubAgentForCurrentTask = this.shouldEnableExploreSubAgent(message);
+
+			// 会话复用：仅在同模式、非figma、无图片附加、且上个任务已完成时复用
+			if (this.canReuseCurrentTaskSession(effectiveMode, images, isFigmaTask)) {
+				this.currentTaskCancelled = false;
+				this.clearAutoApproveRules();
+				this._onTodoListUpdate.fire({ todos: [] });
+				this.currentTask!.prepareForResumeRun();
+				this.currentTask!.addUserMessage(message, images);
+				await this.startTaskWithHeartbeat(this.currentTask!);
+				return;
+			}
+
+				const initialMessageHistory = isFigmaTask ? [] : this.getTaskHistorySeed(effectiveMode);
+				const hasHistorySeed = initialMessageHistory.length > 0;
+
+				// P0优化：生成 environment_details 并附加到用户消息（Figma任务跳过，避免干扰）
+				const recentlyModifiedFiles = this.fileTracker?.getAndClearRecentlyModifiedFiles() || [];
+				const environmentDetails = isFigmaTask
+					? ''
+					: await this.environmentTracker.generateEnvironmentDetails(recentlyModifiedFiles);
 
 			// 1. 同步提取关键词（零延迟，无需AI调用）
 			const keywords = isFigmaTask ? [] : this.extractKeywordsSync(message);
 
 			// 2. 生成 RepoMap（传入关键词，个性化PageRank排序）
 			let repoMap = '';
-			if (!isFigmaTask && this.repoMapService && this.shouldGenerateRepoMap(recentlyModifiedFiles)) {
-				repoMap = await this.generateRepoMap(workspaceRoot, keywords);
-			} else if (!isFigmaTask && this.lastRepoMap) {
-				repoMap = this.lastRepoMap;
-			}
+				if (!isFigmaTask && !hasHistorySeed && this.repoMapService && this.shouldGenerateRepoMap(recentlyModifiedFiles)) {
+					repoMap = await this.generateRepoMap(workspaceRoot, keywords);
+				} else if (!isFigmaTask && !hasHistorySeed && this.lastRepoMap) {
+					repoMap = this.lastRepoMap;
+				}
 
-			// 🚀 使用已翻译的关键词进行预加载（此时 RepoMap 已就绪）
-			let preloadedCode = '';
-			if (!isFigmaTask && repoMap && keywords.length > 0) {
-				preloadedCode = await this.smartPreloadCodeWithKeywords(message, repoMap, workspaceRoot, keywords);
-			} else if (!isFigmaTask && repoMap) {
-				preloadedCode = await this.smartPreloadCode(message, repoMap, workspaceRoot);
-			}
+				// 🚀 使用已翻译的关键词进行预加载（此时 RepoMap 已就绪）
+				let preloadedCode = '';
+				if (!isFigmaTask && !hasHistorySeed && repoMap && keywords.length > 0) {
+					preloadedCode = await this.smartPreloadCodeWithKeywords(message, repoMap, workspaceRoot, keywords);
+				} else if (!isFigmaTask && !hasHistorySeed && repoMap) {
+					preloadedCode = await this.smartPreloadCode(message, repoMap, workspaceRoot);
+				}
 
 			// 组合完整消息
 			const messageParts = [message];
@@ -1369,20 +1434,24 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 🔥 新任务开始时清除自动批准设置（始终允许是针对单个任务的）
 			this.clearAutoApproveRules();
 			this._onTodoListUpdate.fire({ todos: [] }); // 新任务开始时清空上次的任务列表
-			this.disposeSubTaskSessions();
 
-			this.currentTask = new TaskService({
-				task: fullMessage,
-				images,
-				apiHandler: effectiveApiHandler,
-				toolExecutor: this.toolExecutor,
-				getSystemPrompt: () => this.getSystemPromptForMode(effectiveMode),
-				getToolDefinitions: () => this.getToolDefinitions(),
-				workspaceRoot,
-				consecutiveMistakeLimit: 3,
-				currentMode: effectiveMode,
-				behaviorReporter: this.behaviorReporter ?? undefined,
-			});
+				this.currentTask = new TaskService({
+					task: fullMessage,
+					images,
+					initialMessageHistory,
+					apiHandler: effectiveApiHandler,
+					toolExecutor: this.toolExecutor,
+					getSystemPrompt: () => this.getSystemPromptForMode(effectiveMode),
+					getToolDefinitions: () => this.getToolDefinitions(),
+					workspaceRoot,
+					consecutiveMistakeLimit: 3,
+					currentMode: effectiveMode,
+					behaviorReporter: this.behaviorReporter ?? undefined,
+				});
+			this.currentTaskMode = effectiveMode;
+
+			// 清理上一个 task 的事件订阅
+			this.taskEventDisposables.clear();
 
 			// 连接TaskService事件
 			const statusChangedDisposable = this.currentTask.onStatusChanged(async (status) => {
@@ -1429,7 +1498,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 							// 估算token: 基于消息长度
 							// 1个中文字符 ≈ 1.5 tokens, 1个英文单词 ≈ 1.3 tokens
 							// 简化估算: 每3个字符 ≈ 1 token
-							const estimatedInputTokens = Math.ceil(message.length / 3);
+							const estimatedInputTokens = estimateTokensFromChars(message.length);
 
 							// 估算输出token: 收集所有文本响应
 							let totalOutputText = '';
@@ -1439,7 +1508,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 									totalOutputText += msg.text;
 								}
 							}
-							const estimatedOutputTokens = Math.ceil(totalOutputText.length / 3);
+							const estimatedOutputTokens = estimateTokensFromChars(totalOutputText.length);
 
 							const usageEvent: ITokenUsageEvent = {
 								promptTokens: estimatedInputTokens,
@@ -1464,10 +1533,14 @@ export class MaxianService extends Disposable implements IMaxianService {
 					}
 				}
 
-				if (status === TaskStatus.COMPLETED) {
-					this._onMessage.fire({
-						type: 'assistant',
-						content: '',
+					if (status === TaskStatus.COMPLETED) {
+						if (this.currentTask && this.currentTaskMode) {
+							this.captureTaskHistorySeed(this.currentTaskMode, this.currentTask);
+						}
+
+						this._onMessage.fire({
+							type: 'assistant',
+							content: '',
 						isPartial: false
 					});
 
@@ -1486,34 +1559,41 @@ export class MaxianService extends Disposable implements IMaxianService {
 						}
 					}
 
-					// 🔥 任务完成，清除自动批准设置
-					this.clearAutoApproveRules();
-					// 任务结束后重置currentTask，避免取消按钮误触发
-					this._onTodoListUpdate.fire({ todos: [] });
-					this.currentTask = null;
-				} else if (status === TaskStatus.ERROR) {
-					// 仅对真正的错误显示错误提示，中止时静默处理
-					this._onMessage.fire({
-						type: 'error',
-						content: '任务错误'
-					});
-					// 🔥 任务错误，清除自动批准设置
-					this.clearAutoApproveRules();
-					// 任务结束后重置currentTask，避免取消按钮误触发
-					this._onTodoListUpdate.fire({ todos: [] });
-					this.currentTask = null;
-				} else if (status === TaskStatus.ABORTED) {
-					// ABORTED状态静默处理，不显示任何提示
-					// 🔥 任务中止，清除自动批准设置
-					this.clearAutoApproveRules();
-					// 任务结束后重置currentTask，避免取消按钮误触发
-					this._onTodoListUpdate.fire({ todos: [] });
-					this.currentTask = null;
+						// 🔥 任务完成，清除自动批准设置
+						this.clearAutoApproveRules();
+						this.pendingUserInputRequestCount = 0;
+						// 任务结束后清空任务列表，保留 currentTask 以复用会话上下文
+						this._onTodoListUpdate.fire({ todos: [] });
+						} else if (status === TaskStatus.ERROR) {
+						// 仅对真正的错误显示错误提示，中止时静默处理
+						this._onMessage.fire({
+							type: 'error',
+							content: '任务错误'
+						});
+						if (this.currentTask && this.currentTaskMode) {
+							this.captureTaskHistorySeed(this.currentTaskMode, this.currentTask);
+						}
+							// 🔥 任务错误，清除自动批准设置
+							this.clearAutoApproveRules();
+							this.pendingUserInputRequestCount = 0;
+							// 保留 currentTask，允许下一轮在同一会话上下文中继续
+							this._onTodoListUpdate.fire({ todos: [] });
+					} else if (status === TaskStatus.ABORTED) {
+						// ABORTED状态静默处理，不显示任何提示
+						// 🔥 任务中止，清除自动批准设置
+						this.clearAutoApproveRules();
+						this.pendingUserInputRequestCount = 0;
+						// 任务结束后重置currentTask，避免取消按钮误触发
+						this._onTodoListUpdate.fire({ todos: [] });
+						this.currentTask = null;
+						this.currentTaskMode = null;
+						this.taskEventDisposables.clear();
 				}
 			});
-			this._register(statusChangedDisposable);
+			this.taskEventDisposables.add(statusChangedDisposable);
 
 			const messageAddedDisposable = this.currentTask.onMessageAdded(clineMessage => {
+				this.taskLastStreamActivityTime = Date.now();
 
 				// 发送完整的ClineMessage（新版本）
 				this._onClineMessage.fire({ message: clineMessage });
@@ -1532,10 +1612,14 @@ export class MaxianService extends Disposable implements IMaxianService {
 					// text/completion_result 只通过新版 ClineMessage 路径处理，避免重复渲染
 				}
 			});
-			this._register(messageAddedDisposable);
+			this.taskEventDisposables.add(messageAddedDisposable);
 
 			// 监听流式chunks，实时发送文本到UI
 			const streamChunkDisposable = this.currentTask.onStreamChunk(chunk => {
+				// 仅真实输出/结束信号刷新活跃时间，避免 heartbeat 造成“假活跃”。
+				if (chunk.text || !chunk.isPartial) {
+					this.taskLastStreamActivityTime = Date.now();
+				}
 				if (chunk.text) {
 					// 记录首Token时间
 					if (!this.currentFirstTokenTime) {
@@ -1549,6 +1633,12 @@ export class MaxianService extends Disposable implements IMaxianService {
 						content: chunk.text,
 						isPartial: chunk.isPartial
 					});
+				} else if (chunk.progressText) {
+					this._onMessage.fire({
+						type: 'progress',
+						content: chunk.progressText,
+						isPartial: true
+					});
 				} else if (!chunk.isPartial) {
 					// 流结束信号
 					this._onMessage.fire({
@@ -1558,7 +1648,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 					});
 				}
 			});
-			this._register(streamChunkDisposable);
+			this.taskEventDisposables.add(streamChunkDisposable);
 
 			// 注意：token使用量事件已在onStatusChanged中统一触发，这里不再重复触发
 			// 只记录日志用于调试
@@ -1566,13 +1656,15 @@ export class MaxianService extends Disposable implements IMaxianService {
 				if (tokenUsage && (tokenUsage.totalTokensIn > 0 || tokenUsage.totalTokensOut > 0)) {
 				}
 			});
-			this._register(tokenUsageDisposable);
+			this.taskEventDisposables.add(tokenUsageDisposable);
 
 			// 监听用户输入请求
-			const userInputDisposable = this.currentTask.onUserInputRequired(({ question, toolUseId }) => {
-				this._onQuestionAsked.fire({ question, toolUseId });
+			const userInputDisposable = this.currentTask.onUserInputRequired(({ question, toolUseId, options }) => {
+				this.taskLastStreamActivityTime = Date.now();
+				this.pendingUserInputRequestCount++;
+				this._onQuestionAsked.fire({ question, toolUseId, options });
 			});
-			this._register(userInputDisposable);
+			this.taskEventDisposables.add(userInputDisposable);
 
 			// 监听步骤更新事件，转发到任务进度事件
 			const stepUpdatedDisposable = this.currentTask.onStepUpdated((stepInfo) => {
@@ -1601,10 +1693,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 					status: status,
 				});
 			});
-			this._register(stepUpdatedDisposable);
+			this.taskEventDisposables.add(stepUpdatedDisposable);
 
 			// 监听工具输入流式事件，转发到UI
 			const toolInputStreamingDisposable = this.currentTask.onToolInputStreaming((event) => {
+				this.taskLastStreamActivityTime = Date.now();
 				this._onToolInputStreaming.fire({
 					toolId: event.toolId,
 					toolName: event.toolName,
@@ -1612,17 +1705,18 @@ export class MaxianService extends Disposable implements IMaxianService {
 					isPartial: event.isPartial
 				});
 			});
-			this._register(toolInputStreamingDisposable);
+			this.taskEventDisposables.add(toolInputStreamingDisposable);
 
 			// 监听工具完成事件，转发到UI
 			const toolCompletedDisposable = this.currentTask.onToolCompleted((event) => {
+				this.taskLastStreamActivityTime = Date.now();
 				this._onToolCompleted.fire({
 					toolId: event.toolId,
 					toolName: event.toolName,
 					isError: event.isError
 				});
 			});
-			this._register(toolCompletedDisposable);
+			this.taskEventDisposables.add(toolCompletedDisposable);
 
 			// 监听任务列表更新事件，转发到UI
 			const todoListUpdatedDisposable = this.currentTask.onTodoListUpdated((event) => {
@@ -1630,10 +1724,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 					todos: event.todos
 				});
 			});
-			this._register(todoListUpdatedDisposable);
+			this.taskEventDisposables.add(todoListUpdatedDisposable);
 
 			// 启动任务
-			await this.currentTask.start();
+			await this.startTaskWithHeartbeat(this.currentTask);
 
 		} catch (error) {
 			console.error('[Maxian] 任务执行错误:', error);
@@ -1649,6 +1743,170 @@ export class MaxianService extends Disposable implements IMaxianService {
 				errorMessage: error instanceof Error ? error.message : String(error),
 				requestSummary: message
 			});
+		}
+	}
+
+	private canReuseCurrentTaskSession(mode: Mode, images?: string[], isFigmaTask: boolean = false): boolean {
+		if (!this.currentTask) {
+			return false;
+		}
+		if (isFigmaTask) {
+			return false;
+		}
+		if (images && images.length > 0) {
+			return false;
+		}
+		if (this.currentTaskMode !== mode) {
+			return false;
+		}
+		if (this.currentTask.abort) {
+			return false;
+		}
+		return this.currentTask.status === TaskStatus.COMPLETED || this.currentTask.status === TaskStatus.ERROR;
+	}
+
+	private captureTaskHistorySeed(mode: Mode, task: TaskService): void {
+		const history = task.getMessageHistory();
+		if (!history || history.length === 0) {
+			this.taskHistoryByMode.delete(mode);
+			return;
+		}
+
+		const compacted = this.compactHistorySeed(history);
+		if (compacted.length === 0) {
+			this.taskHistoryByMode.delete(mode);
+			return;
+		}
+		this.taskHistoryByMode.set(mode, compacted);
+	}
+
+	private getTaskHistorySeed(mode: Mode): MessageParam[] {
+		const seed = this.taskHistoryByMode.get(mode);
+		if (!seed || seed.length === 0) {
+			return [];
+		}
+		return seed.map(msg => this.cloneMessageParam(msg));
+	}
+
+	private compactHistorySeed(history: MessageParam[]): MessageParam[] {
+		const selected: MessageParam[] = [];
+		let totalChars = 0;
+
+		for (let index = history.length - 1; index >= 0; index--) {
+			const normalized = this.normalizeHistoryMessageForSeed(history[index]);
+			const chars = this.estimateMessageChars(normalized);
+			if (selected.length >= MaxianService.HISTORY_SEED_MAX_MESSAGES) {
+				break;
+			}
+			if (selected.length > 0 && totalChars + chars > MaxianService.HISTORY_SEED_MAX_CHARS) {
+				break;
+			}
+			selected.unshift(normalized);
+			totalChars += chars;
+		}
+
+		return selected;
+	}
+
+	private normalizeHistoryMessageForSeed(msg: MessageParam): MessageParam {
+		const cloned = this.cloneMessageParam(msg);
+		if (cloned.role === 'user' && typeof cloned.content === 'string') {
+			let content = cloned.content;
+			content = content.replace(/<environment_details>[\s\S]*?<\/environment_details>/g, '<environment_details>...省略...</environment_details>');
+			content = content.replace(/<repo_map>[\s\S]*?<\/repo_map>/g, '<repo_map>...省略...</repo_map>');
+			content = content.replace(/<preloaded_code>[\s\S]*?<\/preloaded_code>/g, '<preloaded_code>...省略...</preloaded_code>');
+			if (content.length > 12000) {
+				content = `${content.slice(0, 12000)}\n\n[...历史上下文已截断...]`;
+			}
+			cloned.content = content;
+		}
+		return cloned;
+	}
+
+	private cloneMessageParam(msg: MessageParam): MessageParam {
+		try {
+			return JSON.parse(JSON.stringify(msg)) as MessageParam;
+		} catch {
+			return msg;
+		}
+	}
+
+	private estimateMessageChars(msg: MessageParam): number {
+		try {
+			return JSON.stringify(msg).length;
+		} catch {
+			return 0;
+		}
+	}
+
+	private async startTaskWithHeartbeat(task: TaskService): Promise<void> {
+		this.stopTaskHeartbeat();
+		this.taskLastStreamActivityTime = Date.now();
+		this.pendingUserInputRequestCount = 0;
+
+		const heartbeatTexts = [
+			'⏳ 正在等待模型返回首个响应...',
+			'⏳ 模型仍在处理中，请稍候...',
+			'⏳ 正在持续处理上下文与工具结果...'
+		];
+		let heartbeatIndex = 0;
+
+		this.taskHeartbeatTimer = setInterval(() => {
+			if (task !== this.currentTask || task.status !== TaskStatus.PROCESSING) {
+				this.stopTaskHeartbeat();
+				return;
+			}
+
+				const idleMs = Date.now() - this.taskLastStreamActivityTime;
+				if (this.pendingUserInputRequestCount > 0) {
+					// 用户确认/输入期间必须无限等待，不触发静默超时自动中止。
+					return;
+				}
+				if (this.activeSubAgentCount > 0) {
+					// 子 Agent 执行期间由子任务自身 watchdog 兜底，主心跳不应误判超时。
+					if (idleMs >= 2500) {
+						this._onMessage.fire({
+							type: 'progress',
+							content: '⏳ 子任务执行中，请稍候...',
+							isPartial: true
+						});
+					}
+					return;
+				}
+					if (idleMs >= MaxianService.TASK_STREAM_STALL_TIMEOUT_MS) {
+						console.warn(`[Maxian] 任务流式静默超时，自动中止。idleMs=${idleMs}`);
+						this._onMessage.fire({
+					type: 'error',
+					content: '任务长时间无响应，已自动中止。请缩小任务范围或分阶段执行。'
+				});
+				task.abortTask(ClineApiReqCancelReason.UserCancelled);
+				this.stopTaskHeartbeat();
+				return;
+			}
+			if (idleMs < 2500) {
+				return;
+			}
+
+			const hint = heartbeatTexts[heartbeatIndex % heartbeatTexts.length];
+			heartbeatIndex++;
+			this._onMessage.fire({
+				type: 'progress',
+				content: hint,
+				isPartial: true
+			});
+		}, 2500);
+
+		try {
+			await task.start();
+		} finally {
+			this.stopTaskHeartbeat();
+		}
+	}
+
+	private stopTaskHeartbeat(): void {
+		if (this.taskHeartbeatTimer) {
+			clearInterval(this.taskHeartbeatTimer);
+			this.taskHeartbeatTimer = null;
 		}
 	}
 
@@ -1747,8 +2005,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		// 生成缓存键（包含 steering 版本，确保 steering 变更时缓存失效）
 		const steeringVersion = this.steeringService ? this.steeringService.getLoadVersion() : 0;
-		const mcpToolCount = this.mcpHub.getConnectedTools().length;
-		const cacheKey = `${workspaceRoot}:${this.currentMode}:${availableTools.length}:sv${steeringVersion}:mcp${mcpToolCount}`;
+		const toolFingerprint = this.buildStableHash([...availableTools].sort().join('|'));
+		const mcpFingerprint = this.getConnectedMcpToolsFingerprint();
+		const cacheKey = `${workspaceRoot}:${this.currentMode}:tools:${toolFingerprint}:sv${steeringVersion}:mcp:${mcpFingerprint}:profile:${MaxianService.PROMPT_PROFILE}`;
 		const now = Date.now();
 
 		// 检查缓存是否有效
@@ -1758,7 +2017,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			(now - this.cachedSystemPromptTime) < this.SYSTEM_PROMPT_CACHE_TTL
 		) {
 			// 估算token数（简单估算：1 token ≈ 3 字符）
-			const estimatedTokens = Math.ceil(this.cachedSystemPrompt.length / 3);
+			const estimatedTokens = estimateTokensFromChars(this.cachedSystemPrompt.length);
 			console.log(`[Maxian] ✅ 系统提示词缓存命中！长度: ${this.cachedSystemPrompt.length} chars ≈ ${estimatedTokens} tokens`);
 
 			return this.cachedSystemPrompt;
@@ -1785,12 +2044,12 @@ export class MaxianService extends Disposable implements IMaxianService {
 			? await this.memoryService.loadMemory()
 			: null;
 
-		let prompt = SystemPromptGenerator.generate(
-			workspaceRoot,
-			availableTools,
-			systemInfo,
-			this.currentMode,
-			{
+			let prompt = SystemPromptGenerator.generate(
+				workspaceRoot,
+				availableTools,
+				systemInfo,
+				this.currentMode,
+				{
 				// 开发环境下启用token统计（可以在设置中配置）
 				includeStats: false, // TODO: 从配置读取
 				// ✅ Skills系统已实施（Task #11-15）
@@ -1798,43 +2057,22 @@ export class MaxianService extends Disposable implements IMaxianService {
 				// 传入预加载的 Skills 列表
 				preloadedSkills: skillsArray,
 				// 诊断不再自动拼接到系统提示词，避免旧诊断回声驱动重复修复。
-				diagnosticText: null,
-				// 📋 Steering内容注入（P1优化 - .maxian/steering/*.md）
-				steeringContent: steeringContent,
-				// 🧠 跨会话记忆注入（来自 .maxian/memory/auto-memory.md）
-				memoryContent: memoryContent ?? null
-			}
-		);
+					diagnosticText: null,
+					// 📋 Steering内容注入（P1优化 - .maxian/steering/*.md）
+					steeringContent: steeringContent,
+					// 🧠 跨会话记忆注入（来自 .maxian/memory/auto-memory.md）
+					memoryContent: memoryContent ?? null,
+					profile: MaxianService.PROMPT_PROFILE
+				}
+			);
 
 		// P1优化：如果将要附加RepoMap，添加使用说明
-		if (this.repoMapService && this.lastRepoMap) {
-			prompt += `\n\n====\n\nCONTEXT OPTIMIZATION (关键！提升响应速度)
-
-⚠️ 用户消息中包含以下优化内容，请按顺序使用：
-
-## 1. <preloaded_code> - 预加载的相关代码（优先使用！）
-- 系统已根据用户问题智能选择并预加载了最相关的代码文件
-- **直接分析这些代码，无需再调用 read_file**
-- 如果预加载的代码已经足够回答问题，直接给出答案
-
-## 2. <repo_map> - 代码库结构图
-- 通过PageRank算法智能排序的代码结构
-- 如果预加载的代码不够，从这里选择更多文件
-- 使用 batch 工具批量读取
-
-## 强制规则
-✅ 正确流程：
-1. 先看 <preloaded_code>，通常已包含所需代码
-2. 如需更多信息，从 <repo_map> 选择文件
-3. 使用 batch 批量读取：batch([read_file("a.java"), read_file("b.java")])
-
-🚫 禁止行为：
-- 禁止使用 list_files 逐层探索目录
-- 禁止忽略预加载的代码而重新读取同一文件
-- 禁止单独调用 read_file（使用 batch）
-
-记住：预加载的代码是为你精心准备的，直接使用可节省50%以上的响应时间！`;
-		}
+			if (this.repoMapService && this.lastRepoMap) {
+				prompt += `\n\n====\n\nCONTEXT OPTIMIZATION
+- 优先使用 <preloaded_code>，足够时不要再读文件
+- 不足时再用 <repo_map> 定位文件，优先 batch 并行只读
+- 避免对同一文件重复 read_file`;
+			}
 
 		// 注入 MCP 服务器上下文
 		const connectedMcpTools = this.mcpHub.getConnectedTools();
@@ -1852,7 +2090,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		// 统计和日志
 		const generateTime = Date.now() - generateStart;
-		const estimatedTokens = Math.ceil(prompt.length / 3);
+		const estimatedTokens = estimateTokensFromChars(prompt.length);
 		console.log(`[Maxian] 🔄 生成新系统提示词
   ├─ 长度: ${prompt.length} chars ≈ ${estimatedTokens} tokens
   ├─ 模式: ${this.currentMode}
@@ -1907,7 +2145,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 				preloadedSkills: skillsArray,
 				diagnosticText: null,
 				steeringContent: steeringContent,
-				memoryContent: memoryContent ?? null
+				memoryContent: memoryContent ?? null,
+				profile: MaxianService.PROMPT_PROFILE
 			}
 		);
 	}
@@ -1919,6 +2158,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private buildFigmaSystemPrompt(workspaceRoot: string): string {
 		const xmlExample = '<write_to_file>\n<path>' + workspaceRoot + '/index.html</path>\n<content>完整代码</content>\n</write_to_file>';
 		return '你是一位顶尖前端开发专家，专精于将 Figma 设计精确还原为生产级 HTML/CSS 代码。\n\n'
+			+ '## 输出语言（强制）\n'
+			+ '- 默认且必须使用简体中文回复所有自然语言内容\n'
+			+ '- 仅当用户明确要求其他语言时才切换\n'
+			+ '- 代码、命令、路径、标识符保持原文，不翻译\n\n'
 			+ '# 核心规则\n\n'
 			+ '## 代码完整性（最高优先级）\n'
 			+ '- 必须一次性写出 100% 完整的代码，绝对禁止骨架、占位符、TODO、注释省略\n'
@@ -1964,7 +2207,13 @@ export class MaxianService extends Disposable implements IMaxianService {
 	 * 单一真源：返回当前内置工具的完整定义（含兼容别名和 MCP 动态工具）
 	 */
 	private getAllToolDefinitions(): ToolDefinition[] {
-		return [
+		const cacheKey = this.buildToolDefinitionsCacheKey('all');
+		const cached = this.toolDefinitionsCacheByKey.get(cacheKey);
+		if (cached) {
+			return cached;
+		}
+
+		const definitions: ToolDefinition[] = [
 			// 1. read_file - 读取文件
 			{
 				name: 'read_file',
@@ -2168,9 +2417,28 @@ export class MaxianService extends Disposable implements IMaxianService {
 					properties: {
 						question: { type: 'string', description: '要问的问题' },
 						follow_up: { type: 'string', description: '后续行动（可选）' },
-						options: { type: 'string', description: '备选答案数组（JSON 字符串，例如 ["A","B"]）' }
+						options: {
+							type: 'array',
+							description: '2-4 个互斥选项，建议使用 {label,description,value} 对象；也兼容字符串数组',
+							minItems: 2,
+							maxItems: 4,
+							items: {
+								anyOf: [
+									{ type: 'string' },
+									{
+										type: 'object',
+										properties: {
+											label: { type: 'string', description: '选项标签（1-5词）' },
+											description: { type: 'string', description: '选择该选项的影响说明（单句）' },
+											value: { type: 'string', description: '实际提交值（可选，默认等于label）' }
+										},
+										required: ['label', 'description']
+									}
+								]
+							}
+						}
 					},
-					required: ['question']
+					required: ['question', 'options']
 				}
 			},
 
@@ -2408,10 +2676,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			},
 
-			// 25. task - 子 Agent 委托
-			{
-				name: 'task',
-				description: '将复杂子任务委托给专门的子 Agent 独立执行。子 Agent 拥有独立的对话历史和受限工具集，适合并行执行独立任务。\n\n子 Agent 类型（subagent_type）：\n- explore：只读探索专家，适合跨模块、多轮、开放式代码库调查\n- plan：规划专家，适合任务分解、风险评估\n- execute/build：全功能执行专家，适合代码实现\n\n对齐 Claude Code / OpenCode 的关键规则：\n- 如果已经缩小到少数明确文件，优先在主线程直接 read_file / edit，不要为了“更规范”强行派发 explore 子 Agent\n- 只有在探索明显跨模块、需要多轮独立调查、或者你想隔离大量搜索上下文时，才考虑使用 task(subagent_type="explore")\n- 禁止把“完整结构 / 所有文件 / 整个模块 / 完整返回每个文件内容”这类宽泛普查直接交给 explore，必须先在主线程收敛到少量候选文件\n- 不要把同一条调查链拆成多个相似的 explore 子 Agent 反复派发',
+				// 25. task - 子 Agent 委托
+				{
+					name: 'task',
+					description: '将复杂子任务委托给专门的子 Agent 独立执行。子 Agent 拥有独立的对话历史和受限工具集，适合并行执行独立任务。\n\n子 Agent 类型（subagent_type）：\n- explore：只读探索专家，适合跨模块、多轮、开放式代码库调查（默认禁用，需在当前消息明确写“启用 explore 子任务”）\n- plan：规划专家，适合任务分解、风险评估\n- execute/build：全功能执行专家，适合代码实现\n\n对齐 Claude Code / OpenCode 的关键规则：\n- 如果已经缩小到少数明确文件，优先在主线程直接 read_file / edit，不要为了“更规范”强行派发 explore 子 Agent\n- 只有在探索明显跨模块、需要多轮独立调查、或者你想隔离大量搜索上下文时，才考虑使用 task(subagent_type="explore")\n- 禁止把“完整结构 / 所有文件 / 整个模块 / 完整返回每个文件内容”这类宽泛普查直接交给 explore，必须先在主线程收敛到少量候选文件\n- 不要把同一条调查链拆成多个相似的 explore 子 Agent 反复派发',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2556,6 +2824,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// MCP 动态工具：已连接服务器上的工具（作为独立 tool definition 注入）
 			...this.getMcpToolDefinitions()
 		];
+		this.cacheToolDefinitions(cacheKey, definitions);
+		return definitions;
 	}
 
 	/**
@@ -2581,7 +2851,20 @@ export class MaxianService extends Disposable implements IMaxianService {
 		const mode = getModeBySlug(this.currentMode);
 		if (!mode) {
 			console.warn('[Maxian] 未找到模式配置:', this.currentMode, '返回所有工具');
-			return this.getAllToolDefinitions();
+			const fallbackKey = this.buildToolDefinitionsCacheKey(`fallback:${this.currentMode}`);
+			const cachedFallback = this.toolDefinitionsCacheByKey.get(fallbackKey);
+			if (cachedFallback) {
+				return cachedFallback;
+			}
+			const fallbackDefs = this.compactToolDefinitions(this.getAllToolDefinitions());
+			this.cacheToolDefinitions(fallbackKey, fallbackDefs);
+			return fallbackDefs;
+		}
+
+		const cacheKey = this.buildToolDefinitionsCacheKey(mode.slug);
+		const cached = this.toolDefinitionsCacheByKey.get(cacheKey);
+		if (cached) {
+			return cached;
 		}
 
 		// 获取当前模式允许使用的工具列表
@@ -2590,18 +2873,98 @@ export class MaxianService extends Disposable implements IMaxianService {
 		// 过滤工具定义
 		const allTools = this.getAllToolDefinitions();
 		const filteredTools = allTools.filter(tool => allowedTools.includes(tool.name));
+		const compacted = this.compactToolDefinitions(filteredTools);
+		this.cacheToolDefinitions(cacheKey, compacted);
+		return compacted;
+	}
 
+	private shouldEnableExploreSubAgent(message: string): boolean {
+		const lower = message.toLowerCase();
+		return MaxianService.EXPLORE_SUB_AGENT_OPT_IN_MARKERS.some(marker => lower.includes(marker.toLowerCase()));
+	}
 
-		return filteredTools;
+	private compactToolDefinitions(definitions: ToolDefinition[]): ToolDefinition[] {
+		if (MaxianService.PROMPT_PROFILE !== 'lean') {
+			return definitions;
+		}
+		return definitions.map(def => ({
+			...def,
+			description: this.getLeanToolDescription(def.name, def.description),
+			parameters: this.compactSchemaDescriptions(def.parameters)
+		}));
+	}
+
+	private compactSchemaDescriptions(schema: any): any {
+		if (!schema || typeof schema !== 'object') {
+			return schema;
+		}
+		const cloned: any = Array.isArray(schema) ? [...schema] : { ...schema };
+		if (typeof cloned.description === 'string') {
+			delete cloned.description;
+		}
+		if (cloned.properties && typeof cloned.properties === 'object') {
+			const nextProperties: Record<string, any> = {};
+			for (const [key, value] of Object.entries(cloned.properties)) {
+				nextProperties[key] = this.compactSchemaDescriptions(value);
+			}
+			cloned.properties = nextProperties;
+		}
+		if (cloned.items) {
+			cloned.items = this.compactSchemaDescriptions(cloned.items);
+		}
+		if (Array.isArray(cloned.anyOf)) {
+			cloned.anyOf = cloned.anyOf.map((item: any) => this.compactSchemaDescriptions(item));
+		}
+		if (Array.isArray(cloned.oneOf)) {
+			cloned.oneOf = cloned.oneOf.map((item: any) => this.compactSchemaDescriptions(item));
+		}
+		return cloned;
+	}
+
+	private truncateToolText(text: string, maxLength: number): string {
+		const normalized = text.replace(/\s+/g, ' ').trim();
+		if (normalized.length <= maxLength) {
+			return normalized;
+		}
+		return `${normalized.slice(0, maxLength - 3)}...`;
+	}
+
+	private getLeanToolDescription(name: string, fallback: string): string {
+		const preset: Record<string, string> = {
+			read_file: '读取文件内容，可选行范围。',
+			write_to_file: '创建文件或整文件重写，仅在必要时使用。',
+			delete_file: '删除文件/目录，删除操作只用此工具。',
+			create_directory: '创建目录（支持多级）。',
+			list_files: '列出目录内容。',
+			search_files: '按正则搜索文件内容，优先 files_with_matches。',
+			codebase_search: '自然语言兜底搜索，少用。',
+			glob: '按通配符匹配文件路径。',
+			execute_command: '执行终端命令；有副作用命令需审批。',
+			batch: '并行执行独立工具调用（优先只读）。',
+			edit: '单处精确替换（old_string/new_string）。',
+			multiedit: '同文件多处原子修改。',
+			apply_diff: 'SEARCH/REPLACE 补丁，仅特殊场景使用。',
+			ask_followup_question: '向用户提问，必须附 options。',
+			attempt_completion: '任务完成后提交最终结果。',
+				task: '委托子 Agent 处理子任务（explore 需显式启用）。',
+			todowrite: '更新任务清单。',
+			lsp: '统一 LSP 查询（hover/diagnostics/definition/references）。',
+			use_mcp_tool: '调用 MCP 工具。',
+			access_mcp_resource: '读取 MCP 资源。'
+		};
+		return preset[name] || this.truncateToolText(fallback, 120);
 	}
 
 	/**
-	 * P2优化：运行子 Agent
-	 * 创建或复用独立 TaskService 实例，避免反复新建 explore 子任务
+	 * 运行子 Agent（无状态）
+	 * 每次委托都创建新的 TaskService，避免跨 task_id 状态污染。
 	 */
 	private async runSubAgent(agentType: string, prompt: string, taskId?: string, taskToolId?: string): Promise<string> {
 		if (!this.toolExecutor || !this.apiHandler) {
 			return '子 Agent 启动失败：主服务未初始化';
+		}
+		if (agentType === 'explore' && !this.allowExploreSubAgentForCurrentTask) {
+			return 'explore 子任务默认禁用。需要时请在当前消息中明确写“启用 explore 子任务”，然后重试。';
 		}
 
 		const workspaceRoot = this.getWorkspaceRoot();
@@ -2625,50 +2988,46 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		const allowedTools = new Set<string>(allowedToolsArray);
 		allowedTools.add('attempt_completion');
-		allowedTools.add('ask_followup_question');
+		allowedTools.delete('ask_followup_question');
 
 		// 过滤工具定义
-		const allToolDefs = this.getAllToolDefinitions();
-		const subAgentToolDefs = allToolDefs.filter(t => allowedTools.has(t.name));
-
-		let subTaskEntry = this.subTaskSessions.get(sessionId);
-		if (subTaskEntry && subTaskEntry.agentType !== agentType) {
-			subTaskEntry.task.abortTask(ClineApiReqCancelReason.UserCancelled);
-			subTaskEntry.task.dispose();
-			this.subTaskSessions.delete(sessionId);
-			subTaskEntry = undefined;
-		}
-
-		let subTask: TaskService;
-		let isResumedTask = false;
-		if (subTaskEntry) {
-			subTask = subTaskEntry.task;
-			isResumedTask = true;
+		const allowedToolsFingerprint = this.buildStableHash(Array.from(allowedTools).sort().join('|'));
+		const subAgentDefsKey = this.buildToolDefinitionsCacheKey(`sub:${agentType}:${allowedToolsFingerprint}`);
+		const cachedSubAgentDefs = this.toolDefinitionsCacheByKey.get(subAgentDefsKey);
+		let subAgentToolDefs: ToolDefinition[];
+		if (cachedSubAgentDefs) {
+			subAgentToolDefs = cachedSubAgentDefs;
 		} else {
-			// 创建过滤工具执行器（共享底层 toolExecutor，读操作安全并发）
-			const filteredExecutor = new FilteredToolExecutor(this.toolExecutor, allowedTools);
-			const subAgentSystemPrompt = async (): Promise<string> => {
-				const basePrompt = await this.getSystemPrompt();
-				const agentRoleDesc = this.getAgentRoleDescription(agentType);
-				return `${basePrompt}\n\n# 子 Agent 角色\n${agentRoleDesc}\n\n# 重要提示\n- 你是一个专门的子 Agent，完成后直接给出精炼结论；如果需要显式收尾，也可以调用 attempt_completion\n- 你的工具集已受限，只能使用当前角色对应的工具\n- 不要调用 task 工具派发更多子 Agent`;
-			};
-
-			subTask = new TaskService({
-				task: prompt,
-				apiHandler: this.apiHandler,
-				toolExecutor: filteredExecutor,
-				getSystemPrompt: subAgentSystemPrompt,
-				getToolDefinitions: () => subAgentToolDefs,
-				workspaceRoot,
-				consecutiveMistakeLimit: 3,
-				currentMode: 'ask',  // ask 模式：attempt_completion 时自动完成，不需用户确认
-			});
-			this.subTaskSessions.set(sessionId, { agentType, task: subTask });
+			const allToolDefs = this.getAllToolDefinitions();
+			subAgentToolDefs = this.compactToolDefinitions(allToolDefs.filter(t => allowedTools.has(t.name)));
+			this.cacheToolDefinitions(subAgentDefsKey, subAgentToolDefs);
 		}
+		// 创建过滤工具执行器（共享底层 toolExecutor，读操作安全并发）
+		const filteredExecutor = new FilteredToolExecutor(this.toolExecutor, allowedTools);
+		const subAgentSystemPrompt = async (): Promise<string> => {
+			return this.buildSubAgentSystemPrompt(agentType, Array.from(allowedTools));
+		};
+
+		const subTask = new TaskService({
+			task: prompt,
+			apiHandler: this.apiHandler,
+			toolExecutor: filteredExecutor,
+			getSystemPrompt: subAgentSystemPrompt,
+			getToolDefinitions: () => subAgentToolDefs,
+			workspaceRoot,
+			consecutiveMistakeLimit: 3,
+			currentMode: 'ask',  // ask 模式：attempt_completion 时自动完成，不需用户确认
+		});
 
 		let completionResult = '';
 		let finalTextResult = '';
+		let subAgentLastActivityAt = Date.now();
+		const touchSubAgentActivity = () => {
+			subAgentLastActivityAt = Date.now();
+			this.taskLastStreamActivityTime = subAgentLastActivityAt;
+		};
 		const completionDisposable = subTask.onMessageAdded((msg) => {
+			touchSubAgentActivity();
 			if (msg.type !== 'say' || !msg.text || msg.partial) {
 				return;
 			}
@@ -2684,6 +3043,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 		// 将子 Agent 的工具进度实时转发给主 UI
 		let subAgentToolCount = 0;
 		const streamingDisposable = taskToolId ? subTask.onToolInputStreaming((event) => {
+			touchSubAgentActivity();
 			subAgentToolCount++;
 			const toolLabel = event.toolName === 'batch' ? 'batch(并行)' : event.toolName;
 			let keyParam = '';
@@ -2700,23 +3060,85 @@ export class MaxianService extends Disposable implements IMaxianService {
 				isPartial: true
 			});
 		}) : { dispose: () => {} };
+		const streamActivityDisposable = subTask.onStreamChunk((chunk) => {
+			// heartbeat/progress 不应视为真实进展，否则会无限刷新“活跃中”。
+			if (chunk.text || !chunk.isPartial) {
+				touchSubAgentActivity();
+			}
+		});
+		const autoInputDisposable = subTask.onUserInputRequired(({ question, options }) => {
+			touchSubAgentActivity();
+			const autoAnswer = options?.[0]?.value || options?.[0]?.label || '按当前上下文选择最保守且可继续推进的方案';
+			console.warn(`[Maxian] 子 Agent 自动响应输入请求: ${question}`);
+			subTask.resumeWithUserInput(autoAnswer);
+		});
 
-		console.log(`[Maxian] 子 Agent 启动: type=${agentType}, tools=${subAgentToolDefs.length}, session=${sessionId}, resumed=${isResumedTask}`);
+		console.log(`[Maxian] 子 Agent 启动: type=${agentType}, tools=${subAgentToolDefs.length}, session=${sessionId}`);
+		this.activeSubAgentCount++;
+		this.taskLastStreamActivityTime = Date.now();
+
+		let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+		let watchdogHandle: ReturnType<typeof setInterval> | null = null;
+		let guardSettled = false;
+		const clearGuards = () => {
+			if (timeoutHandle) {
+				clearTimeout(timeoutHandle);
+				timeoutHandle = null;
+			}
+			if (watchdogHandle) {
+				clearInterval(watchdogHandle);
+				watchdogHandle = null;
+			}
+		};
+
+		const timeoutPromise = new Promise<never>((_, reject) => {
+			timeoutHandle = setTimeout(() => {
+				if (guardSettled) {
+					return;
+				}
+				guardSettled = true;
+				reject(new Error('__SUB_AGENT_TIMEOUT__'));
+			}, MaxianService.SUB_AGENT_MAX_RUNTIME_MS);
+		});
+		const idleWatchdogPromise = new Promise<never>((_, reject) => {
+			watchdogHandle = setInterval(() => {
+				if (guardSettled) {
+					return;
+				}
+				if (Date.now() - subAgentLastActivityAt >= MaxianService.SUB_AGENT_IDLE_TIMEOUT_MS) {
+					guardSettled = true;
+					reject(new Error('__SUB_AGENT_IDLE_TIMEOUT__'));
+				}
+			}, 2000);
+		});
 
 		try {
-			if (subTask.status === TaskStatus.PROCESSING) {
-				return `子 Agent (${agentType}) 正在执行中，请等待同一 task_id 的现有结果，不要重复派发。`;
-			}
-			if (isResumedTask) {
-				subTask.prepareForResumeRun();
-				subTask.resumeWithUserInput(prompt);
-			}
-			await subTask.start();
+			const startPromise = (async () => {
+				await subTask.start();
+			})();
+			await Promise.race([startPromise, timeoutPromise, idleWatchdogPromise]);
 		} catch (error) {
-			console.error(`[Maxian] 子 Agent 异常: ${error}`);
+			const message = error instanceof Error ? error.message : String(error);
+			if (message === '__SUB_AGENT_TIMEOUT__' || message === '__SUB_AGENT_IDLE_TIMEOUT__') {
+				console.warn(`[Maxian] 子 Agent 超时熔断: type=${agentType}, reason=${message}`);
+				subTask.abortTask(ClineApiReqCancelReason.UserCancelled);
+				finalTextResult = finalTextResult || `子 Agent (${agentType}) 已因${message === '__SUB_AGENT_TIMEOUT__' ? '运行超时' : '空闲超时'}被自动终止，请主流程基于已有结果继续推进。`;
+			} else {
+				console.error(`[Maxian] 子 Agent 异常: ${error}`);
+			}
 		} finally {
+			guardSettled = true;
+			clearGuards();
+			this.activeSubAgentCount = Math.max(0, this.activeSubAgentCount - 1);
+			this.taskLastStreamActivityTime = Date.now();
 			completionDisposable.dispose();
 			streamingDisposable.dispose();
+			streamActivityDisposable.dispose();
+			autoInputDisposable.dispose();
+			if (subTask.status === TaskStatus.PROCESSING) {
+				subTask.abortTask(ClineApiReqCancelReason.UserCancelled);
+			}
+			subTask.dispose();
 			if (taskToolId && subAgentToolCount > 0) {
 				this._onToolInputStreaming.fire({
 					toolId: taskToolId,
@@ -2775,6 +3197,42 @@ export class MaxianService extends Disposable implements IMaxianService {
 		}
 	}
 
+	private buildStableHash(input: string): string {
+		const hashed = stringHash(input || '', 0);
+		return (hashed >>> 0).toString(16);
+	}
+
+	private getConnectedMcpToolsFingerprint(): string {
+		const connected = this.mcpHub.getConnectedTools();
+		if (connected.length === 0) {
+			return 'none';
+		}
+		const key = connected
+			.map(({ serverName, tool }) => `${serverName}:${tool.name}`)
+			.sort()
+			.join('|');
+		return this.buildStableHash(key);
+	}
+
+	private buildToolDefinitionsCacheKey(scope: string): string {
+		return `${scope}:profile:${MaxianService.PROMPT_PROFILE}:mcp:${this.getConnectedMcpToolsFingerprint()}`;
+	}
+
+	private cacheToolDefinitions(key: string, definitions: ToolDefinition[]): void {
+		if (!this.toolDefinitionsCacheByKey.has(key) && this.toolDefinitionsCacheByKey.size >= MaxianService.MAX_TOOL_DEFINITION_CACHE_ENTRIES) {
+			const firstKey = this.toolDefinitionsCacheByKey.keys().next().value;
+			if (firstKey) {
+				this.toolDefinitionsCacheByKey.delete(firstKey);
+			}
+		}
+		this.toolDefinitionsCacheByKey.set(key, definitions);
+	}
+
+	private buildSubAgentSystemPrompt(agentType: string, allowedTools: string[]): string {
+		const agentRoleDesc = this.getAgentRoleDescription(agentType);
+		return `你是码弦子代理（${agentType}）。\n\n规则：\n- 必须使用简体中文输出\n- 只解决当前子任务，不扩散到无关问题\n- 只使用被允许的工具：${allowedTools.sort().join(', ')}\n- 禁止调用 task 再次派发子代理\n- 禁止向用户提问；缺失信息时基于现有上下文做最保守假设并继续\n\n角色说明：\n${agentRoleDesc}\n\n执行要求：\n1. 先做最小必要分析，再直接推进\n2. 工具结果优先于猜测\n3. 任务完成后输出精炼结果；需要显式收尾时调用 attempt_completion`;
+	}
+
 	async executeTool(toolUse: ToolUse): Promise<ToolResponse> {
 		if (!this.toolExecutor) {
 			await this.initialize();
@@ -2830,6 +3288,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 			console.error('[Maxian] 无当前任务，无法提交用户回复');
 			return;
 		}
+		this.pendingUserInputRequestCount = Math.max(0, this.pendingUserInputRequestCount - 1);
+		this.taskLastStreamActivityTime = Date.now();
 		this.currentTask.resumeWithUserInput(response);
 	}
 
@@ -2841,6 +3301,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 			console.error('[Maxian] 无当前任务，无法提交ask响应');
 			return;
 		}
+		this.pendingUserInputRequestCount = Math.max(0, this.pendingUserInputRequestCount - 1);
+		this.taskLastStreamActivityTime = Date.now();
 		this.currentTask.handleWebviewAskResponse(askTs, response, text, images);
 	}
 
@@ -2985,7 +3447,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 		}
 
 		// 检查是否有TaskService任务在运行（code/architect/debug等模式）
-		if (this.currentTask) {
+		if (this.currentTask && this.currentTask.status === TaskStatus.PROCESSING) {
 			// 立即设置取消标志，防止重复点击
 			this.currentTaskCancelled = true;
 			const task = this.currentTask;
@@ -3009,6 +3471,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 			console.log(`[Maxian] 任务中止，记录日志 - 输入Token:${inputTokens}, 输出Token:${outputTokens}`);
 
 			this.currentTask = null;
+			this.currentTaskMode = null;
+			this.taskEventDisposables.clear();
+			this.stopTaskHeartbeat();
 			task.abortTask(ClineApiReqCancelReason.UserCancelled);
 			this._onTodoListUpdate.fire({ todos: [] });
 			this._onTaskCancelled.fire();
@@ -3052,6 +3517,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		// 重置当前任务
 		this.currentTask = null;
+		this.currentTaskMode = null;
+		this.taskHistoryByMode.clear();
+		this.taskEventDisposables.clear();
+		this.stopTaskHeartbeat();
 		this.isAskModeRunning = false;
 		this.askModeAbortController = null;
 
@@ -3771,7 +4240,6 @@ ${preloadedCode}
 		console.log('[Maxian] 码弦服务正在销毁');
 		// 埋点：会话结束
 		this.behaviorReporter?.reportSessionEnd();
-		this.disposeSubTaskSessions();
 		// 释放 SteeringService 资源
 		if (this.steeringService) {
 			this.steeringService.dispose();
@@ -3779,17 +4247,76 @@ ${preloadedCode}
 		}
 		// 释放 MCP Hub 资源
 		this.mcpHub.dispose();
+		this.restoreConsoleSilence();
 		super.dispose();
 	}
 
-	private disposeSubTaskSessions(): void {
-		for (const { task } of this.subTaskSessions.values()) {
-			if (task.status === TaskStatus.PROCESSING) {
-				task.abortTask(ClineApiReqCancelReason.UserCancelled);
-			}
-			task.dispose();
+	private installConsoleSilence(): void {
+		if (this.consoleSilenceInstalled) {
+			return;
 		}
-		this.subTaskSessions.clear();
+
+		const target = globalThis.console;
+		this.originalConsoleMethods = {
+			log: target.log.bind(target),
+			warn: target.warn.bind(target),
+			error: target.error.bind(target),
+			info: target.info.bind(target),
+			debug: target.debug.bind(target),
+		};
+
+		const shouldAllow = (args: unknown[]): boolean => {
+			if (args.length === 0) {
+				return false;
+			}
+			const firstArg = args[0];
+			return typeof firstArg === 'string' && firstArg.startsWith(MaxianService.TOOL_TRACE_CONSOLE_PREFIX);
+		};
+
+		const wrap = (method: keyof Pick<Console, 'log' | 'warn' | 'error' | 'info' | 'debug'>) => {
+			const original = this.originalConsoleMethods?.[method];
+			if (!original) {
+				return () => {};
+			}
+			return (...args: unknown[]) => {
+				if (shouldAllow(args)) {
+					original(...args);
+				}
+			};
+		};
+
+		target.log = wrap('log') as typeof target.log;
+		target.warn = wrap('warn') as typeof target.warn;
+		target.error = wrap('error') as typeof target.error;
+		target.info = wrap('info') as typeof target.info;
+		target.debug = wrap('debug') as typeof target.debug;
+		this.consoleSilenceInstalled = true;
+	}
+
+	private restoreConsoleSilence(): void {
+		if (!this.consoleSilenceInstalled || !this.originalConsoleMethods) {
+			return;
+		}
+
+		const target = globalThis.console;
+		if (this.originalConsoleMethods.log) {
+			target.log = this.originalConsoleMethods.log as typeof target.log;
+		}
+		if (this.originalConsoleMethods.warn) {
+			target.warn = this.originalConsoleMethods.warn as typeof target.warn;
+		}
+		if (this.originalConsoleMethods.error) {
+			target.error = this.originalConsoleMethods.error as typeof target.error;
+		}
+		if (this.originalConsoleMethods.info) {
+			target.info = this.originalConsoleMethods.info as typeof target.info;
+		}
+		if (this.originalConsoleMethods.debug) {
+			target.debug = this.originalConsoleMethods.debug as typeof target.debug;
+		}
+
+		this.consoleSilenceInstalled = false;
+		this.originalConsoleMethods = null;
 	}
 
 	// ===================================================================

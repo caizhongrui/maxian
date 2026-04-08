@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/viewZones/viewZones.js","code":"onLineMappingChanged(e) {\n        return this.g();\n    }","startLine":75,"endLine":77,"chunkType":"function","mtime":1772878380254.788}

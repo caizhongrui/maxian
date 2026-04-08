@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view.js","code":"addOverlayWidget(widgetData) {\n        this.t.addWidget(widgetData.widget);\n        this.layoutOverlayWidget(widgetData);\n        this.W();\n    }","startLine":539,"endLine":543,"chunkType":"function","mtime":1772878379798.9834}

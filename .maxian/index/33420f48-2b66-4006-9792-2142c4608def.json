@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/storage/common/storage.js","code":"async close() {\n        if (!this.m) {\n            this.m = this.y();\n        }\n        return this.m;\n    }","startLine":184,"endLine":189,"chunkType":"function","mtime":1772878378528.3423}

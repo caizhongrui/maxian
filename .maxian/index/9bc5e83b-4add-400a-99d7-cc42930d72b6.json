@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestMemory.js","code":"constructor(name) {\n        this.name = name;\n    }","startLine":25,"endLine":27,"chunkType":"function","mtime":1772878383694.0967}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/folding/browser/folding.js","code":"reveal(position) {\n        this.f.revealPositionInCenterIfOutsideViewport(position, 0 /* ScrollType.Smooth */);\n    }","startLine":412,"endLine":414,"chunkType":"function","mtime":1772878382588.2642}

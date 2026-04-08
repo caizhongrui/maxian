@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/editStack.js","code":"redo() {\n        for (const editStackElement of this.d) {\n            editStackElement.redo();\n        }\n    }","startLine":275,"endLine":279,"chunkType":"function","mtime":1772878380722.5027}

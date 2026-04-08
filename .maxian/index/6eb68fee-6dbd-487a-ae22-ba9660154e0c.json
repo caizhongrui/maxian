@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/stableEditorScroll.js","code":"constructor(a, b, c, d, e) {\n        this.a = a;\n        this.b = b;\n        this.c = c;\n        this.d = d;\n        this.e = e;\n    }","startLine":21,"endLine":27,"chunkType":"function","mtime":1772878379798.705}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"function isNeitherLessOrGreaterThan(result) {\n        return result === 0;\n    }","startLine":549,"endLine":551,"chunkType":"function","mtime":1772878378138.325}

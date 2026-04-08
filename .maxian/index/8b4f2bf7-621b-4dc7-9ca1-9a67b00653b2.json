@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/services/abstractCodeEditorService.js","code":"registerCodeEditorOpenHandler(handler) {\n        const rm = this.y.unshift(handler);\n        return $1c(rm);\n    }","startLine":240,"endLine":243,"chunkType":"function","mtime":1772878379683.022}

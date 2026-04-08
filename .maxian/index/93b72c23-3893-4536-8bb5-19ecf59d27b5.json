@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"if (needleLen === 0 || haystackLen === 0) {\n        return haystack;\n    }","startLine":144,"endLine":146,"chunkType":"function","mtime":1772878378348.6172}

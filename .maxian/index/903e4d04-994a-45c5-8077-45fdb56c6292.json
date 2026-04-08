@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneEditor.js","code":"export function registerCommand(id, handler) {\n    return $wn.registerCommand({ id, handler });\n}","startLine":353,"endLine":355,"chunkType":"function","mtime":1772878383800.241}

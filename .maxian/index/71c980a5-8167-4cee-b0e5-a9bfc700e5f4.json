@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/lihuiwang.vue-alias-skip/src/utils.ts","code":"return ''\n}\n\nexport {\n  screeningPath,\n  rootPath,\n  joiningSuffix,\n  screeningRelativePath\n}","startLine":105,"endLine":113,"chunkType":"block","mtime":1772782077300.2754}

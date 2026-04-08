@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/utils.js","code":"static create(value, debugOwner = undefined) {\n        return new BaseRefCounted(value, value, debugOwner);\n    }","startLine":356,"endLine":358,"chunkType":"function","mtime":1772878380291.6145}

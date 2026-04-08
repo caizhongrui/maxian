@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/ast.js","code":"canBeReused(_openedBracketIds) {\n        return true;\n    }","startLine":452,"endLine":454,"chunkType":"function","mtime":1772878380613.0552}

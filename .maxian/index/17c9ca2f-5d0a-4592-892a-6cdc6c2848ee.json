@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/desktopEnvironmentInfo.js","code":"if ('GNOME_DESKTOP_SESSION_ID' in env) {\n        return DesktopEnvironment.GNOME;\n    }","startLine":88,"endLine":90,"chunkType":"function","mtime":1772878378178.4114}

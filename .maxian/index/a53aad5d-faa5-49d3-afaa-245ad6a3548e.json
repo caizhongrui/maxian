@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/documentSymbols/browser/outlineModel.js","code":"static empty(element) {\n        return element.children.size === 0;\n    }","startLine":77,"endLine":79,"chunkType":"function","mtime":1772878382320.121}

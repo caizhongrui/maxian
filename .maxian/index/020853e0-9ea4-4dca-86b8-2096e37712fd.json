@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/worker/workerMain.js","code":"if (!isFirstMessage) {\n            beforeReadyMessages.push(message);\n            return;\n        }","startLine":25,"endLine":28,"chunkType":"function","mtime":1772878379209.7517}

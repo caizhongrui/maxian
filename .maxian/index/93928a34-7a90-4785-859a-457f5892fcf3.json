@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/prefixSumComputer.js","code":"getPrefixSum(index) {\n        if (index < 0) {\n            return 0;\n        }\n        index = $tf(index);\n        return this.d(index);\n    }","startLine":87,"endLine":93,"chunkType":"function","mtime":1772878380727.7363}

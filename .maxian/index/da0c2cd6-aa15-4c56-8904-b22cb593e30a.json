@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/service_windows.rs","code":"new_std_command(std::env::current_exe().unwrap())\n\t\t\t.args(std::env::args().skip(1))","startLine":103,"endLine":104,"chunkType":"function","mtime":1762250468185.9302}

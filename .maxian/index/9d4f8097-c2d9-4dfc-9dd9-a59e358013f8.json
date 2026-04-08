@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/postCommitCommands.ts","code":"getPostCommitCommandsProviders(): PostCommitCommandsProvider[];\n\tregisterPostCommitCommandsProvider(provider: PostCommitCommandsProvider): Disposable;","startLine":16,"endLine":17,"chunkType":"function","mtime":1762250468219.135}

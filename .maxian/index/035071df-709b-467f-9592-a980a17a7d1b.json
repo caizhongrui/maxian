@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/debugName.js","code":"function getClassName(obj) {\n    const ctor = obj.constructor;\n    if (ctor) {\n        return ctor.name;\n    }\n    return 'Object';\n}","startLine":90,"endLine":96,"chunkType":"function","mtime":1772878378283.8657}

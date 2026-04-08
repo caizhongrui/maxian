@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/paging.js","code":"isResolved(index) {\n        const pageIndex = Math.floor(index / this.a.pageSize);\n        const page = this.b[pageIndex];\n        return !!page.isResolved;\n    }","startLine":38,"endLine":42,"chunkType":"function","mtime":1772878378320.7078}

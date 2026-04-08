@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/resources.js","code":"basenameOrAuthority(resource) {\n        return $rh(resource) || resource.authority;\n    }","startLine":57,"endLine":59,"chunkType":"function","mtime":1772878378344.7244}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/format/browser/formatActions.js","code":"if (!editor || !editor.hasModel()) {\n        return;\n    }","startLine":253,"endLine":255,"chunkType":"function","mtime":1772878382619.9243}

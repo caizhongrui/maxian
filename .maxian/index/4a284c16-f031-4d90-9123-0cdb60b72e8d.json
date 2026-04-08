@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"eol() {\n        return (this.e >= this.d);\n    }","startLine":470,"endLine":472,"chunkType":"function","mtime":1772878378348.6172}

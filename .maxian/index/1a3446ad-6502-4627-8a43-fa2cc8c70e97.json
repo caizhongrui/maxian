@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/server/src/modes/languageModes.ts","code":"getId(): string;\n\tgetSelectionRange?: (document: TextDocument, position: Position) => Promise<SelectionRange>;","startLine":69,"endLine":70,"chunkType":"function","mtime":1762250468240.9165}

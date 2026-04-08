@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/socket_signal.rs","code":"pub(crate) fn get_server_msg_content<'a: 'b, 'b>(\n\t\t&'a mut self,","startLine":126,"endLine":127,"chunkType":"function","mtime":1762250468186.2886}

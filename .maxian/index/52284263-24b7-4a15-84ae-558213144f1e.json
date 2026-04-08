@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/format/browser/format.js","code":"if (!edits || edits.length === 0) {\n        return false;\n    }","startLine":260,"endLine":262,"chunkType":"function","mtime":1772878382619.5645}

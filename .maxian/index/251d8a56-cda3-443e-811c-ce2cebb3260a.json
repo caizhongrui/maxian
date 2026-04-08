@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/brackets.js","code":"getToken(value) {\n        return this.c.get(value.toLowerCase());\n    }","startLine":60,"endLine":62,"chunkType":"function","mtime":1772878380614.212}

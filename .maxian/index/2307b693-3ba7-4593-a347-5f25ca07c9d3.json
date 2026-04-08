@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModel.js","code":"isTooLargeForTokenization() {\n        return this.O;\n    }","startLine":426,"endLine":428,"chunkType":"function","mtime":1772878380728.0076}

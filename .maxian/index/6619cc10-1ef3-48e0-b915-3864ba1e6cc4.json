@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/rangeMapping.js","code":"constructor(position, range) {\n        this.position = position;\n        this.range = range;\n    }","startLine":54,"endLine":57,"chunkType":"function","mtime":1772878380413.6038}

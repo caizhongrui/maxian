@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test.cc","code":"asm(\"movw $0x38, %ax; ltr %ax\");\n    fn(\"{};\");","startLine":23,"endLine":24,"chunkType":"function","mtime":1762250468357.204}

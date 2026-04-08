@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view.js","code":"removeOverlayWidget(widgetData) {\n        this.t.removeWidget(widgetData.widget);\n        this.W();\n    }","startLine":550,"endLine":553,"chunkType":"function","mtime":1772878379798.9834}

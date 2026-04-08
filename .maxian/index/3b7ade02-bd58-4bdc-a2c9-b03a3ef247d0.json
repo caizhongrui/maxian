@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/service_macos.rs","code":"Err(CodeError::CommandFailed { code: 3, .. }) => {}\n\t\t\tErr(e) => return Err(wrap(e, \"error stopping service\").into()),","startLine":89,"endLine":90,"chunkType":"function","mtime":1762250468185.8486}

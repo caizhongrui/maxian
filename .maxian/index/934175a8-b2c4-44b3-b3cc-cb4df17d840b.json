@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/getHover.js","code":"constructor(provider, hover, ordinal) {\n        this.provider = provider;\n        this.hover = hover;\n        this.ordinal = ordinal;\n    }","startLine":11,"endLine":15,"chunkType":"function","mtime":1772878382759.26}

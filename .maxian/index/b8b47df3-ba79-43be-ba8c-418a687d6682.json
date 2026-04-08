@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/promise.js","code":"getPromise() {\n        return this.a.getValue().promise;\n    }","startLine":97,"endLine":99,"chunkType":"function","mtime":1772878378315.9143}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/skipList.js","code":"static j(list, p = 0.5) {\n        let lvl = 1;\n        while (Math.random() < p && lvl < list.c) {\n            lvl += 1;\n        }\n        return lvl;\n    }","startLine":142,"endLine":148,"chunkType":"function","mtime":1772878378347.7126}

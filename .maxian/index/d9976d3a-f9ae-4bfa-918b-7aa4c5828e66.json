@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"constructor(executor) {\n        super(globalThis, executor);\n    }","startLine":1123,"endLine":1125,"chunkType":"function","mtime":1772878378139.2854}

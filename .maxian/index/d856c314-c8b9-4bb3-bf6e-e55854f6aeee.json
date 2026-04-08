@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/api.js","code":"if (options.lazy) {\n        return new $ke(new $dd(options.owner, options.debugName, undefined), initialValue, options.equalsFn ?? strictEquals);\n    }","startLine":10,"endLine":12,"chunkType":"function","mtime":1772878378282.462}

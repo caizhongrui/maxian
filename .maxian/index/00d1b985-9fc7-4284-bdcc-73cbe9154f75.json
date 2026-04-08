@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/textEdit.js","code":"getLineAt(lineNumber) {\n        return this.getValueOfRange(new $gD(lineNumber, 1, lineNumber, Number.MAX_SAFE_INTEGER));\n    }","startLine":281,"endLine":283,"chunkType":"function","mtime":1772878380471.9346}

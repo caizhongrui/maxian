@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/cursor/cursorCollection.js","code":"setSelections(selections) {\n        this.setStates($X4.fromModelSelections(selections));\n    }","startLine":62,"endLine":64,"chunkType":"function","mtime":1772878380475.5085}

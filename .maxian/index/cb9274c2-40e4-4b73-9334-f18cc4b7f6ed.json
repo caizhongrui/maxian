@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/ipynb/src/notebookImagePaste.ts","code":"function coalesce<T>(array: ReadonlyArray<T | undefined | null>): T[] {\n\treturn <T[]>array.filter(e => !!e);\n}","startLine":191,"endLine":193,"chunkType":"function","mtime":1762250468248.1514}

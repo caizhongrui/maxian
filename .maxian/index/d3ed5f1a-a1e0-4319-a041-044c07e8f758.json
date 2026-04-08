@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/peek/referencesTree.js","code":"renderTemplate(container) {\n        return this.a.createInstance(FileReferencesTemplate, container);\n    }","startLine":138,"endLine":140,"chunkType":"function","mtime":1772878382753.075}

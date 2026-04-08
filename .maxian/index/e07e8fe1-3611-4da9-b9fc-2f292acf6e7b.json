@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/contextmenu/browser/contextmenu.js","code":"p(action) {\n        return this.h.lookupKeybinding(action.id);\n    }","startLine":304,"endLine":306,"chunkType":"function","mtime":1772878382316.3633}

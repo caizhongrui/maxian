@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/actions.js","code":"G(value) {\n        if (this.u !== value) {\n            this.u = value;\n            this.j.fire({ tooltip: value });\n        }\n    }","startLine":41,"endLine":46,"chunkType":"function","mtime":1772878378137.9944}

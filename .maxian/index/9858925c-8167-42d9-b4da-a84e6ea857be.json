@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/package.json","code":"{\n          \"command\": \"git.deleteRemoteBranch\",\n          \"when\": \"config.git.enabled && !git.missing && gitOpenRepositoryCount != 0\"","startLine":1260,"endLine":1262,"chunkType":"block","mtime":1773492854666.838}

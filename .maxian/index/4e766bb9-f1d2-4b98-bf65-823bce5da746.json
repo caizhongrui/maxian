@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/fixedArray.js","code":"get(index) {\n        if (index < this.a.length) {\n            return this.a[index];\n        }\n        return this.b;\n    }","startLine":15,"endLine":20,"chunkType":"function","mtime":1772878380722.991}

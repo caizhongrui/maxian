@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/pushError.ts","code":"registerPushErrorHandler(provider: PushErrorHandler): Disposable;\n\tgetPushErrorHandlers(): PushErrorHandler[];","startLine":10,"endLine":11,"chunkType":"function","mtime":1762250468219.2893}

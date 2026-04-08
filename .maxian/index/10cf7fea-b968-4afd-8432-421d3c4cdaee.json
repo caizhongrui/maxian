@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/diff/linesDiffComputer.js","code":"flip() {\n        return new $FD(this.lineRangeMapping.flip(), this.changes.map(c => c.flip()));\n    }","startLine":27,"endLine":29,"chunkType":"function","mtime":1772878380557.276}

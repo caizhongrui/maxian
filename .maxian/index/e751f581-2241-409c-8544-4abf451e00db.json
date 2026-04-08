@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/bootstrap-meta.js","code":"if (pkgObj['BUILD_INSERT_PACKAGE_CONFIGURATION']) {\n    pkgObj = require('../package.json'); // Running out of sources\n}","startLine":12,"endLine":14,"chunkType":"function","mtime":1772878377405.6519}

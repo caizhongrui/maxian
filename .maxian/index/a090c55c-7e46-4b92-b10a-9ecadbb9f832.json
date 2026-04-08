@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/list/listWidget.js","code":"H({ indexes, browserEvent }) {\n        return { indexes, elements: indexes.map(i => this.o.element(i)), browserEvent };\n    }","startLine":1516,"endLine":1518,"chunkType":"function","mtime":1772878378009.8872}

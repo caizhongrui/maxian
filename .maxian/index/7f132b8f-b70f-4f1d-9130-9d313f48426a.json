@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/smartSelect/browser/wordSelections.js","code":"constructor(a = true) {\n        this.a = a;\n    }","startLine":8,"endLine":10,"chunkType":"function","mtime":1772878383600.8613}

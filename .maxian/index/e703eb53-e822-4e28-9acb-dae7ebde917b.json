@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/multicursor/browser/multicursor.js","code":"n(selections) {\n        this.b = true;\n        this.a.setSelections(selections);\n        this.b = false;\n    }","startLine":440,"endLine":444,"chunkType":"function","mtime":1772878383570.817}

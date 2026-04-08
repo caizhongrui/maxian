@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/media-preview/media/imagePreview.js","code":"if (isMac ? altPressed : ctrlPressed) {\n\t\t\tcontainer.classList.remove('zoom-in');\n\t\t\tcontainer.classList.add('zoom-out');\n\t\t}","startLine":184,"endLine":187,"chunkType":"function","mtime":1762250468276.502}

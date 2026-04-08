@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/decorations/decorations.js","code":"dispose() {\n        this.c.removeEventHandler(this);\n        this.g = null;\n        super.dispose();\n    }","startLine":18,"endLine":22,"chunkType":"function","mtime":1772878380158.7595}

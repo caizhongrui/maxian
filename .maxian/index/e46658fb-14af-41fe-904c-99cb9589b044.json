@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/hash.js","code":"if (typeof input === 'string') {\n        buff = new TextEncoder().encode(input);\n    }","startLine":74,"endLine":76,"chunkType":"function","mtime":1772878378210.1096}

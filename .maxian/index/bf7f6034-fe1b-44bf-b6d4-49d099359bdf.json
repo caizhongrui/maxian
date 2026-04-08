@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/mouseTarget.js","code":"getPositionFromDOMInfo(spanNode, offset) {\n        return this.f.getPositionFromDOMInfo(spanNode, offset);\n    }","startLine":288,"endLine":290,"chunkType":"function","mtime":1772878379372.1423}

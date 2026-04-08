@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/editorExtensions.js","code":"function getEditorCommand(commandId) {\n        return EditorContributionRegistry.INSTANCE.getEditorCommand(commandId);\n    }","startLine":373,"endLine":375,"chunkType":"function","mtime":1772878379375.4983}

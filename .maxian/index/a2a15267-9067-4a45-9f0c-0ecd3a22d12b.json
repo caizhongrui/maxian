@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/server/src/utils/arrays.ts","code":"export function pushAll<T>(to: T[], from: T[]) {\n\tif (from) {\n\t\tfor (const e of from) {\n\t\t\tto.push(e);\n\t\t}\n\t}\n}","startLine":6,"endLine":12,"chunkType":"function","mtime":1762250468243.8677}

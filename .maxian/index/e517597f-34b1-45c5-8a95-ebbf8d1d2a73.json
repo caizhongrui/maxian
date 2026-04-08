@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/npm/src/readScripts.ts","code":"onObjectBegin() {\n\t\t\tlevel++;\n\t\t},","startLine":33,"endLine":35,"chunkType":"function","mtime":1762250468289.2502}

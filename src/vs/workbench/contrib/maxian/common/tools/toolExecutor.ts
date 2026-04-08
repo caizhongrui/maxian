@@ -6,6 +6,7 @@
 import { ToolUse, ToolResponse, ToolName } from './toolTypes.js';
 import { ITodoItem } from './todoStore.js';
 import { BehaviorReporter } from '../../browser/behaviorReporter.js';
+import { ToolInteractionRequest } from './toolExecutionProtocol.js';
 
 /**
  * 工具执行器接口
@@ -77,10 +78,13 @@ export interface ToolExecutionResult {
 	nextAction?: 'retry' | 'read_before_write' | 'refocus' | 'ask_user' | 'none';
 	result?: ToolResponse;
 	error?: string;
+	interaction?: ToolInteractionRequest;
 	metadata?: {
 		toolName?: ToolName;
 		affectedPaths?: string[];
 		didWrite?: boolean;
+		unknownWrite?: boolean;
+		mutationEvidence?: 'none' | 'filesystem' | 'heuristic' | 'command-unknown';
 		shouldInvalidateSearchCache?: boolean;
 		shouldResetReadTracking?: boolean;
 		shouldCacheResult?: boolean;

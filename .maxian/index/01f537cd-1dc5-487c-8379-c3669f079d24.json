@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/dropOrPasteInto/browser/copyPasteContribution.js","code":"run(_accessor, editor) {\n        return $I_.get(editor)?.pasteAs({ providerId: $h_.id });\n    }","startLine":88,"endLine":90,"chunkType":"function","mtime":1772878382466.6506}

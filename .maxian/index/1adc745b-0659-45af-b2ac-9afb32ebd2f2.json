@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/microsoft-authentication/src/cryptoUtils.ts","code":"export function randomUUID() {\n\treturn crypto.randomUUID();\n}","startLine":7,"endLine":9,"chunkType":"function","mtime":1762250468283.7876}

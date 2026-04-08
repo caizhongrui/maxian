@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/peekView/browser/peekView.js","code":"if (editor instanceof $Ecb) {\n        return editor.getParentEditor();\n    }","startLine":74,"endLine":76,"chunkType":"function","mtime":1772878383576.017}

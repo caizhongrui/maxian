@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/tokenizationRegistry.js","code":"get(languageId) {\n        return this.a.get(languageId) || null;\n    }","startLine":32,"endLine":34,"chunkType":"function","mtime":1772878381088.7043}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/folding/browser/folding.js","code":"if (!selections || selections.length === 0) {\n        return {\n            startsInside: () => false\n        };\n    }","startLine":484,"endLine":488,"chunkType":"function","mtime":1772878382588.2642}

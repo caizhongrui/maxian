@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/peek/referencesTree.js","code":"renderElement(node, index, template) {\n        template.set(node.element, $Xl(node.filterData));\n    }","startLine":141,"endLine":143,"chunkType":"function","mtime":1772878382753.075}

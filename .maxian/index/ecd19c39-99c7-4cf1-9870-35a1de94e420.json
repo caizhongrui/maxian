@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/treeSitterTokens.js","code":"hasAccurateTokensForLine(lineNumber) {\n        // TODO @alexr00 update for background tokenization\n        return true;\n    }","startLine":65,"endLine":68,"chunkType":"function","mtime":1772878380879.3171}

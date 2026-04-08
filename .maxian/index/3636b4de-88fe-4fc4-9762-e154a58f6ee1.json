@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/common/ipc.js","code":"registerChannel(channelName, channel) {\n        this.d.registerChannel(channelName, channel);\n    }","startLine":763,"endLine":765,"chunkType":"function","mtime":1772878378450.3462}

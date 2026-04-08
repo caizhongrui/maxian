@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/errors.rs","code":"SingletonLockfileOpenFailed(std::io::Error),\n\t#[error(\"could not read singleton lock file: {0:?}\")]","startLine":447,"endLine":448,"chunkType":"function","mtime":1762250468186.8193}

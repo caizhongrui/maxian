@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/documentSymbols/browser/documentSymbols.js","code":"finally {\n        reference.dispose();\n    }\n});\n//# sourceMappingURL=documentSymbols.js.map","startLine":20,"endLine":24,"chunkType":"block","mtime":1772878382319.7808}

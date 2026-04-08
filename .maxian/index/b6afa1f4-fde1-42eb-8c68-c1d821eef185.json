@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/web/src/serverHost.ts","code":"writeOutputIsTTY() {\n\t\t\treturn true;\n\t\t},","startLine":104,"endLine":106,"chunkType":"function","mtime":1762250468340.7437}

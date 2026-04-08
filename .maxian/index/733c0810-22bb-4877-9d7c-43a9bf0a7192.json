@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/common/ipc.js","code":"if (typeof data === 'undefined') {\n        writer.write(BufferPresets.Undefined);\n    }","startLine":152,"endLine":154,"chunkType":"function","mtime":1772878378450.3462}

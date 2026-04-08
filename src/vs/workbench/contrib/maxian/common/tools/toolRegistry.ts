@@ -540,8 +540,13 @@ export function registerBuiltinTools(): void {
 				type: 'object',
 				properties: {
 					question: { type: 'string', description: '问题内容' },
+					options: {
+						type: 'array',
+						description: '2-4 个候选答案（支持字符串或 {label,description,value} 对象）',
+						items: { type: 'string', description: '选项文本（运行时也兼容对象格式）' }
+					}
 				},
-				required: ['question'],
+				required: ['question', 'options'],
 			},
 		},
 		{

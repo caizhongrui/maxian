@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/uri.ts","code":"export function fromGitUri(uri: Uri): GitUriParams {\n\treturn JSON.parse(uri.query);\n}","startLine":19,"endLine":21,"chunkType":"function","mtime":1762250468220.486}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/path.js","code":"function isPathSeparator(code) {\n    return code === CHAR_FORWARD_SLASH || code === CHAR_BACKWARD_SLASH;\n}","startLine":70,"endLine":72,"chunkType":"function","mtime":1772878378321.6858}

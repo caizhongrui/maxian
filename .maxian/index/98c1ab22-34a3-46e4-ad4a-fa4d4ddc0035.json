@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/remoteRepositories.browser.ts","code":"export function getApi(): Thenable<RemoteHubApi> {\n\t\treturn getRemoteExtension().activate();\n\t}","startLine":37,"endLine":39,"chunkType":"function","mtime":1762250468330.7295}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test.cc","code":"LOG_INFO(\"not hilighted as string\");\n    LOG_INFO(obj << \", even worse; \" << obj.x << \" check this out.\");","startLine":9,"endLine":10,"chunkType":"function","mtime":1762250468357.204}

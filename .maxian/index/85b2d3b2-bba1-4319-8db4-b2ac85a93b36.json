@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/test/smoke/quickFix.test.ts","code":"function workspaceFile(fileName: string) {\n\treturn vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0].uri, fileName);\n}","startLine":176,"endLine":178,"chunkType":"function","mtime":1762250468331.6755}

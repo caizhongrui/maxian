@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/zipper.rs","code":"Some(path) => {\n\t\t\t\tlet mut full_path = PathBuf::from(parent_path);\n\t\t\t\tfull_path.push(PathBuf::from_iter(path.iter().skip(skip_segments_no)));\n\t\t\t\tfull_path\n\t\t\t}","startLine":66,"endLine":70,"chunkType":"function","mtime":1762250468187.767}

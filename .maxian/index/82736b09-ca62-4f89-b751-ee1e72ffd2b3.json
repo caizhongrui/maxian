@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/glob.js","code":"if (typeof a !== 'string' && typeof b !== 'string') {\n            return a.base === b.base && a.pattern === b.pattern;\n        }","startLine":588,"endLine":590,"chunkType":"function","mtime":1772878378209.8264}

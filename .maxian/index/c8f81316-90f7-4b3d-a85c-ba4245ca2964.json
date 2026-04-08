@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/range.js","code":"isEmpty() {\n        return $gD.isEmpty(this);\n    }","startLine":27,"endLine":29,"chunkType":"function","mtime":1772878380413.052}

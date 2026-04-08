@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/marshalling.js","code":"if (!obj || depth > 200) {\n        return obj;\n    }","startLine":27,"endLine":29,"chunkType":"function","mtime":1772878378278.0107}

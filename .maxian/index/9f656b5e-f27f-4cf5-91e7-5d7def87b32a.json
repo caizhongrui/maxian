@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/path.js","code":"isAbsolute(path) {\n        validateString(path, 'path');\n        return path.length > 0 && path.charCodeAt(0) === CHAR_FORWARD_SLASH;\n    },","startLine":1045,"endLine":1048,"chunkType":"function","mtime":1772878378321.6858}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/modelLineProjectionData.js","code":"toPosition(baseLineNumber) {\n        return new $fD(baseLineNumber + this.outputLineIndex, this.outputOffset + 1);\n    }","startLine":296,"endLine":298,"chunkType":"function","mtime":1772878380879.8118}

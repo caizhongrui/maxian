@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/http.rs","code":"Some(DelegatedHttpEvent::End) => Ok(SimpleResponse::generic_error(&url)),\n\t\t\tSome(_) => panic!(\"expected initresponse as first message from delegated http\"),","startLine":297,"endLine":298,"chunkType":"function","mtime":1762250468186.994}

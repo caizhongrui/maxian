@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/ternarySearchtree.test.js","code":"setup(() => {\n        tree = $2k.forUris();\n        for (const uri of sampleUris) {\n            tree.set(uri, true);\n        }\n    });","startLine":743,"endLine":748,"chunkType":"function","mtime":1772878379171.2532}

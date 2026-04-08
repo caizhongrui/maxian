@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/mangle-loader.js","code":"if (options.disabled) {\n\t\t// Dynamically disabled\n\t\treturn source;\n\t}","startLine":49,"endLine":52,"chunkType":"function","mtime":1762250468263.3079}

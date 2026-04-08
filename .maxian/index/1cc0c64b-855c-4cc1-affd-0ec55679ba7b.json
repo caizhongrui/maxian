@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/overviewRuler/overviewRuler.js","code":"onFlushed(e) {\n        this.f();\n        return true;\n    }","startLine":51,"endLine":54,"chunkType":"function","mtime":1772878380214.1323}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"wait() {\n        return this.b;\n    }","startLine":396,"endLine":398,"chunkType":"function","mtime":1772878378139.2854}

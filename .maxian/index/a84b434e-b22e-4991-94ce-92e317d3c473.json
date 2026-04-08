@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/amdX.js","code":"class DefineCall {\n    constructor(id, dependencies, callback) {\n        this.id = id;\n        this.dependencies = dependencies;\n        this.callback = callback;\n    }\n}","startLine":10,"endLine":16,"chunkType":"class","mtime":1772878377505.6775}

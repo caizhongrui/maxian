@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"toArray() {\n        const result = [];\n        this.iterate(item => { result.push(item); return true; });\n        return result;\n    }","startLine":666,"endLine":670,"chunkType":"function","mtime":1772878378138.325}

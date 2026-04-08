@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestWidget.js","code":"focusSelected() {\n        if (this.r.length > 0) {\n            this.r.setFocus([0]);\n        }\n    }","startLine":481,"endLine":485,"chunkType":"function","mtime":1772878383697.8738}

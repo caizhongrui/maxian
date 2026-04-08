@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view.js","code":"setAriaOptions(options) {\n        this.F.setAriaOptions(options);\n    }","startLine":523,"endLine":525,"chunkType":"function","mtime":1772878379798.9834}

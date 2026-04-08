@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/diff/diff.test.js","code":"function createArray(length, value) {\n    const r = [];\n    for (let i = 0; i < length; i++) {\n        r[i] = value;\n    }\n    return r;\n}","startLine":8,"endLine":14,"chunkType":"function","mtime":1772878378719.102}

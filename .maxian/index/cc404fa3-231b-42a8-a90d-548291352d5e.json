@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test-issue11.ts","code":"let x2: A<C | B, C & B>;\nconst t = 1 < (5 > 10 ? 1 : 2);\nvar f6 = 1 < foo<string>();","startLine":15,"endLine":17,"chunkType":"block","mtime":1762250468356.097}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/snippet/browser/snippetParser.js","code":"toString() {\n        return this.children.reduce((prev, cur) => prev + cur.toString(), '');\n    }","startLine":153,"endLine":155,"chunkType":"function","mtime":1772878383633.8225}

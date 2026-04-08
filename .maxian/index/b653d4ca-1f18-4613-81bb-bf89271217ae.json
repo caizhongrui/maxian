@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/editorWorkerBootstrap.js","code":"if (!initialized) {\n        $Avc(null);\n    }","startLine":23,"endLine":25,"chunkType":"function","mtime":1772878380882.5522}

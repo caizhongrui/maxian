@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/map.js","code":"add(value) {\n        this.c.set(value, (this.c.get(value) || 0) + 1);\n        return this;\n    }","startLine":590,"endLine":593,"chunkType":"function","mtime":1772878378277.2786}

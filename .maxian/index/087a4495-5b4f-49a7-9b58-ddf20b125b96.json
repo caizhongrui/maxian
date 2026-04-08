@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoError/browser/markerNavigationService.js","code":"registerProvider(provider) {\n        const remove = this.c.unshift(provider);\n        return $1c(() => remove());\n    }","startLine":177,"endLine":180,"chunkType":"function","mtime":1772878382622.5972}

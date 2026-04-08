@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/numbers.js","code":"export function rot(index, modulo) {\n    return (modulo + (index % modulo)) % modulo;\n}","startLine":8,"endLine":10,"chunkType":"function","mtime":1772878378281.265}

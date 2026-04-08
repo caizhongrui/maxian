@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/dropOrPasteInto/browser/edit.js","code":"return visit(Array.from(edits));\n}\n//# sourceMappingURL=edit.js.map","startLine":79,"endLine":81,"chunkType":"block","mtime":1772878382469.046}

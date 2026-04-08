@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/unc.js","code":"if (typeof maybeUNCPath !== 'string') {\n        return undefined; // require a valid string\n    }","startLine":45,"endLine":47,"chunkType":"function","mtime":1772878378448.671}

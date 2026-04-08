@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/ternarySearchTree.js","code":"cmp(a) {\n        return this.e\n            ? $Tf(a, this.b, 0, a.length, this.c, this.d)\n            : $Vf(a, this.b, 0, a.length, this.c, this.d);\n    }","startLine":66,"endLine":70,"chunkType":"function","mtime":1772878378349.0525}

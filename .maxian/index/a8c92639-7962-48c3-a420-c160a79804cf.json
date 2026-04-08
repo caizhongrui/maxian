@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/github-authentication/src/flows.ts","code":"if (enterpriseUri) {\n\t\tbody.append('github_enterprise', enterpriseUri.toString(true));\n\t}","startLine":100,"endLine":102,"chunkType":"function","mtime":1762250468226.017}

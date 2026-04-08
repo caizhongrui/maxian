@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/paths.rs","code":"remove_dir_all(&self.server_dir).map_err(|e| {\n\t\t\twrap(\n\t\t\t\te,\n\t\t\t\tformat!(\"error deleting server dir {}\", self.server_dir.display()),\n\t\t\t)\n\t\t})","startLine":57,"endLine":62,"chunkType":"function","mtime":1762250468185.2612}

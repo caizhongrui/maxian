@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/iconLabels.js","code":"if (!iconOffsets || iconOffsets.length === 0) {\n        return $Ul(query, text, enableSeparateSubstringMatching);\n    }","startLine":67,"endLine":69,"chunkType":"function","mtime":1772878378214.569}

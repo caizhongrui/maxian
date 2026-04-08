@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/util/codeAction.ts","code":"export async function applyCodeActionCommands(\n\tclient: ITypeScriptServiceClient,","startLine":34,"endLine":35,"chunkType":"function","mtime":1762250468329.5872}

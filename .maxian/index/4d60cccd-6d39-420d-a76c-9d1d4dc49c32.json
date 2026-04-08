@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"for (i = 0; i < len; i++) {\n        if (a.charCodeAt(i) !== b.charCodeAt(i)) {\n            return i;\n        }\n    }","startLine":382,"endLine":386,"chunkType":"function","mtime":1772878378348.6172}

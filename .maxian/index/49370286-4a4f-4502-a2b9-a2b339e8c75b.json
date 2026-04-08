@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/references-view/package.json","code":"\"category\": \"%cmd.category.references%\"\n      },\n      {\n        \"command\": \"references-view.clearHistory\",","startLine":76,"endLine":79,"chunkType":"block","mtime":1762250468299.844}

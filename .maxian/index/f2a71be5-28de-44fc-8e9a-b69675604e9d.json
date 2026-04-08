@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/view/inlineEdits/utils.js","code":"deltaX(delta) {\n        return new $5gb(this.x + delta, this.y);\n    }","startLine":58,"endLine":60,"chunkType":"function","mtime":1772878383195.934}

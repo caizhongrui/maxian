@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/languages/supports/richEditBrackets.js","code":"isClose(text) {\n        return this.d.has(text);\n    }","startLine":44,"endLine":46,"chunkType":"function","mtime":1772878380587.3462}

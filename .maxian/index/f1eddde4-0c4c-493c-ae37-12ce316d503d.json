@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/diffProviderFactoryService.js","code":"dispose() {\n        this.d?.dispose();\n    }","startLine":49,"endLine":51,"chunkType":"function","mtime":1772878380287.7637}

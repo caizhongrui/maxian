@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/tree/compressedObjectTreeModel.js","code":"getListRenderCount(location) {\n        return this.f.getListRenderCount(location);\n    }","startLine":341,"endLine":343,"chunkType":"function","mtime":1772878378114.8982}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/client/src/node/htmlClientMain.ts","code":"export async function deactivate(): Promise<void> {\n\tif (client) {\n\t\tawait client.dispose();\n\t\tclient = undefined;\n\t}\n}","startLine":55,"endLine":60,"chunkType":"function","mtime":1762250468237.0044}

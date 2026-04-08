@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/file_lock.rs","code":"Err(CodeError::SingletonLockfileOpenFailed(err))\n\t}","startLine":72,"endLine":73,"chunkType":"function","mtime":1762250468186.8901}

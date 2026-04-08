@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/links/browser/getLinks.js","code":"if (result) {\n                lists[i] = [result, provider];\n            }","startLine":113,"endLine":115,"chunkType":"function","mtime":1772878383569.025}

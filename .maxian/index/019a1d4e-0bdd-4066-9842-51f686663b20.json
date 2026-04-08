@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/storage/test/node/storage.integrationTest.js","code":"}\n        items.set('super.large.string', value.join()); // 3.6MB\n        return { items, uuid, value };\n    }\n});","startLine":631,"endLine":635,"chunkType":"block","mtime":1772878378529.0044}

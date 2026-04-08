@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view/viewController.js","code":"emitMouseDrag(e) {\n        this.c.emitMouseDrag(e);\n    }","startLine":255,"endLine":257,"chunkType":"function","mtime":1772878379801.3662}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/service_macos.rs","code":"Some(mut d) => {\n\t\t\td.push(format!(\"{}.plist\", get_service_label()));\n\t\t\tOk(d)\n\t\t}","startLine":120,"endLine":123,"chunkType":"function","mtime":1762250468185.8486}

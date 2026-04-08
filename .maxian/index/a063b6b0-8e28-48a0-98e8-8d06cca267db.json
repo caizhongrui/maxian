@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/commands/version.rs","code":"Some(p) => {\n\t\t\tvm.set_preferred_version(version.clone(), p.clone()).await?;\n\t\t\tprint_now_using(&ctx.log, &version, &p);\n\t\t\tOk(0)\n\t\t}","startLine":34,"endLine":38,"chunkType":"function","mtime":1762250468182.9995}

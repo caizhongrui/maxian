@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/minimap/minimap.js","code":"onTokensColorsChanged(e) {\n        this.z();\n        return this.w.onTokensColorsChanged();\n    }","startLine":718,"endLine":721,"chunkType":"function","mtime":1772878380165.3325}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/json-language-features/client/src/jsonClient.ts","code":"export const editorSection = 'editor';\n\texport const foldingMaximumRegions = 'foldingMaximumRegions';","startLine":112,"endLine":113,"chunkType":"block","mtime":1762250468252.5417}

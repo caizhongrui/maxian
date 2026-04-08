@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/hoverTypes.js","code":"dispose() {\n        for (const part of this.renderedHoverParts) {\n            part.dispose();\n        }\n    }","startLine":49,"endLine":53,"chunkType":"function","mtime":1772878382941.0137}

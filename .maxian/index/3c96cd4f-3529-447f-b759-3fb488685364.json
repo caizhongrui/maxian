@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/selectBox/selectBoxCustom.js","code":"focus() {\n        if (this.h) {\n            this.h.tabIndex = 0;\n            this.h.focus();\n        }\n    }","startLine":246,"endLine":251,"chunkType":"function","mtime":1772878378109.543}

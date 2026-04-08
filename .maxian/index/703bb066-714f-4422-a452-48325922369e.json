@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/errors.rs","code":"AsyncPipeListenerFailed(std::io::Error),\n\t#[error(\"could not create singleton lock file: {0:?}\")]","startLine":445,"endLine":446,"chunkType":"function","mtime":1762250468186.8193}

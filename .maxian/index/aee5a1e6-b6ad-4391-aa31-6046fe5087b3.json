@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsImpl.js","code":"handleDidChangeTokens(e) {\n        this.a.value?.object.handleDidChangeTokens(e);\n    }","startLine":47,"endLine":49,"chunkType":"function","mtime":1772878380612.7896}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/tree/abstractTree.js","code":"t(element) {\n        const node = this.b.get(element);\n        if (!node) {\n            return;\n        }\n        this.u(node);\n    }","startLine":329,"endLine":335,"chunkType":"function","mtime":1772878378114.123}

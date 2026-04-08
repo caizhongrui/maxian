@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestController.js","code":"selectLastSuggestion() {\n        this.widget.value.selectLast();\n    }","startLine":591,"endLine":593,"chunkType":"function","mtime":1772878383693.3113}

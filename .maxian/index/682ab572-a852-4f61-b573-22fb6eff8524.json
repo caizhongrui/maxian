@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/terminal.ts","code":"getTerminalEnv(): { [key: string]: string };\n}","startLine":12,"endLine":13,"chunkType":"function","mtime":1762250468219.929}

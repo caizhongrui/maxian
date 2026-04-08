@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test-strings.ts","code":"var x = `Hello ${foo}!`;\nconsole.log(`string text line 1\nstring text line 2`);\nx = tag`Hello ${ a + b } world ${ a * b }`;","startLine":1,"endLine":4,"chunkType":"block","mtime":1762250468356.608}

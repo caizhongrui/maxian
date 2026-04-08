@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/rename/browser/rename.js","code":"if (loc?.rejectReason) {\n        return { edits: [], rejectReason: loc.rejectReason };\n    }","startLine":113,"endLine":115,"chunkType":"function","mtime":1772878383596.4146}

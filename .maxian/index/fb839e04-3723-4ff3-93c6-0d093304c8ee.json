@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/common/ipc.net.js","code":"static fromSocket(socket, id) {\n        return new $ou(new $nu(socket), id);\n    }","startLine":427,"endLine":429,"chunkType":"function","mtime":1772878378491.1975}

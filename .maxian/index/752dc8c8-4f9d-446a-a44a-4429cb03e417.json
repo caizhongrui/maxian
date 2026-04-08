@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/util/textRendering.ts","code":"export function tagsToMarkdown(\n\ttags: readonly Proto.JSDocTagInfo[],","startLine":216,"endLine":217,"chunkType":"function","mtime":1762250468329.936}

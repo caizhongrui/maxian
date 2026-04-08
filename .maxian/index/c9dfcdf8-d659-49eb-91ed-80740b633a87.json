@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view/viewPart.js","code":"static write(target, partId) {\n        target.setAttribute('data-mprt', String(partId));\n    }","startLine":31,"endLine":33,"chunkType":"function","mtime":1772878379802.5874}

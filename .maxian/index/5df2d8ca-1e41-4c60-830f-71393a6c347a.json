@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/buffer.js","code":"return (((source[offset + 0] << 0) >>> 0) |\n        ((source[offset + 1] << 8) >>> 0) |","startLine":219,"endLine":220,"chunkType":"function","mtime":1772878378139.7178}

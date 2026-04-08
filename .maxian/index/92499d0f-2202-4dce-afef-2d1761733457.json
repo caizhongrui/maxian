@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/tsconfig.vscode-proposed-dts.json","code":"{\n\t\"extends\": \"./tsconfig.vscode-dts.json\",\n\t\"include\": [\n\t\t\"vscode-dts/vscode.d.ts\",\n\t\t\"vscode-dts/vscode.proposed.*.d.ts\",\n\t]\n}","startLine":1,"endLine":8,"chunkType":"block","mtime":1762250468417.999}

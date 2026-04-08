@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModelSearch.js","code":"reset(lastIndex) {\n        this.a.lastIndex = lastIndex;\n        this.b = -1;\n        this.c = 0;\n    }","startLine":410,"endLine":414,"chunkType":"function","mtime":1772878380728.4277}

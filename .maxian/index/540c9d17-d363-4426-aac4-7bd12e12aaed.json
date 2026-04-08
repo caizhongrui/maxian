@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/paths.rs","code":"let (quality, commit) = match fname.split_once('-') {\n\t\t\t\tSome(r) => r,\n\t\t\t\tNone => continue,\n\t\t\t};","startLine":136,"endLine":139,"chunkType":"function","mtime":1762250468185.2612}

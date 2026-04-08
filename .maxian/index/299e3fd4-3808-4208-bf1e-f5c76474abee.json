@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/services/editorWorkerService.js","code":"canComputeDirtyDiff(original, modified) {\n        return (canSyncModel(this.a, original) && canSyncModel(this.a, modified));\n    }","startLine":97,"endLine":99,"chunkType":"function","mtime":1772878379683.8535}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlayHints/browser/inlayHintsController.js","code":"function fixSpace(str) {\n    const noBreakWhitespace = '\\xa0';\n    return str.replace(/[ \\t]/g, noBreakWhitespace);\n}","startLine":661,"endLine":664,"chunkType":"function","mtime":1772878383113.8022}

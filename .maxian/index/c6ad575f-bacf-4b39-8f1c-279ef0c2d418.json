@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/modelService.js","code":"canComputeSHA1(model) {\n        return (model.getValueLength() <= $vyb.MAX_MODEL_SIZE);\n    }","startLine":474,"endLine":476,"chunkType":"function","mtime":1772878381035.162}

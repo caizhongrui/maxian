@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/web/src/typingsInstaller/jsTyping.ts","code":"directoryExists(path: string): boolean;\n\tfileExists(fileName: string): boolean;","startLine":74,"endLine":75,"chunkType":"function","mtime":1762250468340.8416}

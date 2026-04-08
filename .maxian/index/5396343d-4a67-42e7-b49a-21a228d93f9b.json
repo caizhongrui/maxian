@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/selectBox/selectBoxCustom.js","code":"setFocusable(focusable) {\n        this.h.tabIndex = focusable ? 0 : -1;\n    }","startLine":258,"endLine":260,"chunkType":"function","mtime":1772878378109.543}

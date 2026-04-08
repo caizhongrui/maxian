@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/node/ipc.net.js","code":"onData(listener) {\n        return this.f.event(listener);\n    }","startLine":268,"endLine":270,"chunkType":"function","mtime":1772878378494.8823}

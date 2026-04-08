@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/uri.js","code":"if ($l) {\n        value = value.replace(/\\//g, '\\\\');\n    }","startLine":518,"endLine":520,"chunkType":"function","mtime":1772878378386.6084}

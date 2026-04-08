@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/linesOperations/browser/linesOperations.js","code":"d(text, wordSeparators) {\n        return text.toLocaleLowerCase();\n    }","startLine":918,"endLine":920,"chunkType":"function","mtime":1772878383402.8794}

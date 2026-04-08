@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/color.js","code":"isDarker() {\n        const yiq = (this.rgba.r * 299 + this.rgba.g * 587 + this.rgba.b * 114) / 1000;\n        return yiq < 128;\n    }","startLine":296,"endLine":299,"chunkType":"function","mtime":1772878378169.5872}

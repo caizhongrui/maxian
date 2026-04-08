@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/editContext/native/editContextFactory.js","code":"EditContext.create = create;\n})(EditContext || (EditContext = {}));\n//# sourceMappingURL=editContextFactory.js.map","startLine":20,"endLine":22,"chunkType":"block","mtime":1772878379330.8362}

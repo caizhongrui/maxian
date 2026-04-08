@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/themables.js","code":"function isThemeColor(obj) {\n        return obj && typeof obj === 'object' && typeof obj.id === 'string';\n    }","startLine":8,"endLine":10,"chunkType":"function","mtime":1772878378385.7046}

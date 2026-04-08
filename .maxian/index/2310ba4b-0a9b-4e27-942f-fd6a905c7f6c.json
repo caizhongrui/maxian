@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"cancel() {\n        if (this.a !== -1) {\n            clearTimeout(this.a);\n            this.a = -1;\n        }\n    }","startLine":731,"endLine":736,"chunkType":"function","mtime":1772878378139.2854}

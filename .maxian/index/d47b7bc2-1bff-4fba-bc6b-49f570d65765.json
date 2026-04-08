@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view.js","code":"removeGlyphMarginWidget(widgetData) {\n        this.w.removeWidget(widgetData.widget);\n        this.J = true;\n        this.W();\n    }","startLine":567,"endLine":571,"chunkType":"function","mtime":1772878379798.9834}

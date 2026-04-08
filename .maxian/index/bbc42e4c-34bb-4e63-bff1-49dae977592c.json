@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/formattedTextRenderer.js","code":"function isFormatTag(char, supportCodeSegments) {\n    return formatTagType(char, supportCodeSegments) !== 0 /* FormatType.Invalid */;\n}","startLine":161,"endLine":163,"chunkType":"function","mtime":1772878377879.06}

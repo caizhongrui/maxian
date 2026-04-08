@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/browser/ui/tree/asyncDataTree.test.js","code":"class VirtualDelegate {\n    getHeight() { return 20; }\n    getTemplateId(element) { return 'default'; }\n}","startLine":51,"endLine":54,"chunkType":"class","mtime":1772878378592.7144}

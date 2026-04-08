@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/json-language-features/client/src/jsonClient.ts","code":"function isThenable<T>(obj: ProviderResult<T>): obj is Thenable<T> {\n\treturn obj && (<any>obj)['then'];\n}","startLine":725,"endLine":727,"chunkType":"function","mtime":1762250468252.5417}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/state.rs","code":"create_dir_all(&root)\n\t\t\t\t.map_err(|e| wrap(e, format!(\"error creating directory {}\", root.display())))?;","startLine":182,"endLine":183,"chunkType":"function","mtime":1762250468184.0547}

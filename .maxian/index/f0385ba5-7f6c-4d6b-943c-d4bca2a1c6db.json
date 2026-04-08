@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/contentWidgets/contentWidgets.js","code":"onDecorationsChanged(e) {\n        // true for inline decorations that can end up relayouting text\n        return true;\n    }","startLine":39,"endLine":42,"chunkType":"function","mtime":1772878380158.028}

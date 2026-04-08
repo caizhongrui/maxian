@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewModel/viewContext.js","code":"addEventHandler(eventHandler) {\n        this.viewModel.addViewEventHandler(eventHandler);\n    }","startLine":13,"endLine":15,"chunkType":"function","mtime":1772878381819.7175}

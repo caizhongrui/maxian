@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/brackets.js","code":"constructor(b, c) {\n        this.b = b;\n        this.c = c;\n        this.a = new Map();\n    }","startLine":88,"endLine":92,"chunkType":"function","mtime":1772878380614.212}

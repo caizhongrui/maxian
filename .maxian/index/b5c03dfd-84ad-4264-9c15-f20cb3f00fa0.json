@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/textEdit.js","code":"inverseMapRange(range, doc) {\n        const reversed = this.inverse(doc);\n        return reversed.mapRange(range);\n    }","startLine":95,"endLine":98,"chunkType":"function","mtime":1772878380471.9346}

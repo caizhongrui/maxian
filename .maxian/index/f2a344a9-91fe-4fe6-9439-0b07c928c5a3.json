@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/storage/node/storage.js","code":"o(connection, msg) {\n        connection.isErroneous = true;\n        connection.lastError = msg;\n        this.d.error(msg);\n    }","startLine":225,"endLine":229,"chunkType":"function","mtime":1772878378528.6816}

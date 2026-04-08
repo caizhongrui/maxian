@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view/viewOverlays.js","code":"_viewOverlaysRender(ctx) {\n        this.a.renderLines(ctx.viewportData);\n    }","startLine":96,"endLine":98,"chunkType":"function","mtime":1772878379802.077}

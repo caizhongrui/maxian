@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/utils/platform.ts","code":"export function isWeb(): boolean {\n\treturn 'navigator' in globalThis && vscode.env.uiKind === vscode.UIKind.Web;\n}","startLine":8,"endLine":10,"chunkType":"function","mtime":1762250468339.6594}

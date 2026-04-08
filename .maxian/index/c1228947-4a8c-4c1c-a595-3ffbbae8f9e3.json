@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/stopwatch.js","code":"elapsed() {\n        if (this.b !== -1) {\n            return this.b - this.a;\n        }\n        return this.c() - this.a;\n    }","startLine":22,"endLine":27,"chunkType":"function","mtime":1772878378347.9456}

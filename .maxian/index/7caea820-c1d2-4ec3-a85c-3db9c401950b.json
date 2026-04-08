@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/tsServer/cancellation.ts","code":"create(serverId: string, tracer: Tracer): OngoingRequestCanceller;\n}","startLine":14,"endLine":15,"chunkType":"function","mtime":1762250468333.3271}

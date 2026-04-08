@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidget.js","code":"tryGetCodeEditor(resource) {\n        return this.c.get().tryGetCodeEditor(resource);\n    }","startLine":60,"endLine":62,"chunkType":"function","mtime":1772878380369.6719}

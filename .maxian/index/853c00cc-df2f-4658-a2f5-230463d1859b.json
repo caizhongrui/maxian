@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"function forward(from, to) {\n        return from(e => to.fire(e));\n    }","startLine":525,"endLine":527,"chunkType":"function","mtime":1772878378208.3105}

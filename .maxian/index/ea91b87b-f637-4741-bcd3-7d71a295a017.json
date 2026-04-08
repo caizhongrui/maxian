@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/languageService.js","code":"getRegisteredLanguageIds() {\n        return this.n.getRegisteredLanguageIds();\n    }","startLine":38,"endLine":40,"chunkType":"function","mtime":1772878381033.703}

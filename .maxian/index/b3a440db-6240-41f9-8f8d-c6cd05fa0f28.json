@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"if (last !== str.length) {\n        yield { isCode: false, str: str.substring(last) };\n    }","startLine":663,"endLine":665,"chunkType":"function","mtime":1772878378348.6172}

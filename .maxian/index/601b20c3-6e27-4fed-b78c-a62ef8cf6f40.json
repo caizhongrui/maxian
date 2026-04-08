@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"constructor(str, offset = 0) {\n        this.c = new $8f(str, offset);\n    }","startLine":478,"endLine":480,"chunkType":"function","mtime":1772878378348.6172}

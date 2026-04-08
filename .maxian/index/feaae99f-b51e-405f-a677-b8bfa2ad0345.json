@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/ternarySearchTree.js","code":"hasNext() {\n        return (this.d[this.e] === 3 /* UriIteratorState.Path */ && this.b.hasNext())\n            || this.e < this.d.length - 1;\n    }","startLine":176,"endLine":179,"chunkType":"function","mtime":1772878378349.0525}

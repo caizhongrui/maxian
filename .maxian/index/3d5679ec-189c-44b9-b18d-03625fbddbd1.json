@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/semanticTokens/common/getSemanticTokens.js","code":"if (!result || (!$njb(result) && !$ojb(result))) {\n            result = null;\n        }","startLine":47,"endLine":49,"chunkType":"function","mtime":1772878383599.2183}

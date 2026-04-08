@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/emmet/src/abbreviationActions.ts","code":"if (!changesWereMade) {\n\t\teditor.selections = oldSelections;\n\t}","startLine":257,"endLine":259,"chunkType":"function","mtime":1762250468205.2075}

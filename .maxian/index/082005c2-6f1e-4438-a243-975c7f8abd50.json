@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/config/charWidthReader.js","code":"constructor(chr, type) {\n        this.chr = chr;\n        this.type = type;\n        this.width = 0;\n    }","startLine":13,"endLine":17,"chunkType":"function","mtime":1772878379288.1052}

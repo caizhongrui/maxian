@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/mangle-loader.js","code":"if (this.mode !== 'production') {\n\t\t// Only enable mangling in production builds\n\t\treturn source;\n\t}","startLine":40,"endLine":43,"chunkType":"function","mtime":1762250468263.3079}

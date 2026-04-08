@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/is_integrated.rs","code":"Some(parent) if parent.file_name().and_then(|n| n.to_str()) == Some(\"bin\") => parent,\n\t\t_ => return Ok(false),","startLine":14,"endLine":15,"chunkType":"function","mtime":1762250468187.2273}

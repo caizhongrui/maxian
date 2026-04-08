@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/folding/browser/foldingDecorations.js","code":"removeDecorations(decorationIds) {\n        this.m.removeDecorations(decorationIds);\n    }","startLine":142,"endLine":144,"chunkType":"function","mtime":1772878382588.838}

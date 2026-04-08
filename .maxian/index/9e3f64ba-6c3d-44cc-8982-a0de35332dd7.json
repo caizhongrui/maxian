@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"forEach(handler) {\n        this.iterate(item => { handler(item); return true; });\n    }","startLine":663,"endLine":665,"chunkType":"function","mtime":1772878378138.325}

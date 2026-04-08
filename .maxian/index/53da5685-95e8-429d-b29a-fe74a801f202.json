@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/labels.js","code":"if ($l) {\n        normalizedPath = $Sg(normalizedPath); // make sure that the path is POSIX normalized on Windows\n    }","startLine":107,"endLine":109,"chunkType":"function","mtime":1772878378239.4617}

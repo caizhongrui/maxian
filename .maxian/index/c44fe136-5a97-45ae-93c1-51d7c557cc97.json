@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-basics/syntaxes/TypeScript.tmLanguage.json","code":"\"begin\": \"(?<![_$[:alnum:]])(?:(?<=\\\\.\\\\.\\\\.)|(?<!\\\\.))(new)(?![_$[:alnum:]])(?:(?=\\\\.\\\\.\\\\.)|(?!\\\\.))\",","startLine":3112,"endLine":3112,"chunkType":"block","mtime":1762250468321.7385}

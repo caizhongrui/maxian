@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test.rb","code":"class SchedulerManagementClient < MsRestAzure::AzureServiceClient\n    include Azure::ARM::Scheduler::Models","startLine":10,"endLine":11,"chunkType":"class","mtime":1762250468359.995}

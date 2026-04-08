@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/treeViewsDnd.js","code":"addDragOperationTransfer(uuid, transferPromise) {\n        this.a.set(uuid, transferPromise);\n    }","startLine":17,"endLine":19,"chunkType":"function","mtime":1772878381084.5413}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"static const(value) {\n        return new ConstValueWithChangeEvent(value);\n    }","startLine":1374,"endLine":1376,"chunkType":"function","mtime":1772878378208.3105}

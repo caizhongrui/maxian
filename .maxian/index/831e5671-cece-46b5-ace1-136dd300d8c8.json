@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/json.js","code":"if (result) {\n        delete result.parent;\n    }","startLine":761,"endLine":763,"chunkType":"function","mtime":1772878378235.0315}

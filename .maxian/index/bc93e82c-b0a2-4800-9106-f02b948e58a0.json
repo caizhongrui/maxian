@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneEditor.js","code":"export function getModel(uri) {\n    const modelService = StandaloneServices.get($AG);\n    return modelService.getModel(uri);\n}","startLine":225,"endLine":228,"chunkType":"function","mtime":1772878383800.241}

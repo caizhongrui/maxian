@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/languageFeatures/diagnostics.ts","code":"export function registerDiagnosticSupport(\n\tselector: vscode.DocumentSelector,","startLine":76,"endLine":77,"chunkType":"function","mtime":1762250468269.5015}

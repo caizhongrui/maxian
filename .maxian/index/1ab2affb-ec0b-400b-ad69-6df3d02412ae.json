@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"class UniqueContainer {\n    constructor(value) {\n        this.value = value;\n        this.id = id++;\n    }\n}","startLine":753,"endLine":758,"chunkType":"class","mtime":1772878378208.3105}

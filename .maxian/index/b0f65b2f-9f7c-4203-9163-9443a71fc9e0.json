@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/contentHoverRendered.js","code":"isColorPickerVisible() {\n        return this.a.isColorPickerVisible();\n    }","startLine":57,"endLine":59,"chunkType":"function","mtime":1772878382757.9448}

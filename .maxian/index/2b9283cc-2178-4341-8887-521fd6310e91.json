@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/log.rs","code":"Ok(Self {\n\t\t\tlevel,\n\t\t\tfile: Arc::new(std::sync::Mutex::new(file)),\n\t\t})","startLine":177,"endLine":180,"chunkType":"function","mtime":1762250468183.5442}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggest.js","code":"static isAllOn(config) {\n        return config.other === 'on' && config.comments === 'on' && config.strings === 'on';\n    }","startLine":336,"endLine":338,"chunkType":"function","mtime":1772878383692.0027}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/filters.js","code":"function isWordSeparator(code) {\n    return isWhitespace(code) || wordSeparators.has(code);\n}","startLine":97,"endLine":99,"chunkType":"function","mtime":1772878378209.0073}

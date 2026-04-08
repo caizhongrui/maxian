@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/config/editorConfiguration.js","code":"function digitCount(n) {\n    let r = 0;\n    while (n) {\n        n = Math.floor(n / 10);\n        r++;\n    }\n    return r ? r : 1;\n}","startLine":164,"endLine":171,"chunkType":"function","mtime":1772878379324.913}

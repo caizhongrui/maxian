@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/linesOperations/browser/sortLinesCommand.js","code":"computeCursorState(model, helper) {\n        return helper.getTrackedSelection(this.d);\n    }","startLine":27,"endLine":29,"chunkType":"function","mtime":1772878383405.868}

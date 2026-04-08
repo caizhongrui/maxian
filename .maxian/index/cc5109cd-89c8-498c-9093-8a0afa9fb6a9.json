@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/docs/superpowers/specs/2026-03-15-monitor-statistics-design.md","code":"if (operation === 'commit') return 'commit_message';\n  if (mode === 'debug') return 'code_debug';","startLine":42,"endLine":43,"chunkType":"function","mtime":1773542187086.9204}

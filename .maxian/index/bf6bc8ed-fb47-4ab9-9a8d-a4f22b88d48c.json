@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/code_server.rs","code":"Err(AnyError::from(ExtensionInstallFailed(\n\t\t\tString::from_utf8_lossy(&result.stderr).to_string(),","startLine":316,"endLine":317,"chunkType":"function","mtime":1762250468184.2969}

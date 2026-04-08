@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/languages/supports/languageBracketsConfiguration.js","code":"constructor(a, bracketText) {\n        this.a = a;\n        this.bracketText = bracketText;\n    }","startLine":85,"endLine":88,"chunkType":"function","mtime":1772878380586.5881}

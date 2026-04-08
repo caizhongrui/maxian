@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/fsharp/syntaxes/fsharp.tmLanguage.json","code":"\"match\": \"(->)\\\\s*(\\\\()?\\\\s*([?[:alpha:]0-9'`^._ ]+)*\",","startLine":820,"endLine":820,"chunkType":"block","mtime":1762250468211.4836}

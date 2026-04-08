@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/viewZones/viewZones.js","code":"function safeInvoke1Arg(func, arg1) {\n    try {\n        return func(arg1);\n    }\n    catch (e) {\n        $gb(e);\n    }\n}","startLine":324,"endLine":331,"chunkType":"function","mtime":1772878380254.788}

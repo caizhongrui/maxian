@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/MEMORY_BANK_QUICKSTART.md","code":"constructor(\n    @IMemoryBankService private readonly memoryBankService: IMemoryBankService","startLine":131,"endLine":132,"chunkType":"function","mtime":1763081533961.1536}

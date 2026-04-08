@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/textModelSync/textModelSync.impl.js","code":"bindToServer(workerServer) {\n        workerServer.setChannel($e0, this);\n    }","startLine":103,"endLine":105,"chunkType":"function","mtime":1772878381038.7056}

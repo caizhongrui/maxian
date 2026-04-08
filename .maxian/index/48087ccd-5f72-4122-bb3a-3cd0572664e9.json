@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/logging.js","code":"b(text) {\n        return consoleTextToArgs([\n            normalText(repeat('|  ', this.a)),\n            text,\n        ]);\n    }","startLine":17,"endLine":22,"chunkType":"function","mtime":1772878378315.3738}

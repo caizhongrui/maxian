@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/map.js","code":"get(resource) {\n        return this.d.get(this.e(resource))?.value;\n    }","startLine":61,"endLine":63,"chunkType":"function","mtime":1772878378277.2786}

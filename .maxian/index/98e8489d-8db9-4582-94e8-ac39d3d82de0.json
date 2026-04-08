@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/simple-browser/src/dispose.ts","code":"if (this._isDisposed) {\n\t\t\tvalue.dispose();\n\t\t} else {\n\t\t\tthis._disposables.push(value);\n\t\t}","startLine":29,"endLine":33,"chunkType":"function","mtime":1762250468307.4485}

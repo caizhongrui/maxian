@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/.lsifrc.json","code":"{\n\t\"project\": \"src/tsconfig.json\",\n\t\"source\": \"./package.json\",\n\t\"package\": \"package.json\",\n\t\"out\": \"vscode.lsif\"\n}","startLine":1,"endLine":7,"chunkType":"block","mtime":1762250468144.5571}

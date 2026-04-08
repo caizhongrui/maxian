@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/diff/defaultLinesDiffComputer/heuristicSequenceOptimizations.js","code":"if (shouldMarkAsChanged(suffix)) {\n            newDiff = newDiff.deltaEnd(suffix.length);\n        }","startLine":358,"endLine":360,"chunkType":"function","mtime":1772878380538.9}

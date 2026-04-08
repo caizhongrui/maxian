@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/smartSelect/browser/smartSelect.js","code":"constructor(f, g) {\n        this.f = f;\n        this.g = g;\n        this.e = false;\n    }","startLine":56,"endLine":60,"chunkType":"function","mtime":1772878383600.5256}

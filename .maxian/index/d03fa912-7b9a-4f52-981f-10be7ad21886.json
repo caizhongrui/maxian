@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/main.ts","code":"export async function deactivate(): Promise<any> {\n\tfor (const task of deactivateTasks) {\n\t\tawait task();\n\t}\n}","startLine":32,"endLine":36,"chunkType":"function","mtime":1762250468218.83}

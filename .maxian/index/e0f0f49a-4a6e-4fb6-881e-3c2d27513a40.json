@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/configuration-editing/src/test/completion.test.ts","code":"await editor.edit(eb => eb.replace(fullRange, content));\n\treturn editor;\n\n}","startLine":591,"endLine":595,"chunkType":"block","mtime":1762250468191.2742}

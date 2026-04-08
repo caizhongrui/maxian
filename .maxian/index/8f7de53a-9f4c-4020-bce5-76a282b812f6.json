@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/utils.js","code":"if (i === len) {\n        return -1; // line only consists of whitespace\n    }","startLine":27,"endLine":29,"chunkType":"function","mtime":1772878380879.5603}

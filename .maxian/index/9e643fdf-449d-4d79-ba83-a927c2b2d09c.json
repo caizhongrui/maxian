@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewModel/overviewZoneManager.js","code":"getCanvasWidth() {\n        return this.g * this.k;\n    }","startLine":93,"endLine":95,"chunkType":"function","mtime":1772878381819.3796}

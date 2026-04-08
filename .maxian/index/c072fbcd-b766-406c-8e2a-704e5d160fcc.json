@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/legal.rs","code":"Ok(false) => return Err(CodeError::DeniedLegalConset.into()),\n\t\t\tErr(_) => return Err(CodeError::NeedsInteractiveLegalConsent.into()),","startLine":55,"endLine":56,"chunkType":"function","mtime":1762250468184.5647}

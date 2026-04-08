@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/colorPicker/browser/colorPickerContribution.js","code":"if (!(uri instanceof URI) || !Array.isArray(color) || color.length !== 4 || !$gD.isIRange(range)) {\n        throw $nb();\n    }","startLine":40,"endLine":42,"chunkType":"function","mtime":1772878382209.6565}

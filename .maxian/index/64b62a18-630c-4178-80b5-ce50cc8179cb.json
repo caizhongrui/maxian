@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/build.rs","code":"set_env_vars_from_map_keys(\"VSCODE_CLI\", json);\n}","startLine":113,"endLine":114,"chunkType":"function","mtime":1762250468181.8926}

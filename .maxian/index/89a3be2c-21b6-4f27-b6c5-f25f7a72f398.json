@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/extension.shared.ts","code":"function registerMarkdownLanguageFeatures(\n\tclient: MdLanguageClient,","startLine":52,"endLine":53,"chunkType":"function","mtime":1762250468268.6726}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/folding/browser/hiddenRangeModel.js","code":"function isInside(line, range) {\n    return line >= range.startLineNumber && line <= range.endLineNumber;\n}","startLine":114,"endLine":116,"chunkType":"function","mtime":1772878382591.506}

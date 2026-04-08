@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/markerHoverParticipant.js","code":"constructor(owner, range, marker) {\n        this.owner = owner;\n        this.range = range;\n        this.marker = marker;\n    }","startLine":34,"endLine":38,"chunkType":"function","mtime":1772878382943.6213}

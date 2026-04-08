@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/findinput/findInput.js","code":"select() {\n        this.inputBox.select();\n    }","startLine":259,"endLine":261,"chunkType":"function","mtime":1772878377945.873}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/assertHeap.js","code":"if (typeof __analyzeSnapshotInTests === 'undefined') {\n        return; // running in browser, no-op\n    }","startLine":60,"endLine":62,"chunkType":"function","mtime":1772878378596.8193}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/editorExtensions.js","code":"constructor(d, opts) {\n        super(opts);\n        this.d = d;\n    }","startLine":164,"endLine":167,"chunkType":"function","mtime":1772878379375.4983}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/color.js","code":"function formatRGBA(color) {\n                return `rgba(${color.rgba.r}, ${color.rgba.g}, ${color.rgba.b}, ${+(color.rgba.a).toFixed(2)})`;\n            }","startLine":456,"endLine":458,"chunkType":"function","mtime":1772878378169.5872}

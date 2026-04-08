@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/main.js","code":"if (args['crash-reporter-directory'] || (argvConfig['enable-crash-reporter'] && !args['disable-crash-reporter'])) {\n    configureCrashReporter();\n}","startLine":75,"endLine":77,"chunkType":"function","mtime":1772878377504.059}

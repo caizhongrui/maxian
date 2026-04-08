@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view/viewOverlays.js","code":"onScrollChanged(e) {\n        return this.a.onScrollChanged(e) || true;\n    }","startLine":73,"endLine":75,"chunkType":"function","mtime":1772878379802.077}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/logging.js","code":"function repeat(str, count) {\n    let result = '';\n    for (let i = 1; i <= count; i++) {\n        result += str;\n    }\n    return result;\n}","startLine":246,"endLine":252,"chunkType":"function","mtime":1772878378315.3738}

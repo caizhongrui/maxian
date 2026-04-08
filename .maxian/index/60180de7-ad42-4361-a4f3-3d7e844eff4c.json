@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/errors.rs","code":"AsyncPipeFailed(std::io::Error),\n\t#[error(\"could not listen on socket/pipe: {0:?}\")]","startLine":443,"endLine":444,"chunkType":"function","mtime":1762250468186.8193}

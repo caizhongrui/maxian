@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-api-tests/src/singlefolder-tests/workspace.fs.test.ts","code":"await vscode.workspace.fs.delete(folder, { recursive: true, useTrash: false });\n\t});\n});","startLine":261,"endLine":263,"chunkType":"block","mtime":1762250468348.1892}

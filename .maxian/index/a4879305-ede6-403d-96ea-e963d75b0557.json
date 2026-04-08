@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/uri.ts","code":"export function isGitUri(uri: Uri): boolean {\n\treturn /^git$/.test(uri.scheme);\n}","startLine":15,"endLine":17,"chunkType":"function","mtime":1762250468220.486}

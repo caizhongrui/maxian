@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/stickyScroll/browser/stickyScrollWidget.js","code":"getLineNumberFromChildDomNode(domNode) {\n        return this.M(domNode)?.lineNumber ?? null;\n    }","startLine":363,"endLine":365,"chunkType":"function","mtime":1772878383639.868}

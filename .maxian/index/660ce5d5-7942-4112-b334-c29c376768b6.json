@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/http.rs","code":"let (tx, mut rx) = mpsc::unbounded_channel();\n\t\tlet sent = self","startLine":254,"endLine":255,"chunkType":"function","mtime":1762250468186.994}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/code/electron-main/app.js","code":"if (window) {\n                window.notifyZoomLevel(zoomLevel);\n            }","startLine":438,"endLine":440,"chunkType":"function","mtime":1772878379281.8267}

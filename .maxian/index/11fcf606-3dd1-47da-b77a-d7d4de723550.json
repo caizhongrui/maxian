@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/control_server.rs","code":"Ok(a) => {\n\t\t\tmultiplexer.register(socket_id, a);\n\t\t\ttrace!(log, \"Attached to server\");\n\t\t\tOk(socket_id)\n\t\t}","startLine":853,"endLine":857,"chunkType":"function","mtime":1762250468184.4028}

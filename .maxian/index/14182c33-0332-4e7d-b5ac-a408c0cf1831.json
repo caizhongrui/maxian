@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/MEMORY_BANK_IMPLEMENTATION.md","code":"registerSingleton(IMemoryBankService, MemoryBankService, InstantiationType.Delayed);\n```","startLine":229,"endLine":230,"chunkType":"function","mtime":1763081478608.7654}

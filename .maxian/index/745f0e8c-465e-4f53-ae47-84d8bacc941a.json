@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneServices.js","code":"class StandaloneLogService extends $7C {\n    constructor() {\n        super(new $Hn());\n    }\n}","startLine":860,"endLine":864,"chunkType":"class","mtime":1772878383802.3767}

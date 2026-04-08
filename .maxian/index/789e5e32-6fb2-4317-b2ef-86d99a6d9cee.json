@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/esbuild-webview-common.js","code":"async function tryBuild(options, didBuild) {\n\ttry {\n\t\tawait build(options, didBuild);\n\t} catch (err) {\n\t\tconsole.error(err);\n\t}\n}","startLine":47,"endLine":53,"chunkType":"function","mtime":1762250468209.6333}

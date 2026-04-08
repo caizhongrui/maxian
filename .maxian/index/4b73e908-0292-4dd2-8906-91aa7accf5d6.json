@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/wordPartOperations/test/browser/utils.js","code":"withService(id, service) {\n        this.a.set(id, service);\n        return this;\n    }","startLine":9,"endLine":12,"chunkType":"function","mtime":1772878383774.9072}

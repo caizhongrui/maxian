@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/uint.js","code":"if (v > 4294967295 /* Constants.MAX_UINT_32 */) {\n        return 4294967295 /* Constants.MAX_UINT_32 */;\n    }","startLine":48,"endLine":50,"chunkType":"function","mtime":1772878378386.3513}

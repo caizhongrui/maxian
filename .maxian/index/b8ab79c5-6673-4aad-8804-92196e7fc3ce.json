@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/java/syntaxes/java.tmLanguage.json","code":"}\n\t\t\t\t\t},\n\t\t\t\t\t\"match\": \"(class|(?<!@)interface|enum)\\\\s+([\\\\w$]+)\",","startLine":334,"endLine":336,"chunkType":"block","mtime":1762250468250.6387}

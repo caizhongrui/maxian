@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/model.ts","code":"this.openRepositories = [];\n\n\t\tthis.possibleGitRepositoryPaths.clear();\n\t\tthis.disposables = dispose(this.disposables);\n\t}\n}","startLine":1073,"endLine":1078,"chunkType":"block","mtime":1762250468218.9368}

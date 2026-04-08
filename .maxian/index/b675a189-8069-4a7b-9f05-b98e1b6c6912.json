@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/snippet/browser/snippetParser.js","code":"toString() {\n        return this.value;\n    }","startLine":168,"endLine":170,"chunkType":"function","mtime":1772878383633.8225}

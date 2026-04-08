@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/colorPicker/browser/hoverColorPicker/hoverColorPickerParticipant.js","code":"getAccessibleContent(hoverPart) {\n        return nls.localize(948, null);\n    }","startLine":117,"endLine":119,"chunkType":"function","mtime":1772878382214.9446}

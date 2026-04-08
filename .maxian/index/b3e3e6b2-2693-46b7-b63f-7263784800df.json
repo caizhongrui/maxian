@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/viewCursors/viewCursors.js","code":"onDecorationsChanged(e) {\n        // true for inline decorations that can end up relayouting text\n        return true;\n    }","startLine":120,"endLine":123,"chunkType":"function","mtime":1772878380217.3767}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/range.js","code":"plusRange(range) {\n        return $gD.plusRange(this, range);\n    }","startLine":125,"endLine":127,"chunkType":"function","mtime":1772878380413.052}

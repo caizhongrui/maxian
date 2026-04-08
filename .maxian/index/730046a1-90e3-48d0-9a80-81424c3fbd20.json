@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/common/ipc.mp.js","code":"constructor(port, clientId) {\n        const protocol = new $Fu(port);\n        super(protocol, clientId);\n        this.b = protocol;\n    }","startLine":36,"endLine":40,"chunkType":"function","mtime":1772878378490.8572}

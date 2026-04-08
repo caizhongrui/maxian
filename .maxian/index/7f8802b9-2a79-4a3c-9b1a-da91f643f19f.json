@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/rename/browser/renameWidget.js","code":"getId() {\n        return '__renameInputWidget';\n    }","startLine":75,"endLine":77,"chunkType":"function","mtime":1772878383596.9014}

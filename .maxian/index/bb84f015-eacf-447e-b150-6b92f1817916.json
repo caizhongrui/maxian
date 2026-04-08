@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/test/node/testService.js","code":"cancelMe() {\n        return Promise.resolve($Vh(100)).then(() => true);\n    }","startLine":19,"endLine":21,"chunkType":"function","mtime":1772878378523.528}

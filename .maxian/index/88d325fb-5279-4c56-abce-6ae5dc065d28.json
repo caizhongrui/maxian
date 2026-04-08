@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/overlayWidgets/overlayWidgets.js","code":"getDomNode() {\n        return this.h;\n    }","startLine":38,"endLine":40,"chunkType":"function","mtime":1772878380213.2715}

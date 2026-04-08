@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-test-resolver/scripts/terminateProcess.sh","code":"for pid in $*; do\n\tterminateTree $pid\ndone","startLine":9,"endLine":12,"chunkType":"block","mtime":1762250468388.3682}

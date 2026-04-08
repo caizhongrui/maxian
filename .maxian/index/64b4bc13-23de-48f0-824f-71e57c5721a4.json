@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/folding/browser/folding.js","code":"static get(editor) {\n        return editor.getContribution($vgb_1.ID);\n    }","startLine":49,"endLine":51,"chunkType":"function","mtime":1772878382588.2642}

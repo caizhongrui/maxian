@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/languageService.js","code":"getMimeType(languageId) {\n        return this.n.getMimeType(languageId);\n    }","startLine":47,"endLine":49,"chunkType":"function","mtime":1772878381033.703}

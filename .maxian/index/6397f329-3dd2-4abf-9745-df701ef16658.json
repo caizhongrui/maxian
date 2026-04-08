@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/api.ts","code":"export function getExtensionApi(\n\tonCompletionAccepted: vscode.Event<vscode.CompletionItem>,","startLine":24,"endLine":25,"chunkType":"function","mtime":1762250468324.0972}

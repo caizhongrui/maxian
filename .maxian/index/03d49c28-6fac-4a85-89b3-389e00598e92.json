@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/linkedList.js","code":"constructor() {\n        this.a = Node.Undefined;\n        this.b = Node.Undefined;\n        this.c = 0;\n    }","startLine":14,"endLine":18,"chunkType":"function","mtime":1772878378240.1345}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/emmet/src/test/testUtils.ts","code":"export function closeAllEditors(): Thenable<any> {\n\treturn vscode.commands.executeCommand('workbench.action.closeAllEditors');\n}","startLine":54,"endLine":56,"chunkType":"function","mtime":1762250468208.256}

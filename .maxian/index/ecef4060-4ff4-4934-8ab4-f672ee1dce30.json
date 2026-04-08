@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/code_server.rs","code":"Some(Ok(cli)) => Ok(cli.path()),\n\t\t_ => {\n\t\t\tlet _ = cache.delete(&cache_name);\n\t\t\tErr(CodeError::CorruptDownload(\"cli directory is empty\").into())\n\t\t}","startLine":864,"endLine":868,"chunkType":"function","mtime":1762250468184.2969}

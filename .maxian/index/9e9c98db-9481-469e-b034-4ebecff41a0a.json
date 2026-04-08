@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/color.js","code":"equals(other) {\n        return !!other && $Vn.equals(this.rgba, other.rgba) && $Wn.equals(this.hsla, other.hsla) && $Xn.equals(this.hsva, other.hsva);\n    }","startLine":226,"endLine":228,"chunkType":"function","mtime":1772878378169.5872}

@@ -42,6 +42,7 @@ export class ToolRepetitionDetector {
 	private previousToolCallJson: string | null = null;
 	private consecutiveIdenticalToolCallCount: number = 0;
 	private readonly consecutiveIdenticalToolCallLimit: number;
+	private readonly workspaceRoot: string;
 
 	// P2优化：Doom Loop检测
 	private toolCallHistory: ToolCallHistoryEntry[] = [];
@@ -52,9 +53,9 @@ export class ToolRepetitionDetector {
 	private doomLoopCount = 0;
 
 	// 同一文件反复写入检测
-	private fileWriteHistory: Array<{ file: string; tool: string; timestamp: number }> = [];
-	private readonly FILE_WRITE_LOOP_THRESHOLD = 4; // 允许合理的 2-3 次连续修改，只拦真正空转
-	private readonly SAME_FILE_SAME_TOOL_THRESHOLD = 3;
+	private fileWriteHistory: Array<{ file: string; tool: string; signature: string; timestamp: number }> = [];
+	private readonly FILE_WRITE_LOOP_THRESHOLD = 5; // 第五次写同一文件时开始评估高风险
+	private readonly SAME_FILE_SAME_TOOL_THRESHOLD = 3; // 同一种写入工具至少重复三次才进入高风险
 	private readonly READ_WRITE_OSCILLATION_WINDOW = 6;
 	private readonly WRITE_TOOLS = new Set(['apply_diff', 'edit', 'write_to_file', 'multiedit', 'patch']);
 	private readonly READ_TOOLS = new Set(['read_file']);
@@ -65,8 +66,9 @@ export class ToolRepetitionDetector {
 	 * Creates a new ToolRepetitionDetector
 	 * @param limit The maximum number of identical consecutive tool calls allowed (default: 3)
 	 */
-	constructor(limit: number = 3) {
+	constructor(limit: number = 3, workspaceRoot: string = '') {
 		this.consecutiveIdenticalToolCallLimit = limit;
+		this.workspaceRoot = this.normalizePathValue(workspaceRoot);
 	}
 
 	/**
@@ -94,7 +96,7 @@ export class ToolRepetitionDetector {
 
 		// 同一文件反复写入检测（优先级最高，在连续相同检测之前）
 		if (this.WRITE_TOOLS.has(currentToolCallBlock.name)) {
-			const fileWriteResult = this.detectSameFileWriteLoop(currentToolCallBlock);
+			const fileWriteResult = this.detectSameFileWriteLoop(currentToolCallBlock, paramsHash);
 			if (fileWriteResult.detected) {
 				this.doomLoopDetected = true;
 				this.doomLoopCount++;
@@ -205,6 +207,11 @@ export class ToolRepetitionDetector {
 	 * 在时间窗口内，如果同一工具调用超过阈值次数，触发检测
 	 */
 	private detectDoomLoop(name: string, paramsHash: string): { detected: boolean; message: string } {
+		// read_file 已有专用重复读取治理（缓存 + guidance），避免双重拦截导致误伤。
+		if (name === 'read_file') {
+			return { detected: false, message: '' };
+		}
+
 		const now = Date.now();
 		const windowStart = now - this.TIME_WINDOW_MS;
 
@@ -235,7 +242,7 @@ export class ToolRepetitionDetector {
 	 * 检测同一文件被反复写入（apply_diff/edit/write_to_file 在同一文件上多次调用）
 	 * 这是 AI 陷入"改了又改"死循环的核心检测
 	 */
-	private detectSameFileWriteLoop(toolUse: ToolUse): { detected: boolean; message: string } {
+	private detectSameFileWriteLoop(toolUse: ToolUse, paramsHash: string): { detected: boolean; message: string } {
 		// 提取目标文件路径
 		const filePath = this.normalizePathValue((toolUse.params as any).path as string | undefined);
 		if (!filePath) {
@@ -246,7 +253,7 @@ export class ToolRepetitionDetector {
 		const windowStart = now - this.TIME_WINDOW_MS;
 
 		// 记录本次写入
-		this.fileWriteHistory.push({ file: filePath, tool: toolUse.name, timestamp: now });
+		this.fileWriteHistory.push({ file: filePath, tool: toolUse.name, signature: paramsHash, timestamp: now });
 		// 清理过期记录
 		this.fileWriteHistory = this.fileWriteHistory.filter(e => e.timestamp >= windowStart);
 
@@ -256,13 +263,26 @@ export class ToolRepetitionDetector {
 		);
 
 		const sameToolWrites = previousWrites.filter(e => e.tool === toolUse.name);
+		const sameSignatureWrites = previousWrites.filter(e => e.signature === paramsHash);
+		const totalWritesIncludingCurrent = previousWrites.length + 1;
+		const sameToolWritesIncludingCurrent = sameToolWrites.length + 1;
+		const sameSignatureWritesIncludingCurrent = sameSignatureWrites.length + 1;
+		const distinctSignatures = new Set(previousWrites.map(e => e.signature)).size + (previousWrites.some(e => e.signature === paramsHash) ? 0 : 1);
+		if (sameSignatureWritesIncludingCurrent >= 2) {
+			return {
+				detected: true,
+				message: `🔴 检测到对同一文件提交了重复写入参数！文件 "${filePath}" 已至少 2 次收到等价写入请求（同工具/同参数签名）。\n\n这通常是“未生效就重复提交同一补丁”或“写入内容完全一致”的无效重试。\n\n请立即切换策略：\n1. 先 read_file 确认当前文件是否已包含目标改动\n2. 若改动已存在，直接 attempt_completion\n3. 若未生效，重新定位并生成新的最小补丁，禁止继续提交等价参数`
+			};
+		}
+		const sameFileHighRisk =
+			(totalWritesIncludingCurrent >= this.FILE_WRITE_LOOP_THRESHOLD && sameToolWritesIncludingCurrent >= this.SAME_FILE_SAME_TOOL_THRESHOLD) ||
+			(totalWritesIncludingCurrent > this.FILE_WRITE_LOOP_THRESHOLD && distinctSignatures <= 2);
 		if (
-			previousWrites.length >= this.FILE_WRITE_LOOP_THRESHOLD &&
-			sameToolWrites.length >= this.SAME_FILE_SAME_TOOL_THRESHOLD
+			sameFileHighRisk
 		) {
 			return {
 				detected: true,
-				message: `🔴 检测到对同一文件的重复修改！文件 "${filePath}" 在短时间内已被写入 ${previousWrites.length} 次，其中同一种写入工具 "${toolUse.name}" 已重复 ${sameToolWrites.length} 次。\n\n这通常意味着你没有真正推进，只是在围绕同一个文件重试。\n\n请立即切换策略：\n1. 如果同一文件还要改多处，先完整读取当前版本，再合并成一次 multiedit\n2. 如果错误已经转移到其他文件，去查调用方、配置入口或引用方\n3. 如果当前修改实际上已经完成，直接总结并调用 attempt_completion`
+				message: `🔴 检测到对同一文件的重复修改！文件 "${filePath}" 在短时间内已被写入 ${totalWritesIncludingCurrent} 次，其中同一种写入工具 "${toolUse.name}" 已重复 ${sameToolWritesIncludingCurrent} 次。\n\n这通常意味着你没有真正推进，只是在围绕同一个文件重试。\n\n请立即切换策略：\n1. 如果同一文件还要改多处，先完整读取当前版本，再合并成一次 multiedit\n2. 如果错误已经转移到其他文件，去查调用方、配置入口或引用方\n3. 如果当前修改实际上已经完成，直接总结并调用 attempt_completion`
 			};
 		}
 
@@ -476,6 +496,9 @@ export class ToolRepetitionDetector {
 					path: this.normalizePathValue(toolUse.params.path),
 					regex: this.normalizeTextValue((toolUse.params as any).regex ?? ''),
 					file_pattern: this.normalizeTextValue((toolUse.params as any).file_pattern ?? ''),
+					output_mode: this.normalizeTextValue((toolUse.params as any).output_mode ?? ''),
+					head_limit: this.normalizeTextValue((toolUse.params as any).head_limit ?? ''),
+					offset: this.normalizeTextValue((toolUse.params as any).offset ?? ''),
 				};
 			case 'glob':
 				return {
@@ -512,7 +535,11 @@ export class ToolRepetitionDetector {
 		if (typeof value !== 'string' || value.length === 0) {
 			return '';
 		}
-		return path.normalize(value).replace(/\\/g, '/');
+		const rawPath = value.replace(/^file:\/\//, '');
+		const withWorkspaceRoot = rawPath.startsWith('/') || !this.workspaceRoot
+			? rawPath
+			: `${this.workspaceRoot.replace(/\/$/, '')}/${rawPath.replace(/^\.\//, '')}`;
+		return path.normalize(withWorkspaceRoot).replace(/\\/g, '/');
 	}
 
 	private normalizeTextValue(value: unknown): string {

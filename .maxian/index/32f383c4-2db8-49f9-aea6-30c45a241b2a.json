@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/colorPicker/browser/colorPickerParts/colorPickerHeader.js","code":"s() {\n        this.f.textContent = this.m.presentation ? this.m.presentation.label : '';\n    }","startLine":66,"endLine":68,"chunkType":"function","mtime":1772878382211.3662}

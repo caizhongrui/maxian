@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"if (!CONTAINS_RTL) {\n        CONTAINS_RTL = makeContainsRtl();\n    }","startLine":553,"endLine":555,"chunkType":"function","mtime":1772878378348.6172}

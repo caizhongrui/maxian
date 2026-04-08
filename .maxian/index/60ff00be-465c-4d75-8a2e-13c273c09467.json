@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/ipynb/src/ipynbMain.browser.ts","code":"export function deactivate() {\n\treturn main.deactivate();\n}","startLine":14,"endLine":16,"chunkType":"function","mtime":1762250468247.7185}

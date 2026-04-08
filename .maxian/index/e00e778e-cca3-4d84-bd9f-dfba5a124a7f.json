@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/services/abstractCodeEditorService.js","code":"constructor(styleSheet) {\n        this.a = styleSheet;\n    }","startLine":296,"endLine":298,"chunkType":"function","mtime":1772878379683.022}

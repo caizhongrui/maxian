@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/OpenCode架构分析与优化建议.md","code":"export function instructions() {\n    return PROMPT_CODEX.trim();\n  }","startLine":446,"endLine":448,"chunkType":"function","mtime":1772782077285.7097}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/tsconfig.ts","code":"if (projectType === ProjectType.TypeScript) {\n\t\tdelete baseConfig.allowImportingTsExtensions;\n\t}","startLine":79,"endLine":81,"chunkType":"function","mtime":1762250468337.3225}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/config/editorConfiguration.js","code":"H(bareFontInfo) {\n        return $N4.readFontInfo(getWindowById(this.u, true).window, bareFontInfo);\n    }","startLine":105,"endLine":107,"chunkType":"function","mtime":1772878379324.913}

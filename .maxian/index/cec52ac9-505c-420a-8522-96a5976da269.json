@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/extension.ts","code":"import('./languageFeatures/tsconfig').then(module => {\n\t\tcontext.subscriptions.push(module.register());\n\t});","startLine":81,"endLine":83,"chunkType":"function","mtime":1762250468325.8662}

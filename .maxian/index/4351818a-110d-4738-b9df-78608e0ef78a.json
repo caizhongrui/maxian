@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/stringBuilder.js","code":"build() {\n        if (this.c !== null) {\n            this.f();\n            return this.c.join('');\n        }\n        return this.e();\n    }","startLine":61,"endLine":67,"chunkType":"function","mtime":1772878380471.0583}

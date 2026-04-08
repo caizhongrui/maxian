@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/offsetRange.js","code":"slice(arr) {\n        return arr.slice(this.start, this.endExclusive);\n    }","startLine":119,"endLine":121,"chunkType":"function","mtime":1772878380412.249}

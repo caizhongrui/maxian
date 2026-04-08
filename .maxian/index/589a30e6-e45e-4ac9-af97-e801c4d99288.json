@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/inspectTokens/inspectTokens.js","code":"static get(editor) {\n        return editor.getContribution(InspectTokensController_1.ID);\n    }","startLine":29,"endLine":31,"chunkType":"function","mtime":1772878383778.6233}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/stickyScroll/browser/stickyScrollProvider.js","code":"getVersionId() {\n        return this.j?.version;\n    }","startLine":74,"endLine":76,"chunkType":"function","mtime":1772878383639.5986}

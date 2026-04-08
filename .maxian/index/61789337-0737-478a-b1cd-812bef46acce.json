@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/linkedList.js","code":"push(element) {\n        return this.d(element, true);\n    }","startLine":40,"endLine":42,"chunkType":"function","mtime":1772878378240.1345}

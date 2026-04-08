@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"for (let i = 0; i < array.length; i++) {\n        if (!!array[i]) {\n            array[to] = array[i];\n            to += 1;\n        }\n    }","startLine":312,"endLine":317,"chunkType":"function","mtime":1772878378138.325}

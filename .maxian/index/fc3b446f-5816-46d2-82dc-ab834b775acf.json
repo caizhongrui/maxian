@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/logging.js","code":"constructor() {\n        this.a = 0;\n        this.d = new WeakMap();\n    }","startLine":13,"endLine":16,"chunkType":"function","mtime":1772878378315.3738}

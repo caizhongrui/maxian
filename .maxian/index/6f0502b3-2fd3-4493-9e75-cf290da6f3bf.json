@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/php-language-features/src/features/phpGlobalFunctions.ts","code":"description: 'Get XML parser error string',\n\t\tsignature: '( int $code ): string'","startLine":5775,"endLine":5776,"chunkType":"block","mtime":1762250468292.3584}

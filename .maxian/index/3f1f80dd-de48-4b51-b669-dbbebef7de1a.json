@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/diffProviderFactoryService.js","code":"createDiffProvider(options) {\n        return this.a.createInstance($o0, options);\n    }","startLine":28,"endLine":30,"chunkType":"function","mtime":1772878380287.7637}

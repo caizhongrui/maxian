@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/yaml/syntaxes/yaml-1.0.tmLanguage.json","code":"\"begin\": \"(?=(?>\\\"(?>[^\\\\\\\\\\\"]++|\\\\\\\\.)*+\\\"|'(?>[^']++|'')*+')[\\t ]*+:)\",","startLine":959,"endLine":959,"chunkType":"block","mtime":1762250468390.2073}

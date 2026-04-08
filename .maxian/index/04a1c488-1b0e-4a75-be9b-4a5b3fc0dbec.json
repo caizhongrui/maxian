@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/auth.rs","code":"let (sender, receiver) = std::sync::mpsc::channel();\n\t\tlet tsender = sender.clone();","startLine":246,"endLine":247,"chunkType":"function","mtime":1762250468182.193}

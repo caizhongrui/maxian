@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/equals.js","code":"return (a, b) => JSON.stringify(a) === JSON.stringify(b);\n}","startLine":21,"endLine":22,"chunkType":"function","mtime":1772878378179.574}

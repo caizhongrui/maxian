@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"function getActualStartIndex(array, start) {\n    return start < 0 ? Math.max(start + array.length, 0) : Math.min(start, array.length);\n}","startLine":532,"endLine":534,"chunkType":"function","mtime":1772878378138.325}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view/viewOverlays.js","code":"_viewOverlaysRender(ctx) {\n        super._viewOverlaysRender(ctx);\n        this.b.setWidth(Math.max(ctx.scrollWidth, this.g));\n    }","startLine":167,"endLine":170,"chunkType":"function","mtime":1772878379802.077}

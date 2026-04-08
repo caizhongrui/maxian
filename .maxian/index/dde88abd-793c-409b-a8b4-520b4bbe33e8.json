@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/filters.js","code":"if (!hasStrongFirstMatch[0] && !options.firstMatchCanBeWeak) {\n        return undefined;\n    }","startLine":600,"endLine":602,"chunkType":"function","mtime":1772878378209.0073}

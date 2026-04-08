@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/position.js","code":"delta(deltaLineNumber = 0, deltaColumn = 0) {\n        return this.with(this.lineNumber + deltaLineNumber, this.column + deltaColumn);\n    }","startLine":33,"endLine":35,"chunkType":"function","mtime":1772878380412.571}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/emmet/src/bufferStream.ts","code":"return this.pos !== start;\n\t}\n}","startLine":139,"endLine":141,"chunkType":"block","mtime":1762250468205.5374}

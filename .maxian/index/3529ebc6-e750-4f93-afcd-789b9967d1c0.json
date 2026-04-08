@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/tagClosing.ts","code":"if (!editor || !vscode.languages.match(selector, editor.document)) {\n\t\t\t\treturn false;\n\t\t\t}","startLine":148,"endLine":150,"chunkType":"function","mtime":1762250468329.2156}

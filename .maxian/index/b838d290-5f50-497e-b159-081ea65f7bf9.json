@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/fixedArray.js","code":"function arrayFill(length, value) {\n    const arr = [];\n    for (let i = 0; i < length; i++) {\n        arr[i] = value;\n    }\n    return arr;\n}","startLine":61,"endLine":67,"chunkType":"function","mtime":1772878380722.991}

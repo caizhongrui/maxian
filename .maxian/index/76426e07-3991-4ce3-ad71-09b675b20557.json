@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/dropdown/dropdown.js","code":"if (this.w.actionProvider) {\n            return this.w.actionProvider.getActions();\n        }","startLine":128,"endLine":130,"chunkType":"function","mtime":1772878377945.1062}

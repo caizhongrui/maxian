@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/tokenizationTextModelPart.js","code":"G() {\n        return this.B(new $QI(this.D, this.z.languageIdCodec, this.t, () => this.w));\n    }","startLine":67,"endLine":69,"chunkType":"function","mtime":1772878380729.088}

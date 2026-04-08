@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-api-tests/src/singlefolder-tests/proxy.test.ts","code":"teardown(async function () {\n\t\tassertNoRpc();\n\t});","startLine":17,"endLine":19,"chunkType":"function","mtime":1762250468346.9954}

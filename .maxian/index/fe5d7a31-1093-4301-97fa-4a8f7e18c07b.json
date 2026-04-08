@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/combineTextEditInfos.js","code":"if (textEditInfoFirst.length === 0) {\n        return textEditInfoSecond;\n    }","startLine":9,"endLine":11,"chunkType":"function","mtime":1772878380614.63}

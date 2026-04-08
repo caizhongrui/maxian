@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModel.js","code":"getAllMarginDecorations(ownerId = 0) {\n        return this.$.getAll(this, ownerId, false, false, true);\n    }","startLine":1367,"endLine":1369,"chunkType":"function","mtime":1772878380728.0076}

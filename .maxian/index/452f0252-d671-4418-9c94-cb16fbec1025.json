@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-basics/syntaxes/TypeScript.tmLanguage.json","code":"},\n\t\t\t\t{\n\t\t\t\t\t\"name\": \"entity.name.type.ts\",\n\t\t\t\t\t\"match\": \"[_$[:alpha:]][_$[:alnum:]]*\"","startLine":4686,"endLine":4689,"chunkType":"block","mtime":1762250468321.7385}

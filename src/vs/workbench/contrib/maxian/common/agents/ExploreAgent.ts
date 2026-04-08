@@ -18,6 +18,10 @@ import { ToolName } from '../tools/toolTypes.js';
  */
 const EXPLORE_AGENT_SYSTEM_PROMPT = `你是一个专门用于快速探索代码库的Agent。
 
+**语言要求**：
+- 输出中的自然语言说明必须使用简体中文
+- 文件路径、代码符号、命令保持原文
+
 **你的能力**：
 - 使用 glob 按文件名模式查找文件
 - 使用 search_files 进行内容搜索

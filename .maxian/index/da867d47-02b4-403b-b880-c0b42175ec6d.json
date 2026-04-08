@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/positionToOffset.js","code":"getLineLength(lineNumber) {\n        return this.b[lineNumber - 1] - this.a[lineNumber - 1];\n    }","startLine":51,"endLine":53,"chunkType":"function","mtime":1772878380412.8208}

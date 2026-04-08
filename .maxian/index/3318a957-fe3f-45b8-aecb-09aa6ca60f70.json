@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/currentLineHighlight/currentLineHighlight.js","code":"onLinesInserted(e) {\n        return true;\n    }","startLine":78,"endLine":80,"chunkType":"function","mtime":1772878380158.3752}

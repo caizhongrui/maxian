@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/dompurify/dompurify.js","code":"if (!freeze) {\n  freeze = function freeze(x) {\n    return x;\n  };\n}","startLine":19,"endLine":23,"chunkType":"function","mtime":1762250468420}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/json.js","code":"setPreviousNode(name, offset, length, 'property');\n                segments[segments.length - 1] = name;","startLine":575,"endLine":576,"chunkType":"function","mtime":1772878378235.0315}

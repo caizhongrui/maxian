@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/api.ts","code":"getAPI(version) {\n\t\t\tif (version === 0) {\n\t\t\t\treturn new ApiV0(onCompletionAccepted, pluginManager);\n\t\t\t}\n\t\t\treturn undefined;\n\t\t}","startLine":29,"endLine":34,"chunkType":"function","mtime":1762250468324.0972}

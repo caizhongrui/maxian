@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/services/treeSitter/treeSitterParserService.js","code":"getOrInitLanguage(languageId) {\n        return this.g.getOrInitLanguage(languageId);\n    }","startLine":325,"endLine":327,"chunkType":"function","mtime":1772878379798.3943}

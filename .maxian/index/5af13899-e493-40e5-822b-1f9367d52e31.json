@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/uri.js","code":"function _schemeFix(scheme, _strict) {\n    if (!scheme && !_strict) {\n        return 'file';\n    }\n    return scheme;\n}","startLine":42,"endLine":47,"chunkType":"function","mtime":1772878378386.6084}

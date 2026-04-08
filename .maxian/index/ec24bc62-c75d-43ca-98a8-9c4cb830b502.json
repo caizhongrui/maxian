@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/indentation/common/indentation.js","code":"if (!indentationRulesSupport) {\n        return [];\n    }","startLine":17,"endLine":19,"chunkType":"function","mtime":1772878382944.9238}

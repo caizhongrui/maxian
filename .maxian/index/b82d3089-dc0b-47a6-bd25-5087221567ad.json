@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneServices.js","code":"if ($N_(key)) {\n            toUpdate.push([`editor.${key}`, source[key]]);\n        }","startLine":700,"endLine":702,"chunkType":"function","mtime":1772878383802.3767}

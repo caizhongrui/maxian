@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/ipynb/package.json","code":"\"command\": \"notebook.cellOutput.openInTextEditor\",\n        \"title\": \"%openCellOutput.title%\",","startLine":76,"endLine":77,"chunkType":"block","mtime":1762250468247.1453}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"for (i = 0; i < len; i++) {\n        if (a.charCodeAt(aLastIndex - i) !== b.charCodeAt(bLastIndex - i)) {\n            return i;\n        }\n    }","startLine":397,"endLine":401,"chunkType":"function","mtime":1772878378348.6172}

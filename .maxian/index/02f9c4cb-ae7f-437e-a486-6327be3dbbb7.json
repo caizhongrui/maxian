@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/contentHoverWidget.js","code":"goToTop() {\n        this.w.scrollbar.setScrollPosition({ scrollTop: 0 });\n    }","startLine":359,"endLine":361,"chunkType":"function","mtime":1772878382758.6707}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/find/browser/findModel.js","code":"dispose() {\n        this.j = true;\n        $Xc(this.g);\n        this.c.dispose();\n    }","startLine":102,"endLine":106,"chunkType":"function","mtime":1772878382472.7625}

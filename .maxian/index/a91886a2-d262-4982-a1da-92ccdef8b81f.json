@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/code/node/cli.js","code":"function eventuallyExit(code) {\n    setTimeout(() => process.exit(code), 0);\n}","startLine":503,"endLine":505,"chunkType":"function","mtime":1772878379287.51}

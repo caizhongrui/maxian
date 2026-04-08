@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/snippet/browser/snippetParser.js","code":"replace(child, others) {\n        this.f = undefined;\n        return super.replace(child, others);\n    }","startLine":517,"endLine":520,"chunkType":"function","mtime":1772878383633.8225}

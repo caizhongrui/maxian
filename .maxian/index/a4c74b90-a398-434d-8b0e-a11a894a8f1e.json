@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/links/browser/getLinks.js","code":"for (let i = 0; i < Math.min(resolveCount, list.links.length); i++) {\n        await list.links[i].resolve(CancellationToken.None);\n    }","startLine":143,"endLine":145,"chunkType":"function","mtime":1772878383569.025}

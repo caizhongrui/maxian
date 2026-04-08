@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/overlayWidgets/overlayWidgets.js","code":"prepareRender(ctx) {\n        this.g = dom.$uj(this.c.domNode);\n    }","startLine":160,"endLine":162,"chunkType":"function","mtime":1772878380213.2715}

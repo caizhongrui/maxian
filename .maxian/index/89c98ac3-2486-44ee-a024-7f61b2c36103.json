@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/stickyScroll/browser/stickyScrollController.js","code":"O(position) {\n        this.Q(position, () => this.G.revealPosition(position));\n    }","startLine":150,"endLine":152,"chunkType":"function","mtime":1772878383638.806}

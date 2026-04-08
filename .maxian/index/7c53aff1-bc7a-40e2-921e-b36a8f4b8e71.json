@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/services/openerService.js","code":"registerExternalOpener(opener) {\n        const remove = this.f.push(opener);\n        return { dispose: remove };\n    }","startLine":153,"endLine":156,"chunkType":"function","mtime":1772878379798.0947}

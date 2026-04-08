@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewModel/viewModelDecorations.js","code":"if (decoration.options.hideInStringTokens && $c9(model, decoration)) {\n        return false;\n    }","startLine":128,"endLine":130,"chunkType":"function","mtime":1772878381819.953}

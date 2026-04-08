@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/logging.js","code":"function formatKind(kind) {\n    return styled(padStr(`${kind}: `, 10), { color: 'black', bold: true });\n}","startLine":158,"endLine":160,"chunkType":"function","mtime":1772878378315.3738}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/diffEditorOptions.js","code":"function isInsertion(mapping) {\n    return mapping.original.length === 0;\n}","startLine":105,"endLine":107,"chunkType":"function","mtime":1772878380261.539}

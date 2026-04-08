@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/languages/supports/richEditBrackets.js","code":"function lengthcmp(a, b) {\n    return a.length - b.length;\n}","startLine":163,"endLine":165,"chunkType":"function","mtime":1772878380587.3462}

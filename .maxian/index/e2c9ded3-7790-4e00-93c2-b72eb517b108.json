@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/code_server.rs","code":"Ok(SocketCodeServer {\n\t\t\tcommit_id: self.server_params.release.commit.to_owned(),\n\t\t\tsocket,\n\t\t\torigin: Arc::new(origin),\n\t\t})","startLine":587,"endLine":591,"chunkType":"function","mtime":1762250468184.2969}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/stickyScroll/browser/stickyScrollWidget.js","code":"getRenderedStickyLine(lineNumber) {\n        return this.m.find(stickyLine => stickyLine.lineNumber === lineNumber);\n    }","startLine":102,"endLine":104,"chunkType":"function","mtime":1772878383639.868}

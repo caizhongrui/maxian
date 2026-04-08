@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/socket_signal.rs","code":"let (tx, _) = mpsc::channel(1);\n\t\tlet mut sink = ServerMessageSink::new_compressed(","startLine":333,"endLine":334,"chunkType":"function","mtime":1762250468186.2886}

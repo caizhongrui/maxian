@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/tree/asyncDataTree.js","code":"getCompressedTreeNode(e) {\n        const node = this.D(e);\n        return this.b.getCompressedTreeNode(node).element;\n    }","startLine":1251,"endLine":1254,"chunkType":"function","mtime":1772878378114.5195}

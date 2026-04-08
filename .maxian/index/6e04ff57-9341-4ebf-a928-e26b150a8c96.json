@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/find/browser/findWidget.js","code":"if (findMatchForeground) {\n        collector.addRule(`.monaco-editor .findMatchInline { color: ${findMatchForeground}; }`);\n    }","startLine":1151,"endLine":1153,"chunkType":"function","mtime":1772878382584.371}

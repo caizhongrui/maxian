@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"static getLocales() {\n        return $wg.e.value;\n    }","startLine":1026,"endLine":1028,"chunkType":"function","mtime":1772878378348.6172}

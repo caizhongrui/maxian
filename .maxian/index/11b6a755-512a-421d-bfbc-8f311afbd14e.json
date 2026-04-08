@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/length.js","code":"if (l2 >= factor) {\n        r = r - (l1 % factor);\n    }","startLine":54,"endLine":56,"chunkType":"function","mtime":1772878380616.6}

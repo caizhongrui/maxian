@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/find/browser/findWidget.js","code":"Bb(e) {\n        // on linux, middle key does pasting.\n        if (e.middleButton) {\n            e.stopPropagation();\n        }\n    }","startLine":648,"endLine":653,"chunkType":"function","mtime":1772878382584.371}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/objects.js","code":"for (const [key, value] of Object.entries(obj)) {\n        if (predicate(key, value)) {\n            result[key] = value;\n        }\n    }","startLine":204,"endLine":208,"chunkType":"function","mtime":1772878378281.759}

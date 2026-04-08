@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"if (offset > 0 && $5f(str.charCodeAt(offset))) {\n        offset--;\n    }","startLine":528,"endLine":530,"chunkType":"function","mtime":1772878378348.6172}

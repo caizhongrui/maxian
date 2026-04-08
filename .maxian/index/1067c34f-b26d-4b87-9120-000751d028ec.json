@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/editorCommon.js","code":"export function isThemeColor(o) {\n    return o && typeof o.id === 'string';\n}","startLine":13,"endLine":15,"chunkType":"function","mtime":1772878380558.529}

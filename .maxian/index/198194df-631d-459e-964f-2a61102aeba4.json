@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestModel.js","code":"if (!this.d) {\n            return 0 /* State.Idle */;\n        }","startLine":237,"endLine":239,"chunkType":"function","mtime":1772878383697.3127}

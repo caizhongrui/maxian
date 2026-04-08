@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/quickAccess/standaloneCommandsQuickAccess.js","code":"run(accessor) {\n        accessor.get($9M).quickAccess.show($xvc.PREFIX);\n    }","startLine":71,"endLine":73,"chunkType":"function","mtime":1772878383779.2214}

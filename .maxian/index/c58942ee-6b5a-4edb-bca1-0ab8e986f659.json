@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModel.js","code":"_overwriteAlternativeVersionId(newAlternativeVersionId) {\n        this.L = newAlternativeVersionId;\n    }","startLine":551,"endLine":553,"chunkType":"function","mtime":1772878380728.0076}

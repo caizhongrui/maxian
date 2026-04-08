@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/gpu/rectangleRenderer.js","code":"onScrollChanged(e) {\n        this.z = true;\n        return super.onScrollChanged(e);\n    }","startLine":182,"endLine":185,"chunkType":"function","mtime":1772878379680.2039}

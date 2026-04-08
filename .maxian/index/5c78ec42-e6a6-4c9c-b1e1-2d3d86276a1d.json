@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/dnd/browser/dnd.js","code":"static get(editor) {\n        return editor.getContribution($ffb.ID);\n    }","startLine":25,"endLine":27,"chunkType":"function","mtime":1772878382319.1167}

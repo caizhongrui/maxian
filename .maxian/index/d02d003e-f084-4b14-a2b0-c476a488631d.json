@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/colorPicker/browser/colorPickerContribution.js","code":"if (!(resource instanceof URI)) {\n        throw $nb();\n    }","startLine":31,"endLine":33,"chunkType":"function","mtime":1772878382209.6565}

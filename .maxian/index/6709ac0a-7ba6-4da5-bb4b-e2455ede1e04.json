@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arraysFind.js","code":"for (const value of items) {\n        const mapped = mapFn(value);\n        if (mapped !== undefined) {\n            return mapped;\n        }\n    }","startLine":172,"endLine":177,"chunkType":"function","mtime":1772878378138.686}

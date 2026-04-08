@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/history.js","code":"d() {\n        this.f();\n        const elements = this.j;\n        this.c = new $p2(elements, 0, elements.length, elements.length);\n    }","startLine":56,"endLine":60,"chunkType":"function","mtime":1772878378213.08}

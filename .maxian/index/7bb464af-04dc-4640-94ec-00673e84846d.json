@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneCodeEditor.js","code":"getModifiedEditor() {\n        return super.getModifiedEditor();\n    }","startLine":284,"endLine":286,"chunkType":"function","mtime":1772878383799.6343}

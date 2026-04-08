@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/pieceTreeTextBuffer/rbTreeBase.js","code":"if (x === tree.root) {\n        // well, it means we add a node to the end (inorder)\n        return;\n    }","startLine":347,"endLine":350,"chunkType":"function","mtime":1772878380727.34}

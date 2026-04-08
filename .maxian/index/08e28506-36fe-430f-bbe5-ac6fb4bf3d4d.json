@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/debug-server-ready/src/extension.ts","code":"class Trigger {\n\tprivate _fired = false;\n\n\tpublic get hasFired() {\n\t\treturn this._fired;\n\t}\n\n\tpublic fire() {\n\t\tthis._fired = true;\n\t}\n}","startLine":40,"endLine":50,"chunkType":"class","mtime":1762250468203.2532}

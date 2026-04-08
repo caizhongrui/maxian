@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/indentation/browser/indentation.js","code":"dispose() {\n        this.a.dispose();\n        this.b.dispose();\n    }","startLine":518,"endLine":521,"chunkType":"function","mtime":1772878382944.546}

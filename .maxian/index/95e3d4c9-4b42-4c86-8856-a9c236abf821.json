@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/indentGuides/indentGuides.js","code":"onDecorationsChanged(e) {\n        // true for inline decorations\n        return true;\n    }","startLine":56,"endLine":59,"chunkType":"function","mtime":1772878380159.7664}

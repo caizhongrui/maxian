@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/color.js","code":"isLighterThan(another) {\n        const lum1 = this.getRelativeLuminance();\n        const lum2 = another.getRelativeLuminance();\n        return lum1 > lum2;\n    }","startLine":308,"endLine":312,"chunkType":"function","mtime":1772878378169.5872}

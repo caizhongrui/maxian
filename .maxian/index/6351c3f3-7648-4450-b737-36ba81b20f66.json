@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneServices.js","code":"if (!(configurationService instanceof $Itc)) {\n        return;\n    }","startLine":695,"endLine":697,"chunkType":"function","mtime":1772878383802.3767}

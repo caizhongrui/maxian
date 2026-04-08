@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"function fromObservable(obs, store) {\n        const observer = new EmitterObserver(obs, store);\n        return observer.emitter.event;\n    }","startLine":584,"endLine":587,"chunkType":"function","mtime":1772878378208.3105}

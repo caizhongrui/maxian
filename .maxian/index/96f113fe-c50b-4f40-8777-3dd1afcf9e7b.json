@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/jake/src/main.ts","code":"function getOutputChannel(): vscode.OutputChannel {\n\tif (!_channel) {\n\t\t_channel = vscode.window.createOutputChannel('Jake Auto Detection');\n\t}\n\treturn _channel;\n}","startLine":53,"endLine":58,"chunkType":"function","mtime":1762250468250.0254}

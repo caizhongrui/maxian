@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/keyboardEvent.js","code":"if (e.shiftKey) {\n        modifiers.push(`shift`);\n    }","startLine":61,"endLine":63,"chunkType":"function","mtime":1772878377883.7583}

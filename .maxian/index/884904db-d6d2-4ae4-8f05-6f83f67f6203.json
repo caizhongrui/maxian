@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/codeEditor/codeEditorWidget.js","code":"applyFontInfo(target) {\n        $J4(target, this.qb.options.get(52 /* EditorOption.fontInfo */));\n    }","startLine":1227,"endLine":1229,"chunkType":"function","mtime":1772878380256.3677}

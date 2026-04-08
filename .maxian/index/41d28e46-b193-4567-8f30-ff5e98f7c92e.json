@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/diffEditorViewModel.js","code":"shouldHideControls(reader) {\n        return this.h.read(reader);\n    }","startLine":436,"endLine":438,"chunkType":"function","mtime":1772878380261.8843}

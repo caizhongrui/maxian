@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/emmet/src/incrementDecrement.ts","code":"function isValidNumber(str: string): boolean {\n\treturn str ? !isNaN(parseFloat(str)) : false;\n}","startLine":112,"endLine":114,"chunkType":"function","mtime":1762250468206.0344}

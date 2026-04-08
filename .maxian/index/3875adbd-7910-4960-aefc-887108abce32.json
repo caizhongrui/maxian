@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/snippet/browser/snippetParser.js","code":"clone() {\n        const ret = new $t_();\n        this.d = this.children.map(child => child.clone());\n        return ret;\n    }","startLine":524,"endLine":528,"chunkType":"function","mtime":1772878383633.8225}

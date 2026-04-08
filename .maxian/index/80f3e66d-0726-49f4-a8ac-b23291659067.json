@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/github/src/auth.ts","code":"export class AuthenticationError extends Error { }","startLine":13,"endLine":14,"chunkType":"class","mtime":1762250468227.8745}

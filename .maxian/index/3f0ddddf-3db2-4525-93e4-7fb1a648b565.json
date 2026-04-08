@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/tfIdf.test.js","code":"function makeDocument(key, content) {\n    return {\n        key,\n        textChunks: Array.isArray(content) ? content : [content],\n    };\n}","startLine":167,"endLine":172,"chunkType":"function","mtime":1772878379172.9316}

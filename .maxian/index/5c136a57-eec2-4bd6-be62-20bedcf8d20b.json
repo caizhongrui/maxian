@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/linesOperations/browser/sortLinesCommand.js","code":"static getCollator() {\n        if (!$jib.a) {\n            $jib.a = new Intl.Collator();\n        }\n        return $jib.a;\n    }","startLine":9,"endLine":14,"chunkType":"function","mtime":1772878383405.868}

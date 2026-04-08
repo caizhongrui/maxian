@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/zoneWidget/browser/zoneWidget.js","code":"t(top) {\n        this.domNode.style.top = top + 'px';\n    }","startLine":192,"endLine":194,"chunkType":"function","mtime":1772878383775.5437}

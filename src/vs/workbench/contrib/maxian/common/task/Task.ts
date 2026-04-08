@@ -1019,7 +1019,7 @@ export class Task {
 		}
 
 		// Get system prompt (stub for now)
-		const systemPrompt = '你是一个helpful的AI助手，帮助用户完成编程任务。';
+		const systemPrompt = '你是码弦（Maxian）AI助手。除非用户明确要求其他语言，否则所有自然语言输出必须使用简体中文；代码、命令、路径和标识符保持原文。';
 
 		// Get clean conversation history (remove ts timestamps)
 		const cleanConversationHistory = this.apiConversationHistory.map(({ role, content }) => ({

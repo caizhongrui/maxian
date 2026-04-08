@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/buffer.js","code":"if (bufferedStream.ended) {\n        return $Bi.concat(bufferedStream.buffer);\n    }","startLine":249,"endLine":251,"chunkType":"function","mtime":1772878378139.7178}

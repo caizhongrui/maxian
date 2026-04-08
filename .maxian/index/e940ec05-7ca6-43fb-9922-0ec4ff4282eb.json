@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/tree/asyncDataTree.js","code":"setFocus(elements, browserEvent) {\n        const nodes = elements.map(e => this.D(e));\n        this.b.setFocus(nodes, browserEvent);\n    }","startLine":843,"endLine":846,"chunkType":"function","mtime":1772878378114.5195}

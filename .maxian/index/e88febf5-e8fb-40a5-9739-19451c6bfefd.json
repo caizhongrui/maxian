@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/logging.ts","code":"verbose(title: string, message: string, data?: any): void;\n}","startLine":29,"endLine":30,"chunkType":"function","mtime":1762250468269.8}

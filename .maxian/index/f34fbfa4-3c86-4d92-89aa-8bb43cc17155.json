@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/components/accessibleDiffViewer.js","code":"close() {\n        transaction(tx => {\n            this.j(false, tx);\n        });\n    }","startLine":83,"endLine":87,"chunkType":"function","mtime":1772878380257.2366}

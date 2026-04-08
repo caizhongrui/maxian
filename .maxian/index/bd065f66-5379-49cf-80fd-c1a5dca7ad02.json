@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/languageFeatures/copyFiles/smartDropOrPaste.ts","code":"if (selectedRange.start.line !== selectedRange.end.line) {\n\t\treturn false;\n\t}","startLine":69,"endLine":71,"chunkType":"function","mtime":1762250468269.3708}

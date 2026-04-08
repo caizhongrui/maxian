@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"takeCount(count) {\n        const result = this.g.slice(this.c, this.c + count);\n        this.c += count;\n        return result;\n    }","startLine":644,"endLine":648,"chunkType":"function","mtime":1772878378138.325}

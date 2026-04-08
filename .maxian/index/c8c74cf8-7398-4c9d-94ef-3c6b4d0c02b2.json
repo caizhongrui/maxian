@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/nls.js","code":"if (process.env['VSCODE_DEV'] ||\n        userLocale === 'pseudo' ||","startLine":10,"endLine":11,"chunkType":"function","mtime":1772878378391.1921}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/contentHoverWidgetWrapper.js","code":"pageDown() {\n        this.g.pageDown();\n    }","startLine":315,"endLine":317,"chunkType":"function","mtime":1772878382758.941}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"if (this.f) {\n            this.h.dispose();\n            this.h = event(this.j.fire, this.j);\n        }","startLine":1363,"endLine":1366,"chunkType":"function","mtime":1772878378208.3105}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/json-language-features/client/src/languageStatus.ts","code":"return Disposable.from(statusItem, activeEditorListener, showSchemasCommand);\n}","startLine":216,"endLine":217,"chunkType":"block","mtime":1762250468252.7239}

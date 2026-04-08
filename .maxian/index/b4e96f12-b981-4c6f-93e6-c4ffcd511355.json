@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/editorDom.js","code":"onMouseUp(target, callback) {\n        return dom.$$i(target, 'mouseup', (e) => {\n            callback(this.b(e));\n        });\n    }","startLine":109,"endLine":113,"chunkType":"function","mtime":1772878379373.9368}

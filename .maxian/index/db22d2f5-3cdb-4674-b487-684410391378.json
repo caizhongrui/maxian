@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/code/electron-sandbox/processExplorer/processExplorerMain.js","code":"function isProcessInformation(item) {\n    return !!item.processRoots;\n}","startLine":170,"endLine":172,"chunkType":"function","mtime":1772878379282.768}

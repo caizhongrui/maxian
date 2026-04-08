@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"for (const item of items) {\n        arr.push(item);\n    }","startLine":473,"endLine":475,"chunkType":"function","mtime":1772878378138.325}

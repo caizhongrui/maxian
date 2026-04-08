@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/dropOrPasteInto/browser/copyPasteController.js","code":"static get(editor) {\n        return editor.getContribution($I_1.ID);\n    }","startLine":50,"endLine":52,"chunkType":"function","mtime":1772878382466.9634}

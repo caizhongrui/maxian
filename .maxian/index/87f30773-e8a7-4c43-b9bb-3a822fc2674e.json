@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/extension.ts","code":"export function activate(\n\tcontext: vscode.ExtensionContext","startLine":27,"endLine":28,"chunkType":"function","mtime":1762250468325.8662}

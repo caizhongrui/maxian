@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/simple-browser/preview-src/index.ts","code":"function toggleFocusLockIndicatorEnabled(enabled: boolean) {\n\tdocument.body.classList.toggle('enable-focus-lock-indicator', enabled);\n}","startLine":109,"endLine":111,"chunkType":"function","mtime":1762250468307.2993}

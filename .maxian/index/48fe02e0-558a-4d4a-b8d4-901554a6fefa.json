@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"if (typeof to === 'number') {\n        from = arg;\n    }","startLine":370,"endLine":372,"chunkType":"function","mtime":1772878378138.325}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/rename/browser/rename.js","code":"static get(editor) {\n        return editor.getContribution(RenameController_1.ID);\n    }","startLine":122,"endLine":124,"chunkType":"function","mtime":1772878383596.4146}

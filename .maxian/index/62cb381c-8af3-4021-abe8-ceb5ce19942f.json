@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/base.js","code":"constructor(_fn, b) {\n        this._fn = _fn;\n        this.b = b;\n        this.a = [];\n        $Yd()?.handleBeginTransaction(this);\n    }","startLine":163,"endLine":168,"chunkType":"function","mtime":1772878378283.0334}

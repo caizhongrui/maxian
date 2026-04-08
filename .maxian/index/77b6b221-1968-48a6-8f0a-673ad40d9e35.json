@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/offsetRange.js","code":"deltaStart(offset) {\n        return new $hD(this.start + offset, this.endExclusive);\n    }","startLine":56,"endLine":58,"chunkType":"function","mtime":1772878380412.249}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/coreCommands.js","code":"registerOverwritableCommand(\"paste\" /* Handler.Paste */);\nregisterOverwritableCommand(\"cut\" /* Handler.Cut */);","startLine":1762,"endLine":1763,"chunkType":"function","mtime":1772878379373.0635}

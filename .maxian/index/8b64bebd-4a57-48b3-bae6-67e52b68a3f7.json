@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-test-resolver/src/extension.ts","code":"function getConfiguration<T>(id: string): T | undefined {\n\treturn vscode.workspace.getConfiguration('testresolver').get<T>(id);\n}","startLine":497,"endLine":499,"chunkType":"function","mtime":1762250468388.745}

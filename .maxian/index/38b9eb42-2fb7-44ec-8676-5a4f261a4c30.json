@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/machine.rs","code":"Ok(PathBuf::from(\"/not-in-snap\")),\n\t\t\tSome(\"/snap/my-snap/1234\".into()),","startLine":139,"endLine":140,"chunkType":"function","mtime":1762250468187.2952}

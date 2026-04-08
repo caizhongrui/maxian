@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/editContext/native/screenReaderSupport.js","code":"prepareRender(ctx) {\n        this.writeScreenReaderContent();\n    }","startLine":67,"endLine":69,"chunkType":"function","mtime":1772878379332.6543}

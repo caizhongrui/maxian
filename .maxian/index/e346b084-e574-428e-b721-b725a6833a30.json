@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/machine.rs","code":"for (pid, process) in sys.processes() {\n\t\tfor cmd in process.cmd() {\n\t\t\tif cmd.contains(&name_str) {\n\t\t\t\treturn Some(pid.as_u32());\n\t\t\t}\n\t\t}\n\t}","startLine":62,"endLine":68,"chunkType":"function","mtime":1762250468187.2952}

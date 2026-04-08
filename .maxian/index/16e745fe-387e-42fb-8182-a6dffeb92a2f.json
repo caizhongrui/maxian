@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/contentHoverWidgetWrapper.js","code":"getAccessibleWidgetContent() {\n        return this.f?.getAccessibleWidgetContent();\n    }","startLine":282,"endLine":284,"chunkType":"function","mtime":1772878382758.941}

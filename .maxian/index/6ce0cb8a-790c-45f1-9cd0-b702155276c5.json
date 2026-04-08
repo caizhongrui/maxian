@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/github-authentication/src/flows.ts","code":"WebWorker,\n\tRemote,\n\tLocal\n}\n\nexport interface IFlowQuery {\n\ttarget: GitHubTarget;\n\textensionHost: ExtensionHost;","startLine":51,"endLine":58,"chunkType":"block","mtime":1762250468226.017}

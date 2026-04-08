@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/server/src/modes/languageModes.ts","code":"onDocumentRemoved(document: TextDocument): void;\n\tdispose(): void;","startLine":102,"endLine":103,"chunkType":"function","mtime":1762250468240.9165}

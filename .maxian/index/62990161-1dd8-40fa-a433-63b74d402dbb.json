@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/simple-browser/src/dispose.ts","code":"export function disposeAll(disposables: vscode.Disposable[]) {\n\twhile (disposables.length) {\n\t\tconst item = disposables.pop();\n\t\titem?.dispose();\n\t}\n}","startLine":8,"endLine":13,"chunkType":"function","mtime":1762250468307.4485}

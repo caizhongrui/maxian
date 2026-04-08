@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/pfs.js","code":"export function readdirSync(path) {\n    return handleDirectoryChildren(fs.readdirSync(path));\n}","startLine":114,"endLine":116,"chunkType":"function","mtime":1772878378444.7122}

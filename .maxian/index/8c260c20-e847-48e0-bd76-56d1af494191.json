@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/dom.js","code":"function isCSSStyleRule(rule) {\n    return typeof rule.selectorText === 'string';\n}","startLine":897,"endLine":899,"chunkType":"function","mtime":1772878377510.8274}

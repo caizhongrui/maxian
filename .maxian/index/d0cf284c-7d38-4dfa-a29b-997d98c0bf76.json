@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/parameterHints/browser/parameterHintsWidget.js","code":"getDomNode() {\n        if (!this.h) {\n            this.t();\n        }\n        return this.h.element;\n    }","startLine":291,"endLine":296,"chunkType":"function","mtime":1772878383575.1748}

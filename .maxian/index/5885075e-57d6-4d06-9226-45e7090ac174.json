@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/node/ipc.net.js","code":"c($ou.fromSocket(new $ru(socket, `ipc-client${clientId}`), clientId));\n        });","startLine":742,"endLine":743,"chunkType":"function","mtime":1772878378494.8823}

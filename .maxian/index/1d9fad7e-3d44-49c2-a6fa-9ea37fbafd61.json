@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneLanguages.js","code":"function isThenable(obj) {\n    return obj && typeof obj.then === 'function';\n}","startLine":217,"endLine":219,"chunkType":"function","mtime":1772878383800.519}

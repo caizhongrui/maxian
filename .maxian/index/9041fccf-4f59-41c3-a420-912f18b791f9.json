@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/editContext/textArea/textAreaEditContextInput.js","code":"isFocused() {\n        return this.z;\n    }","startLine":401,"endLine":403,"chunkType":"function","mtime":1772878379334.2788}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/viewZones/viewZones.js","code":"onScrollChanged(e) {\n        return e.scrollTopChanged || e.scrollWidthChanged;\n    }","startLine":81,"endLine":83,"chunkType":"function","mtime":1772878380254.788}

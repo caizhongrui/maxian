@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/worker/workerMain.js","code":"function loadCode(moduleId) {\n        const moduleUrl = new URL(`${moduleId}.js`, globalThis._VSCODE_FILE_ROOT);\n        return import(moduleUrl.href);\n    }","startLine":7,"endLine":10,"chunkType":"function","mtime":1772878379209.7517}

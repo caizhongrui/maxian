@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/tsconfig.ts","code":"export async function openProjectConfigOrPromptToCreate(\n\tprojectType: ProjectType,","startLine":116,"endLine":117,"chunkType":"function","mtime":1762250468337.3225}

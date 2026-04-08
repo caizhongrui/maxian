@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/observable.test.js","code":"get() {\n        this.h.log(`${this.debugName}.get`);\n        return this.g;\n    }","startLine":1280,"endLine":1283,"chunkType":"function","mtime":1772878379002.9128}

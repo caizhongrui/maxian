@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/contentHoverWidgetWrapper.js","code":"goToTop() {\n        this.g.goToTop();\n    }","startLine":318,"endLine":320,"chunkType":"function","mtime":1772878382758.941}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModel.js","code":"if (!done) {\n                    done = true;\n                    resolve(builder.finish());\n                }","startLine":66,"endLine":69,"chunkType":"function","mtime":1772878380728.0076}

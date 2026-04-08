@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/typescriptService.ts","code":"export class Cancelled {\n\t\tpublic readonly type = 'cancelled';\n\n\t\tconstructor(\n\t\t\tpublic readonly reason: string\n\t\t) { }\n\t}","startLine":23,"endLine":29,"chunkType":"class","mtime":1762250468337.7876}

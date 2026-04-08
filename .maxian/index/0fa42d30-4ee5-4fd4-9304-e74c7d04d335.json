@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/rpc.rs","code":"let (writer, mut reader) = tokio::io::duplex(1024);\n\t\tstreams.insert(1, tokio::io::split(writer).1);","startLine":733,"endLine":734,"chunkType":"function","mtime":1762250468183.7632}

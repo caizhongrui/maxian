@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/json.js","code":"function toNoArgVisit(visitFunction) {\n        return visitFunction ? () => visitFunction(_scanner.getTokenOffset(), _scanner.getTokenLength()) : () => true;\n    }","startLine":873,"endLine":875,"chunkType":"function","mtime":1772878378235.0315}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/control_server.rs","code":"prune_stopped_servers(paths).map(|v| {\n\t\tv.iter()\n\t\t\t.map(|p| p.server_dir.display().to_string())\n\t\t\t.collect()\n\t})","startLine":877,"endLine":881,"chunkType":"function","mtime":1762250468184.4028}

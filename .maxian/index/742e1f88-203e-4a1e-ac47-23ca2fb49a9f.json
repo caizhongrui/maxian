@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/cursor/cursorCollection.js","code":"dispose() {\n        for (const cursor of this.b) {\n            cursor.dispose(this.a);\n        }\n    }","startLine":18,"endLine":22,"chunkType":"function","mtime":1772878380475.5085}

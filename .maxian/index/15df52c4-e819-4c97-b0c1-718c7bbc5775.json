@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/rename/browser/renameWidget.js","code":"acceptInput(wantsPreview) {\n        this.Q(`invoking acceptInput`);\n        this.H?.(wantsPreview);\n    }","startLine":201,"endLine":204,"chunkType":"function","mtime":1772878383596.9014}

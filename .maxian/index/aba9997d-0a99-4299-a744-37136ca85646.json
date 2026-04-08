@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/color.js","code":"function _toTwoDigitHex(n) {\n                const r = n.toString(16);\n                return r.length !== 2 ? '0' + r : r;\n            }","startLine":471,"endLine":474,"chunkType":"function","mtime":1772878378169.5872}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/list/listWidget.js","code":"domFocus() {\n        this.o.domNode.focus({ preventScroll: true });\n    }","startLine":1273,"endLine":1275,"chunkType":"function","mtime":1772878378009.8872}

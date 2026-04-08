@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/zipper.rs","code":"wrap(e, format!(\"could not create symlink {}\", outpath.display()))\n\t\t\t\t})?;","startLine":109,"endLine":110,"chunkType":"function","mtime":1762250468187.767}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/colorPicker/browser/colorPickerParts/colorPickerStrip.js","code":"C(color) {\n        return color.hsva.a;\n    }","startLine":83,"endLine":85,"chunkType":"function","mtime":1772878382213.8716}

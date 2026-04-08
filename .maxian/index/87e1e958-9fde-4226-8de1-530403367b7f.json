@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggest.js","code":"if (token.isCancellationRequested) {\n        disposables.dispose();\n        return Promise.reject(new $lb());\n    }","startLine":239,"endLine":242,"chunkType":"function","mtime":1772878383692.0027}

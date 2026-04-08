@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/util/file.ts","code":"export function isMarkdownFile(document: vscode.TextDocument) {\n\treturn document.languageId === 'markdown';\n}","startLine":22,"endLine":24,"chunkType":"function","mtime":1762250468272.3816}

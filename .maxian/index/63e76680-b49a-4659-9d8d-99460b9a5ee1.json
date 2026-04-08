@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/editStack.js","code":"constructor(model, undoRedoService) {\n        this.c = model;\n        this.d = undoRedoService;\n    }","startLine":315,"endLine":318,"chunkType":"function","mtime":1772878380722.5027}

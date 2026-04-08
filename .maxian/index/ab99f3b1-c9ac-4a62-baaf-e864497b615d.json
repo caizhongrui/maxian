@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/linkedText.js","code":"if (index < text.length) {\n        result.push(text.substring(index));\n    }","startLine":41,"endLine":43,"chunkType":"function","mtime":1772878378240.3694}

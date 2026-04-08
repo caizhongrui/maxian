@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/assertHeap.js","code":"if (currentTest.timeout() < snapshotMinTime) {\n        currentTest.timeout(snapshotMinTime);\n    }","startLine":57,"endLine":59,"chunkType":"function","mtime":1772878378596.8193}

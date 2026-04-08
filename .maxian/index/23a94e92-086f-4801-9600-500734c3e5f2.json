@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/server-main.js","code":"if (shouldSpawnCli) {\n    loadCode(nlsConfiguration).then((mod) => {\n        mod.$dZ();\n    });\n}","startLine":39,"endLine":43,"chunkType":"function","mtime":1772878377505.168}

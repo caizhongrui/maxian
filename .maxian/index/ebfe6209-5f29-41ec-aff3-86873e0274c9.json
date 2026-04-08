@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoError/browser/gotoErrorWidget.js","code":"C(widthInPixel) {\n        this.d.layout(this.Y, widthInPixel);\n    }","startLine":315,"endLine":317,"chunkType":"function","mtime":1772878382622.2388}

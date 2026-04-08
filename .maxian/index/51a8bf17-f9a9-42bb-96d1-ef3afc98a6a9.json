@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestWidget.js","code":"N(e) {\n        if (e.elements.length) {\n            this.O(e.elements[0], e.indexes[0]);\n        }\n    }","startLine":274,"endLine":278,"chunkType":"function","mtime":1772878383697.8738}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/codeLens/baseCodeLensProvider.ts","code":"private walkNavTree(\n\t\tdocument: vscode.TextDocument,","startLine":69,"endLine":70,"chunkType":"function","mtime":1762250468326.372}

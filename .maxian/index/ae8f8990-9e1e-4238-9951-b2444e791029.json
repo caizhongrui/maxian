@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/cursor/cursor.js","code":"getPosition() {\n        return this.n.getPrimaryCursor().modelState.position;\n    }","startLine":244,"endLine":246,"chunkType":"function","mtime":1772878380473.827}

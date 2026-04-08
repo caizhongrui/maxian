@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/microsoft-authentication/src/node/authServer.ts","code":"waitForOAuthResponse(): Promise<IOAuthResult>;\n}","startLine":63,"endLine":64,"chunkType":"function","mtime":1762250468284.4001}

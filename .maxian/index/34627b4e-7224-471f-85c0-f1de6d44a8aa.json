@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/components/accessibleDiffViewer.js","code":"break;\n        }\n        row.setAttribute('aria-label', ariaLabel);\n        return row;\n    }","startLine":520,"endLine":524,"chunkType":"block","mtime":1772878380257.2366}

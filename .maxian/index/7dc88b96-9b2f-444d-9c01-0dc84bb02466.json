@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/commands/serve_web.rs","code":"let (counter_tx, mut counter_rx) = tokio::sync::watch::channel(0);\n\t\tlet mut opener = Some((args.opener, socket_path, Arc::new(counter_tx)));","startLine":813,"endLine":814,"chunkType":"function","mtime":1762250468182.808}

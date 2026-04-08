@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/server/src/browser/htmlServerWorkerMain.ts","code":"self.onmessage = messageHandler;","startLine":35,"endLine":36,"chunkType":"block","mtime":1762250468239.7412}

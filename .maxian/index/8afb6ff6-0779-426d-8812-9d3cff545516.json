@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/labels.js","code":"if (curVal && !inVariable) {\n        segments.push({ value: curVal, type: Type.TEXT });\n    }","startLine":284,"endLine":286,"chunkType":"function","mtime":1772878378239.4617}

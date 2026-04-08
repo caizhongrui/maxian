@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/find/browser/findWidget.js","code":"focusFindInput() {\n        this.J.select();\n        // Edge browser requires focus() in addition to select()\n        this.J.focus();\n    }","startLine":612,"endLine":616,"chunkType":"function","mtime":1772878382584.371}

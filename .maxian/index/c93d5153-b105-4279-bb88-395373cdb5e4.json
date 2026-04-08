@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/delegatingEditorImpl.js","code":"setPosition(position, source = 'api') {\n        this.g.setPosition(position, source);\n    }","startLine":27,"endLine":29,"chunkType":"function","mtime":1772878380260.9314}

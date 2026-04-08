@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/cursor/cursorTypeOperations.js","code":"static shiftIndent(config, indentation, count) {\n        return $t6(config, indentation, count);\n    }","startLine":41,"endLine":43,"chunkType":"function","mtime":1772878380531.6836}

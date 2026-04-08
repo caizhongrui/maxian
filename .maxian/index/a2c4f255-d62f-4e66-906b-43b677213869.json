@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/dropOrPasteInto/browser/copyPasteContribution.js","code":"runEditorCommand(_accessor, editor) {\n        $I_.get(editor)?.clearWidgets();\n    }","startLine":40,"endLine":42,"chunkType":"function","mtime":1772878382466.6506}

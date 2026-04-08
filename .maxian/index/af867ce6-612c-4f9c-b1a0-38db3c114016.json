@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/cursor/cursorCollection.js","code":"ensureValidState() {\n        for (const cursor of this.b) {\n            cursor.ensureValidState(this.a);\n        }\n    }","startLine":36,"endLine":40,"chunkType":"function","mtime":1772878380475.5085}

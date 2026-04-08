@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/links/browser/getLinks.js","code":"dispose() {\n        this.a.dispose();\n        this.links.length = 0;\n    }","startLine":68,"endLine":71,"chunkType":"function","mtime":1772878383569.025}

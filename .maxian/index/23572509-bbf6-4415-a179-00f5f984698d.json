@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/php-language-features/src/features/phpGlobalFunctions.ts","code":"session_unset: {\n\t\tdescription: 'Free all session variables',\n\t\tsignature: '(void): bool'\n\t},\n\tsession_write_close: {","startLine":4441,"endLine":4445,"chunkType":"block","mtime":1762250468292.3584}

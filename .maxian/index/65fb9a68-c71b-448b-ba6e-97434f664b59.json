@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/editorExtensions.js","code":"function getDiffEditorContributions() {\n        return EditorContributionRegistry.INSTANCE.getDiffEditorContributions();\n    }","startLine":389,"endLine":391,"chunkType":"function","mtime":1772878379375.4983}

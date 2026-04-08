@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/concat23Trees.js","code":"if (items.length === 1) {\n        return items[0];\n    }","startLine":16,"endLine":18,"chunkType":"function","mtime":1772878380615.0159}

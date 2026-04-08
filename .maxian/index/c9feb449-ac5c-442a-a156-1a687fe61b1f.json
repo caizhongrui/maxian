@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/marginDecorations/marginDecorations.js","code":"onDecorationsChanged(e) {\n        return true;\n    }","startLine":23,"endLine":25,"chunkType":"function","mtime":1772878380165.0789}

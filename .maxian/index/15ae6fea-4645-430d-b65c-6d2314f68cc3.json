@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/mock.js","code":"get(target, key) {\n            if (!target.hasOwnProperty(key)) {\n                target[key] = stub();\n            }\n            return target[key];\n        },","startLine":13,"endLine":18,"chunkType":"function","mtime":1772878378999.8274}

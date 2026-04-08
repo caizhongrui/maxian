@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/stickyScroll/browser/stickyScrollModelProvider.js","code":"constructor(_editor, m) {\n        super(_editor);\n        this.m = m;\n    }","startLine":161,"endLine":164,"chunkType":"function","mtime":1772878383639.2544}

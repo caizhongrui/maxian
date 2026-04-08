@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/groovy/syntaxes/groovy.tmLanguage.json","code":"\"beginCaptures\": {\n\t\t\t\t\t\t\t\t\"0\": {\n\t\t\t\t\t\t\t\t\t\"name\": \"keyword.operator.assignment.groovy\"\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t},","startLine":1354,"endLine":1358,"chunkType":"block","mtime":1762250468231.869}

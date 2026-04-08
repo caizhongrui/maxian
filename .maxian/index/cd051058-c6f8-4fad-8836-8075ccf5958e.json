@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/viewLinesGpu/viewLinesGpu.js","code":"linesVisibleRangesForRange(range, includeNewLines) {\n        return null;\n    }","startLine":323,"endLine":325,"chunkType":"function","mtime":1772878380218.9119}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/service_linux.rs","code":"write_systemd_service_file(&self.service_file, exe, args)\n\t\t\t.map_err(|e| wrap(e, \"error creating service file\"))?;","startLine":79,"endLine":80,"chunkType":"function","mtime":1762250468185.7712}

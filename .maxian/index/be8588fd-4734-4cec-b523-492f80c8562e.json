@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/msgpack_rpc.rs","code":"let (write_tx, mut write_rx) = mpsc::channel::<Vec<u8>>(8);\n\tlet mut decoder = MsgPackCodec::new();","startLine":59,"endLine":60,"chunkType":"function","mtime":1762250468183.6272}

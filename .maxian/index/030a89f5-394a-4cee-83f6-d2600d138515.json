@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/languageFeatures/fileReferences.ts","code":"client: MdLanguageClient,\n): vscode.Disposable {\n\treturn commandManager.register(new FindFileReferencesCommand(client));\n}","startLine":54,"endLine":58,"chunkType":"block","mtime":1762250468269.5815}

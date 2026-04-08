@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/npm/src/preferred-pm.ts","code":"async function pathExists(filePath: string) {\n\ttry {\n\t\tawait workspace.fs.stat(Uri.file(filePath));\n\t} catch {\n\t\treturn false;\n\t}\n\treturn true;\n}","startLine":17,"endLine":24,"chunkType":"function","mtime":1762250468289.1921}

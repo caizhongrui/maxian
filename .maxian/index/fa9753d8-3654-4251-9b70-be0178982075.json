@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/getIconClasses.js","code":"if (URI.isUri(icon)) {\n        return [];\n    }","startLine":16,"endLine":18,"chunkType":"function","mtime":1772878380883.5256}

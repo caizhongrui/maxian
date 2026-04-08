@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModelTokens.js","code":"getEndState(lineNumber) {\n        return this.a.getEndState(lineNumber);\n    }","startLine":178,"endLine":180,"chunkType":"function","mtime":1772878380728.8506}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-api-tests/src/utils.ts","code":"export async function revertAllDirty(): Promise<void> {\n\treturn vscode.commands.executeCommand('_workbench.revertAllDirty');\n}","startLine":57,"endLine":59,"chunkType":"function","mtime":1762250468349.2837}

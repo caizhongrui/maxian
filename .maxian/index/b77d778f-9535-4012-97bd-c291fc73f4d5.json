@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/sectionHeaders/browser/sectionHeaders.js","code":"t() {\n        this.c.cancel();\n        if (this.f) {\n            this.f.cancel();\n            this.f = null;\n        }\n    }","startLine":142,"endLine":148,"chunkType":"function","mtime":1772878383597.2058}

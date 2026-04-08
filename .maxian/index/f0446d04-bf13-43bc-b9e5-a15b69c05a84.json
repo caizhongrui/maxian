@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/stickyScroll/browser/stickyScrollModelProvider.js","code":"g() {\n        return this.t !== undefined;\n    }","startLine":319,"endLine":321,"chunkType":"function","mtime":1772878383639.2544}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/peek/referencesWidget.js","code":"focusOnPreviewEditor() {\n        this.Z.focus();\n    }","startLine":220,"endLine":222,"chunkType":"function","mtime":1772878382753.5593}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/update_service.rs","code":"Ok((f, true)) => tar::decompress_tarball(f, target_dir, reporter),\n\t\tOk((f, false)) => zipper::unzip_file(f, target_dir, reporter),","startLine":183,"endLine":184,"chunkType":"function","mtime":1762250468186.4631}

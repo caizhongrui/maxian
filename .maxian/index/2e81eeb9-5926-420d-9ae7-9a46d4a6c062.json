@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/delegatingEditorImpl.js","code":"revealRangeNearTop(range, scrollType = 0 /* ScrollType.Smooth */) {\n        this.g.revealRangeNearTop(range, scrollType);\n    }","startLine":87,"endLine":89,"chunkType":"function","mtime":1772878380260.9314}

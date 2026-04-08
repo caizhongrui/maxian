@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/editorDom.js","code":"onPointerUp(target, callback) {\n        return dom.$$i(target, 'pointerup', (e) => {\n            callback(this.b(e));\n        });\n    }","startLine":140,"endLine":144,"chunkType":"function","mtime":1772878379373.9368}

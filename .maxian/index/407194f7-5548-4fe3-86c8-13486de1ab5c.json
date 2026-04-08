@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/shared.webpack.config.js","code":"devtool: 'source-map',\n\t\tplugins: nodePlugins(extConfig.context),\n\t};\n\n\treturn merge(defaultConfig, extConfig);\n}","startLine":74,"endLine":79,"chunkType":"block","mtime":1762250468305.6277}

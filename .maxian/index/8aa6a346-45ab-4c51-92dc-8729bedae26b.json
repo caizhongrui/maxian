@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/dnd.js","code":"if (uriList) {\n        vsDataTransfer.replace($9C.uriList, uriList);\n    }","startLine":44,"endLine":46,"chunkType":"function","mtime":1772878379373.373}

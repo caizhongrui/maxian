@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/util/dispose.ts","code":"return value;\n\t}\n\n\tprotected get isDisposed() {\n\t\treturn this._isDisposed;\n\t}\n}","startLine":49,"endLine":56,"chunkType":"block","mtime":1762250468272.206}

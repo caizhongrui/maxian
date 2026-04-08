@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/tokens/tokenArray.js","code":"build() {\n        return $DE.create(this.a);\n    }","startLine":64,"endLine":66,"chunkType":"function","mtime":1772878381183.586}

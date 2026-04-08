@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/codeEditor/codeEditorWidget.js","code":"getAction(id) {\n        return this.sb.get(id) || null;\n    }","startLine":735,"endLine":737,"chunkType":"function","mtime":1772878380256.3677}

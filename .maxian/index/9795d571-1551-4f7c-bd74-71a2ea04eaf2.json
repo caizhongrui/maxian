@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/languageFeatures/copyFiles/smartDropOrPaste.ts","code":"export async function shouldInsertMarkdownLinkByDefault(\n\tparser: IMdParser,","startLine":20,"endLine":21,"chunkType":"function","mtime":1762250468269.3708}

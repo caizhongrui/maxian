@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/scrollbar/scrollableElement.js","code":"constructor() {\n        this.a = 5;\n        this.b = [];\n        this.c = -1;\n        this.d = -1;\n    }","startLine":31,"endLine":36,"chunkType":"function","mtime":1772878378058.088}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"class ConstValueWithChangeEvent {\n    constructor(value) {\n        this.value = value;\n        this.onDidChange = Event.None;\n    }\n}","startLine":1392,"endLine":1397,"chunkType":"class","mtime":1772878378208.3105}

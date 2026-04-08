@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/parameterHints/browser/parameterHints.js","code":"static get(editor) {\n        return editor.getContribution($$ib_1.ID);\n    }","startLine":30,"endLine":32,"chunkType":"function","mtime":1772878383571.4219}

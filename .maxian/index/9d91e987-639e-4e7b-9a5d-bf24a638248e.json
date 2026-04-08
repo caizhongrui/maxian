@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/notebook-renderers/src/index.ts","code":"if (element.querySelector('div')) {\n\t\t\t\telement.querySelector('div')!.tabIndex = 0;\n\t\t\t}","startLine":610,"endLine":612,"chunkType":"function","mtime":1762250468286.3284}

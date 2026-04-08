@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/editStack.js","code":"close() {\n        if (this.c instanceof $XH) {\n            this.c = this.c.serialize();\n        }\n    }","startLine":164,"endLine":168,"chunkType":"function","mtime":1772878380722.5027}

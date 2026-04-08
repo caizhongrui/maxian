@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/color.js","code":"darken(factor) {\n        return new $Yn(new $Wn(this.hsla.h, this.hsla.s, this.hsla.l - this.hsla.l * factor, this.hsla.a));\n    }","startLine":360,"endLine":362,"chunkType":"function","mtime":1772878378169.5872}

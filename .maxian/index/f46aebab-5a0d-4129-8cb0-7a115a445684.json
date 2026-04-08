@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/components/accessibleDiffViewer.js","code":"nextGroup(tx) { this.t(1, tx); }\n    previousGroup(tx) { this.t(-1, tx); }","startLine":157,"endLine":158,"chunkType":"function","mtime":1772878380257.2366}

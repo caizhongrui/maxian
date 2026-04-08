@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/contentWidgets/contentWidgets.js","code":"dispose() {\n        super.dispose();\n        this.b = {};\n    }","startLine":27,"endLine":30,"chunkType":"function","mtime":1772878380158.028}

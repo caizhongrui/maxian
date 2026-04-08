@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/jsonFormatter.js","code":"function repeat(s, count) {\n    let result = '';\n    for (let i = 0; i < count; i++) {\n        result += s;\n    }\n    return result;\n}","startLine":162,"endLine":168,"chunkType":"function","mtime":1772878378236.3533}

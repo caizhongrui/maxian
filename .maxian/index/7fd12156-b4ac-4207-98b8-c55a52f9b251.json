@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/cursor/oneCursor.js","code":"setState(context, modelState, viewState) {\n        this.g(context, modelState, viewState);\n    }","startLine":53,"endLine":55,"chunkType":"function","mtime":1772878380532.5466}

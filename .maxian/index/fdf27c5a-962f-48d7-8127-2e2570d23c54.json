@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/server/src/utils/arrays.ts","code":"export function mergeSort<T>(data: T[], compare: (a: T, b: T) => number): T[] {\n\t_divideAndMerge(data, compare);\n\treturn data;\n}","startLine":22,"endLine":25,"chunkType":"function","mtime":1762250468243.8677}

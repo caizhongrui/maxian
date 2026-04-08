@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/emmet/src/util.ts","code":"export function isNumber(obj: any): obj is number {\n\treturn typeof obj === 'number';\n}","startLine":717,"endLine":719,"chunkType":"function","mtime":1762250468209.3823}

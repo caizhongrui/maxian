@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"constructor(message, stack) {\n        super(message);\n        this.name = 'ListenerRefusalError';\n        this.stack = stack;\n    }","startLine":746,"endLine":750,"chunkType":"function","mtime":1772878378208.3105}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/search-result/syntaxes/searchResult.tmLanguage.json","code":"{\n      \"include\": \"#vb\"\n    },\n    {\n      \"include\": \"#xml\"\n    },\n    {\n      \"include\": \"#yaml\"","startLine":224,"endLine":231,"chunkType":"block","mtime":1762250468304.94}

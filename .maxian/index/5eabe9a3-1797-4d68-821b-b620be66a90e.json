@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/delegatingEditorImpl.js","code":"getSupportedActions() {\n        return this.g.getSupportedActions();\n    }","startLine":96,"endLine":98,"chunkType":"function","mtime":1772878380260.9314}

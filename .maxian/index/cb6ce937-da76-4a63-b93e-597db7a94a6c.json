@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"if (str) {\n        str = str.replace(CSI_SEQUENCE, '');\n    }","startLine":676,"endLine":678,"chunkType":"function","mtime":1772878378348.6172}

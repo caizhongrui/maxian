@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/stickyScroll/browser/stickyScrollController.js","code":"focusNext() {\n        if (this.t < this.a.lineNumberCount - 1) {\n            this.N(true);\n        }\n    }","startLine":127,"endLine":131,"chunkType":"function","mtime":1772878383638.806}

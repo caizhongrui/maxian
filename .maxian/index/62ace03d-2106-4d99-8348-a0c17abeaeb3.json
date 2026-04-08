@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/codeEditor/codeEditorWidget.js","code":"cc(detachedModel) {\n        detachedModel?.removeAllDecorationsWithOwnerId(this.pb);\n    }","startLine":1443,"endLine":1445,"chunkType":"function","mtime":1772878380256.3677}

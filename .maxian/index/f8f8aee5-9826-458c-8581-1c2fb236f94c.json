@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/json-language-features/client/src/jsonClient.ts","code":"setTimeout(callback: (...args: any[]) => void, ms: number, ...args: any[]): Disposable;\n\t};","startLine":132,"endLine":133,"chunkType":"function","mtime":1762250468252.5417}

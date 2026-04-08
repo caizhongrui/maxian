@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/wordHighlighter/browser/wordHighlighter.js","code":"trigger() {\n        this.w.cancel();\n        this.H(false, true); // immediate rendering (noDelay = true)\n    }","startLine":279,"endLine":282,"chunkType":"function","mtime":1772878383751.4924}

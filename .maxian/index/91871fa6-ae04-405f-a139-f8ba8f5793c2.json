@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/offsetRange.js","code":"substring(str) {\n        return str.substring(this.start, this.endExclusive);\n    }","startLine":122,"endLine":124,"chunkType":"function","mtime":1772878380412.249}

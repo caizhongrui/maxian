@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/update_service.rs","code":"Some(Platform::LinuxX64)\n\t\t} else if cfg!(all(target_os = \"linux\", target_arch = \"arm\")) {","startLine":295,"endLine":296,"chunkType":"function","mtime":1762250468186.4631}

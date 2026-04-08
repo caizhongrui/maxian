@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/sync.rs","code":"let (closed_tx, closed_rx) = watch::channel(None);\n\t(Barrier(closed_rx), BarrierOpener(Arc::new(closed_tx)))","startLine":68,"endLine":69,"chunkType":"function","mtime":1762250468187.6062}

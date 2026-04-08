@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/assert.js","code":"export function ok(value, message) {\n    if (!value) {\n        throw new Error(message ? `Assertion failed (${message})` : 'Assertion Failed');\n    }\n}","startLine":20,"endLine":24,"chunkType":"function","mtime":1772878378139.0464}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/components/accessibleDiffViewer.js","code":"getModifiedPosition() {\n        return this.c.modified.getPosition() ?? undefined;\n    }","startLine":572,"endLine":574,"chunkType":"function","mtime":1772878380257.2366}

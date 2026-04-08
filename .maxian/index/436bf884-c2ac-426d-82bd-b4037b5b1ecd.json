@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/extension.shared.ts","code":"registerUpdateLinksOnRename(client),\n\t\tregisterUpdatePastedLinks(selector, client),","startLine":64,"endLine":65,"chunkType":"function","mtime":1762250468268.6726}

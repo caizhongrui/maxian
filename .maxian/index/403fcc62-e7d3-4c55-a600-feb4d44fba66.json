@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/keyCodes.js","code":"for (let i = 0; i <= 193 /* ScanCode.MAX_VALUE */; i++) {\n    $8e[i] = -1 /* KeyCode.DependsOnKbLayout */;\n}","startLine":448,"endLine":450,"chunkType":"function","mtime":1772878378239.2432}

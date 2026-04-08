@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/npm/src/npmView.ts","code":"class NoScripts extends TreeItem {\n\tconstructor(message: string) {\n\t\tsuper(message, TreeItemCollapsibleState.None);\n\t\tthis.contextValue = 'noscripts';\n\t}\n}","startLine":128,"endLine":133,"chunkType":"class","mtime":1762250468289.1233}

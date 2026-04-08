@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/protocol.rs","code":"}\n\n#[derive(Serialize)]\npub struct GetHostnameResponse {","startLine":124,"endLine":127,"chunkType":"block","mtime":1762250468185.4087}

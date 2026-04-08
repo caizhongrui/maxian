@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/editorSimpleWorker.js","code":"if (!original || !modified) {\n            return null;\n        }","startLine":64,"endLine":66,"chunkType":"function","mtime":1772878380880.35}

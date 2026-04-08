@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/color.js","code":"transparent(factor) {\n        const { r, g, b, a } = this.rgba;\n        return new $Yn(new $Vn(r, g, b, a * factor));\n    }","startLine":363,"endLine":366,"chunkType":"function","mtime":1772878378169.5872}

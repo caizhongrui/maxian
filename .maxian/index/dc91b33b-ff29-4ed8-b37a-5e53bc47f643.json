@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view.js","code":"onConfigurationChanged(e) {\n        this.domNode.setClassName(this.U());\n        this.O();\n        this.S();\n        return false;\n    }","startLine":297,"endLine":302,"chunkType":"function","mtime":1772878379798.9834}

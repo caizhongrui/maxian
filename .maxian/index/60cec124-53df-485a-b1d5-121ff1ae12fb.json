@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/editorExtensions.js","code":"constructor(opts) {\n        super($G5.q(opts));\n        this.label = opts.label;\n        this.alias = opts.alias;\n    }","startLine":242,"endLine":246,"chunkType":"function","mtime":1772878379375.4983}

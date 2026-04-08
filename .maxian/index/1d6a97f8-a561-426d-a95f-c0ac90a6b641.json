@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"isTriggered() {\n        return !!this.a?.isTriggered();\n    }","startLine":333,"endLine":335,"chunkType":"function","mtime":1772878378139.2854}

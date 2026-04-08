@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/stickyScroll/browser/stickyScrollWidget.js","code":"getCurrentLines() {\n        return this.n;\n    }","startLine":105,"endLine":107,"chunkType":"function","mtime":1772878383639.868}

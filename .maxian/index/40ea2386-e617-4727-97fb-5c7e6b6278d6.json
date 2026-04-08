@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/resourceTree.js","code":"static isResourceNode(obj) {\n        return obj instanceof Node;\n    }","startLine":69,"endLine":71,"chunkType":"function","mtime":1772878378345.136}

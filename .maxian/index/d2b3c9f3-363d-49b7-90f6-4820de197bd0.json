@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/desktop/version_manager.rs","code":"make_fake_vscode_install(&dir.path().join(\"desktop/stable\"));\n\t\tmake_fake_vscode_install(&dir.path().join(\"desktop/1.68.2\"));","startLine":437,"endLine":438,"chunkType":"function","mtime":1762250468183.2607}

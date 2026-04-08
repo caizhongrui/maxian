@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/code/browser/workbench/workbench.js","code":"class TransparentCrypto {\n    async seal(data) {\n        return data;\n    }\n    async unseal(data) {\n        return data;\n    }\n}","startLine":19,"endLine":26,"chunkType":"class","mtime":1772878379209.9885}

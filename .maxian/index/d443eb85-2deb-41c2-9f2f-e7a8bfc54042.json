@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/server/src/utils/strings.ts","code":"export function isEOL(content: string, offset: number) {\n\treturn isNewlineCharacter(content.charCodeAt(offset));\n}","startLine":70,"endLine":72,"chunkType":"function","mtime":1762250468244.1436}

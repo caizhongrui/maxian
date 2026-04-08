@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/editorState/browser/editorState.js","code":"constructor(model, parent) {\n        super(parent);\n        this.a = model.onDidChangeContent(() => this.cancel());\n    }","startLine":111,"endLine":114,"chunkType":"function","mtime":1772878382471.167}

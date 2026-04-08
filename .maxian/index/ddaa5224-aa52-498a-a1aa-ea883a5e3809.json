@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-math/esbuild.js","code":"require('../esbuild-webview-common').run({\n\tentryPoints: [\n\t\tpath.join(srcDir, 'katex.ts'),\n\t],\n\tsrcDir,\n\toutdir: outDir,\n}, process.argv, postBuild);","startLine":32,"endLine":38,"chunkType":"function","mtime":1762250468274.1978}

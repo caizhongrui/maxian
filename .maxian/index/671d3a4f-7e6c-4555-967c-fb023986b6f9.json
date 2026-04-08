@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/fuzzyScorer.test.js","code":"function _doScore2(target, query, matchOffset = 0) {\n    const preparedQuery = $4M(query);\n    return $1M(target, preparedQuery, 0, matchOffset);\n}","startLine":63,"endLine":66,"chunkType":"function","mtime":1772878378722.0234}

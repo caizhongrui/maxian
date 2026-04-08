@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/gpu/gpuDisposable.js","code":"function createTexture(device, descriptor) {\n        return wrapDestroyableInDisposable(device.createTexture(descriptor));\n    }","startLine":35,"endLine":37,"chunkType":"function","mtime":1772878379678.6018}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewEvents.js","code":"constructor() {\n        this.type = 8 /* ViewEventType.ViewLineMappingChanged */;\n        // Nothing to do\n    }","startLine":88,"endLine":91,"chunkType":"function","mtime":1772878381184.2231}

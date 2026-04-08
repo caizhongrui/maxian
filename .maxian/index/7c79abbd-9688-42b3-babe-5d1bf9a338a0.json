@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/npm/src/tasks.ts","code":"export function isWorkspaceFolder(value: any): value is WorkspaceFolder {\n\treturn value && typeof value !== 'number';\n}","startLine":125,"endLine":127,"chunkType":"function","mtime":1762250468289.453}

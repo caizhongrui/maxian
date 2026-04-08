@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/docs/superpowers/plans/2026-03-15-user-behavior-analytics.md","code":"export function getBehaviorTrend(params) {\n  return request({\n    url: '/behavior/stats/trend',\n    method: 'get',\n    params\n  })\n}","startLine":1441,"endLine":1447,"chunkType":"function","mtime":1773552378307.195}

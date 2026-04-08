@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/filters.js","code":"if (!camelCaseWord) {\n        return null;\n    }","startLine":229,"endLine":231,"chunkType":"function","mtime":1772878378209.0073}

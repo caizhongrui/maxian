@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/commands/serve_web.rs","code":"for (k, v) in res.headers() {\n\t\tproxied_res.headers_mut().insert(k, v.clone());\n\t}","startLine":327,"endLine":329,"chunkType":"function","mtime":1762250468182.808}

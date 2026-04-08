@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/markdownRenderer.js","code":"if (!uri) {\n            return href;\n        }","startLine":115,"endLine":117,"chunkType":"function","mtime":1772878377884.173}

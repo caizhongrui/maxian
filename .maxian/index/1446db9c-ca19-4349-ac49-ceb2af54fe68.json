@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/util/dom.ts","code":"export function escapeAttribute(value: string | vscode.Uri): string {\n\treturn value.toString().replace(/\"/g, '&quot;');\n}","startLine":7,"endLine":9,"chunkType":"function","mtime":1762250468272.3254}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/editContext/native/editContextFactory.js","code":"function supported(obj) {\n        return typeof obj?.EditContext === 'function';\n    }","startLine":10,"endLine":12,"chunkType":"function","mtime":1772878379330.8362}

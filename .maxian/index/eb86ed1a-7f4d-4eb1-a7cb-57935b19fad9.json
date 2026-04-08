@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view/renderingContext.js","code":"constructor(outsideRenderedLine, ranges) {\n        this.outsideRenderedLine = outsideRenderedLine;\n        this.ranges = ranges;\n    }","startLine":128,"endLine":131,"chunkType":"function","mtime":1772878379801.125}

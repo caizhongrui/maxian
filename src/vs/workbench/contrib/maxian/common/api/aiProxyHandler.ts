@@ -16,6 +16,7 @@ import type {
 	ModelInfo,
 	ContentBlock
 } from './types.js';
+import { estimateTokensFromChars } from '../utils/tokenEstimate.js';
 
 /**
  * AiProxy API 配置
@@ -362,7 +363,7 @@ export class AiProxyHandler implements IApiHandler {
 		}
 
 		// 估算 token 数（每4个字符约1个token）
-		const estimatedTokens = Math.ceil(systemPrompt.length / 4);
+		const estimatedTokens = estimateTokensFromChars(systemPrompt.length);
 
 		// 只有大于阈值的提示词才值得缓存
 		return estimatedTokens >= this.PROMPT_CACHE_CONFIG.minTokensForCaching;
@@ -436,7 +437,7 @@ export class AiProxyHandler implements IApiHandler {
 			}
 
 			// 大消息可缓存
-			const estimatedTokens = Math.ceil(msg.content.length / 4);
+			const estimatedTokens = estimateTokensFromChars(msg.content.length);
 			if (estimatedTokens >= this.PROMPT_CACHE_CONFIG.minTokensForCaching) {
 				cachedCount++;
 				return {
@@ -798,17 +799,59 @@ export class AiProxyHandler implements IApiHandler {
 
 		// E2优化：追踪最终的 finish_reason，用于检测输出 token 达到上限
 		let finishReason = '';
+		const HEARTBEAT_INTERVAL_MS = 3000;
+		const STREAM_IDLE_TIMEOUT_MS = 90000;
+		const streamStartedAt = Date.now();
+		let lastHeartbeatAt = 0;
+		let lastNetworkActivityAt = streamStartedAt;
 
 		try {
 			while (true) {
-				const { done, value } = await reader.read();
+				const readPromise = reader.read();
+				let readResult: ReadableStreamReadResult<Uint8Array> | null = null;
+				while (!readResult) {
+					let timeoutHandle: any;
+					const timeoutSignal = new Promise<{ kind: 'tick' }>((resolve) => {
+						timeoutHandle = setTimeout(() => resolve({ kind: 'tick' }), HEARTBEAT_INTERVAL_MS);
+					});
+					const raced = await Promise.race([
+						readPromise.then(result => ({ kind: 'read' as const, result })),
+						timeoutSignal
+					]);
+					if (timeoutHandle) {
+						clearTimeout(timeoutHandle);
+					}
+
+					if (raced.kind === 'tick') {
+						const now = Date.now();
+						if (now - lastNetworkActivityAt >= STREAM_IDLE_TIMEOUT_MS) {
+							throw new Error(`流式响应静默超时（>${Math.floor(STREAM_IDLE_TIMEOUT_MS / 1000)}s 无新数据）`);
+						}
+						if (now - lastHeartbeatAt >= HEARTBEAT_INTERVAL_MS) {
+							lastHeartbeatAt = now;
+							yield {
+								type: 'heartbeat',
+								elapsedMs: now - streamStartedAt
+							};
+						}
+						continue;
+					}
+
+					readResult = raced.result;
+				}
+
+				const { done, value } = readResult;
 
 				if (done) {
 					break;
 				}
+				if (!value) {
+					continue;
+				}
 
 				// 解码数据
 				const chunk = decoder.decode(value, { stream: true });
+				lastNetworkActivityAt = Date.now();
 				totalBytesReceived += value.byteLength;
 				buffer += chunk;
 
@@ -1022,7 +1065,7 @@ export class AiProxyHandler implements IApiHandler {
 		}
 
 		// 简单估算：每4个字符约1个token
-		return Math.ceil(totalChars / 4);
+		return estimateTokensFromChars(totalChars);
 	}
 
 	/**

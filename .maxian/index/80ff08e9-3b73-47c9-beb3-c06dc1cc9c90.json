@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/ui/largeProjectStatus.ts","code":"export function create(\n\tclient: ITypeScriptServiceClient,","startLine":108,"endLine":109,"chunkType":"function","mtime":1762250468338.4573}

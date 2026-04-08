@@ -17,6 +17,7 @@ import { writeToFileTool } from '../tools/writeToFileTool.js';
 import { listFilesTool } from '../tools/listFilesTool.js';
 import { searchFilesTool } from '../tools/searchFilesTool.js';
 import { executeCommandTool } from '../tools/executeCommandTool.js';
+import { ensureFollowupOptions } from '../tools/toolExecutionProtocol.js';
 
 /**
  * Processes and presents assistant message content to the user interface.
@@ -287,20 +288,7 @@ async function handleToolUseBlock(task: Task, block: AssistantMessageContent & {
 			case 'ask_followup_question': {
 				// Ask user a question
 				const question = params.question || '';
-				let options: string[] = [];
-				const rawOptions = (params as any).options;
-				if (Array.isArray(rawOptions)) {
-					options = rawOptions.map((value: unknown) => String(value).trim()).filter(Boolean).slice(0, 6);
-				} else if (typeof rawOptions === 'string' && rawOptions.trim().length > 0) {
-					try {
-						const parsed = JSON.parse(rawOptions);
-						if (Array.isArray(parsed)) {
-							options = parsed.map((value: unknown) => String(value).trim()).filter(Boolean).slice(0, 6);
-						}
-					} catch {
-						options = rawOptions.split(/\r?\n|;/).map((value: string) => value.trim()).filter(Boolean).slice(0, 6);
-					}
-				}
+				const options = ensureFollowupOptions((params as any).options);
 				const askExtra = options.length > 0 ? {
 					metadata: {
 						kiloCode: { options }

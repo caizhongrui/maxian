@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/SKILLS_DEBUG.md","code":"constructor(\n    @IWorkspaceContextService private readonly workspaceService?: IWorkspaceContextService","startLine":174,"endLine":175,"chunkType":"function","mtime":1772782077286.6492}

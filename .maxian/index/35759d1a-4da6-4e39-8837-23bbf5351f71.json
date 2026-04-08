@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeBase.js","code":"getCharCode(offset) {\n        const nodePos = this.G(offset);\n        return this.l(nodePos);\n    }","startLine":524,"endLine":527,"chunkType":"function","mtime":1772878380724.943}

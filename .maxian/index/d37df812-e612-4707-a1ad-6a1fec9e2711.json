@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/offsetRange.js","code":"isAfter(other) {\n        return this.start >= other.endExclusive;\n    }","startLine":116,"endLine":118,"chunkType":"function","mtime":1772878380412.249}

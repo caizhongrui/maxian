@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/editorWorkerHost.js","code":"static getChannel(workerServer) {\n        return workerServer.getChannel($S9.CHANNEL_NAME);\n    }","startLine":7,"endLine":9,"chunkType":"function","mtime":1772878380882.9116}

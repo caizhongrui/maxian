@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewModelEventDispatcher.js","code":"constructor() {\n        this.viewEvents = [];\n        this.outgoingEvents = [];\n    }","startLine":128,"endLine":131,"chunkType":"function","mtime":1772878381821.1108}

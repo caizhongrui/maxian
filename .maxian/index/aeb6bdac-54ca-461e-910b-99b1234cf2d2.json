@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/textEdit.js","code":"getTransformer() {\n        if (!this.c) {\n            this.c = new $rD(this.getValue());\n        }\n        return this.c;\n    }","startLine":275,"endLine":280,"chunkType":"function","mtime":1772878380471.9346}

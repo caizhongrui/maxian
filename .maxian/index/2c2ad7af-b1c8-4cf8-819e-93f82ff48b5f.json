@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/link/clickLinkGesture.js","code":"s(mouseEvent) {\n        this.j = mouseEvent;\n        this.a.fire([mouseEvent, null]);\n    }","startLine":109,"endLine":112,"chunkType":"function","mtime":1772878382623.359}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/control_server.rs","code":"let (http_delegated, mut http_rx) = DelegatedSimpleHttp::new(log.clone());\n\tlet (socket_tx, mut socket_rx) = mpsc::channel(4);","startLine":536,"endLine":537,"chunkType":"function","mtime":1762250468184.4028}

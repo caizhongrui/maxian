@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/utils.js","code":"if (args.length === 3) {\n        [owner, event, getValue] = args;\n    }","startLine":49,"endLine":51,"chunkType":"function","mtime":1772878378316.9473}

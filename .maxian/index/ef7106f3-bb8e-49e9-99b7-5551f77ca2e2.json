@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/commands/showPreview.ts","code":"async function showPreview(\n\twebviewManager: MarkdownPreviewManager,","startLine":17,"endLine":18,"chunkType":"function","mtime":1762250468268.3147}

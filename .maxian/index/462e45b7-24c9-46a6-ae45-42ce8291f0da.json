@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"emitOne(item) {\n        this.f(item);\n    }","startLine":1649,"endLine":1651,"chunkType":"function","mtime":1772878378139.2854}

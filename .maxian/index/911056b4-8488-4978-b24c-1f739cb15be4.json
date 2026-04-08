@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/editStack.js","code":"close() {\n        this.c = false;\n    }","startLine":263,"endLine":265,"chunkType":"function","mtime":1772878380722.5027}

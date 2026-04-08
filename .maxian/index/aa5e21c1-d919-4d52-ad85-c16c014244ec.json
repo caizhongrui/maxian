@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/find/browser/replacePattern.js","code":"static staticValue(value) {\n        return new $rfb(value, -1, null);\n    }","startLine":124,"endLine":126,"chunkType":"function","mtime":1772878382585.86}

@@ -18,6 +18,10 @@ import { ToolName } from '../tools/toolTypes.js';
  */
 const PLAN_AGENT_SYSTEM_PROMPT = `你是一个软件架构师Agent，专门用于设计实现方案。
 
+**语言要求**：
+- 输出中的自然语言说明必须使用简体中文
+- 文件路径、代码符号、命令保持原文
+
 **你的任务**：
 - 分析任务需求
 - 设计实现方案

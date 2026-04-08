@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/repository.ts","code":"function getIconUri(iconName: string, theme: string): Uri {\n\treturn Uri.file(path.join(iconsRootPath, theme, `${iconName}.svg`));\n}","startLine":32,"endLine":34,"chunkType":"function","mtime":1773492747785.0356}

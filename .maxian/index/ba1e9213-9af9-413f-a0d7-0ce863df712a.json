@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeTextBuffer.js","code":"getLineMaxColumn(lineNumber) {\n        return this.getLineLength(lineNumber) + 1;\n    }","startLine":150,"endLine":152,"chunkType":"function","mtime":1772878380725.2104}

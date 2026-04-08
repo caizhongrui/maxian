@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/minimap/minimap.js","code":"onFlushed(e) {\n        if (this.h) {\n            this.n = true;\n        }\n        return this.w.onFlushed();\n    }","startLine":647,"endLine":652,"chunkType":"function","mtime":1772878380165.3325}

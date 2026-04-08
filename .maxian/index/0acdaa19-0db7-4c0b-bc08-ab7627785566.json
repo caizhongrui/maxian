@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/TEST_GENERATION_GUIDE.md","code":"assertThrows(IllegalArgumentException.class, () -> {\n        calculator.divide(5, 0);\n    });","startLine":211,"endLine":213,"chunkType":"function","mtime":1764632824882.745}

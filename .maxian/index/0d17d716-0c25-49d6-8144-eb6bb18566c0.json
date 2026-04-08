@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/lifecycle.js","code":"dispose() {\n        this.b = true;\n        $Uc(this);\n        this.a?.dispose();\n        this.a = undefined;\n    }","startLine":415,"endLine":420,"chunkType":"function","mtime":1772878378239.9001}

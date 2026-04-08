@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/diff/rangeMapping.js","code":"toTextEdit(modified) {\n        const newText = modified.getValueOfRange(this.modifiedRange);\n        return new $tD(this.originalRange, newText);\n    }","startLine":191,"endLine":194,"chunkType":"function","mtime":1772878380557.872}

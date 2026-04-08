@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"constructor(options) {\n        super(options);\n        this.k = options.delay ?? 100;\n    }","startLine":1123,"endLine":1126,"chunkType":"function","mtime":1772878378208.3105}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModel.js","code":"static from(options) {\n        if (options instanceof $4I) {\n            return options;\n        }\n        return new $4I(options);\n    }","startLine":1768,"endLine":1773,"chunkType":"function","mtime":1772878380728.0076}

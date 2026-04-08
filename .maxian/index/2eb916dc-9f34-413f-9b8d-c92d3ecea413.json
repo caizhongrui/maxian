@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/mock.js","code":"set(target, key, value) {\n            target[key] = value;\n            return true;\n        },","startLine":19,"endLine":22,"chunkType":"function","mtime":1772878378999.8274}

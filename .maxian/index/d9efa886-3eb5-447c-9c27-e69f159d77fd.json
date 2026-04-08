@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/search-result/syntaxes/generateTMLanguage.js","code":"require('fs').writeFileSync(\n\trequire('path').join(__dirname, './searchResult.tmLanguage.json'),","startLine":249,"endLine":250,"chunkType":"function","mtime":1762250468304.8367}

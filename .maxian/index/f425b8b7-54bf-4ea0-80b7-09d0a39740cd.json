@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/lineEdit.js","code":"constructor(lineRange, newLines) {\n        this.lineRange = lineRange;\n        this.newLines = newLines;\n    }","startLine":200,"endLine":203,"chunkType":"function","mtime":1772878380410.1218}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/less/syntaxes/less.tmLanguage.json","code":"},\n\t\t\"at-namespace\": {\n\t\t\t\"begin\": \"\\\\s*((@)namespace)\\\\s+\",\n\t\t\t\"beginCaptures\": {","startLine":454,"endLine":457,"chunkType":"block","mtime":1762250468261.719}

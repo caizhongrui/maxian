@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/keyCodes.js","code":"function toUserSettingsGeneral(keyCode) {\n        return userSettingsGeneralMap.keyCodeToStr(keyCode);\n    }","startLine":746,"endLine":748,"chunkType":"function","mtime":1772878378239.2432}

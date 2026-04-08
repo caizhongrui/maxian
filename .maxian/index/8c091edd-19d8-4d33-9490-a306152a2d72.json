@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeBase.js","code":"v(nodes) {\n        for (let i = 0; i < nodes.length; i++) {\n            $jI(this, nodes[i]);\n        }\n    }","startLine":928,"endLine":932,"chunkType":"function","mtime":1772878380724.943}

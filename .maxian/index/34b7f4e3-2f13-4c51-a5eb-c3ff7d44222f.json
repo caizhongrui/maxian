@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/util/snippetForFunctionCall.ts","code":"export function snippetForFunctionCall(\n\titem: { insertText?: string | vscode.SnippetString; label: string },","startLine":10,"endLine":11,"chunkType":"function","mtime":1762250468329.83}

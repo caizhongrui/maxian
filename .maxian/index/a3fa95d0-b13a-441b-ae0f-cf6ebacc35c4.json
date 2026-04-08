@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/multicursor/browser/multicursor.js","code":"getSession(findController) {\n        return this.c;\n    }","startLine":464,"endLine":466,"chunkType":"function","mtime":1772878383570.817}

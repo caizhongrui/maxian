@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/quickAccess/browser/editorNavigationQuickAccess.js","code":"g(editor) {\n        return $x5(editor) ?\n            editor.getModel()?.modified :\n            editor.getModel();\n    }","startLine":96,"endLine":100,"chunkType":"function","mtime":1772878383577.152}

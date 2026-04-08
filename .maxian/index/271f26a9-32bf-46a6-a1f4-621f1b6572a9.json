@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/indentationGuesser.js","code":"class SpacesDiffResult {\n    constructor() {\n        this.spacesDiff = 0;\n        this.looksLikeAlignment = false;\n    }\n}","startLine":5,"endLine":10,"chunkType":"class","mtime":1772878380723.866}

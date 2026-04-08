@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/github/src/auth.ts","code":"export async function getSession(): Promise<AuthenticationSession> {\n\treturn await authentication.getSession('github', scopes, { createIfNone: true });\n}","startLine":32,"endLine":34,"chunkType":"function","mtime":1762250468227.8745}

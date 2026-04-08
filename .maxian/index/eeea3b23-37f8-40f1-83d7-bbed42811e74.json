@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/util/snippetForFunctionCall.ts","code":"}\n\n\treturn { hasOptionalParameters, parts };\n}","startLine":116,"endLine":120,"chunkType":"block","mtime":1762250468329.83}

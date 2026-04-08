@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test.sql","code":"CREATE VIEW METRIC_STATS (ID, MONTH, TEMP_C, RAIN_C) AS\nSELECT ID,\nMONTH,\n(TEMP_F - 32) * 5 /9,\nRAIN_I * 0.3937\nFROM STATS;","startLine":1,"endLine":6,"chunkType":"block","mtime":1762250468360.5273}

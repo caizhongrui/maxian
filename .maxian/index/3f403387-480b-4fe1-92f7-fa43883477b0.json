@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/tree/objectTreeModel.js","code":"isCollapsible(element) {\n        const location = this.o(element);\n        return this.c.isCollapsible(location);\n    }","startLine":163,"endLine":166,"chunkType":"function","mtime":1772878378135.0793}

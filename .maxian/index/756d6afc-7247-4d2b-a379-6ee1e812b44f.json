@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewModel/viewModelLines.js","code":"getHiddenAreas() {\n        return [];\n    }","startLine":844,"endLine":846,"chunkType":"function","mtime":1772878381820.8547}

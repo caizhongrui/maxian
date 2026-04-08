@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/naturalLanguage/korean.js","code":"if (result && result.length > 0) {\n        return new Uint32Array(result);\n    }","startLine":16,"endLine":18,"chunkType":"function","mtime":1772878378278.8872}

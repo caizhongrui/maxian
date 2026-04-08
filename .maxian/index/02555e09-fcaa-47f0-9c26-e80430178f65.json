@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/editorAction.js","code":"run(args) {\n        if (!this.isSupported()) {\n            return Promise.resolve(undefined);\n        }\n        return this.b(args);\n    }","startLine":18,"endLine":23,"chunkType":"function","mtime":1772878380558.2727}

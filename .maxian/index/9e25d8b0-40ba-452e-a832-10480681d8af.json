@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/languageSelector.js","code":"if (selector === '*') {\n            return 5;\n        }","startLine":29,"endLine":31,"chunkType":"function","mtime":1772878380612.0017}

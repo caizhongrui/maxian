@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/test/engine.ts","code":"dispose() {\n\t\tthis._onContributionsChanged.dispose();\n\t}","startLine":19,"endLine":21,"chunkType":"function","mtime":1762250468271.3906}

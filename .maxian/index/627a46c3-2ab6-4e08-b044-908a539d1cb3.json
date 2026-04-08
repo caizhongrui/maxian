@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"whenIdle() {\n        return this.size > 0\n            ? Event.toPromise(this.onDrained)\n            : Promise.resolve();\n    }","startLine":551,"endLine":555,"chunkType":"function","mtime":1772878378139.2854}

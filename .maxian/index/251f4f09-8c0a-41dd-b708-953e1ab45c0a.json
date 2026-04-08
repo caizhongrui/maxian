@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/positionToOffset.js","code":"getOffset(position) {\n        return this.a[position.lineNumber - 1] + position.column - 1;\n    }","startLine":29,"endLine":31,"chunkType":"function","mtime":1772878380412.8208}

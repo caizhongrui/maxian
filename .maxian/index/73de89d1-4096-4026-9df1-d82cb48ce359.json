@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/goToSymbol.js","code":"if (resultWithoutDeclaration && resultWithoutDeclaration.length === 1) {\n            return resultWithoutDeclaration;\n        }","startLine":62,"endLine":64,"chunkType":"function","mtime":1772878382623.1074}

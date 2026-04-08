@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/debug-server-ready/src/extension.ts","code":"function removeAnsiEscapeCodes(str: string): string {\n\tif (str) {\n\t\tstr = str.replace(CSI_SEQUENCE, '');\n\t}\n\n\treturn str;\n}","startLine":32,"endLine":38,"chunkType":"function","mtime":1762250468203.2532}

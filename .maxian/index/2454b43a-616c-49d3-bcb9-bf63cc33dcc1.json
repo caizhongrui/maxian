@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extension/lib/utils.js","code":"for (const item of rootList) {\n        if (presentPath.indexOf(item) === 0) {\n            return item;\n        }\n    }","startLine":51,"endLine":55,"chunkType":"function","mtime":1772782077295.5815}

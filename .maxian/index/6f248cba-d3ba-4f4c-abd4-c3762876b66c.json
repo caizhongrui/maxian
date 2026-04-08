@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/SKILLS_READY.md","code":"# 完全关闭IDE\npkill -f \"Electron\"\npkill -f \"Code Helper\"","startLine":170,"endLine":172,"chunkType":"block","mtime":1772782077288.1204}

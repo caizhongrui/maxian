@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewLayout/linesLayout.js","code":"getWhitespaces() {\n        this.o();\n        return this.g.slice(0);\n    }","startLine":731,"endLine":734,"chunkType":"function","mtime":1772878381186.6013}

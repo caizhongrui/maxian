@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/service_windows.rs","code":"Err(e) => return Err(wrap(e, \"error deleting registry key\").into()),\n\t\t}","startLine":126,"endLine":127,"chunkType":"function","mtime":1762250468185.9302}

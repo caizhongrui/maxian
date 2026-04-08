@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/pfs.js","code":"async function rimrafUnlink(path) {\n    return fs.promises.rm(path, { recursive: true, force: true, maxRetries: 3 });\n}","startLine":60,"endLine":62,"chunkType":"function","mtime":1772878378444.7122}

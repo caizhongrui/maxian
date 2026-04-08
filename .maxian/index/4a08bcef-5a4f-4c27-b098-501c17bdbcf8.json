@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/http.rs","code":"copy_async_progress(progress, &mut res.read, &mut file, content_length)\n\t\t.await","startLine":51,"endLine":52,"chunkType":"function","mtime":1762250468186.994}

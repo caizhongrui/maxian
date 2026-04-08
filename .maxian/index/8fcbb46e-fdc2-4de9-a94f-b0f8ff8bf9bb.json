@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/color.js","code":"static fromHex(hex) {\n        return $Yn.Format.CSS.parseHex(hex) || $Yn.red;\n    }","startLine":181,"endLine":183,"chunkType":"function","mtime":1772878378169.5872}

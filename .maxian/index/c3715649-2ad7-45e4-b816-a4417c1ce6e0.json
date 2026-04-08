@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/utils.js","code":"constructor(b, c) {\n        this.b = b;\n        this.c = c;\n        this.a = 0;\n    }","startLine":320,"endLine":324,"chunkType":"function","mtime":1772878378316.9473}

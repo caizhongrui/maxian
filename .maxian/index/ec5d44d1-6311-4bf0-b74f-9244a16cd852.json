@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/button/button.js","code":"addButton(options) {\n        const button = this.b.add(new $81(this.c, options));\n        this.d(button);\n        return button;\n    }","startLine":399,"endLine":403,"chunkType":"function","mtime":1772878377941.6091}

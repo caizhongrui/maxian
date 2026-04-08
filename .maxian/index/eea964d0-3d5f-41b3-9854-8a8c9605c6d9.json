@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/intervalTree.js","code":"if (!startDone) {\n        node.start = Math.max(0, nodeStart + deltaColumn);\n    }","startLine":363,"endLine":365,"chunkType":"function","mtime":1772878380724.168}

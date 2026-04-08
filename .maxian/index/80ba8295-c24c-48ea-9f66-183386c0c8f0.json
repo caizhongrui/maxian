@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/commands/index.ts","code":"export function registerBaseCommands(\n\tcommandManager: CommandManager,","startLine":21,"endLine":22,"chunkType":"function","mtime":1762250468324.4358}

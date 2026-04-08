@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/tree/asyncDataTree.js","code":"hasNode(element) {\n        return element === this.f.element || this.g.has(element);\n    }","startLine":719,"endLine":721,"chunkType":"function","mtime":1772878378114.5195}

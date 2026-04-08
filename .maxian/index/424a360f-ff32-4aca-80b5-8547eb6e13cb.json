@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/readOnlyMessage/browser/contribution.js","code":"constructor(a) {\n        super();\n        this.a = a;\n        this.B(this.a.onDidAttemptReadOnlyEdit(() => this.b()));\n    }","startLine":12,"endLine":16,"chunkType":"function","mtime":1772878383596.1973}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/quickInput/standaloneQuickInputService.js","code":"toggle() {\n        return this.b.toggle();\n    }","startLine":115,"endLine":117,"chunkType":"function","mtime":1772878383798.8425}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/defaultWorkerFactory.js","code":"if (!blobUrl.startsWith('blob:')) {\n        throw new URIError('Not a blob-url: ' + blobUrl);\n    }","startLine":23,"endLine":25,"chunkType":"function","mtime":1772878377509.9834}

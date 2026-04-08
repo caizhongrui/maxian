@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/date.js","code":"if (date > todayMidnightTime.getTime()) {\n        return localize(97, null);\n    }","startLine":215,"endLine":217,"chunkType":"function","mtime":1772878378177.7314}

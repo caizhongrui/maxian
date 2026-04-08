@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/mouseTarget.js","code":"getCurrentScrollTop() {\n        return this.c.viewLayout.getCurrentScrollTop();\n    }","startLine":291,"endLine":293,"chunkType":"function","mtime":1772878379372.1423}

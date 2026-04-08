@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test-object-literals.ts","code":"let s1 = {\n\tk: {\n\t\tk1: s,\n\t\tk2: 1\n\t}\n};","startLine":1,"endLine":6,"chunkType":"block","mtime":1762250468356.4917}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneServices.js","code":"warn(message) {\n        return this.notify({ severity: Severity.Warning, message });\n    }","startLine":270,"endLine":272,"chunkType":"function","mtime":1772878383802.3767}

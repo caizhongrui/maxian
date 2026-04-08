@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/LSP功能测试指南.md","code":"function calculate(a: number, b: number): number {\n    const result: number = \"wrong type\";  // 错误\n    return result;\n}","startLine":139,"endLine":142,"chunkType":"function","mtime":1772782077285.1265}

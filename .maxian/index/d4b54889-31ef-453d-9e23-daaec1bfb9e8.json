@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/folding/browser/syntaxRangeProvider.js","code":"if (diff === 0) {\n            diff = d1.rank - d2.rank;\n        }","startLine":135,"endLine":137,"chunkType":"function","mtime":1772878382592.492}

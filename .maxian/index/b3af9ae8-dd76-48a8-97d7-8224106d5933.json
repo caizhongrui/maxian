@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/local_forwarding.rs","code":"print_forwarding_addr(&SetPortsResponse {\n\t\t\t\tport_format: forward_own_tunnel.get_port_format().ok(),\n\t\t\t});","startLine":291,"endLine":293,"chunkType":"function","mtime":1762250468184.6646}

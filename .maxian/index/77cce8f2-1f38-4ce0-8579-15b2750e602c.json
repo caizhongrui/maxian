@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/TOOL_PARAMETERS_GUIDE.md","code":"## 命令执行工具\n\n### 11. execute_command\n**功能**: 在终端中执行命令\n\n**参数**:\n```typescript\n{\n  command: string; // 要执行的命令","startLine":289,"endLine":298,"chunkType":"block","mtime":1763085028773.5667}

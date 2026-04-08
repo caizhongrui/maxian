@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/nls.js","code":"function touch(path) {\n    const date = new Date();\n    return fs.promises.utimes(path, date, date);\n}","startLine":161,"endLine":164,"chunkType":"function","mtime":1772878378391.1921}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/git.ts","code":"function sanitizePath(path: string): string {\n\treturn path.replace(/^([a-z]):\\\\/i, (_, letter) => `${letter.toUpperCase()}:\\\\`);\n}","startLine":353,"endLine":355,"chunkType":"function","mtime":1773492735506.4934}

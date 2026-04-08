@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/self_update.rs","code":"validate_cli_is_good(&staging_path)?;","startLine":101,"endLine":102,"chunkType":"function","mtime":1762250468183.851}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/guidesTextModelPart.js","code":"j(languageId) {\n        return this.h.getLanguageConfiguration(languageId);\n    }","startLine":19,"endLine":21,"chunkType":"function","mtime":1772878380723.284}

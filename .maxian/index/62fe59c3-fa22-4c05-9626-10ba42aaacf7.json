@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/tokenizer.js","code":"skip(length) {\n        throw new $sb();\n    }","startLine":304,"endLine":306,"chunkType":"function","mtime":1772878380618.1973}

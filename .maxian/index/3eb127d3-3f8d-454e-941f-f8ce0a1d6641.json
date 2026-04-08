@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/textEdit.js","code":"static insert(position, newText) {\n        return new $sD([new $tD($gD.fromPositions(position, position), newText)]);\n    }","startLine":21,"endLine":23,"chunkType":"function","mtime":1772878380471.9346}

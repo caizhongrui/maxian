@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/find/browser/findModel.js","code":"moveToNextMatch() {\n        this.u(this.a.getSelection().getEndPosition());\n    }","startLine":360,"endLine":362,"chunkType":"function","mtime":1772878382472.7625}

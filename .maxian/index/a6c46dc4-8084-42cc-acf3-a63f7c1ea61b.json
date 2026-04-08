@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/colorPicker/browser/colorDetector.js","code":"isColorDecoration(decoration) {\n        return this.t.has(decoration);\n    }","startLine":221,"endLine":223,"chunkType":"function","mtime":1772878382209.2205}

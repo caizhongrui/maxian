@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/server/src/utils/arrays.ts","code":"export function contains<T>(arr: T[], val: T) {\n\treturn arr.indexOf(val) !== -1;\n}","startLine":14,"endLine":16,"chunkType":"function","mtime":1762250468243.8677}

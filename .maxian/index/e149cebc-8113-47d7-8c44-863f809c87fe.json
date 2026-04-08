@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/github/src/test/index.ts","code":"testRunner.configure(options);\n\nexport = testRunner;","startLine":27,"endLine":31,"chunkType":"block","mtime":1762250468229.0322}

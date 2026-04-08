@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModel.js","code":"getLanguageIdAtPosition(lineNumber, column) {\n        return this.tokenization.getLanguageIdAtPosition(lineNumber, column);\n    }","startLine":1527,"endLine":1529,"chunkType":"function","mtime":1772878380728.0076}

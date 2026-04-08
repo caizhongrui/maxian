@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/base.js","code":"if (!tx) {\n        $be(fn, getDebugName);\n    }","startLine":155,"endLine":157,"chunkType":"function","mtime":1772878378283.0334}

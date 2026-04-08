@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/concat23Trees.js","code":"function heightDiff(node1, node2) {\n    return Math.abs(node1.listHeight - node2.listHeight);\n}","startLine":79,"endLine":81,"chunkType":"function","mtime":1772878380615.0159}

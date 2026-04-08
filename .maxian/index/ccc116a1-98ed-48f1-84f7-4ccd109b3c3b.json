@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/editorSimpleWorker.js","code":"if (typeof importScripts === 'function') {\n    // Running in a web worker\n    globalThis.monaco = $R9();\n}","startLine":439,"endLine":442,"chunkType":"function","mtime":1772878380880.35}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/jsonc.js","code":"if (m4[length - 1] === '\\n') {\n                return m4[length - 2] === '\\r' ? '\\r\\n' : '\\n';\n            }","startLine":31,"endLine":33,"chunkType":"function","mtime":1772878378235.3025}

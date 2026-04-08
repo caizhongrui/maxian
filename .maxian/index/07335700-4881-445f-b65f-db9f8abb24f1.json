@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/preview-src/index.ts","code":"if (typeof line === 'number' && !isNaN(line)) {\n\t\tmessaging.postMessage('didClick', { line: Math.floor(line) });\n\t}","startLine":314,"endLine":316,"chunkType":"function","mtime":1762250468266.5684}

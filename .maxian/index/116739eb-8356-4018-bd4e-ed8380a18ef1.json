@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/editorSimpleWorker.js","code":"const proxyMethodRequest = (method, args) => {\n            return this.o.$fhr(method, args);\n        };","startLine":394,"endLine":396,"chunkType":"function","mtime":1772878380880.35}

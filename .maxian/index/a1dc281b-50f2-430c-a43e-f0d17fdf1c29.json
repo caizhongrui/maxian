@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/offsetRange.js","code":"join(other) {\n        return new $hD(Math.min(this.start, other.start), Math.max(this.endExclusive, other.endExclusive));\n    }","startLine":81,"endLine":83,"chunkType":"function","mtime":1772878380412.249}

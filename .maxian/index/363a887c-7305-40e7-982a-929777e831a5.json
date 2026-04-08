@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/button/button.js","code":"constructor(c) {\n        this.c = c;\n        this.a = [];\n        this.b = new $2c();\n    }","startLine":384,"endLine":388,"chunkType":"function","mtime":1772878377941.6091}

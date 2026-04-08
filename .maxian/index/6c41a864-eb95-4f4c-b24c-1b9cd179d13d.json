@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/cursor/cursorCollection.js","code":"constructor(context) {\n        this.a = context;\n        this.b = [new $I8(context)];\n        this.d = 0;\n    }","startLine":13,"endLine":17,"chunkType":"function","mtime":1772878380475.5085}

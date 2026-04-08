@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/server/src/modes/languageModes.ts","code":"getAllModesInDocument(document: TextDocument): LanguageMode[];\n\tgetMode(languageId: string): LanguageMode | undefined;","startLine":100,"endLine":101,"chunkType":"function","mtime":1762250468240.9165}

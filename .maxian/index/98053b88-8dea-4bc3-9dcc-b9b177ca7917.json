@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/blockDecorations/blockDecorations.js","code":"onConfigurationChanged(e) {\n        return this.f();\n    }","startLine":40,"endLine":42,"chunkType":"function","mtime":1772878380157.3745}

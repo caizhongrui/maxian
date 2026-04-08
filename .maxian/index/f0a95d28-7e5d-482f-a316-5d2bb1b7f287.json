@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/map.js","code":"isEmpty() {\n        return !this.d && !this.e;\n    }","startLine":170,"endLine":172,"chunkType":"function","mtime":1772878378277.2786}

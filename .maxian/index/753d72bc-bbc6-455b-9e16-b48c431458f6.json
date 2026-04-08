@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/peek/referencesTree.js","code":"constructor(a) {\n        this.a = a;\n        this.templateId = $Ceb_1.id;\n    }","startLine":134,"endLine":137,"chunkType":"function","mtime":1772878382753.075}

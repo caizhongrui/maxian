@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/IMPLEMENTATION_STATUS.md","code":"- ✅ ToolExecutor管理\n   - ✅ TaskService创建和管理\n   - ✅ **完整的15个工具定义**（本次补全）\n   - ✅ 系统提示词生成\n   - ✅ 工作区根目录管理","startLine":340,"endLine":344,"chunkType":"block","mtime":1763175108137.8928}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/id.js","code":"catch (err) {\n        errorLogger(err);\n        return '';\n    }","startLine":109,"endLine":112,"chunkType":"function","mtime":1772878378390.6702}

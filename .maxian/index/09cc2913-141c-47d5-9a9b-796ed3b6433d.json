@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/languages/autoIndent.js","code":"if (afterEnterAction.action === IndentAction.Indent) {\n        afterEnterIndent = indentConverter.shiftIndent(afterEnterIndent);\n    }","startLine":274,"endLine":276,"chunkType":"function","mtime":1772878380563.374}

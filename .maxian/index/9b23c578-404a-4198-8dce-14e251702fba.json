@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/tar.rs","code":"Ok((file, header[0] == 0x1f && header[1] == 0x8b))\n}","startLine":126,"endLine":127,"chunkType":"function","mtime":1762250468187.6743}

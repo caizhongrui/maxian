@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/quickInput/standaloneQuickInputService.js","code":"input(options, token) {\n        return this.b.input(options, token);\n    }","startLine":100,"endLine":102,"chunkType":"function","mtime":1772878383798.8425}

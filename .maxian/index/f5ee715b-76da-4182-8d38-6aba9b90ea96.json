@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"start(listenerCount) {\n        this.g = new $se();\n        this.listenerCount = listenerCount;\n    }","startLine":646,"endLine":649,"chunkType":"function","mtime":1772878378208.3105}

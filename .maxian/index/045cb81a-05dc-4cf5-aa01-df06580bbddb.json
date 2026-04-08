@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/wordHighlighter/browser/highlightDecorations.js","code":"if (kind === DocumentHighlightKind.Write) {\n        return _WRITE_OPTIONS;\n    }","startLine":79,"endLine":81,"chunkType":"function","mtime":1772878383750.9597}

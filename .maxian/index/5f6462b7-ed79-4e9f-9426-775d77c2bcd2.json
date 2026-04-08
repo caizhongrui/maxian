@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/issue-4008.yaml","code":"- blue: a=\"brown,not_brown\"\n- not_blue: foo\n- blue: foo=\"}\"\n- not_blue: 1","startLine":1,"endLine":4,"chunkType":"block","mtime":1762250468353.9592}

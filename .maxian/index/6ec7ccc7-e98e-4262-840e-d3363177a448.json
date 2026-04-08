@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/codeEditor/codeEditorWidget.js","code":"getTelemetryData() {\n        return this.mb;\n    }","startLine":1474,"endLine":1476,"chunkType":"function","mtime":1772878380256.3677}

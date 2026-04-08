@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/date.js","code":"if (typeof date !== 'number') {\n        date = date.getTime();\n    }","startLine":22,"endLine":24,"chunkType":"function","mtime":1772878378177.7314}

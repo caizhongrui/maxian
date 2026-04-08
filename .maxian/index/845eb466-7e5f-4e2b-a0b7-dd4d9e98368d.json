@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/viewLines/viewLines.js","code":"onTokensChanged(e) {\n        return this.f.onTokensChanged(e);\n    }","startLine":240,"endLine":242,"chunkType":"function","mtime":1772878380218.7095}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view/viewOverlays.js","code":"onZonesChanged(e) {\n        return this.a.onZonesChanged(e);\n    }","startLine":79,"endLine":81,"chunkType":"function","mtime":1772878379802.077}

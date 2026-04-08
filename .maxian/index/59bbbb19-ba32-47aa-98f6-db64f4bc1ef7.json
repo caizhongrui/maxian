@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/view/ghostText/ghostTextView.js","code":"ownsViewZone(viewZoneId) {\n        return this.n.viewZoneId === viewZoneId;\n    }","startLine":128,"endLine":130,"chunkType":"function","mtime":1772878383194.6384}

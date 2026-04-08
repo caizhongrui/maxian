@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/config/elementSizeObserver.js","code":"dispose() {\n        this.stopObserving();\n        super.dispose();\n    }","startLine":19,"endLine":22,"chunkType":"function","mtime":1772878379325.359}

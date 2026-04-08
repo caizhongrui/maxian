@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/tunnel-forwarding/src/split.ts","code":"export const splitNewLines = () => new StreamSplitter('\\n'.charCodeAt(0));","startLine":8,"endLine":9,"chunkType":"function","mtime":1762250468319.6929}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"const finish = () => {\n        todo = -1;\n        for (const promise of promiseList) {\n            promise.cancel?.();\n        }\n    };","startLine":507,"endLine":512,"chunkType":"function","mtime":1772878378139.2854}

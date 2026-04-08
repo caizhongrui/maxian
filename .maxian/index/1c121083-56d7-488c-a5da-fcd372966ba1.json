@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/errors.rs","code":"ServerDownloadError(String),\n\t#[error(\"Updates are are not available: {0}\")]","startLine":506,"endLine":507,"chunkType":"function","mtime":1762250468186.8193}

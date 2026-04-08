@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/utils.js","code":"if (!mapping) {\n        // No changes before the position\n        return $gD.fromPositions(posInOriginal);\n    }","startLine":314,"endLine":317,"chunkType":"function","mtime":1772878380291.6145}

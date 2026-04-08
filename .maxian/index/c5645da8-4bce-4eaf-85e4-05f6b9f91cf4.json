@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/microsoft-authentication/src/common/publicClientCache.ts","code":"removeAccount(account: AccountInfo): Promise<void>;\n\taccounts: AccountInfo[];","startLine":14,"endLine":15,"chunkType":"function","mtime":1762250468282.9082}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/commands/serve_web.rs","code":"let (s_req, s_res) =\n\t\t\t\ttokio::join!(hyper::upgrade::on(&mut req), hyper::upgrade::on(&mut res));","startLine":334,"endLine":335,"chunkType":"function","mtime":1762250468182.808}

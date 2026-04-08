@@ -11,6 +11,7 @@ import { IRipgrepService } from '../../../../services/ripgrep/common/ripgrep.js'
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import * as path from '../../../../../base/common/path.js';
 import * as glob from '../../../../../base/common/glob.js';
+import { TOOL_SEARCH_EXCLUDE_GLOBS, isLikelyNoisePath, shouldApplyNoiseFiltering } from '../../common/services/globConstants.js';
 
 /**
  * P1优化：搜索结果缓存条目
@@ -64,6 +65,52 @@ export class SearchTool {
 		return `${trimmed.slice(0, this.MAX_PREVIEW_LINE_CHARS)}...`;
 	}
 
+	private getNoiseExcludePattern(searchPath: string): glob.IExpression | undefined {
+		return shouldApplyNoiseFiltering(searchPath, this.workspaceRoot) ? TOOL_SEARCH_EXCLUDE_GLOBS : undefined;
+	}
+
+	private filterNoiseFilePaths(filePaths: string[], searchPath: string): string[] {
+		if (!shouldApplyNoiseFiltering(searchPath, this.workspaceRoot)) {
+			return filePaths;
+		}
+		return filePaths.filter(filePath => !isLikelyNoisePath(filePath));
+	}
+
+	private filterNoiseTextResults(
+		results: Map<string, { filePath: string; lineNumber: number; line: string }>,
+		searchPath: string
+	): Map<string, { filePath: string; lineNumber: number; line: string }> {
+		if (!shouldApplyNoiseFiltering(searchPath, this.workspaceRoot)) {
+			return results;
+		}
+		const filtered = new Map<string, { filePath: string; lineNumber: number; line: string }>();
+		for (const [key, value] of results.entries()) {
+			if (!isLikelyNoisePath(value.filePath)) {
+				filtered.set(key, value);
+			}
+		}
+		return filtered;
+	}
+
+	/**
+	 * 归一化 file_pattern:
+	 * - 裸文件名/扩展名模式（如 *.java / package.json）自动补全为递归匹配前缀
+	 * - 已包含路径层级（含 / 或双星前缀）的模式保持不变
+	 */
+	private normalizeFilePattern(pattern: string | undefined): string | undefined {
+		if (!pattern) {
+			return undefined;
+		}
+		const normalized = pattern.trim().replace(/\\/g, '/');
+		if (!normalized) {
+			return undefined;
+		}
+		if (normalized.startsWith('**/') || normalized.includes('/')) {
+			return normalized;
+		}
+		return `**/${normalized}`;
+	}
+
 	/**
 	 * 搜索文件
 	 * 使用 ISearchService.fileSearch()，底层由 Extension Host 的 ripgrep 实现
@@ -111,19 +158,24 @@ export class SearchTool {
 					this.debugLog('[SearchTool] searchFiles 内容搜索，路径:', searchPath, 'regex:', regex, 'file_pattern:', file_pattern, 'isFilePath:', isFilePath);
 
 					// 合并文件过滤：若path指向文件则用文件名，否则用file_pattern参数
-					const effectiveFilePattern = fileNameFilter || file_pattern;
+					const effectiveFilePattern = this.normalizeFilePattern(fileNameFilter || file_pattern);
 					const includePattern: glob.IExpression | undefined = effectiveFilePattern
 						? { [effectiveFilePattern]: true }
 						: undefined;
 
-					const results = await this.performTextSearchDirect(folderUri, regex, includePattern, true, cts.token);
+					const excludePattern = this.getNoiseExcludePattern(searchPath);
+					const rawResults = await this.performTextSearchDirect(folderUri, regex, includePattern, excludePattern, true, cts.token);
+					const results = this.filterNoiseTextResults(rawResults, searchPath);
 
 					clearTimeout(timeoutId);
 					const elapsed = Date.now() - startTime;
 					this.debugLog('[SearchTool] searchFiles 内容搜索完成，耗时:', elapsed, 'ms，匹配文件数:', new Set(Array.from(results.values()).map(r => r.filePath)).size);
 
 					if (results.size === 0) {
-						return `❌ 未找到匹配正则表达式 "${regex}" 的内容\n\n📁 搜索路径: "${searchPath}"${file_pattern ? '\n📄 文件模式: ' + file_pattern : ''}\n\n💡 建议：\n1. 检查正则表达式语法是否正确\n2. 或使用 codebase_search 进行关键词搜索\n3. 或使用 glob 工具按文件名搜索`;
+						if (rawResults.size > 0) {
+							return `未找到匹配正则表达式 "${regex}" 的可用结果（原始命中 ${rawResults.size} 条均位于噪音目录，已自动过滤）。\n\n📁 搜索路径: "${searchPath}"${file_pattern ? '\n📄 文件模式: ' + file_pattern : ''}\n\n💡 提示：如需搜索构建产物目录，请把 path 明确指向该目录后重试。`;
+						}
+						return `未找到匹配正则表达式 "${regex}" 的内容。\n\n📁 搜索路径: "${searchPath}"${file_pattern ? '\n📄 文件模式: ' + file_pattern : ''}\n\n💡 建议：\n1. 检查正则表达式语法是否正确\n2. 或使用 codebase_search 进行关键词搜索\n3. 或使用 glob 工具按文件名搜索`;
 					}
 
 					// 按文件分组
@@ -166,12 +218,14 @@ export class SearchTool {
 				}
 
 				// 只有 file_pattern，执行文件名搜索（QueryType.File）
-				const includePattern = file_pattern || '**/*';
+				const includePattern = this.normalizeFilePattern(file_pattern) || '**/*';
 				this.debugLog('[SearchTool] searchFiles 文件名搜索，路径:', folderPath, '模式:', includePattern);
 
+				const excludePattern = this.getNoiseExcludePattern(searchPath);
 				const result = await this.searchService.fileSearch({
 					type: QueryType.File,
 					filePattern: includePattern,
+					excludePattern,
 					folderQueries: [{ folder: folderUri }],
 					maxResults: 500
 				}, cts.token);
@@ -180,17 +234,21 @@ export class SearchTool {
 				const elapsed = Date.now() - startTime;
 				this.debugLog('[SearchTool] searchFiles 文件名搜索完成，耗时:', elapsed, 'ms，结果数:', result?.results?.length || 0);
 
-				if (!result || !result.results || result.results.length === 0) {
-					// 🔥 优化：当搜索返回0结果时，给AI明确的指导，防止重复搜索
+				const allFilesRaw = result?.results?.map(r => r.resource.fsPath) ?? [];
+				const allFiles = this.filterNoiseFilePaths(allFilesRaw, searchPath);
+
+				if (allFiles.length === 0) {
 					const dirExists = await this.checkDirectoryExists(searchPath);
 					if (!dirExists) {
-						return `❌ 未找到匹配的文件\n\n📁 目录 "${searchPath}" 不存在。\n\n💡 建议：如果你需要创建文件，请逐步使用 write_to_file 创建，并在关键步骤后验证结果。\n\n⚠️ 重要：不要再次搜索同一个不存在的目录，这会浪费时间和资源！`;
+						return `未找到匹配的文件。\n\n📁 目录 "${searchPath}" 不存在。\n\n💡 建议：如果你需要创建文件，请逐步使用 write_to_file 创建，并在关键步骤后验证结果。`;
 					} else {
-						return `❌ 未找到匹配的文件\n\n📁 目录 "${searchPath}" 存在但为空或没有匹配 "${includePattern}" 的文件。\n\n💡 建议：\n1. 检查目录路径是否正确\n2. 或使用 list_files 查看目录内容\n3. 或逐步创建所需文件并验证\n\n⚠️ 重要：不要再次搜索同一个目录，请尝试其他策略！`;
+						if (allFilesRaw.length > 0) {
+							return `未找到匹配的文件（原始命中 ${allFilesRaw.length} 项均位于噪音目录，已自动过滤）。\n\n📁 搜索路径: "${searchPath}"\n📄 文件模式: "${includePattern}"\n\n💡 提示：如需搜索构建产物目录，请把 path 明确指向该目录后重试。`;
+						}
+						return `未找到匹配的文件。\n\n📁 目录 "${searchPath}" 存在但为空或没有匹配 "${includePattern}" 的文件。\n\n💡 建议：\n1. 检查目录路径是否正确\n2. 或使用 list_files 查看目录内容\n3. 或逐步创建所需文件并验证`;
 					}
 				}
 
-				const allFiles = result.results.map(r => r.resource.fsPath);
 				if (outputMode === 'count') {
 					return `${allFiles.length} files`;
 				}
@@ -241,22 +299,31 @@ export class SearchTool {
 			? rawPath
 			: `${this.workspaceRoot.replace(/\/$/, '')}/${rawPath}`;
 
-		// P1优化：检查缓存
-		const cacheKey = this.getCacheKey(query, searchPath, file_pattern);
-		const cachedResult = this.getFromCache(cacheKey);
-		if (cachedResult) {
-			this.cacheHits++;
-			this.debugLog(`[SearchTool] 使用缓存结果 (命中率: ${this.getCacheHitRate()}%)`);
-			return cachedResult;
-		}
-		this.cacheMisses++;
+			const normalizedFilePattern = this.normalizeFilePattern(file_pattern);
 
-		try {
-			const folderUri = URI.file(searchPath);
+			// P1优化：检查缓存
+			const cacheKey = this.getCacheKey({
+				query,
+				path: searchPath,
+				filePattern: normalizedFilePattern,
+				outputMode,
+				headLimit,
+				offset: offsetVal
+			});
+			const cachedResult = this.getFromCache(cacheKey);
+			if (cachedResult) {
+				this.cacheHits++;
+				this.debugLog(`[SearchTool] 使用缓存结果 (命中率: ${this.getCacheHitRate()}%)`);
+				return cachedResult;
+			}
+			this.cacheMisses++;
 
-			const includePattern: glob.IExpression | undefined = file_pattern
-				? { [file_pattern]: true }
-				: undefined;
+			try {
+				const folderUri = URI.file(searchPath);
+
+				const includePattern: glob.IExpression | undefined = normalizedFilePattern
+					? { [normalizedFilePattern]: true }
+					: undefined;
 
 			this.debugLog('[SearchTool] codebaseSearch 开始，查询:', query, '路径:', searchPath);
 
@@ -267,11 +334,16 @@ export class SearchTool {
 			try {
 				// 对齐 Claude Code / OpenCode：codebase_search 作为自然语言兜底搜索，不再在运行时二次拆词猜测。
 				const searchStart = Date.now();
-				const results = await this.performTextSearchDirect(folderUri, query, includePattern, false, cts.token);
+				const excludePattern = this.getNoiseExcludePattern(searchPath);
+				const rawResults = await this.performTextSearchDirect(folderUri, query, includePattern, excludePattern, false, cts.token);
+				const results = this.filterNoiseTextResults(rawResults, searchPath);
 				const searchElapsed = Date.now() - searchStart;
 				this.debugLog('[SearchTool] 直接搜索完成，耗时:', searchElapsed, 'ms，结果数:', results.size);
 
 				clearTimeout(timeoutId);
+				if (results.size === 0 && rawResults.size > 0) {
+					return `未找到与 "${query}" 相关的可用结果（原始命中 ${rawResults.size} 条均位于噪音目录，已自动过滤）。\n\n建议：\n- 如需搜索构建产物目录，请把 path 明确指向该目录后重试\n- 或继续在源码目录内检索`;
+				}
 				const result = await this.formatSearchResults(query, results, startTime, outputMode, headLimit, offsetVal);
 				if (results.size > 0) {
 					this.setCache(cacheKey, result);
@@ -379,6 +451,7 @@ export class SearchTool {
 		folderUri: URI,
 		pattern: string,
 		includePattern: glob.IExpression | undefined,
+		excludePattern: glob.IExpression | undefined,
 		isRegExp: boolean,
 		token: CancellationToken
 	): Promise<Map<string, { filePath: string; lineNumber: number; line: string }>> {
@@ -395,6 +468,7 @@ export class SearchTool {
 						isWordMatch: false
 					},
 					includePattern,
+					excludePattern,
 					maxResults: 100,
 					folderQueries: [{ folder: folderUri }]
 				},
@@ -608,11 +682,21 @@ export class SearchTool {
 	/**
 	 * 生成缓存键
 	 */
-	private getCacheKey(query: string, path: string, filePattern?: string): string {
+	private getCacheKey(params: {
+		query: string;
+		path: string;
+		filePattern?: string;
+		outputMode?: 'content' | 'files_with_matches' | 'count';
+		headLimit?: number;
+		offset?: number;
+	}): string {
 		return JSON.stringify({
-			query,
-			path,
-			filePattern: filePattern || '',
+			query: params.query,
+			path: params.path,
+			filePattern: params.filePattern || '',
+			outputMode: params.outputMode || 'files_with_matches',
+			headLimit: params.headLimit ?? 100,
+			offset: params.offset ?? 0
 		});
 	}
 
@@ -657,6 +741,18 @@ export class SearchTool {
 		} catch {
 			return '';
 		}
+	}
+
+	private normalizeComparablePath(rawPath: string): string {
+		const trimmed = (rawPath || '').replace(/^file:\/\//, '').replace(/\/+$/, '');
+		if (!trimmed) {
+			return '';
+		}
+		return path.normalize(trimmed);
+	}
+
+	private isPathRelated(a: string, b: string): boolean {
+		return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 	}
 
 	/**
@@ -720,20 +816,20 @@ export class SearchTool {
 			return;
 		}
 
-		const normalizedPaths = paths.map(p => p.replace(/\/$/, ''));
+		const normalizedPaths = paths
+			.map(p => this.normalizeComparablePath(p))
+			.filter(Boolean);
 		const keysToDelete: string[] = [];
 
 		for (const [key, entry] of this.searchCache.entries()) {
-			const cachedPath = entry.searchPath.replace(/\/$/, '');
+			const cachedPath = this.normalizeComparablePath(entry.searchPath);
 			if (!cachedPath) {
 				keysToDelete.push(key);
 				continue;
 			}
 
 			const shouldInvalidate = normalizedPaths.some(affectedPath =>
-				affectedPath === cachedPath ||
-				affectedPath.startsWith(`${cachedPath}/`) ||
-				cachedPath.startsWith(`${affectedPath}/`)
+				this.isPathRelated(affectedPath, cachedPath)
 			);
 
 			if (shouldInvalidate) {

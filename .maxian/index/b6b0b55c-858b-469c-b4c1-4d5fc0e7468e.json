@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/quickFix.ts","code":"function isPreferredFix(\n\taction: VsCodeCodeAction,","startLine":508,"endLine":509,"chunkType":"function","mtime":1762250468328.5637}

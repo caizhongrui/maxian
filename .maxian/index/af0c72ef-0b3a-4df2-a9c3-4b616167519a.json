@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/main.js","code":"if (portable && portable.isPortable) {\n    app.setAppLogsPath(path.join(userDataPath, 'logs'));\n}","startLine":83,"endLine":85,"chunkType":"function","mtime":1772878377504.059}

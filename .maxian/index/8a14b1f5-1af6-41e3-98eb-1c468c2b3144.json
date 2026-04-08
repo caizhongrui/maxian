@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/editorExtensions.js","code":"runEditorCommand(accessor, editor, args) {\n        this.u(accessor, editor);\n        return this.run(accessor, editor, args || {});\n    }","startLine":247,"endLine":250,"chunkType":"function","mtime":1772878379375.4983}

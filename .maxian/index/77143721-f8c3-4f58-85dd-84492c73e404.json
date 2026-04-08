@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/labels.js","code":"if ($m || forceDisableMnemonics) {\n        return label.replace(/\\(&&\\w\\)|&&/g, '');\n    }","startLine":317,"endLine":319,"chunkType":"function","mtime":1772878378239.4617}

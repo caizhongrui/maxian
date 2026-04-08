@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModel.js","code":"getInjectedTextDecorations(ownerId = 0) {\n        return this.$.getAllInjectedText(this, ownerId);\n    }","startLine":1353,"endLine":1355,"chunkType":"function","mtime":1772878380728.0076}

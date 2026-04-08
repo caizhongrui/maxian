@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"function isLessThan(result) {\n        return result < 0;\n    }","startLine":537,"endLine":539,"chunkType":"function","mtime":1772878378138.325}

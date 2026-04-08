@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/fixedArray.js","code":"set(index, value) {\n        while (index >= this.a.length) {\n            this.a[this.a.length] = this.b;\n        }\n        this.a[index] = value;\n    }","startLine":21,"endLine":26,"chunkType":"function","mtime":1772878380722.991}

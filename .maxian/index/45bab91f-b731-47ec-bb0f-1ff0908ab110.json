@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/util/dependentRegistration.ts","code":"export function conditionalRegistration(\n\tconditions: readonly Condition[],","startLine":65,"endLine":66,"chunkType":"function","mtime":1762250468329.7383}

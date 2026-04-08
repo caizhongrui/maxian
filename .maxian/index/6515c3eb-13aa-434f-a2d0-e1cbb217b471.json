@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewModel.js","code":"constructor(range, options) {\n        this._viewModelDecorationBrand = undefined;\n        this.range = range;\n        this.options = options;\n    }","startLine":87,"endLine":91,"chunkType":"function","mtime":1772878381187.7893}

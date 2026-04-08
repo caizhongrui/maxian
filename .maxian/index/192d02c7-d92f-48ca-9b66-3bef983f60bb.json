@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/storage/common/storage.js","code":"t() {\n        this.B(this.r.onDidChangeItemsExternal(e => this.u(e)));\n    }","startLine":48,"endLine":50,"chunkType":"function","mtime":1772878378528.3423}

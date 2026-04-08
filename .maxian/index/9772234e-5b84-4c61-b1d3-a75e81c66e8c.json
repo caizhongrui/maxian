@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestWidgetRenderer.js","code":"$nk(data.readMore);\n            data.readMore.onmousedown = null;\n            data.readMore.onclick = null;\n        }\n    }","startLine":191,"endLine":195,"chunkType":"block","mtime":1772878383698.5754}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"if (Object.keys(values).length === 0) {\n        return template;\n    }","startLine":37,"endLine":39,"chunkType":"function","mtime":1772878378348.6172}

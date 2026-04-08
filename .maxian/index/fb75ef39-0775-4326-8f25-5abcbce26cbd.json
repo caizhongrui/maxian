@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/mouseTarget.js","code":"getVerticalOffsetForLineNumber(lineNumber) {\n        return this.c.viewLayout.getVerticalOffsetForLineNumber(lineNumber);\n    }","startLine":264,"endLine":266,"chunkType":"function","mtime":1772878379372.1423}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test.sh","code":"realpath() { [[ $1 = /* ]] && echo \"$1\" || echo \"$PWD/${1#./}\"; }\n\tROOT=$(dirname $(dirname $(realpath \"$0\")))","startLine":4,"endLine":5,"chunkType":"function","mtime":1762250468360.3738}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/extpath.js","code":"function normalizePath(path) {\n    return $Ff($lc(path), sep);\n}","startLine":132,"endLine":134,"chunkType":"function","mtime":1772878378390.1477}

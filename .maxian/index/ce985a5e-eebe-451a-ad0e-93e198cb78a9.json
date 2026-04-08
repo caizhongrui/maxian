@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/cursor/cursorTypeEditOperations.js","code":"return (config.autoSurround === 'brackets' || config.autoSurround === 'languageDefined');\n    }","startLine":950,"endLine":951,"chunkType":"function","mtime":1772878380477.6985}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestWidget.js","code":"forceRenderingAbove() {\n        if (!this.n) {\n            this.n = true;\n            this.U(this.w.restore());\n        }\n    }","startLine":801,"endLine":806,"chunkType":"function","mtime":1772878383697.8738}

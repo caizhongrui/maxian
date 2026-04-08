@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/linkedEditing/browser/linkedEditing.js","code":"setDebounceDuration(timeInMS) {\n        this.b = timeInMS;\n    }","startLine":290,"endLine":292,"chunkType":"function","mtime":1772878383408.0415}

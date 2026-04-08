@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlayHints/browser/inlayHints.js","code":"constructor(range, direction) {\n        this.range = range;\n        this.direction = direction;\n    }","startLine":12,"endLine":15,"chunkType":"function","mtime":1772878383113.2056}

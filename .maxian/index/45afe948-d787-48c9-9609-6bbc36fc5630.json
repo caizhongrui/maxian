@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/range.js","code":"toJSON() {\n        return this;\n    }","startLine":397,"endLine":399,"chunkType":"function","mtime":1772878380413.052}

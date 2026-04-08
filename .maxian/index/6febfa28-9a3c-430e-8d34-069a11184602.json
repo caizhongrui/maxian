@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/cssValue.js","code":"if (!uri) {\n        return `url('')`;\n    }","startLine":27,"endLine":29,"chunkType":"function","mtime":1772878377509.5535}

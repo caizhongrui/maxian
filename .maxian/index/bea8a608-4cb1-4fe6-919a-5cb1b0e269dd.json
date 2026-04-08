@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/scrollbar/scrollbarState.js","code":"clone() {\n        return new $qZ(this.c, this.a, this.b, this.d, this.e, this.f);\n    }","startLine":24,"endLine":26,"chunkType":"function","mtime":1772878378060.1316}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/glyphMargin/glyphMargin.js","code":"dispose() {\n        this.n = [];\n        this.s = [];\n        this.t = {};\n        super.dispose();\n    }","startLine":117,"endLine":122,"chunkType":"function","mtime":1772878380159.458}

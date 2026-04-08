@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/view/inlineEdits/inlineEditsView.js","code":"this.b.root.classList.toggle('toolbarDropdownVisible', toolbarDropdownVisible.read(reader));\n        }));\n    }","startLine":401,"endLine":403,"chunkType":"block","mtime":1772878383195.6814}

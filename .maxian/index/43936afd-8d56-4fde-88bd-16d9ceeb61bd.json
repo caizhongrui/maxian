@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/notebook-renderers/src/color.ts","code":"function _toTwoDigitHex(n: number): string {\n\t\t\t\tconst r = n.toString(16);\n\t\t\t\treturn r.length !== 2 ? '0' + r : r;\n\t\t\t}","startLine":933,"endLine":936,"chunkType":"function","mtime":1762250468286.1135}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/codeEditor/codeEditorContributions.js","code":"set(id, value) {\n        this.c.set(id, value);\n    }","startLine":83,"endLine":85,"chunkType":"function","mtime":1772878380256.0403}

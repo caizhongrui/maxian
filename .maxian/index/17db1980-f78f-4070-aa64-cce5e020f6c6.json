@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/commands/output.rs","code":"write_columns(&mut bw, table.cols.iter().map(|c| c.heading), &sizes)?;\n\t\t// print --- separators","startLine":103,"endLine":104,"chunkType":"function","mtime":1762250468182.722}

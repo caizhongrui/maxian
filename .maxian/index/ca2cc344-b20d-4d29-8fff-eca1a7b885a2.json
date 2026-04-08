@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/selection.js","code":"getPosition() {\n        return new $fD(this.positionLineNumber, this.positionColumn);\n    }","startLine":75,"endLine":77,"chunkType":"function","mtime":1772878380414.3105}

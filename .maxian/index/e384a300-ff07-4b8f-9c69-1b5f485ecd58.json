@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/less/syntaxes/less.tmLanguage.json","code":"},\n\t\t\t\t\t\"name\": \"entity.other.attribute-name.pseudo-class.less\",\n\t\t\t\t\t\"patterns\": [\n\t\t\t\t\t\t{\n\t\t\t\t\t\t\t\"begin\": \"\\\\(\",","startLine":3877,"endLine":3881,"chunkType":"block","mtime":1762250468261.719}

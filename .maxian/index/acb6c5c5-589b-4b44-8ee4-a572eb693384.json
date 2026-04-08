@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/comparers.js","code":"if (elementASuffixMatch !== elementBSuffixMatch) {\n        return elementASuffixMatch ? -1 : 1;\n    }","startLine":259,"endLine":261,"chunkType":"function","mtime":1772878378169.8606}

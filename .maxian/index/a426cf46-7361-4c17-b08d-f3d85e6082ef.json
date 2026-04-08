@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/documentSymbols/browser/documentSymbols.js","code":"return (await outlineService.getOrCreate(reference.object.textEditorModel, CancellationToken.None)).getTopLevelSymbols();\n    }","startLine":18,"endLine":19,"chunkType":"function","mtime":1772878382319.7808}

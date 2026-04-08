@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/code/browser/workbench/workbench.js","code":"if (!configElement || !configElementAttribute) {\n        throw new Error('Missing web configuration element');\n    }","startLine":466,"endLine":468,"chunkType":"function","mtime":1772878379209.9885}

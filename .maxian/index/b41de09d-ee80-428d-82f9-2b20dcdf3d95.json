@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/comparers.js","code":"if (prefixCompare) {\n        return prefixCompare;\n    }","startLine":253,"endLine":255,"chunkType":"function","mtime":1772878378169.8606}

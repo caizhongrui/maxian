@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/common/ipc.js","code":"read(bytes) {\n        const result = this.b.slice(this.a, this.a + bytes);\n        this.a += result.byteLength;\n        return result;\n    }","startLine":109,"endLine":113,"chunkType":"function","mtime":1772878378450.3462}

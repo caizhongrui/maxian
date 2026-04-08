@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/viewLines/viewLine.js","code":"while (spanNode) {\n        spanNode = spanNode.previousSibling;\n        spanIndex++;\n    }","startLine":517,"endLine":520,"chunkType":"function","mtime":1772878380218.248}

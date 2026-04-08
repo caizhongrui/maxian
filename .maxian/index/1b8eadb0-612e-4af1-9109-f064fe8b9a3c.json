@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/util/dispose.ts","code":"public dispose(): any {\n\t\tif (this._isDisposed) {\n\t\t\treturn;\n\t\t}\n\t\tthis._isDisposed = true;\n\t\tdisposeAll(this._disposables);\n\t}","startLine":35,"endLine":41,"chunkType":"function","mtime":1762250468272.206}

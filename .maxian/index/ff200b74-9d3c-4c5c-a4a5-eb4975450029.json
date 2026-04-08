@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/storage/common/storage.js","code":"constructor() {\n        this.onDidChangeItemsExternal = Event.None;\n        this.a = new Map();\n    }","startLine":254,"endLine":257,"chunkType":"function","mtime":1772878378528.3423}

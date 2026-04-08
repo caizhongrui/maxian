@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/bootstrap-fork.js","code":"if (!process.env['VSCODE_HANDLES_UNCAUGHT_ERRORS']) {\n    handleExceptions();\n}","startLine":185,"endLine":187,"chunkType":"function","mtime":1772878377404.6196}

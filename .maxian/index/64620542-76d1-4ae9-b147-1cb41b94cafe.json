@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/objects.js","code":"if (!$Ag(destination)) {\n        return source;\n    }","startLine":78,"endLine":80,"chunkType":"function","mtime":1772878378281.759}

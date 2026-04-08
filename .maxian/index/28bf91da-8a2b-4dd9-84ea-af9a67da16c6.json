@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/languages/enterAction.js","code":"if (removeText) {\n        indentation = indentation.substring(0, indentation.length - removeText);\n    }","startLine":41,"endLine":43,"chunkType":"function","mtime":1772878380564.0742}

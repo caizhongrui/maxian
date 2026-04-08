@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"if (result === undefined) {\n        // see https://bugs.webkit.org/show_bug.cgi?id=261140\n        result = [];\n    }","startLine":518,"endLine":521,"chunkType":"function","mtime":1772878378138.325}

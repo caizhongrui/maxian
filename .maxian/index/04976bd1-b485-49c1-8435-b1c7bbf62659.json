@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/positionToOffset.js","code":"getRange(offsetRange) {\n        return $gD.fromPositions(this.getPosition(offsetRange.start), this.getPosition(offsetRange.endExclusive));\n    }","startLine":41,"endLine":43,"chunkType":"function","mtime":1772878380412.8208}

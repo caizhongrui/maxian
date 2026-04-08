@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneServices.js","code":"setFilter(filter) { }\n    getFilter(source) {\n        return NotificationsFilter.OFF;\n    }","startLine":296,"endLine":299,"chunkType":"function","mtime":1772878383802.3767}

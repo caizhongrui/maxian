@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/ipynb/src/serializers.ts","code":"export function removeVSCodeCellLanguageId(metadata: CellMetadata) {\n\tif (metadata.metadata?.vscode) {\n\t\tdelete metadata.metadata.vscode;\n\t}\n}","startLine":81,"endLine":85,"chunkType":"function","mtime":1762250468248.7864}

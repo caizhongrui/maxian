@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/port_forwarder.rs","code":"let (tx, rx) = mpsc::channel(8);\n\t\tSelf {\n\t\t\ttx,\n\t\t\trx,\n\t\t\tforwarded: HashSet::new(),\n\t\t}","startLine":36,"endLine":41,"chunkType":"function","mtime":1762250468185.327}

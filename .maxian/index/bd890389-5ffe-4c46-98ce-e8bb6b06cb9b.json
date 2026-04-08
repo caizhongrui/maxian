@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/diff/defaultLinesDiffComputer/lineSequence.js","code":"constructor(a, b) {\n        this.a = a;\n        this.b = b;\n    }","startLine":6,"endLine":9,"chunkType":"function","mtime":1772878380539.1743}

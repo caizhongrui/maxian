@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/ipynb/src/notebookImagePaste.ts","code":"function getImageMimeType(uri: vscode.Uri): string | undefined {\n\treturn imageExtToMime.get(extname(uri.fsPath).toLowerCase());\n}","startLine":45,"endLine":47,"chunkType":"function","mtime":1762250468248.1514}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/htmlContent.js","code":"appendMarkdown(value) {\n        this.value += value;\n        return this;\n    }","startLine":39,"endLine":42,"chunkType":"function","mtime":1772878378214.0713}

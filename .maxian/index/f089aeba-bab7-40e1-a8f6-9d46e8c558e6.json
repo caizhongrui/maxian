@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/delegatingEditorImpl.js","code":"focus() {\n        this.g.focus();\n    }","startLine":99,"endLine":101,"chunkType":"function","mtime":1772878380260.9314}

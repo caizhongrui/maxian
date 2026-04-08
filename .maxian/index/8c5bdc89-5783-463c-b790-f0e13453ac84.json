@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidget.js","code":"setViewModel(viewModel) {\n        this.b.set(viewModel, undefined);\n    }","startLine":45,"endLine":47,"chunkType":"function","mtime":1772878380369.6719}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/encodedTokenAttributes.js","code":"static containsBalancedBrackets(metadata) {\n        return (metadata & 1024 /* MetadataConsts.BALANCED_BRACKETS_MASK */) !== 0;\n    }","startLine":102,"endLine":104,"chunkType":"function","mtime":1772878380560.6304}

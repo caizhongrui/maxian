@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/unicodeHighlighter/browser/unicodeHighlighter.js","code":"dispose() {\n        this.f.clear();\n        super.dispose();\n    }","startLine":202,"endLine":205,"chunkType":"function","mtime":1772878383750.3093}

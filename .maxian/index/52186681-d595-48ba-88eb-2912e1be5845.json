@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneServices.js","code":"Q() {\n        this.N = null;\n        this.a.fire();\n    }","startLine":428,"endLine":431,"chunkType":"function","mtime":1772878383802.3767}

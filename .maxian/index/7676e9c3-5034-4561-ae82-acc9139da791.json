@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/SKILLS_FINAL_FIX_SUMMARY.md","code":"registerSingleton(ISkillService, SkillServiceImpl, InstantiationType.Delayed);","startLine":27,"endLine":28,"chunkType":"function","mtime":1772782077287.0613}

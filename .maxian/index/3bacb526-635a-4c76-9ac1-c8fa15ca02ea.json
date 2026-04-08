@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/css-language-features/client/src/dropOrPaste/uriList.ts","code":"function splitUriList(str: string): string[] {\n\treturn str.split('\\r\\n');\n}","startLine":8,"endLine":10,"chunkType":"function","mtime":1762250468196.7368}

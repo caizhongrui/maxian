@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/cursor/cursorCollection.js","code":"stopTrackingSelections() {\n        for (const cursor of this.b) {\n            cursor.stopTrackingSelection(this.a);\n        }\n    }","startLine":28,"endLine":32,"chunkType":"function","mtime":1772878380475.5085}

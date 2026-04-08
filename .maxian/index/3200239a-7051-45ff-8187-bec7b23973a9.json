@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/folding/browser/hiddenRangeModel.js","code":"h(newHiddenAreas) {\n        this.b = newHiddenAreas;\n        this.f = false;\n        this.d.fire(newHiddenAreas);\n    }","startLine":63,"endLine":67,"chunkType":"function","mtime":1772878382591.506}

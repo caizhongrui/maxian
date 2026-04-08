@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlayHints/browser/inlayHintsController.js","code":"dispose() {\n        this.g.dispose();\n        this.J();\n        this.f.dispose();\n    }","startLine":122,"endLine":126,"chunkType":"function","mtime":1772878383113.8022}

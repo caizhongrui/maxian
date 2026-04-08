@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModel.js","code":"equalsTextBuffer(other) {\n        this.jb();\n        return this.C.equals(other);\n    }","startLine":299,"endLine":302,"chunkType":"function","mtime":1772878380728.0076}

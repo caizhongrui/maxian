@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/range.js","code":"getEndPosition() {\n        return $gD.getEndPosition(this);\n    }","startLine":227,"endLine":229,"chunkType":"function","mtime":1772878380413.052}

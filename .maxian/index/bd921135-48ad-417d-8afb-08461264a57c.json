@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/marked/marked.js","code":"changeDefaults(marked.defaults);\n    return marked;","startLine":2443,"endLine":2444,"chunkType":"function","mtime":1762250468438.999}

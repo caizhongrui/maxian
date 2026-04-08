@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test.rb","code":"super(credentials, options)\n      @base_url = base_url || 'https://management.azure.com'","startLine":24,"endLine":25,"chunkType":"function","mtime":1762250468359.995}

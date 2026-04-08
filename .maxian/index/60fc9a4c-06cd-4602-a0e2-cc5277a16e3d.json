@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/skipList.js","code":"while (node) {\n            yield [node.key, node.value];\n            node = node.forward[0];\n        }","startLine":67,"endLine":70,"chunkType":"function","mtime":1772878378347.7126}

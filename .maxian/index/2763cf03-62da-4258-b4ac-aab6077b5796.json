@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-test-resolver/src/extension.ts","code":"function getNewEnv(): { [x: string]: string | undefined } {\n\tconst env = { ...process.env };\n\tdelete env['ELECTRON_RUN_AS_NODE'];\n\treturn env;\n}","startLine":485,"endLine":489,"chunkType":"function","mtime":1762250468388.745}

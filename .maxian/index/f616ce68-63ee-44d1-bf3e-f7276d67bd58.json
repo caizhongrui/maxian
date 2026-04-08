@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/ipynb/src/ipynbMain.browser.ts","code":"export function activate(context: vscode.ExtensionContext) {\n\treturn main.activate(context, new NotebookSerializer(context));\n}","startLine":10,"endLine":12,"chunkType":"function","mtime":1762250468247.7185}

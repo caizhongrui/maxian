@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/quickInput/standaloneQuickInputService.js","code":"static get(editor) {\n        return editor.getContribution($stc.ID);\n    }","startLine":138,"endLine":140,"chunkType":"function","mtime":1772878383798.8425}

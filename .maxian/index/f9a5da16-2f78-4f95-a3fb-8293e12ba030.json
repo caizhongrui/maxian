@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/languageFeaturesService.js","code":"setNotebookTypeResolver(resolver) {\n        this.a = resolver;\n    }","startLine":44,"endLine":46,"chunkType":"function","mtime":1772878380884.6372}

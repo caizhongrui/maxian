@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/editorDom.js","code":"i(properties) {\n        return JSON.stringify(properties);\n    }","startLine":226,"endLine":228,"chunkType":"function","mtime":1772878379373.9368}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsSource.js","code":"g(reader) {\n        return new $tD(this.a.read(reader) ?? emptyRange, this.inlineCompletion.filterText);\n    }","startLine":314,"endLine":316,"chunkType":"function","mtime":1772878383189.7903}

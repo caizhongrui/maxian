@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/extpath.js","code":"if (osPath.indexOf('/') === -1) {\n        osPath = $Sg(osPath);\n    }","startLine":28,"endLine":30,"chunkType":"function","mtime":1772878378208.665}

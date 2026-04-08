@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/wordCharacterClassifier.js","code":"if (!result) {\n        result = new $qE(wordSeparators, intlSegmenterLocales);\n        wordClassifierCache.set(key, result);\n    }","startLine":84,"endLine":87,"chunkType":"function","mtime":1772878380473.0513}

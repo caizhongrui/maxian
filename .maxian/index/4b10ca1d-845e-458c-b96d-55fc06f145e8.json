@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/link/goToDefinitionAtPosition.js","code":"dispose() {\n        this.b.dispose();\n        this.c.dispose();\n    }","startLine":253,"endLine":256,"chunkType":"function","mtime":1772878382623.6}

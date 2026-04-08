@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModelSearch.js","code":"if (!captureMatches) {\n        return new $nG(range, null);\n    }","startLine":79,"endLine":81,"chunkType":"function","mtime":1772878380728.4277}

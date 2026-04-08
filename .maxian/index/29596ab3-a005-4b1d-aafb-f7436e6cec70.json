@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModelTokens.js","code":"dispose() {\n        this.a = true;\n    }","startLine":374,"endLine":376,"chunkType":"function","mtime":1772878380728.8506}

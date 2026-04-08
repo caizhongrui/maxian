@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/equals.js","code":"if (a === b) {\n        return true;\n    }","startLine":51,"endLine":53,"chunkType":"function","mtime":1772878378179.574}

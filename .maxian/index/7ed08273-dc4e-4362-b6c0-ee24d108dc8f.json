@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/server/src/modes/languageModes.ts","code":"getModesInRange(document: TextDocument, range: Range): LanguageModeRange[];\n\tgetAllModes(): LanguageMode[];","startLine":98,"endLine":99,"chunkType":"function","mtime":1762250468240.9165}

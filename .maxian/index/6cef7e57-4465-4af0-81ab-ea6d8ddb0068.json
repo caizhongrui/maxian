@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/completions.ts","code":"return (\n\t\t(!completionConfiguration.nameSuggestions && element.kind === PConst.Kind.warning)","startLine":921,"endLine":922,"chunkType":"function","mtime":1762250468326.671}

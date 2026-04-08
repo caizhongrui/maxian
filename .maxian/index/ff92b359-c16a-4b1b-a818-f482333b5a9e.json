@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsImpl.js","code":"handleDidChangeLanguage(e) {\n        this.a.clear();\n        this.m();\n    }","startLine":37,"endLine":40,"chunkType":"function","mtime":1772878380612.7896}

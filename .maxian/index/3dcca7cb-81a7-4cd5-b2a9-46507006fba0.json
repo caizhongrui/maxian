@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/editStack.js","code":"return ((element instanceof $YH) || (element instanceof $ZH));\n}","startLine":312,"endLine":313,"chunkType":"function","mtime":1772878380722.5027}

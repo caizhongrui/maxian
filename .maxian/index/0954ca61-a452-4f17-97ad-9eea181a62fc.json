@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlayHints/browser/inlayHintsController.js","code":"D(model) {\n        const hints = this.E(model);\n        this.s.set(model, hints);\n    }","startLine":356,"endLine":359,"chunkType":"function","mtime":1772878383113.8022}

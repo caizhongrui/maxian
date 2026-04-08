@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/nosleep_windows.rs","code":"PowerClearRequest(self.request.0, PowerRequestSystemRequired);\n\t\t}","startLine":76,"endLine":77,"chunkType":"function","mtime":1762250468185.1594}

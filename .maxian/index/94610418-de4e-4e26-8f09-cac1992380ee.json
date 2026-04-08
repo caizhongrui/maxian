@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/colorPicker/browser/defaultDocumentColorProvider.js","code":"async provideDocumentColors(model, _token) {\n        return this.a.computeDefaultDocumentColors(model.uri);\n    }","startLine":22,"endLine":24,"chunkType":"function","mtime":1772878382214.1238}

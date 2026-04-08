@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/singleton_server.rs","code":"let (shutdown_broadcast, _) = broadcast::channel(4);\n\tlet rpc = new_json_rpc();","startLine":81,"endLine":82,"chunkType":"function","mtime":1762250468186.1865}

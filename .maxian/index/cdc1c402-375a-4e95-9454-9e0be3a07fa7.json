@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/microsoft-authentication/src/common/event.ts","code":"} finally {\n\t\t\tthis.data.pop();\n\t\t\tdata.buffers.forEach(flush => flush());\n\t\t}\n\t}\n}","startLine":102,"endLine":107,"chunkType":"block","mtime":1762250468282.5562}

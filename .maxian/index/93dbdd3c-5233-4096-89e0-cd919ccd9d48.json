@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/comparers.js","code":"if (one === other) {\n        return 0;\n    }","startLine":68,"endLine":70,"chunkType":"function","mtime":1772878378169.8606}

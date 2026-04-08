@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/history.js","code":"constructor(history = [], limit = 10) {\n        this.h(history);\n        this.b = limit;\n        this.d();\n    }","startLine":8,"endLine":12,"chunkType":"function","mtime":1772878378213.08}

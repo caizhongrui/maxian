@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git-base/package.nls.json","code":"{\n\t\"displayName\": \"Git Base\",\n\t\"description\": \"Git static contributions and pickers.\",\n\t\"command.api.getRemoteSources\": \"Get Remote Sources\"\n}","startLine":1,"endLine":6,"chunkType":"block","mtime":1762250468212.3208}

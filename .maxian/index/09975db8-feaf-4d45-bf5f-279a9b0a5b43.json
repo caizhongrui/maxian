@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/model/provideInlineCompletions.js","code":"hash() {\n        return JSON.stringify({ insertText: this.insertText, range: this.range.toString() });\n    }","startLine":276,"endLine":278,"chunkType":"function","mtime":1772878383190.7805}

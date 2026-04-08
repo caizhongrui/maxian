@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestController.js","code":"acceptNextSuggestion() {\n        this.a.value.next();\n    }","startLine":571,"endLine":573,"chunkType":"function","mtime":1772878383693.3113}

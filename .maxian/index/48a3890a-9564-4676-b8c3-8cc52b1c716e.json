@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/test/smoke/referencesCodeLens.test.ts","code":"const codeLenses = await getCodeLenses(testDocumentUri);\n\t\tassert.strictEqual(codeLenses?.length, 1);\n\t});\n});","startLine":106,"endLine":109,"chunkType":"block","mtime":1762250468331.7502}

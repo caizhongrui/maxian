@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/utils.js","code":"add(o) {\n            return store.add(o);\n        }","startLine":65,"endLine":67,"chunkType":"function","mtime":1772878379174.5796}

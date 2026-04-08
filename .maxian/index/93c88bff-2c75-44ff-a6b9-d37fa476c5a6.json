@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/commands/serve_web.rs","code":"let (mut stdout, mut stderr) = (\n\t\t\tBufReader::new(child.stdout.take().unwrap()).lines(),","startLine":807,"endLine":808,"chunkType":"function","mtime":1762250468182.808}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/package.json","code":"\"default\": true\n        },\n        \"typescript.tsserver.watchOptions\": {\n          \"description\": \"%configuration.tsserver.watchOptions%\",","startLine":1338,"endLine":1341,"chunkType":"block","mtime":1762250468323.1108}

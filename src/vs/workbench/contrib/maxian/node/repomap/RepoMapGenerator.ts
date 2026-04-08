@@ -16,6 +16,7 @@ import { TagExtractor } from './TagExtractor.js';
 import { ReferenceGraphBuilder } from './ReferenceGraphBuilder.js';
 import { PageRankSorter } from './PageRankSorter.js';
 import { Tag, RepoMapOptions, RepoMapContext } from './types.js';
+import { estimateTokensFromChars } from '../../common/utils/tokenEstimate.js';
 
 /**
  * P0优化: RepoMap缓存条目
@@ -426,7 +427,7 @@ export class RepoMapGenerator {
 
 		// 小文本直接计算
 		if (textLength < 500) {
-			return Math.ceil(textLength / 3);
+			return estimateTokensFromChars(textLength);
 		}
 
 		// 大文本采样估算
@@ -442,7 +443,7 @@ export class RepoMapGenerator {
 		}
 
 		const sampleText = sampledLines.join('\n');
-		const sampleTokens = Math.ceil(sampleText.length / 3);
+		const sampleTokens = estimateTokensFromChars(sampleText.length);
 
 		// 线性外推
 		const estimatedTokens = Math.ceil(sampleTokens / sampleText.length * textLength);

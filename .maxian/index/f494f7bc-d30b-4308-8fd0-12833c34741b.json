@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/languages/autoIndent.js","code":"if (autoIndent < 4 /* EditorAutoIndentStrategy.Full */) {\n        return null;\n    }","startLine":179,"endLine":181,"chunkType":"function","mtime":1772878380563.374}

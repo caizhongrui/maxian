@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/languageFeatureRegistry.js","code":"allNoModel() {\n        return this.d.map(entry => entry.provider);\n    }","startLine":83,"endLine":85,"chunkType":"function","mtime":1772878380560.9429}

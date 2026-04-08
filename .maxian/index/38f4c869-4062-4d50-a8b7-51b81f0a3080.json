@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/snapshot.js","code":"setup(function () {\n    const currentTest = this.currentTest;\n    context = new $rf(() => new $l4(currentTest));\n});","startLine":128,"endLine":131,"chunkType":"function","mtime":1772878379170.391}

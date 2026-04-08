@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"if (index > -1) {\n        array.splice(index, 1);\n        return element;\n    }","startLine":413,"endLine":416,"chunkType":"function","mtime":1772878378138.325}

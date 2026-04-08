@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/diff/rangeMapping.js","code":"toString() {\n        return `{${this.originalRange.toString()}->${this.modifiedRange.toString()}}`;\n    }","startLine":182,"endLine":184,"chunkType":"function","mtime":1772878380557.872}

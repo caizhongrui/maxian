@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/types.js","code":"for (const key in obj) {\n        if (hasOwnProperty.call(obj, key)) {\n            return false;\n        }\n    }","startLine":109,"endLine":113,"chunkType":"function","mtime":1772878378386.0784}

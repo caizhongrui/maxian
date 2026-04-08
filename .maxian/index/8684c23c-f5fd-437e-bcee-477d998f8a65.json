@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/delegatingEditorImpl.js","code":"trigger(source, handlerId, payload) {\n        this.g.trigger(source, handlerId, payload);\n    }","startLine":102,"endLine":104,"chunkType":"function","mtime":1772878380260.9314}

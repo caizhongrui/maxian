@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/electron-sandbox/ipc.electron.js","code":"constructor(id) {\n        const protocol = $U3.f();\n        super(protocol, id);\n        this.b = protocol;\n    }","startLine":20,"endLine":24,"chunkType":"function","mtime":1772878378492.4065}

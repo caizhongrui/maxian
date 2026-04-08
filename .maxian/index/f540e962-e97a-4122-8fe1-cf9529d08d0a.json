@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/map.js","code":"function isEntries(arg) {\n    return Array.isArray(arg);\n}","startLine":34,"endLine":36,"chunkType":"function","mtime":1772878378277.2786}

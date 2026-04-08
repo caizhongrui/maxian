@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/folding/browser/foldingRanges.js","code":"toRegion(index) {\n        return new $0fb(this, index);\n    }","startLine":146,"endLine":148,"chunkType":"function","mtime":1772878382590.9312}

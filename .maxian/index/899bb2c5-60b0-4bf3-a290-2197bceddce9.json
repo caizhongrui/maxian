@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/semanticTokensDto.js","code":"return {\n        id: id,\n        type: 'delta',\n        deltas: deltas\n    };\n}\n//# sourceMappingURL=semanticTokensDto.js.map","startLine":129,"endLine":135,"chunkType":"block","mtime":1772878381037.5598}

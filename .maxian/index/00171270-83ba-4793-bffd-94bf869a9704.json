@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/marked/marked.js","code":"function cleanUrl(href) {\n    try {\n        href = encodeURI(href).replace(/%25/g, '%');\n    }\n    catch {\n        return null;\n    }\n    return href;\n}","startLine":79,"endLine":87,"chunkType":"function","mtime":1762250468438.999}

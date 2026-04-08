@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/assertHeap.js","code":"if (!currentTest) {\n        throw new Error('assertSnapshot can only be used when a test is running');\n    }","startLine":52,"endLine":54,"chunkType":"function","mtime":1772878378596.8193}

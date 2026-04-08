@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/singleton_client.rs","code":"Some('x') => {\n\t\t\t\t\t\tstdin_handle.notify(protocol::singleton::METHOD_SHUTDOWN, EmptyObject {});\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}","startLine":83,"endLine":86,"chunkType":"function","mtime":1762250468186.0828}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/completionModel.js","code":"getItemsByProvider() {\n        this.o();\n        return this.m;\n    }","startLine":55,"endLine":58,"chunkType":"function","mtime":1772878383691.2795}

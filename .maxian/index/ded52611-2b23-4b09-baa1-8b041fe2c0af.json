@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/objects.js","code":"for (const prop of $Qv(obj)) {\n        if (typeof obj[prop] === 'function') {\n            methods.push(prop);\n        }\n    }","startLine":221,"endLine":225,"chunkType":"function","mtime":1772878378281.759}

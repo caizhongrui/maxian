@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/codeEditor/codeEditorWidget.js","code":"writeScreenReaderContent(reason) {\n        this.tb?.view.writeScreenReaderContent(reason);\n    }","startLine":253,"endLine":255,"chunkType":"function","mtime":1772878380256.3677}

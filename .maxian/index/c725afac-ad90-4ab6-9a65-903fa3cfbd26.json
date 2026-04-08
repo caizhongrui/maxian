@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"return ((charCode >= 0x2E80 && charCode <= 0xD7AF)\n        || (charCode >= 0xF900 && charCode <= 0xFAFF)","startLine":611,"endLine":612,"chunkType":"function","mtime":1772878378348.6172}

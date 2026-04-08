@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/tsServer/server.ts","code":"onData(handler: (data: Proto.Response) => void): void;\n\tonExit(handler: (code: number | null, signal: string | null) => void): void;","startLine":82,"endLine":83,"chunkType":"function","mtime":1762250468335.7903}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/prefixSumComputer.js","code":"getPrefixSum(count) {\n        this.g();\n        if (count === 0) {\n            return 0;\n        }\n        return this.d[count - 1];\n    }","startLine":162,"endLine":168,"chunkType":"function","mtime":1772878380727.7363}

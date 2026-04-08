@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"if (filteredLocales.length === 0) {\n            filteredLocales = ['_default'];\n        }","startLine":1010,"endLine":1012,"chunkType":"function","mtime":1772878378348.6172}

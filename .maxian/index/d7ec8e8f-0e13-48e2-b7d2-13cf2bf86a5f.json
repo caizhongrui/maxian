@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/filters.js","code":"if (!regexp) {\n        regexp = new RegExp(strings.$Gf(word), 'i');\n        fuzzyRegExpCache.set(word, regexp);\n    }","startLine":347,"endLine":350,"chunkType":"function","mtime":1772878378209.0073}

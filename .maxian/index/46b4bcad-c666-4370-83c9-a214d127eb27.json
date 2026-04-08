@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/parameterHints/browser/parameterHints.js","code":"previous() {\n        this.c.rawValue?.previous();\n    }","startLine":51,"endLine":53,"chunkType":"function","mtime":1772878383571.4219}

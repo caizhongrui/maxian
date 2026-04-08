@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"function next() {\n        return index < len ? promiseFactories[index++]() : null;\n    }","startLine":469,"endLine":471,"chunkType":"function","mtime":1772878378139.2854}

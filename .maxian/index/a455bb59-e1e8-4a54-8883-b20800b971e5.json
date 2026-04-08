@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/tsconfig.ts","code":"if (serviceConfig.implicitProjectConfiguration.strictNullChecks) {\n\t\tprojectConfig.strictNullChecks = true;\n\t}","startLine":50,"endLine":52,"chunkType":"function","mtime":1762250468337.3225}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/test/node/testService.js","code":"pong(ping) {\n        return Promise.resolve({ incoming: ping, outgoing: 'pong' });\n    }","startLine":16,"endLine":18,"chunkType":"function","mtime":1772878378523.528}

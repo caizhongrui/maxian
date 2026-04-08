@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/offsetEdit.js","code":"compose(other) {\n        return joinEdits(this, other);\n    }","startLine":69,"endLine":71,"chunkType":"function","mtime":1772878380411.8613}

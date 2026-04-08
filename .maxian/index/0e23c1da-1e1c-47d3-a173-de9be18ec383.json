@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/linesOperations/browser/linesOperations.js","code":"if ($Eib.wordBoundary.isSupported()) {\n    $L5($Eib);\n}","startLine":1094,"endLine":1096,"chunkType":"function","mtime":1772878383402.8794}

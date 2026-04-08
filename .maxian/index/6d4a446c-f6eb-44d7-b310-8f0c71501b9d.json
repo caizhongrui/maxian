@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/nosleep_linux.rs","code":"Ok(SleepInhibitor {\n\t\t\t_connection: connection,\n\t\t})","startLine":74,"endLine":76,"chunkType":"function","mtime":1762250468184.815}

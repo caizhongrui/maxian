@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModelTokens.js","code":"addRange(range) {\n        $hD.addRange(range, this.a);\n    }","startLine":313,"endLine":315,"chunkType":"function","mtime":1772878380728.8506}

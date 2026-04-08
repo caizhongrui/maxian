@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewModel/viewModelImpl.js","code":"endComposition(source) {\n        this.S(eventsCollector => this.n.endComposition(eventsCollector, source));\n    }","startLine":838,"endLine":840,"chunkType":"function","mtime":1772878381820.4382}

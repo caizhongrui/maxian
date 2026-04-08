@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/map.js","code":"set(first, second, value) {\n        if (!this.c[first]) {\n            this.c[first] = {};\n        }\n        this.c[first][second] = value;\n    }","startLine":725,"endLine":730,"chunkType":"function","mtime":1772878378277.2786}

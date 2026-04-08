@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/git.ts","code":"function parseVersion(raw: string): string {\n\treturn raw.replace(/^git version /, '');\n}","startLine":67,"endLine":69,"chunkType":"function","mtime":1773492735506.4934}

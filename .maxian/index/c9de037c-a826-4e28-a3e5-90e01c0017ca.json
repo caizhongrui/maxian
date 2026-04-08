@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/list/listWidget.js","code":"I() {\n        const focus = this.d.get();\n        this.o.domNode.classList.toggle('element-focused', focus.length > 0);\n        this.J();\n    }","startLine":1519,"endLine":1523,"chunkType":"function","mtime":1772878378009.8872}

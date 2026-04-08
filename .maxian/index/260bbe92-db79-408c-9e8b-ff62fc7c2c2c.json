@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"if (disposables instanceof $2c) {\n                disposables.add(result);\n            }","startLine":902,"endLine":904,"chunkType":"function","mtime":1772878378208.3105}

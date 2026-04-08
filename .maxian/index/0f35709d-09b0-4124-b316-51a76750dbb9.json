@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/rpc.rs","code":"let (tx, rx) = oneshot::channel();\n\t\tlet id = next_message_id();","startLine":348,"endLine":349,"chunkType":"function","mtime":1762250468183.7632}

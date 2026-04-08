@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/ipynb/src/deserializers.ts","code":"if (!Array.isArray(notebookContent.cells)) {\n\t\tthrow new Error('Notebook content is missing cells');\n\t}","startLine":351,"endLine":353,"chunkType":"function","mtime":1762250468247.5317}

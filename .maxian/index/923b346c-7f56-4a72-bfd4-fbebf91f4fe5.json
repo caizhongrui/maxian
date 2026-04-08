@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/iterator.js","code":"function first(iterable) {\n        return iterable[Symbol.iterator]().next().value;\n    }","startLine":43,"endLine":45,"chunkType":"function","mtime":1772878378234.5435}

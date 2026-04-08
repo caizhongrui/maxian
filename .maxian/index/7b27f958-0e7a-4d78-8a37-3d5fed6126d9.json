@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/stream.js","code":"if (!token?.isCancellationRequested) {\n            listener.onEnd();\n        }","startLine":312,"endLine":314,"chunkType":"function","mtime":1772878378348.1633}

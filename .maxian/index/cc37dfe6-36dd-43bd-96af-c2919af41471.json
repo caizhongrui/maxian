@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/snapshot.js","code":"const sanitizeName = (name) => name.replace(/[^a-z0-9_-]/gi, '_');\nconst normalizeCrlf = (str) => str.replace(/\\r\\n/g, '\\n');","startLine":10,"endLine":11,"chunkType":"function","mtime":1772878379170.391}

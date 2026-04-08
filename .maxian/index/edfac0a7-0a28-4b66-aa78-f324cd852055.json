@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/peek/referencesController.js","code":"static get(editor) {\n        return editor.getContribution($Ieb_1.ID);\n    }","startLine":40,"endLine":42,"chunkType":"function","mtime":1772878382623.9429}

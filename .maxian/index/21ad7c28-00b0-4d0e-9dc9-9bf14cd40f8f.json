@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/globalPointerMoveMonitor.js","code":"constructor() {\n        this.a = new $2c();\n        this.b = null;\n        this.c = null;\n    }","startLine":8,"endLine":12,"chunkType":"function","mtime":1772878377879.3848}

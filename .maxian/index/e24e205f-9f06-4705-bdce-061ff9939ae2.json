@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/filters.js","code":"function isDefault(score) {\n        return !score || (score.length === 2 && score[0] === -100 && score[1] === 0);\n    }","startLine":522,"endLine":524,"chunkType":"function","mtime":1772878378209.0073}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/node/ipc.net.js","code":"traceSocketEvent(type, data) {\n        this.socket.traceSocketEvent(type, data);\n    }","startLine":203,"endLine":205,"chunkType":"function","mtime":1772878378494.8823}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/services/openerService.js","code":"registerOpener(opener) {\n        const remove = this.a.unshift(opener);\n        return { dispose: remove };\n    }","startLine":138,"endLine":141,"chunkType":"function","mtime":1772878379798.0947}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/latex/syntaxes/Bibtex.tmLanguage.json","code":"},\n\t\t\t\"patterns\": [\n\t\t\t\t{\n\t\t\t\t\t\"include\": \"#nested_braces\"","startLine":262,"endLine":265,"chunkType":"block","mtime":1762250468260.0588}

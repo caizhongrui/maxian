@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/languageFeatures/copyFiles/copyFiles.ts","code":"if (typeof entry !== 'string') {\n\t\t\treturn match;\n\t\t}","startLine":107,"endLine":109,"chunkType":"function","mtime":1762250468268.9111}

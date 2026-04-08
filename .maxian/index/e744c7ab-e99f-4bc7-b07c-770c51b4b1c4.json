@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/commands/output.rs","code":"for (i, col) in cols.enumerate() {\n\t\twrite!(w, \" {:width$} |\", col, width = sizes[i])?;\n\t}","startLine":131,"endLine":133,"chunkType":"function","mtime":1762250468182.722}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/filters.js","code":"constructor(firstMatchCanBeWeak, boostFullMatch) {\n        this.firstMatchCanBeWeak = firstMatchCanBeWeak;\n        this.boostFullMatch = boostFullMatch;\n    }","startLine":529,"endLine":532,"chunkType":"function","mtime":1772878378209.0073}

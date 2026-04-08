@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/editContext/native/debugEditContext.js","code":"attachedElements() {\n        return this.f.attachedElements();\n    }","startLine":59,"endLine":61,"chunkType":"function","mtime":1772878379330.372}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/ipynb/src/deserializers.ts","code":"if (output.data) {\n\t\tfor (const key in output.data) {\n\t\t\titems.push(convertJupyterOutputToBuffer(key, output.data[key]));\n\t\t}\n\t}","startLine":217,"endLine":221,"chunkType":"function","mtime":1762250468247.5317}

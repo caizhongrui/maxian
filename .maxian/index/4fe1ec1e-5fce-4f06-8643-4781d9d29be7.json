@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/editContext/native/editContextFactory.js","code":"function create(window, options) {\n        return new window.EditContext(options);\n    }","startLine":17,"endLine":19,"chunkType":"function","mtime":1772878379330.8362}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/cursor/cursor.js","code":"updateConfiguration(cursorConfig) {\n        this.context = new $H8(this.c, this.g, this.h, cursorConfig);\n        this.n.updateContext(this.context);\n    }","startLine":40,"endLine":43,"chunkType":"function","mtime":1772878380473.827}

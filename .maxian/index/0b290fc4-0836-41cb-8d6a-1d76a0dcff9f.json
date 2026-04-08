@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/utils.js","code":"bind(key, obs) {\n        return $j9(key, this.a, obs instanceof Function ? obs : reader => obs.read(reader));\n    }","startLine":78,"endLine":80,"chunkType":"function","mtime":1772878383194.3264}

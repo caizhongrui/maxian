@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/format/browser/format.js","code":"static setFormatterSelector(selector) {\n        const remove = $Agb.c.unshift(selector);\n        return { dispose: remove };\n    }","startLine":68,"endLine":71,"chunkType":"function","mtime":1772878382619.5645}

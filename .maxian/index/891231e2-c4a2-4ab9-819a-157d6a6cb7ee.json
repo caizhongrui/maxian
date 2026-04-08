@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/editorExtensions.js","code":"function registerCommand(command) {\n    command.register();\n    return command;\n}","startLine":434,"endLine":437,"chunkType":"function","mtime":1772878379375.4983}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"dispose() {\n        this.cancel();\n        this.f = true;\n    }","startLine":783,"endLine":786,"chunkType":"function","mtime":1772878378139.2854}

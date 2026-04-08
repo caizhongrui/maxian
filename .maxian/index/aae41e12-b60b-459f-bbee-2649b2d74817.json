@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/errors.rs","code":"SingletonLockfileReadFailed(rmp_serde::decode::Error),\n\t#[error(\"the process holding the singleton lock file (pid={0}) exited\")]","startLine":449,"endLine":450,"chunkType":"function","mtime":1762250468186.8193}

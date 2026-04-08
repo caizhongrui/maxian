@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/observable.test.js","code":"f() {\n        this.h.log(`${this.debugName}.lastObserverRemoved`);\n    }","startLine":1277,"endLine":1279,"chunkType":"function","mtime":1772878379002.9128}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/fastDomNode.js","code":"setColor(color) {\n        if (this.y === color) {\n            return;\n        }\n        this.y = color;\n        this.domNode.style.color = this.y;\n    }","startLine":224,"endLine":230,"chunkType":"function","mtime":1772878377878.2446}

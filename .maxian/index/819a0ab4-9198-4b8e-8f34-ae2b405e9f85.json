@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"if (target.length < query.length) {\n        return false; // impossible for query to be contained in target\n    }","startLine":709,"endLine":711,"chunkType":"function","mtime":1772878378348.6172}

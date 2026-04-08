@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneServices.js","code":"enableKeybindingHoldMode(commandId) {\n        return undefined;\n    }","startLine":484,"endLine":486,"chunkType":"function","mtime":1772878383802.3767}

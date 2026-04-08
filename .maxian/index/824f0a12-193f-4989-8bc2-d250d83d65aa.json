@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/glyphHoverController.js","code":"I() {\n        if (_sticky) {\n            return;\n        }\n        this.b?.hide();\n    }","startLine":163,"endLine":168,"chunkType":"function","mtime":1772878382759.7761}

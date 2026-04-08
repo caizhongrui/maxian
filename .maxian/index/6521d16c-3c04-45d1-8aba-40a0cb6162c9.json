@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/editContext/native/nativeEditContext.js","code":"isFocused() { return this.s.isFocused; }\n    focus() { this.s.focus(); }","startLine":138,"endLine":139,"chunkType":"function","mtime":1772878379331.4082}

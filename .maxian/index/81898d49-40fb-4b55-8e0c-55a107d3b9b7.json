@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"constructor(autoOpenTimeMs) {\n        super();\n        this.f = setTimeout(() => this.open(), autoOpenTimeMs);\n    }","startLine":405,"endLine":408,"chunkType":"function","mtime":1772878378139.2854}

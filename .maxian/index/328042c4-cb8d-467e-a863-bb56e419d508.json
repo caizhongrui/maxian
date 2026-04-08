@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/extension.ts","code":"registerBaseCommands(commandManager, lazyClientHost, pluginManager, activeJsTsEditorTracker);","startLine":75,"endLine":76,"chunkType":"function","mtime":1762250468325.8662}

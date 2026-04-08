@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/operation.ts","code":"getOperations(operationKind: OperationKind): Operation[];\n\tisIdle(): boolean;","startLine":201,"endLine":202,"chunkType":"function","mtime":1773492706591.157}

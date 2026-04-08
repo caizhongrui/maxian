@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"for (let i = 0; i < arr.length; i++) {\n        f(i === 0 ? undefined : arr[i - 1], arr[i], i + 1 === arr.length ? undefined : arr[i + 1]);\n    }","startLine":170,"endLine":172,"chunkType":"function","mtime":1772878378138.325}

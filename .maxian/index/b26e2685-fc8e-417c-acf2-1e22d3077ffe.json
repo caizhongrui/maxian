@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test-members.ts","code":"class A2 extends B1 {\n\tpublic count: number = 9;\n\tpublic resolveNextGeneration(cell : A2) {\n\t}\n}","startLine":1,"endLine":5,"chunkType":"class","mtime":1762250468356.4417}

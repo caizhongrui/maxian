@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"dequeue() {\n        const result = this.g[this.c];\n        this.c++;\n        return result;\n    }","startLine":634,"endLine":638,"chunkType":"function","mtime":1772878378138.325}

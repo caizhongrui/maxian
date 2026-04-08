@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/make/syntaxes/make.tmLanguage.json","code":"\"name\": \"variable.other.makefile\"\n\t\t\t\t\t\t}\n\t\t\t\t\t]\n\t\t\t\t},\n\t\t\t\t{\n\t\t\t\t\t\"begin\": \"^\\\\s*(ifeq|ifneq|ifdef|ifndef)(?=\\\\s)\",","startLine":193,"endLine":198,"chunkType":"block","mtime":1762250468263.229}

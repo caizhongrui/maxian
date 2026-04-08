@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/find/browser/replacePattern.js","code":"static matchIndex(index) {\n        return new $rfb(null, index, null);\n    }","startLine":127,"endLine":129,"chunkType":"function","mtime":1772878382585.86}

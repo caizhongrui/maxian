@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/services/abstractCodeEditorService.js","code":"removeCodeEditor(editor) {\n        if (delete this.n[editor.getId()]) {\n            this.c.fire(editor);\n        }\n    }","startLine":60,"endLine":64,"chunkType":"function","mtime":1772878379683.022}

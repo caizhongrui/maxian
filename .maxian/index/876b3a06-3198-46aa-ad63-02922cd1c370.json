@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/util/textRendering.ts","code":"function convertLinkTags(\n\tparts: readonly Proto.SymbolDisplayPart[] | string | undefined,","startLine":138,"endLine":139,"chunkType":"function","mtime":1762250468329.936}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/12750.html","code":"<script type=\"text/javascript\">\n\twindow.alert('hello');\n</script>\n<script>\n\twindow.alert('hello');\n</script>","startLine":1,"endLine":6,"chunkType":"block","mtime":1762250468353.311}

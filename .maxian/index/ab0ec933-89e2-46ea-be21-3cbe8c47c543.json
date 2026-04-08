@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/eolCounter.js","code":"if (eolCount === 0) {\n        firstLineLength = text.length;\n    }","startLine":45,"endLine":47,"chunkType":"function","mtime":1772878380409.3926}

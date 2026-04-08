@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/tokenizationTextModelPart.js","code":"F() {\n        return this.B(new GrammarTokens(this.z.languageIdCodec, this.t, () => this.w, this.y));\n    }","startLine":64,"endLine":66,"chunkType":"function","mtime":1772878380729.088}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/tsconfig.ts","code":"if (serviceConfig.implicitProjectConfiguration.experimentalDecorators) {\n\t\tprojectConfig.experimentalDecorators = true;\n\t}","startLine":46,"endLine":48,"chunkType":"function","mtime":1762250468337.3225}

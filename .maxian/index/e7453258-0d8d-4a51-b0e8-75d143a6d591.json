@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/goToCommands.js","code":"k(editor) {\n        return editor.getOption(60 /* EditorOption.gotoLocation */).alternativeDefinitionCommand;\n    }","startLine":213,"endLine":215,"chunkType":"function","mtime":1772878382622.8394}

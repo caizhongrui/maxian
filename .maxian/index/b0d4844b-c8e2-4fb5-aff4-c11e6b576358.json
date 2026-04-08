@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view/viewOverlays.js","code":"onLinesInserted(e) {\n        return this.a.onLinesInserted(e);\n    }","startLine":70,"endLine":72,"chunkType":"function","mtime":1772878379802.077}

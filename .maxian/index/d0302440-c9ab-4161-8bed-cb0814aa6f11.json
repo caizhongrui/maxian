@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestController.js","code":"run(_accessor, editor) {\n        $Scb.get(editor)?.resetWidgetSize();\n    }","startLine":935,"endLine":937,"chunkType":"function","mtime":1772878383693.3113}

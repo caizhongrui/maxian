@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/range.js","code":"static isEmpty(range) {\n        return (range.startLineNumber === range.endLineNumber && range.startColumn === range.endColumn);\n    }","startLine":33,"endLine":35,"chunkType":"function","mtime":1772878380413.052}

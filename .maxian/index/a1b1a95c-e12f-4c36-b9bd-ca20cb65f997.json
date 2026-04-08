@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/markdownExtensions.ts","code":"function uriEqual(a: vscode.Uri, b: vscode.Uri): boolean {\n\t\treturn a.toString() === b.toString();\n\t}","startLine":50,"endLine":52,"chunkType":"function","mtime":1762250468269.9932}

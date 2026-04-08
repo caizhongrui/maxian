@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/browser/markdownRenderer.test.js","code":"function strToNode(str) {\n    return new DOMParser().parseFromString(str, 'text/html').body.firstChild;\n}","startLine":13,"endLine":15,"chunkType":"function","mtime":1772878378557.6582}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/gpu/gpuUtils.js","code":"if (width > 0 && height > 0) {\n            callback(width, height);\n        }","startLine":41,"endLine":43,"chunkType":"function","mtime":1772878379678.9072}

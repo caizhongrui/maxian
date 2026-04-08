@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/MEMORY_BANK_GUIDE.md","code":"if (entries.length === 0) {\n    await memoryBankService.initialize(workspaceUri);\n}","startLine":383,"endLine":385,"chunkType":"function","mtime":1763081262412.046}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/objective-c/syntaxes/objective-c.tmLanguage.json","code":"\"beginCaptures\": {\n\t\t\t\t\t\t\"0\": {\n\t\t\t\t\t\t\t\"name\": \"meta.preprocessor.objc\"\n\t\t\t\t\t\t},\n\t\t\t\t\t\t\"1\": {","startLine":2292,"endLine":2296,"chunkType":"block","mtime":1762250468290.2017}

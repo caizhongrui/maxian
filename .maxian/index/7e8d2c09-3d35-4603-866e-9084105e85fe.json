@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/iterator.js","code":"function isEmpty(iterable) {\n        return !iterable || iterable[Symbol.iterator]().next().done === true;\n    }","startLine":39,"endLine":41,"chunkType":"function","mtime":1772878378234.5435}

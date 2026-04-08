@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"function runAndSubscribe(event, handler, initial) {\n        handler(initial);\n        return event(e => handler(e));\n    }","startLine":529,"endLine":532,"chunkType":"function","mtime":1772878378208.3105}

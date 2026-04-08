@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/editorTheme.js","code":"getColor(color) {\n        return this.a.getColor(color);\n    }","startLine":18,"endLine":20,"chunkType":"function","mtime":1772878380559.423}

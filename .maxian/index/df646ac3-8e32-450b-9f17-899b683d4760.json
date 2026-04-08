@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/codeLens/referencesCodeLens.ts","code":"export function register(\n\tselector: DocumentSelector,","startLine":133,"endLine":134,"chunkType":"function","mtime":1762250468326.5674}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/editorExtensions.js","code":"u(accessor, editor) {\n        accessor.get($vv).publicLog2('editorActionInvoked', { name: this.label, id: this.id });\n    }","startLine":251,"endLine":253,"chunkType":"function","mtime":1772878379375.4983}

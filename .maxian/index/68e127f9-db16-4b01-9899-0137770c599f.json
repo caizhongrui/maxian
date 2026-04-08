@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/folding/browser/folding.js","code":"if (!configurationService.getValue('editor.folding', { resource })) {\n        return [];\n    }","startLine":1133,"endLine":1135,"chunkType":"function","mtime":1772878382588.2642}

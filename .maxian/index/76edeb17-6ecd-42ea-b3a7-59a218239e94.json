@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/dnd.js","code":"if (backgroundColor) {\n        dragImage.style.background = backgroundColor;\n    }","startLine":73,"endLine":75,"chunkType":"function","mtime":1772878377510.5635}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/services/abstractCodeEditorService.js","code":"addDiffEditor(editor) {\n        this.r[editor.getId()] = editor;\n        this.g.fire(editor);\n    }","startLine":71,"endLine":74,"chunkType":"function","mtime":1772878379683.022}

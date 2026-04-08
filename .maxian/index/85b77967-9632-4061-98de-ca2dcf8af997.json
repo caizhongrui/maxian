@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/extpath.js","code":"if (isWindowsOS && name[name.length - 1] === '.') {\n        return false; // Windows: file cannot end with a \".\"\n    }","startLine":163,"endLine":165,"chunkType":"function","mtime":1772878378208.665}

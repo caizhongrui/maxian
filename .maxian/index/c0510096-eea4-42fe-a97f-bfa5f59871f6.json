@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/wordHighlighter/browser/wordHighlighter.js","code":"static get(editor) {\n        return editor.getContribution($0jb_1.ID);\n    }","startLine":686,"endLine":688,"chunkType":"function","mtime":1772878383751.4924}

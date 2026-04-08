@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/diff/defaultLinesDiffComputer/lineSequence.js","code":"isStronglyEqual(offset1, offset2) {\n        return this.b[offset1] === this.b[offset2];\n    }","startLine":24,"endLine":26,"chunkType":"function","mtime":1772878380539.1743}

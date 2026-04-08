@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/typeConverters.ts","code":"export function withFileCodeEdits(\n\t\tworkspaceEdit: vscode.WorkspaceEdit,","startLine":91,"endLine":92,"chunkType":"function","mtime":1762250468337.5417}

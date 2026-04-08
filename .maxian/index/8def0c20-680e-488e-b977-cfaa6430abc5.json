@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewModel/viewModelLines.js","code":"onModelLinesDeleted(_versionId, fromLineNumber, toLineNumber) {\n        return new viewEvents.$c5(fromLineNumber, toLineNumber);\n    }","startLine":869,"endLine":871,"chunkType":"function","mtime":1772878381820.8547}

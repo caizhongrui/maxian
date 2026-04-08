@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/pfs.js","code":"async function readdir(path, options) {\n    return handleDirectoryChildren(await (options ? safeReaddirWithFileTypes(path) : fs.promises.readdir(path)));\n}","startLine":69,"endLine":71,"chunkType":"function","mtime":1772878378444.7122}

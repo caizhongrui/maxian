@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/marked/marked.js","code":"}\n            if (async) {\n                return Promise.reject(e);\n            }\n            throw e;\n        };\n    }\n}","startLine":2407,"endLine":2414,"chunkType":"block","mtime":1762250468438.999}

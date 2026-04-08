@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneEditor.js","code":"export function getEditors() {\n    const codeEditorService = StandaloneServices.get($B5);\n    return codeEditorService.listCodeEditors();\n}","startLine":69,"endLine":72,"chunkType":"function","mtime":1772878383800.241}

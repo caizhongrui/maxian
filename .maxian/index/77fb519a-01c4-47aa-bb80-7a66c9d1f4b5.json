@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/colorPicker/browser/colorPickerModel.js","code":"flushColor() {\n        this.c.fire(this.a);\n    }","startLine":68,"endLine":70,"chunkType":"function","mtime":1772878382209.9583}

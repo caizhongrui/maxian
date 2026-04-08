@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/codeEditor/codeEditorWidget.js","code":"getContribution(id) {\n        return this.f.get(id);\n    }","startLine":724,"endLine":726,"chunkType":"function","mtime":1772878380256.3677}

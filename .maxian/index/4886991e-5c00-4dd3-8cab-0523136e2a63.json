@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/dev_tunnels.rs","code":"Ok(ActiveTunnel {\n\t\t\tname: tunnel_details.name.clone(),\n\t\t\tid: tunnel_details.id.clone(),\n\t\t\tmanager,\n\t\t})","startLine":891,"endLine":895,"chunkType":"function","mtime":1762250468184.497}

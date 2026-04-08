@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/documentSymbols/browser/outlineModel.js","code":"getItemEnclosingPosition(position) {\n        return position ? this.c(position, this.children) : undefined;\n    }","startLine":99,"endLine":101,"chunkType":"function","mtime":1772878382320.121}

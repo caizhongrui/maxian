@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"if (!token) {\n        return $Gh(token => $Vh(millis, token));\n    }","startLine":415,"endLine":417,"chunkType":"function","mtime":1772878378139.2854}

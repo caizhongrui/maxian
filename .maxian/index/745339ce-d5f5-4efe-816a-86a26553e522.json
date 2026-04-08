@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/buffer.js","code":"return (source[offset] * 2 ** 24\n        + source[offset + 1] * 2 ** 16","startLine":204,"endLine":205,"chunkType":"function","mtime":1772878378139.7178}

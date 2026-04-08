@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/storage/node/storage.js","code":"m(path) {\n        return `${path}.backup`;\n    }","startLine":165,"endLine":167,"chunkType":"function","mtime":1772878378528.6816}

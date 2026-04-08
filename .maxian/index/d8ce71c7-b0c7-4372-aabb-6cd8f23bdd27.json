@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/ipynb/src/notebookImagePaste.ts","code":"async function getDroppedImageData(\n\tdataTransfer: vscode.DataTransfer,","startLine":136,"endLine":137,"chunkType":"function","mtime":1762250468248.1514}

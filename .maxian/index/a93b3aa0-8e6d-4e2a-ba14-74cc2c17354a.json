@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModelTokens.js","code":"constructor(d) {\n        this.d = d;\n        this.a = new $II();\n        this.b = new $JI();\n        this.b.addRange(new $hD(1, d + 1));\n    }","startLine":172,"endLine":177,"chunkType":"function","mtime":1772878380728.8506}

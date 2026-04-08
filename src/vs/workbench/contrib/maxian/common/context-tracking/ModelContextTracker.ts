@@ -10,6 +10,7 @@
  */
 
 import { MessageParam } from '../api/types.js';
+import { estimateTokensFromChars } from '../utils/tokenEstimate.js';
 
 /**
  * Token使用记录
@@ -92,8 +93,7 @@ export class ModelContextTracker {
 			}
 		}
 
-		// 估算：1 token ≈ 3 字符（中英文混合）
-		const estimatedTokens = Math.ceil(totalChars / 3);
+		const estimatedTokens = estimateTokensFromChars(totalChars);
 		this.estimatedCurrentTokens = estimatedTokens;
 
 		return estimatedTokens;

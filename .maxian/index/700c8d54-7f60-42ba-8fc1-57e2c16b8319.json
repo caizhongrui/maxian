@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/app_lock.rs","code":"CloseHandle(self.handle)\n\t\t};","startLine":58,"endLine":59,"chunkType":"function","mtime":1762250468186.6355}

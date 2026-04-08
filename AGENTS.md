@@ -1,0 +1,4 @@
+- 后端代码在Users/caizhongrui/Documents/workspace/qdport/ai/qdport-ai-api，管理端页面在Users/caizhongrui/Documents/workspace/qdport/ai/ui 之前不是说过了吗
+- 不用生成总结报告
+- Users/caizhongrui/Documents/workspace/qdport/ai/ui 这是管理页面； 这是后端apiUsers/caizhongrui/Documents/workspace/qdport/ai/qdport-ai-api
+- 后端api路径/Users/caizhongrui/Documents/workspace/qdport/ai/qdport-ai-api

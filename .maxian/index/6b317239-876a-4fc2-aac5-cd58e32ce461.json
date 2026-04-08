@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneTreeSitterService.js","code":"constructor() {\n        this.onDidUpdateTree = Event.None;\n        this.onDidAddLanguage = Event.None;\n    }","startLine":11,"endLine":14,"chunkType":"function","mtime":1772878383802.8618}

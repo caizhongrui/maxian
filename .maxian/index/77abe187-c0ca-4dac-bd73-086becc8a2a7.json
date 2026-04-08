@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/terminateProcess.sh","code":"terminateTree() {\n    for cpid in $(/usr/bin/pgrep -P $1); do\n        terminateTree $cpid\n    done\n    kill -9 $1 > /dev/null 2>&1\n}","startLine":3,"endLine":8,"chunkType":"function","mtime":1762250468447}

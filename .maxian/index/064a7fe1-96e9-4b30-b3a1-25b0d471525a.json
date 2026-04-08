@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/parsers.js","code":"if (value > this.a) {\n            this.a = value;\n        }","startLine":21,"endLine":23,"chunkType":"function","mtime":1772878378321.362}

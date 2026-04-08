@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/history.js","code":"clear() {\n        this.h([]);\n        this.d();\n    }","startLine":52,"endLine":55,"chunkType":"function","mtime":1772878378213.08}

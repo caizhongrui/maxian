@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/notebook-renderers/src/linkify.ts","code":"export function linkify(text: string, linkOptions: LinkOptions, splitLines?: boolean) {\n\treturn linkDetector.linkify(text, linkOptions, splitLines);\n}","startLine":209,"endLine":211,"chunkType":"function","mtime":1762250468286.4329}

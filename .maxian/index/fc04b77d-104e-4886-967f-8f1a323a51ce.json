@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/package.json","code":"{\n          \"command\": \"git.push\",\n          \"group\": \"1_header@2\",\n          \"when\": \"scmProvider == git\"","startLine":1518,"endLine":1521,"chunkType":"block","mtime":1773492854666.838}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/preview-src/index.ts","code":"function updateScrollProgress() {\n\tstate.scrollProgress = window.scrollY / document.body.clientHeight;\n\tvscode.setState(state);\n}","startLine":369,"endLine":372,"chunkType":"function","mtime":1762250468266.5684}

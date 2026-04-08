@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view/viewLayer.js","code":"constructor(b) {\n        this.b = b;\n        this.domNode = this.c();\n        this.a = new $X6(this.b);\n    }","startLine":180,"endLine":184,"chunkType":"function","mtime":1772878379801.6555}

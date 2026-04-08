@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModel.js","code":"function _normalizeOptions(options) {\n    if (options instanceof $5I) {\n        return options;\n    }\n    return $5I.createDynamic(options);\n}","startLine":1835,"endLine":1840,"chunkType":"function","mtime":1772878380728.0076}

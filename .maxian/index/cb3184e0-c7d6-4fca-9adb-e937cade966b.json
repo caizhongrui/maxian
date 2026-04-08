@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/processes.js","code":"if (!result || Platform.$l /* workaround https://github.com/nodejs/node/issues/7657 */) {\n            useQueue = true;\n        }","startLine":41,"endLine":43,"chunkType":"function","mtime":1772878378445.782}

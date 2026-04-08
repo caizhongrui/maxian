@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/button/button.js","code":"hasFocus() {\n        return $Lj(this.b);\n    }","startLine":250,"endLine":252,"chunkType":"function","mtime":1772878377941.6091}

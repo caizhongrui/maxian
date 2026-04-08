@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/browser/ui/splitview/splitview.test.js","code":"function getSashes(splitview) {\n    return splitview.sashItems.map((i) => i.sash);\n}","startLine":49,"endLine":51,"chunkType":"function","mtime":1772878378592.4766}

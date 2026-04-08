@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/colorPicker/browser/colorDetector.js","code":"N() {\n        this.C.removeDecorations(this.n);\n        this.n = [];\n        this.t.clear();\n        this.L.clear();\n    }","startLine":202,"endLine":207,"chunkType":"function","mtime":1772878382209.2205}

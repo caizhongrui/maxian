@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/parameterHints/browser/parameterHintsModel.js","code":"if (this.h.type === 2 /* ParameterHintState.Type.Pending */) {\n            this.h.request.cancel();\n        }","startLine":66,"endLine":68,"chunkType":"function","mtime":1772878383571.8333}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/diffAlgorithm.js","code":"swap() {\n        return new $U9(this.seq2Range, this.seq1Range);\n    }","startLine":51,"endLine":53,"chunkType":"function","mtime":1772878380534.47}

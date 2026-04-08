@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/view/ghostText/ghostTextView.js","code":"export const $1gb = $H1('editorGhostText', { createHTML: value => value });\n//# sourceMappingURL=ghostTextView.js.map","startLine":278,"endLine":279,"chunkType":"block","mtime":1772878383194.6384}

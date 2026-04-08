@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/services/editorWorkerService.js","code":"dispose() {\n        if (this.b) {\n            this.b.dispose();\n            this.b = null;\n        }\n        super.dispose();\n    }","startLine":258,"endLine":264,"chunkType":"function","mtime":1772878379683.8535}

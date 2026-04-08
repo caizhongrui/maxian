@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/extension.ts","code":"export function deactivate() {\n\tfs.rmSync(temp.instanceTempDir.value, { recursive: true, force: true });\n}","startLine":90,"endLine":92,"chunkType":"function","mtime":1762250468325.8662}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/scrollbar/scrollbarState.js","code":"getRectangleSmallSize() {\n        return this.a;\n    }","startLine":105,"endLine":107,"chunkType":"function","mtime":1772878378060.1316}

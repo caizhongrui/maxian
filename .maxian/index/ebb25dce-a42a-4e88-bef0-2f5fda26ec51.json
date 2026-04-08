@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/extension.ts","code":"import('./task/taskProvider').then(module => {\n\t\tcontext.subscriptions.push(module.register(lazyClientHost.map(x => x.serviceClient)));\n\t});","startLine":77,"endLine":79,"chunkType":"function","mtime":1762250468325.8662}

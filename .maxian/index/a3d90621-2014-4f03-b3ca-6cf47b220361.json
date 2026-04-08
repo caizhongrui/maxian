@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/history.js","code":"next() {\n        // This will navigate past the end of the last element, and in that case the input should be cleared\n        return this.c.next();\n    }","startLine":21,"endLine":24,"chunkType":"function","mtime":1772878378213.08}

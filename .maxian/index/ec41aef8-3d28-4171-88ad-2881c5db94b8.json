@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoError/browser/markerNavigationService.js","code":"dispose() {\n        this.e.dispose();\n        this.c.dispose();\n    }","startLine":79,"endLine":82,"chunkType":"function","mtime":1772878382622.5972}

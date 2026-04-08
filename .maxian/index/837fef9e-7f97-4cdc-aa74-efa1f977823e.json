@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/services/hoverService/updatableHoverWidget.js","code":"constructor(c, d, e) {\n        this.c = c;\n        this.d = d;\n        this.e = e;\n    }","startLine":11,"endLine":15,"chunkType":"function","mtime":1772878379797.564}

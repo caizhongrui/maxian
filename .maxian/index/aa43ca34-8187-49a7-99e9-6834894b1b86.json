@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/services/editorWorkerService.js","code":"canComputeWordRanges(resource) {\n        return canSyncModel(this.a, resource);\n    }","startLine":153,"endLine":155,"chunkType":"function","mtime":1772878379683.8535}

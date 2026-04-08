@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/configuration/schemes.ts","code":"export function isOfScheme(scheme: string, link: string): boolean {\n\treturn link.toLowerCase().startsWith(scheme + ':');\n}","startLine":15,"endLine":17,"chunkType":"function","mtime":1762250468325.5422}

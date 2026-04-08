@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/indentation/common/indentation.js","code":"if (model.getLineCount() === 1 && model.getLineMaxColumn(1) === 1) {\n        // Model is empty\n        return [];\n    }","startLine":12,"endLine":15,"chunkType":"function","mtime":1772878382944.9238}

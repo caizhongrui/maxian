@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/textEdit.js","code":"equals(other) {\n        return $tD.equals(this, other);\n    }","startLine":211,"endLine":213,"chunkType":"function","mtime":1772878380471.9346}

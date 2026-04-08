@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/npm/src/readScripts.ts","code":"return { location: new Location(document.uri, new Range(start, end ?? start)), scripts };\n};","startLine":71,"endLine":74,"chunkType":"block","mtime":1762250468289.2502}

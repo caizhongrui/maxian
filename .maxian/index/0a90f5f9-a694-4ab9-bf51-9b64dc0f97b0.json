@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/promise.js","code":"getDataOrThrow() {\n        if (this.error) {\n            throw this.error;\n        }\n        return this.data;\n    }","startLine":77,"endLine":82,"chunkType":"function","mtime":1772878378315.9143}

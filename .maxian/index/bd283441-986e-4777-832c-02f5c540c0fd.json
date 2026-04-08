@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/server/src/modes/languageModes.ts","code":"onDocumentRemoved(document: TextDocument): void;\n\tgetSemanticTokens?(document: TextDocument): Promise<SemanticTokenData[]>;","startLine":89,"endLine":90,"chunkType":"function","mtime":1762250468240.9165}

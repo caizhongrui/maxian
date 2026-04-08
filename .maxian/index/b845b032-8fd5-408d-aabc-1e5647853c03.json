@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/multiDiffEditor/objectPool.js","code":"constructor(d) {\n        this.d = d;\n        this.a = new Set();\n        this.b = new Set();\n        this.c = new Map();\n    }","startLine":2,"endLine":7,"chunkType":"function","mtime":1772878380370.2668}

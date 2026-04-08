@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/css-language-features/client/src/dropOrPaste/uriList.ts","code":"function coalesce<T>(array: ReadonlyArray<T | undefined | null>): T[] {\n\treturn <T[]>array.filter(e => !!e);\n}","startLine":36,"endLine":38,"chunkType":"function","mtime":1762250468196.7368}

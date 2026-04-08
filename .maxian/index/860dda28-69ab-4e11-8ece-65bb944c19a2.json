@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/comparers.js","code":"function startsWithUpper(string) {\n    const character = string.charAt(0);\n    return (character.toLocaleLowerCase() !== character) ? true : false;\n}","startLine":178,"endLine":181,"chunkType":"function","mtime":1772878378169.8606}

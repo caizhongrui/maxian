@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/common/ipc.net.js","code":"send(buffer) {\n        this.b.write(new ProtocolMessage(1 /* ProtocolMessageType.Regular */, 0, 0, buffer));\n    }","startLine":422,"endLine":424,"chunkType":"function","mtime":1772878378491.1975}

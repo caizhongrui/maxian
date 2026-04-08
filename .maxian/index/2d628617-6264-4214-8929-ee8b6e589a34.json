@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/tree/abstractTree.js","code":"getStickyScrollFocus() {\n        const focus = this.C?.getFocus();\n        return focus !== undefined ? [focus] : [];\n    }","startLine":2347,"endLine":2350,"chunkType":"function","mtime":1772878378114.123}

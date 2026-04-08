@@ -18,6 +18,7 @@
  */
 
 import { MessageParam, ContentBlock } from '../api/types.js';
+import { estimateTokensFromChars } from '../utils/tokenEstimate.js';
 
 /**
  * Compaction 配置常量
@@ -130,7 +131,7 @@ export function shouldCompact(state: CompactionState): boolean {
  */
 export function estimateTokens(content: string | ContentBlock[]): number {
 	if (typeof content === 'string') {
-		return Math.ceil(content.length / 4);
+		return estimateTokensFromChars(content.length);
 	}
 
 	let totalChars = 0;
@@ -143,7 +144,7 @@ export function estimateTokens(content: string | ContentBlock[]): number {
 			totalChars += JSON.stringify(block.input).length;
 		}
 	}
-	return Math.ceil(totalChars / 4);
+	return estimateTokensFromChars(totalChars);
 }
 
 /**
@@ -361,7 +362,7 @@ export class ContextCompactor {
 						const part = block as ToolCallPart;
 						if (part.compactedAt) {
 							compactedParts++;
-							savedTokens += Math.ceil((part.originalLength || 0) / 3);
+							savedTokens += estimateTokensFromChars(part.originalLength || 0);
 						} else {
 							totalTokens += estimateTokens(part.content);
 						}

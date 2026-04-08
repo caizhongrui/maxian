@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/console.js","code":"function color(color) {\n    return `color: ${color}`;\n}","startLine":100,"endLine":102,"chunkType":"function","mtime":1772878378170.2651}

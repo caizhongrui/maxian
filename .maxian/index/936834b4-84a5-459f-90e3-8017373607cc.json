@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/ternarySearchTree.js","code":"forEach(callback) {\n        for (const [key, value] of this) {\n            callback(value, key);\n        }\n    }","startLine":631,"endLine":635,"chunkType":"function","mtime":1772878378349.0525}

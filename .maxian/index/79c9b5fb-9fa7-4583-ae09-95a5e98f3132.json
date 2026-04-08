@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/comparers.js","code":"if (elementAName.length < elementBName.length) {\n            return -1;\n        }","startLine":281,"endLine":283,"chunkType":"function","mtime":1772878378169.8606}

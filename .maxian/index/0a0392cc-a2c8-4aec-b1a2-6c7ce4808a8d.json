@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/client/src/requests.ts","code":"stat(uri: string): Promise<FileStat>;\n\treadDirectory(uri: string): Promise<[string, FileType][]>;","startLine":76,"endLine":77,"chunkType":"function","mtime":1762250468237.1685}

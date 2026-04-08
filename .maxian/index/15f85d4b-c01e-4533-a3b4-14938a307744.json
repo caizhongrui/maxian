@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/ternarySearchTree.js","code":"hasNext() {\n        return this.e < this.c;\n    }","startLine":93,"endLine":95,"chunkType":"function","mtime":1772878378349.0525}

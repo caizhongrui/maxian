@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/codeLens/baseCodeLensProvider.ts","code":"if (item.nameSpan) {\n\t\treturn typeConverters.Range.fromTextSpan(item.nameSpan);\n\t}","startLine":88,"endLine":90,"chunkType":"function","mtime":1762250468326.372}

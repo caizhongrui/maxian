@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/dropOrPasteInto/browser/copyPasteController.js","code":"changePasteType() {\n        this.h.tryShowSelector();\n    }","startLine":68,"endLine":70,"chunkType":"function","mtime":1772878382466.9634}

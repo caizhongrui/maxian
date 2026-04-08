@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/quickInput/standaloneQuickInputService.js","code":"navigate(next, quickNavigate) {\n        return this.b.navigate(next, quickNavigate);\n    }","startLine":118,"endLine":120,"chunkType":"function","mtime":1772878383798.8425}

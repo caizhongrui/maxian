@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewModel.js","code":"constructor(tabSize, data) {\n        this.tabSize = tabSize;\n        this.data = data;\n    }","startLine":18,"endLine":21,"chunkType":"function","mtime":1772878381187.7893}

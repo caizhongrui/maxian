@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/range.js","code":"function isEmpty(range) {\n        return range.end - range.start <= 0;\n    }","startLine":23,"endLine":25,"chunkType":"function","mtime":1772878378344.468}

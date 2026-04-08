@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/editorBrowser.js","code":"if (thing && typeof thing.getEditorType === 'function') {\n        return thing.getEditorType() === editorCommon.EditorType.IDiffEditor;\n    }","startLine":128,"endLine":130,"chunkType":"function","mtime":1772878379373.6018}

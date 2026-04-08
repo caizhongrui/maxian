@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/MEMORY_BANK_IMPLEMENTATION.md","code":"async learnNewFeature(workspaceUri: URI): Promise<void> {\n    // 实现新的学习逻辑\n}","startLine":407,"endLine":409,"chunkType":"function","mtime":1763081478608.7654}

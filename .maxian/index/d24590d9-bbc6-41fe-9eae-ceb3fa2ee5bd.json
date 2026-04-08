@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/errors.rs","code":"CorruptDownload(&'static str),\n\t#[error(\"port forwarding is not available in this context\")]","startLine":478,"endLine":479,"chunkType":"function","mtime":1762250468186.8193}

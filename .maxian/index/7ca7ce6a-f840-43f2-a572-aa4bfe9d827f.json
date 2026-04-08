@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/semanticTokens/browser/viewportSemanticTokens.js","code":"n() {\n        for (const request of this.g) {\n            request.cancel();\n        }\n        this.g = [];\n    }","startLine":75,"endLine":80,"chunkType":"function","mtime":1772878383597.8464}

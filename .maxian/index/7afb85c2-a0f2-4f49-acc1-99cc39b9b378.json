@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/ipynb/src/notebookSerializer.ts","code":"constructor(protected readonly context: vscode.ExtensionContext) {\n\t\tsuper(() => { });\n\t}","startLine":15,"endLine":17,"chunkType":"function","mtime":1762250468248.445}

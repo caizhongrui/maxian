@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/pieceTreeTextBuffer/rbTreeBase.js","code":"if (x === tree.root) {\n        return;\n    }","startLine":340,"endLine":342,"chunkType":"function","mtime":1772878380727.34}

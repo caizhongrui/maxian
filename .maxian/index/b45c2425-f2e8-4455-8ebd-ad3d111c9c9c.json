@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/rpc.rs","code":"Some(Method::Sync(callback)) => MaybeSync::Sync(callback(id, body)),\n\t\t\t\tSome(Method::Async(callback)) => MaybeSync::Future(callback(id, body)),","startLine":426,"endLine":427,"chunkType":"function","mtime":1762250468183.7632}

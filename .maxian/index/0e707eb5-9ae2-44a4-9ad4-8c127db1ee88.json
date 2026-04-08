@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/contentHoverController.js","code":"scrollUp() {\n        this.c?.scrollUp();\n    }","startLine":275,"endLine":277,"chunkType":"function","mtime":1772878382755.282}

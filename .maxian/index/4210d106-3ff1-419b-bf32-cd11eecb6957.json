@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/view/inlineEdits/utils.js","code":"add(other) {\n        return new $5gb(this.x + other.x, this.y + other.y);\n    }","startLine":55,"endLine":57,"chunkType":"function","mtime":1772878383195.934}

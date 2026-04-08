@@ -66,7 +66,7 @@ suite('SystemPromptGenerator', () => {
 		);
 
 		// 估算token数（1 token ≈ 3 chars）
-		const estimatedTokens = Math.ceil(prompt.length / 3);
+		const estimatedTokens = Math.ceil(prompt.length / 4);
 
 		console.log(`[Test] 系统提示词统计:
   - 字符数: ${prompt.length}
@@ -93,6 +93,7 @@ suite('SystemPromptGenerator', () => {
 		assert.ok(prompt.includes('码弦') || prompt.includes('Maxian'), '应包含角色定义');
 		assert.ok(prompt.includes('工具') || prompt.includes('tool'), '应包含工具说明');
 		assert.ok(prompt.includes('Markdown') || prompt.includes('markdown'), '应包含格式规则');
+		assert.ok(prompt.includes('默认且必须使用简体中文') || prompt.includes('默认使用简体中文'), '应包含中文输出约束');
 
 		// 验证不包含API相关内容
 		assert.ok(!prompt.includes('fetch('), '不应包含fetch调用');

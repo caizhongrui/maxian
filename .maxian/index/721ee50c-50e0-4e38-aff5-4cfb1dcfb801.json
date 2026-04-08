@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/range.js","code":"equalsRange(other) {\n        return $gD.equalsRange(this, other);\n    }","startLine":207,"endLine":209,"chunkType":"function","mtime":1772878380413.052}

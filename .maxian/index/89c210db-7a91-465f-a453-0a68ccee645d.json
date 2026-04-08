@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/hoverTypes.js","code":"register(ctor) {\n        this._participants.push(ctor);\n    }","startLine":59,"endLine":61,"chunkType":"function","mtime":1772878382941.0137}

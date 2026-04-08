@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/viewZones/viewZones.js","code":"y(zone) {\n        if (typeof zone.minWidthInPx === 'number') {\n            return zone.minWidthInPx;\n        }\n        return 0;\n    }","startLine":244,"endLine":249,"chunkType":"function","mtime":1772878380254.788}

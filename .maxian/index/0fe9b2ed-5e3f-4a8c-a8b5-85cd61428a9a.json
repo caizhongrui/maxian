@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/web/src/pathMapper.ts","code":"export function looksLikeNodeModules(filepath: string) {\n\treturn filepath.includes('/node_modules');\n}","startLine":86,"endLine":88,"chunkType":"function","mtime":1762250468340.651}

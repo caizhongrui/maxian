@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/codeEditor/codeEditorWidget.js","code":"fc(key) {\n        this.xb.removeDecorationType(key);\n    }","startLine":1468,"endLine":1470,"chunkType":"function","mtime":1772878380256.3677}

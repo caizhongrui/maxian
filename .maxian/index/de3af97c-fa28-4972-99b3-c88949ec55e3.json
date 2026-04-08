@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/diagnostics.ts","code":"diagnostics.push(diagnostic);\n\t\t\t}\n\t\t}\n\n\t\tthis.diagnostics.set(document.uri, diagnostics);\n\t}\n\n\tdispose() {\n\t\tdispose(this.disposables);\n\t}\n}","startLine":90,"endLine":101,"chunkType":"block","mtime":1762250468217.4321}

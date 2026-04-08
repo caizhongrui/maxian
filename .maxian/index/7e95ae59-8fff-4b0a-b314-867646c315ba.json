@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/utils/arrays.ts","code":"export function coalesce<T>(array: ReadonlyArray<T | undefined>): T[] {\n\treturn array.filter((e): e is T => !!e);\n}","startLine":22,"endLine":24,"chunkType":"function","mtime":1762250468338.8157}

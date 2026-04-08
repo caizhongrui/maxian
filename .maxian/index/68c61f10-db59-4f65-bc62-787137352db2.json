@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/linesOperations/browser/linesOperations.js","code":"if ($Dib.caseBoundary.isSupported() && $Dib.singleLetters.isSupported()) {\n    $L5($Dib);\n}","startLine":1091,"endLine":1093,"chunkType":"function","mtime":1772878383402.8794}

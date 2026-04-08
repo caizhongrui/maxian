@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/diffEditorViewModel.js","code":"getMaxVisibleLineCountBottom() {\n        return this.lineCount - this.d.get();\n    }","startLine":453,"endLine":455,"chunkType":"function","mtime":1772878380261.8843}

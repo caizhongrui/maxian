@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/preview-src/index.ts","code":"if (typeof originalState.scrollProgress !== 'undefined' && originalState?.resource !== state.resource) {\n\tstate.scrollProgress = 0;\n}","startLine":31,"endLine":33,"chunkType":"function","mtime":1762250468266.5684}

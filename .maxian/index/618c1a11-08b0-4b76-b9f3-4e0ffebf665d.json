@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/code/node/cli.js","code":"catch (error) {\n            error.message = `Error using --file-write: ${error.message}`;\n            throw error;\n        }","startLine":196,"endLine":199,"chunkType":"function","mtime":1772878379287.51}

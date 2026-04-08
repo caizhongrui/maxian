@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/json/syntaxes/snippets.tmLanguage.json","code":"}\n\t\t},\n\t\t\"regex_backslash_escape\": {\n\t\t\t\"match\": \"(?:(?:(\\\\\\\\)(\\\\\\\\\\\\/))|(?:(\\\\\\\\\\\\\\\\\\\\\\\\)(\\\\\\\\\\\\/)))\",","startLine":7250,"endLine":7253,"chunkType":"block","mtime":1762250468257.0105}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/emmet/src/locateFile.ts","code":"function resolveRelative(basePath: string, filePath: string): Promise<string> {\n\treturn tryFile(path.resolve(basePath, filePath));\n}","startLine":40,"endLine":42,"chunkType":"function","mtime":1762250468206.1013}

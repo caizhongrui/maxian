@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/config/editorConfiguration.js","code":"function deepCloneAndMigrateOptions(_options) {\n    const options = objects.$Hv(_options);\n    $P4(options);\n    return options;\n}","startLine":280,"endLine":284,"chunkType":"function","mtime":1772878379324.913}

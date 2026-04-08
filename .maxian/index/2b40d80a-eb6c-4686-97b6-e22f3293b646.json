@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/observable.test.js","code":"endUpdate(observable) {\n        this.b.log(`${this.debugName}.endUpdate (count ${this.a})`);\n        this.a--;\n    }","startLine":1256,"endLine":1259,"chunkType":"function","mtime":1772878379002.9128}

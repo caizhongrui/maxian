@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/commands.ts","code":"class CreateBranchItem extends CheckoutCommandItem {\n\tget label(): string { return l10n.t('{0} Create new branch...', '$(plus)'); }\n}","startLine":29,"endLine":31,"chunkType":"class","mtime":1773492784505.2227}

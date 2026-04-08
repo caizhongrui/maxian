@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewModel/viewModelLines.js","code":"setHiddenAreas(_ranges) {\n        return false;\n    }","startLine":847,"endLine":849,"chunkType":"function","mtime":1772878381820.8547}

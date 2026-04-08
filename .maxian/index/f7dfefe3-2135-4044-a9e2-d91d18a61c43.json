@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/ime.js","code":"disable() {\n        this.b = false;\n        this.a.fire();\n    }","startLine":25,"endLine":28,"chunkType":"function","mtime":1772878378215.376}

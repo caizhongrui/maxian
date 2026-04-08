@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/iterator.js","code":"for (const element of iterable) {\n            if (predicate(element)) {\n                yield element;\n            }\n        }","startLine":67,"endLine":71,"chunkType":"function","mtime":1772878378234.5435}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/editStack.js","code":"setModel(model) {\n        this.model = model;\n    }","startLine":153,"endLine":155,"chunkType":"function","mtime":1772878380722.5027}

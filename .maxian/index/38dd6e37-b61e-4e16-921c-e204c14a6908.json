@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/docs/superpowers/plans/2026-03-15-user-behavior-analytics.md","code":"SUM(s.online_duration) AS online_duration,\n            SUM(s.task_count) AS task_count,","startLine":536,"endLine":537,"chunkType":"function","mtime":1773552378307.195}

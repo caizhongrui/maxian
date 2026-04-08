@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneEditor.js","code":"export function remeasureFonts() {\n    $N4.clearAllFontInfos();\n}","startLine":347,"endLine":349,"chunkType":"function","mtime":1772878383800.241}

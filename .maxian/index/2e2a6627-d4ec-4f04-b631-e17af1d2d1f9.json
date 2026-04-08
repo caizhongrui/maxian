@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-api-tests/src/singlefolder-tests/documentPaste.test.ts","code":"function reverseString(str: string) {\n\treturn str.split(\"\").reverse().join(\"\");\n}","startLine":210,"endLine":212,"chunkType":"function","mtime":1762250468345.29}

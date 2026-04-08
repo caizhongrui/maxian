@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestWidget.js","code":"getDomNode() {\n        return this.g.element.domNode;\n    }","startLine":837,"endLine":839,"chunkType":"function","mtime":1772878383697.8738}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/minimap/minimap.js","code":"onCursorStateChanged(e) {\n        this.c = e.selections;\n        this.f = null;\n        return this.w.onSelectionChanged();\n    }","startLine":636,"endLine":640,"chunkType":"function","mtime":1772878380165.3325}

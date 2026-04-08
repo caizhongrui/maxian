@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arraysFind.js","code":"if (array.length === 0) {\n        return undefined;\n    }","startLine":137,"endLine":139,"chunkType":"function","mtime":1772878378138.686}

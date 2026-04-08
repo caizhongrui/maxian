@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/editorSimpleWorker.js","code":"if (a.range && b.range) {\n                return $gD.compareRangesUsingStarts(a.range, b.range);\n            }","startLine":144,"endLine":146,"chunkType":"function","mtime":1772878380880.35}

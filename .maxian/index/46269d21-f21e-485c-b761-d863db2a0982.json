@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/update_service.rs","code":"Ok(Release {\n\t\t\ttarget,\n\t\t\tplatform,\n\t\t\tquality,\n\t\t\tname: res.name,\n\t\t\tcommit: res.version,\n\t\t})","startLine":140,"endLine":146,"chunkType":"function","mtime":1762250468186.4631}

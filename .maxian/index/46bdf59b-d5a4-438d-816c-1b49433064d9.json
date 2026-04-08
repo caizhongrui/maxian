@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/contentHoverWidgetWrapper.js","code":"scrollLeft() {\n        this.g.scrollLeft();\n    }","startLine":306,"endLine":308,"chunkType":"function","mtime":1772878382758.941}

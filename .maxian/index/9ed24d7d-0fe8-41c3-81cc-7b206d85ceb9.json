@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/protocol.rs","code":"serverlog(ServerLog<'a>),\n\tmakehttpreq(HttpRequestParams<'a>),","startLine":20,"endLine":21,"chunkType":"function","mtime":1762250468185.4087}

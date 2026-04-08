@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/tree/asyncDataTree.js","code":"function intersects(node, other) {\n    return node === other || isAncestor(node, other) || isAncestor(other, node);\n}","startLine":41,"endLine":43,"chunkType":"function","mtime":1772878378114.5195}

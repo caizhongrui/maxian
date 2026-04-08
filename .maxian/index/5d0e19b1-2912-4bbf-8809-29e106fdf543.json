@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/linesOperations/browser/linesOperations.js","code":"if ($Gib.isSupported()) {\n    $L5($Gib);\n}","startLine":1103,"endLine":1105,"chunkType":"function","mtime":1772878383402.8794}

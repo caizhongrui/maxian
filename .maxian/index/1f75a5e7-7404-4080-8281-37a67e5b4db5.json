@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/less/syntaxes/less.tmLanguage.json","code":"\"1\": {\n\t\t\t\t\t\"name\": \"punctuation.separator.less\"\n\t\t\t\t}\n\t\t\t},\n\t\t\t\"match\": \"\\\\s*(,)\\\\s*\"","startLine":1003,"endLine":1007,"chunkType":"block","mtime":1762250468261.719}

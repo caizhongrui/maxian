@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/node/ipc.cp.js","code":"dispose() {\n        this.h.dispose();\n        this.b?.cancel();\n        this.b = undefined;\n        this.o();\n        this.c.clear();\n    }","startLine":181,"endLine":187,"chunkType":"function","mtime":1772878378492.8965}

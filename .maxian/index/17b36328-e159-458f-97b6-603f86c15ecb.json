@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewModel/viewModelLines.js","code":"getViewLineLength(viewLineNumber) {\n        return this.model.getLineLength(viewLineNumber);\n    }","startLine":904,"endLine":906,"chunkType":"function","mtime":1772878381820.8547}

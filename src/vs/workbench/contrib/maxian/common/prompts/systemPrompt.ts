@@ -17,6 +17,7 @@ import {
 } from './sections/index.js';
 import { getModeBySlug, DEFAULT_MODE, type Mode } from '../modes/modeTypes.js';
 import { ISkill } from '../../../skills/common/skillTypes.js';
+import { estimateTokensFromChars } from '../utils/tokenEstimate.js';
 
 /**
  * 系统提示词生成器
@@ -50,8 +51,14 @@ export class SystemPromptGenerator {
 			diagnosticText?: string | null;
 			steeringContent?: string | null;
 			memoryContent?: string | null;
+			profile?: 'full' | 'lean';
 		}
 	): string {
+		const profile = options?.profile ?? 'full';
+		if (profile === 'lean') {
+			return this.generateLeanPrompt(workspaceRoot, availableTools, systemInfo, mode, options);
+		}
+
 		const sections: string[] = [];
 
 		// 1. 角色定义
@@ -123,11 +130,101 @@ ${options.memoryContent}`);
 
 		if (options?.includeStats) {
 			const chars = prompt.length;
-			const estimatedTokens = Math.ceil(chars / 3);
+			const estimatedTokens = estimateTokensFromChars(chars);
 			console.log(`[SystemPrompt] ${chars} chars ≈ ${estimatedTokens} tokens`);
 		}
 
 		return prompt;
+	}
+
+	private static generateLeanPrompt(
+		workspaceRoot: string,
+		availableTools: ToolName[],
+		systemInfo: SystemInfo,
+		mode: Mode,
+		options?: {
+			includeStats?: boolean;
+			reserveForSkills?: boolean;
+			preloadedSkills?: ISkill[];
+			diagnosticText?: string | null;
+			steeringContent?: string | null;
+			memoryContent?: string | null;
+			profile?: 'full' | 'lean';
+		}
+	): string {
+		const sections: string[] = [];
+		sections.push(this.getRoleDefinition(mode));
+		sections.push(`====
+
+WORKING CONTRACT
+
+- 以完成用户目标为第一优先，先做最少探索再执行修改。
+- 默认使用简体中文；代码、命令、路径保持原文。
+- Markdown 保持简洁：必要时用短列表与代码块。
+- 工具调用失败时，不要机械重试同一写入；先判断是否“已生效/需重读/需改策略”。`);
+		sections.push(`====
+
+TOOL CORE RULES
+
+- 读：优先 \`search_files(output_mode=files_with_matches)\` → \`read_file\`，减少大范围扫描。
+- 改：单点用 \`edit\`，同文件多点用 \`multiedit\`，新文件才用 \`write_to_file\`。
+- 并行：多个独立只读操作时用 \`batch\`。
+- 提问：\`ask_followup_question\` 必须带 options（2-4 个）。
+- 完成：仅在目标实现且验证后调用 \`attempt_completion\`。`);
+		sections.push(`====
+
+AVAILABLE TOOLS
+
+${availableTools.join(', ')}`);
+		sections.push(getSystemInfoSection(workspaceRoot, systemInfo));
+		sections.push(getObjectiveSection());
+
+		const customInstructions = this.getCustomInstructions(mode);
+		if (customInstructions) {
+			sections.push(customInstructions);
+		}
+
+		if (options?.steeringContent) {
+			sections.push(`====
+
+STEERING
+
+${this.truncateLongSection(options.steeringContent, 2200)}`);
+		}
+
+		if (options?.memoryContent) {
+			sections.push(`====
+
+MEMORY
+
+${this.truncateLongSection(options.memoryContent, 1600)}`);
+		}
+
+		if (options?.diagnosticText) {
+			sections.push(this.truncateLongSection(options.diagnosticText, 1200));
+		}
+
+		if (options?.reserveForSkills && options?.preloadedSkills && options.preloadedSkills.length > 0) {
+			sections.push(this.getSkillsDirectory(options.preloadedSkills));
+		}
+
+		const prompt = sections.join('\n\n');
+
+		if (options?.includeStats) {
+			const chars = prompt.length;
+			const estimatedTokens = estimateTokensFromChars(chars);
+			console.log(`[SystemPrompt][lean] ${chars} chars ≈ ${estimatedTokens} tokens`);
+		}
+
+		return prompt;
+	}
+
+	private static truncateLongSection(text: string, maxChars: number): string {
+		const normalized = text.trim();
+		if (normalized.length <= maxChars) {
+			return normalized;
+		}
+		return `${normalized.slice(0, maxChars)}\n\n[truncated]`;
 	}
 
 	/**
@@ -152,10 +249,15 @@ ${skillNames}`;
 
 	private static getRoleDefinition(mode: Mode): string {
 		const modeConfig = getModeBySlug(mode);
+		const languageConstraint = `【输出语言强约束】
+- 默认且必须使用简体中文回复所有自然语言内容（包括说明、总结、错误解释、计划与提问）。
+- 仅当用户明确要求其他语言时，才切换到指定语言。
+- 代码、命令、路径、API 字段名和标识符保持原文，不做翻译。`;
+
 		if (!modeConfig) {
-			return `你是码弦（Maxian），一个智能AI编程助手，专门帮助用户完成软件开发任务。`;
+			return `你是码弦（Maxian），一个智能AI编程助手，专门帮助用户完成软件开发任务。\n\n${languageConstraint}`;
 		}
-		return modeConfig.roleDefinition;
+		return `${modeConfig.roleDefinition}\n\n${languageConstraint}`;
 	}
 
 	private static getCustomInstructions(mode: Mode): string | null {

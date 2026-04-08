@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/emmet/src/parseDocument.ts","code":"export function removeFileFromParseCache(document: TextDocument) {\n\tconst filename = document.uri.toString();\n\t_parseCache.delete(filename);\n}","startLine":43,"endLine":46,"chunkType":"function","mtime":1762250468206.3792}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/promise.js","code":"constructor(b) {\n        this.b = b;\n        this.a = $ge(this, undefined);\n    }","startLine":13,"endLine":16,"chunkType":"function","mtime":1772878378315.9143}

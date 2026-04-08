@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/path.js","code":"}\n        return path.slice(startDot, end);\n    },","startLine":1300,"endLine":1302,"chunkType":"block","mtime":1772878378321.6858}

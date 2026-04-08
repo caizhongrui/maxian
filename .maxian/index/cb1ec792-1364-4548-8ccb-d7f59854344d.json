@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/scrollDecoration/scrollDecoration.js","code":"onScrollChanged(e) {\n        this.b = e.scrollTop;\n        return this.h();\n    }","startLine":55,"endLine":58,"chunkType":"function","mtime":1772878380215.1133}

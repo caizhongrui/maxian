@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/cursor/cursorCollection.js","code":"killSecondaryCursors() {\n        this.e([]);\n    }","startLine":97,"endLine":99,"chunkType":"function","mtime":1772878380475.5085}

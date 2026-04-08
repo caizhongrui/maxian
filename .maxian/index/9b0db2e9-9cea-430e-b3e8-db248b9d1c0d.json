@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/find/browser/findController.js","code":"dispose() {\n        this.s();\n        super.dispose();\n    }","startLine":113,"endLine":116,"chunkType":"function","mtime":1772878382472.2595}

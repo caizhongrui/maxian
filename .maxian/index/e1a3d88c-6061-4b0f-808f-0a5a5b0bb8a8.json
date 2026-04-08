@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view.js","code":"function safeInvokeNoArg(func) {\n    try {\n        return func();\n    }\n    catch (e) {\n        $gb(e);\n        return null;\n    }\n}","startLine":577,"endLine":585,"chunkType":"function","mtime":1772878379798.9834}

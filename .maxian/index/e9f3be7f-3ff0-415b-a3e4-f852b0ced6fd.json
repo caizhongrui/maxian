@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/splitview/splitview.js","code":"function Invisible(cachedVisibleSize) { return { type: 'invisible', cachedVisibleSize }; }\n    Sizing.Invisible = Invisible;","startLine":137,"endLine":138,"chunkType":"function","mtime":1772878378110.4668}

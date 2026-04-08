@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/inspectTokens/inspectTokens.js","code":"stop() {\n        if (this.c) {\n            this.c.dispose();\n            this.c = null;\n        }\n    }","startLine":55,"endLine":60,"chunkType":"function","mtime":1772878383778.6233}

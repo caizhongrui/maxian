@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/terminalEncoding.js","code":"if (verbose) {\n                console.log('Running \"locale charmap\" to detect terminal encoding...');\n            }","startLine":70,"endLine":72,"chunkType":"function","mtime":1772878378446.695}

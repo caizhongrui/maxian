@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/resources.js","code":"extname(resource) {\n        return paths.$kc.extname(resource.path);\n    }","startLine":63,"endLine":65,"chunkType":"function","mtime":1772878378344.7244}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"constructor(str, offset = 0) {\n        this.c = str;\n        this.d = str.length;\n        this.e = offset;\n    }","startLine":452,"endLine":456,"chunkType":"function","mtime":1772878378348.6172}

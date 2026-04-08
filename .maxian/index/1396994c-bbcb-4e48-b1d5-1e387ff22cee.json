@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/observable.test.js","code":"toString() {\n        return `${this.debugName}: ${this.g}`;\n    }","startLine":1301,"endLine":1303,"chunkType":"function","mtime":1772878379002.9128}

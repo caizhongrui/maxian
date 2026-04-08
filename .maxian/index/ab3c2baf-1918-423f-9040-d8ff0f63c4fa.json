@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/diffEditorViewModel.js","code":"setActiveMovedText(movedText) {\n        this.t.set(movedText, undefined);\n    }","startLine":31,"endLine":33,"chunkType":"function","mtime":1772878380261.8843}

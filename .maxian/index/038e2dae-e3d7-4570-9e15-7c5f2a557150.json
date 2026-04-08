@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/sandbox/electron-sandbox/preload.js","code":"getProcessMemoryInfo() {\n                return process.getProcessMemoryInfo();\n            },","startLine":163,"endLine":165,"chunkType":"function","mtime":1772878378527.5525}

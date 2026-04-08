@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/test-workspace/sub/c.md","code":"# First\n# Second\n\n[b](/b.md)\n[b](../b.md)\n[b](./../b.md)","startLine":1,"endLine":7,"chunkType":"block","mtime":1762250468273.2593}

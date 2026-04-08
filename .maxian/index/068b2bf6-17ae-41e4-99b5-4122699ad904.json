@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/node/ipc.cp.js","code":"this.b?.cancel();\n                this.o();\n                this.h.fire({ code, signal });\n            });\n        }","startLine":156,"endLine":160,"chunkType":"block","mtime":1772878378492.8965}

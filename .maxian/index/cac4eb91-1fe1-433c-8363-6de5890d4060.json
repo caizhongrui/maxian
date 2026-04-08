@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/resourceTree.js","code":"constructor(context, rootURI = URI.file('/'), a = defaultExtUri) {\n        this.a = a;\n        this.root = new Node(rootURI, '', context);\n    }","startLine":72,"endLine":75,"chunkType":"function","mtime":1772878378345.136}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/code/node/cli.js","code":"if (process.env['VSCODE_DEV']) {\n            cliProcessMain = './cliProcessMain.js';\n        }","startLine":122,"endLine":124,"chunkType":"function","mtime":1772878379287.51}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/linesOperations/browser/linesOperations.js","code":"constructor(descending, opts) {\n        super(opts);\n        this.d = descending;\n    }","startLine":206,"endLine":209,"chunkType":"function","mtime":1772878383402.8794}

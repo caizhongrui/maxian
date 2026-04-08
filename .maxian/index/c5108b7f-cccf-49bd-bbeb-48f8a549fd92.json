@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/socket_signal.rs","code":"Some(msg) => ClientRequestMethod::servermsg(msg),\n\t\t\t\t\tNone => ClientRequestMethod::serverclose(ServerClosedParams { i }),","startLine":151,"endLine":152,"chunkType":"function","mtime":1762250468186.2886}

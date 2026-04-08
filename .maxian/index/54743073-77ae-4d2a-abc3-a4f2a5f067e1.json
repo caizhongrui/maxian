@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/tsServer/server.ts","code":"export type State = typeof Unresolved | typeof Resolved | Errored;\n}","startLine":644,"endLine":647,"chunkType":"block","mtime":1762250468335.7903}

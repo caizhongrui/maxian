@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/basic.java","code":"for (int i = 0; i < 9; i++) {\n\t\t\tSystem.out.println(\"Hello\" + i);\n\t\t}","startLine":28,"endLine":30,"chunkType":"function","mtime":1762250468353.6846}

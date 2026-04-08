@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/viewCursors/viewCursors.js","code":"dispose() {\n        super.dispose();\n        this.t.dispose();\n        this.w.dispose();\n    }","startLine":46,"endLine":50,"chunkType":"function","mtime":1772878380217.3767}

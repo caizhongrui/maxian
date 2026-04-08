@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/observable.test.js","code":"c() {\n        this.h.log(`${this.debugName}.firstObserverAdded`);\n    }","startLine":1274,"endLine":1276,"chunkType":"function","mtime":1772878379002.9128}

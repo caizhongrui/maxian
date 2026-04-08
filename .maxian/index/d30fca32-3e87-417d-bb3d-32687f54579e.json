@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/tokens/sparseMultilineTokens.js","code":"getStartCharacter(tokenIndex) {\n        return this.c[4 * tokenIndex + 1];\n    }","startLine":507,"endLine":509,"chunkType":"function","mtime":1772878381182.7197}

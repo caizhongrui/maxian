@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/debug-auto-launch/src/extension.ts","code":"function refreshAutoAttachVars() {\n\tupdateAutoAttach(State.Disabled);\n\tupdateAutoAttach(readCurrentState());\n}","startLine":88,"endLine":91,"chunkType":"function","mtime":1762250468202.4573}

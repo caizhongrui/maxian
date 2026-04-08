@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/diffAlgorithm.js","code":"constructor(seq1Range, seq2Range) {\n        this.seq1Range = seq1Range;\n        this.seq2Range = seq2Range;\n    }","startLine":47,"endLine":50,"chunkType":"function","mtime":1772878380534.47}

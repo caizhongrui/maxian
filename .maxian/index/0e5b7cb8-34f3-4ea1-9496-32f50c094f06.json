@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/hotReload.js","code":"function hotReloadDisabled() {\n    return true; // TODO@hediet fix hot reload.\n}","startLine":6,"endLine":8,"chunkType":"function","mtime":1772878378213.3774}

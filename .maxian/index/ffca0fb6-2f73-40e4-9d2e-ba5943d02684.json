@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/services/abstractCodeEditorService.js","code":"insertRule(selector, rule) {\n        dom.$Xj(selector, rule, this.a);\n    }","startLine":303,"endLine":305,"chunkType":"function","mtime":1772878379683.022}

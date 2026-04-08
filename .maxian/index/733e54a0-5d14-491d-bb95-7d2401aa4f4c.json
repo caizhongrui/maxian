@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/markdownRenderer/browser/markdownRenderer.js","code":"async h(link, markdown) {\n        await $D_(this.f, link, markdown.isTrusted);\n    }","startLine":99,"endLine":101,"chunkType":"function","mtime":1772878380292.31}

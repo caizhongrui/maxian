@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/nls.js","code":"async function exists(path) {\n    try {\n        await fs.promises.access(path);\n        return true;\n    }\n    catch {\n        return false;\n    }\n}","startLine":152,"endLine":160,"chunkType":"function","mtime":1772878378391.1921}

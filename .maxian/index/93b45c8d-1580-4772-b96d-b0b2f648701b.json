@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/textLength.js","code":"addToRange(range) {\n        return $gD.fromPositions(this.addToPosition(range.getStartPosition()), this.addToPosition(range.getEndPosition()));\n    }","startLine":116,"endLine":118,"chunkType":"function","mtime":1772878380472.342}

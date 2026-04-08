@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/peek/referencesWidget.js","code":"show(where) {\n        super.show(where, this.layoutData.heightInLines || 18);\n    }","startLine":214,"endLine":216,"chunkType":"function","mtime":1772878382753.5593}

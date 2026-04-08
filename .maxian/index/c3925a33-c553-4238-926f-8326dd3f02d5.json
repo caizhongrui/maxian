@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/keyCodes.js","code":"function fromString(key) {\n        return uiMap.strToKeyCode(key);\n    }","startLine":738,"endLine":740,"chunkType":"function","mtime":1772878378239.2432}

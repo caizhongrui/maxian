@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/objective-c/syntaxes/objective-c.tmLanguage.json","code":"},\n\t\t\t\t{\n\t\t\t\t\t\"include\": \"#strings\"\n\t\t\t\t},\n\t\t\t\t{\n\t\t\t\t\t\"include\": \"#special_variables\"","startLine":642,"endLine":647,"chunkType":"block","mtime":1762250468290.2017}

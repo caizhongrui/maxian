@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/position.js","code":"toJSON() {\n        return {\n            lineNumber: this.lineNumber,\n            column: this.column\n        };\n    }","startLine":134,"endLine":139,"chunkType":"function","mtime":1772878380412.571}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/lazyObservableValue.js","code":"o(newValue) {\n        this.d = newValue;\n    }","startLine":115,"endLine":117,"chunkType":"function","mtime":1772878378314.9124}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/LSP自然语言测试.md","code":"```\n\n### 场景 3：类型驱动开发\n\n```\n你：我要添加一个 updateUser 方法\n\nAI 应该：\n1. 使用 lsp_type_definition 查看 User 类型\n2. 使用 lsp_hover 了解现有方法的签名\n3. 建议方法签名和实现\n```\n\n---\n\n## ❌ 反模式（AI 不应该要求）","startLine":324,"endLine":339,"chunkType":"block","mtime":1772782077285.404}

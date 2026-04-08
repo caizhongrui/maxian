@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/editContext/native/debugEditContext.js","code":"dispatchEvent(event) {\n        return this.f.dispatchEvent(event);\n    }","startLine":106,"endLine":108,"chunkType":"function","mtime":1772878379330.372}

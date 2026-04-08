@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/getIconClasses.js","code":"if (ThemeIcon.isThemeIcon(icon)) {\n        return [`codicon-${icon.id}`, 'predefined-file-icon'];\n    }","startLine":13,"endLine":15,"chunkType":"function","mtime":1772878380883.5256}

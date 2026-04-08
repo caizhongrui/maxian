@@ -15,6 +15,7 @@ import { normalizeString } from '../../common/utils/textNormalization.js';
 import * as path from '../../../../../base/common/path.js';
 import { trackFileRead, assertFileWritable, withFileLock, updateFileAfterWrite } from '../../common/file/fileTimeTracker.js';
 import { FileStateCache, FILE_UNCHANGED_STUB } from '../../common/file/fileStateCache.js';
+import { isLikelyNoisePath, shouldApplyNoiseFiltering } from '../../common/services/globConstants.js';
 
 interface PreparedWriteToFile {
 	absolutePath: string;
@@ -600,12 +601,53 @@ ${assertResult.message}
 		const processedContent = this.normalizeWriteContent(content);
 		const actualLineCount = processedContent.split('\n').length;
 		const predictedLineCount = line_count ? parseInt(line_count, 10) : undefined;
+		let currentContent: string | null = null;
+		let currentFileIsBlank = false;
+
+		// 已存在文件且内容完全一致：直接拒绝无效写入，避免重复回路
+		if (exists) {
+			try {
+				const currentFile = await this.fileService.readFile(uri);
+				currentContent = currentFile.value.toString();
+				currentFileIsBlank = currentContent.trim().length === 0;
+				if (processedContent.trim().length === 0 && currentContent.trim().length > 0) {
+					return {
+						error: `<error>
+write_to_file 安全拦截：不允许通过空内容覆盖已存在文件
+文件: ${absolutePath}
+
+这通常是“误把删除操作写成清空文件”。
+请改用 delete_file 删除文件；如需保留文件并清空内容，请用 edit 明确表达该意图。
+</error>`
+					};
+				}
+				if (currentContent === processedContent) {
+					return {
+						error: `<error>
+write_to_file 未产生任何修改：目标文件内容与待写入内容完全一致
+文件: ${absolutePath}
+
+请不要重复写入相同内容。
+如果目标已完成，请直接 attempt_completion；
+如果仅需局部修改，请改用 edit / multiedit。
+</error>`
+					};
+				}
+			} catch (e) {
+				console.warn(`[FileOperations] 读取当前文件内容用于无效写入检查失败: ${absolutePath}`, e);
+			}
+		}
+
 		const omissionError = this.getWriteOmissionError(absolutePath, processedContent, actualLineCount, predictedLineCount);
 		if (omissionError) {
 			return { error: omissionError };
 		}
 
 		if (predictedLineCount && !Number.isNaN(predictedLineCount) && Math.abs(actualLineCount - predictedLineCount) > 5) {
+			// 空文件恢复场景：允许一次整文件写入，不用行数校验阻断。
+			if (exists && currentFileIsBlank) {
+				console.warn(`[FileOperations] 跳过空文件行数校验: ${absolutePath}, actual=${actualLineCount}, predicted=${predictedLineCount}`);
+			} else {
 			return {
 				error: `<error>
 错误: write_to_file 行数校验失败
@@ -617,6 +659,7 @@ ${assertResult.message}
 请先重新读取目标文件全文，再重新生成完整内容；如果只是修改局部，请改用 edit 或 multiedit。
 </error>`
 			};
+			}
 		}
 
 		return {
@@ -1098,6 +1141,7 @@ ${assertResult.message}
 		}
 
 		const absolutePath = this.resolveFilePath(dirPath);
+		const applyNoiseFiltering = shouldApplyNoiseFiltering(absolutePath, this.workspaceRoot || absolutePath);
 		const startTime = Date.now();
 		const timeout = 10000; // 10秒超时
 
@@ -1167,8 +1211,12 @@ ${assertResult.message}
 					for (const child of stat.children) {
 						if (matchedFiles.length >= limit || timedOut) break;
 
-						// 跳过隐藏文件和 node_modules
-						if (child.name.startsWith('.') || child.name === 'node_modules') {
+						const childPath = child.resource.fsPath;
+						const childRelativePath = childPath.startsWith(absolutePath)
+							? childPath.substring(absolutePath.length).replace(/^[\/\\]/, '')
+							: childPath;
+						const normalizedChildRelativePath = childRelativePath.replace(/\\/g, '/');
+						if (applyNoiseFiltering && isLikelyNoisePath(normalizedChildRelativePath)) {
 							continue;
 						}
 
@@ -1177,11 +1225,14 @@ ${assertResult.message}
 						} else {
 							scannedCount++;
 							// 即时匹配，不需要收集所有文件
-							const filePath = child.resource.fsPath;
+							const filePath = childPath;
 							const relativePath = filePath.startsWith(absolutePath)
 								? filePath.substring(absolutePath.length).replace(/^[\/\\]/, '')
 								: filePath;
 							const normalizedPath = relativePath.replace(/\\/g, '/');
+							if (applyNoiseFiltering && isLikelyNoisePath(normalizedPath)) {
+								continue;
+							}
 
 							if (pattern(normalizedPath)) {
 								// P2优化：记录 mtime 以便按修改时间排序（对齐 OpenCode glob.ts）

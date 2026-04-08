@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/emmet/src/balance.ts","code":"export function balanceOut() {\n\tbalance(true);\n}","startLine":14,"endLine":16,"chunkType":"function","mtime":1762250468205.2974}

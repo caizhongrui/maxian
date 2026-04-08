@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"isRunning(taskId) {\n        if (typeof taskId === 'number') {\n            return this.a?.taskId === taskId;\n        }\n        return !!this.a;\n    }","startLine":1145,"endLine":1150,"chunkType":"function","mtime":1772878378139.2854}

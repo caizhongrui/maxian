@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/code_server.rs","code":"Ok(Some(AnyCodeServer::Port(PortCodeServer {\n\t\t\t\tcommit_id: self.server_params.release.commit.to_owned(),\n\t\t\t\tport,\n\t\t\t\torigin,\n\t\t\t})))","startLine":381,"endLine":385,"chunkType":"function","mtime":1762250468184.2969}

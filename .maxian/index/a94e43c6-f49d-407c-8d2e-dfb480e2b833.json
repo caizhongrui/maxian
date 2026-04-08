@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/breadcrumbs/breadcrumbsWidget.js","code":"setEnabled(value) {\n        this.o = value;\n        this.d.classList.toggle('disabled', !this.o);\n    }","startLine":119,"endLine":122,"chunkType":"function","mtime":1772878377941.2322}

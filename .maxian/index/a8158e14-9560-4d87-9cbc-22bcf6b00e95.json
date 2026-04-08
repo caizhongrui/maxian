@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/format/browser/formatActions.js","code":"dispose() {\n        this.a.dispose();\n        this.b.dispose();\n    }","startLine":149,"endLine":152,"chunkType":"function","mtime":1772878382619.9243}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/hintsWidget/inlineCompletionsHintsWidget.js","code":"getId() { return this.j; }\n    getDomNode() {\n        return this.m.root;\n    }","startLine":218,"endLine":221,"chunkType":"function","mtime":1772878383117.7202}

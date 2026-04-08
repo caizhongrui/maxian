@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/linesDecorations/linesDecorations.js","code":"onScrollChanged(e) {\n        return e.scrollTopChanged;\n    }","startLine":46,"endLine":48,"chunkType":"function","mtime":1772878380164.5603}

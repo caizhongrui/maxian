@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/media-preview/src/ownedStatusBarEntry.ts","code":"protected showItem(owner: unknown, text: string) {\n\t\tthis._showOwner = owner;\n\t\tthis.entry.text = text;\n\t\tthis.entry.show();\n\t}","startLine":20,"endLine":24,"chunkType":"function","mtime":1762250468278.1165}

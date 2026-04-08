@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/paths.rs","code":"write(&self.pidfile, format!(\"{pid}\")).map_err(|e| {\n\t\t\twrap(\n\t\t\t\te,\n\t\t\t\tformat!(\"error writing process id into {}\", self.pidfile.display()),\n\t\t\t)\n\t\t})","startLine":67,"endLine":72,"chunkType":"function","mtime":1762250468185.2612}

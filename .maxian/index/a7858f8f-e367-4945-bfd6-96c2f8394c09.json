@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/AI_COMPLETION_DEBUG_GUIDE.md","code":"async provideInlineCompletions(...) {\n    return undefined;  // 临时禁用\n    // ... 其他代码\n}","startLine":71,"endLine":74,"chunkType":"function","mtime":1762260541035.3054}

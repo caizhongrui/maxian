@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/ternarySearchTree.js","code":"cmp(a) {\n        const aCode = a.charCodeAt(0);\n        const thisCode = this.b.charCodeAt(this.c);\n        return aCode - thisCode;\n    }","startLine":24,"endLine":28,"chunkType":"function","mtime":1772878378349.0525}

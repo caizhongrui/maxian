@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/desktop/version_manager.rs","code":"Ok(p) => p,\n\t\tErr(e) => {\n\t\t\tinfo!(log, \"PATH is empty ({}), skipping detection\", e);\n\t\t\treturn Ok(vec![]);\n\t\t}","startLine":375,"endLine":379,"chunkType":"function","mtime":1762250468183.2607}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/bootstrap-esm.js","code":"function setupNLS() {\n    if (!setupNLSResult) {\n        setupNLSResult = doSetupNLS();\n    }\n    return setupNLSResult;\n}","startLine":45,"endLine":50,"chunkType":"function","mtime":1772878377404.136}

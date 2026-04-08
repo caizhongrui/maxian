@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/textLength.js","code":"toLineRange() {\n        return $jD.ofLength(1, this.lineCount);\n    }","startLine":105,"endLine":107,"chunkType":"function","mtime":1772878380472.342}

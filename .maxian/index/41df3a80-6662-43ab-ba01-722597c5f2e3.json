@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/utils.js","code":"for (let i = 0; i < n; i++) {\n        suite(`${description} (iteration ${i})`, callback);\n    }","startLine":16,"endLine":18,"chunkType":"function","mtime":1772878379174.5796}

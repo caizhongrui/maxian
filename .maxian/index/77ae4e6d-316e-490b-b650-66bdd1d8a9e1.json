@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/rename/browser/rename.js","code":"focusPreviousRenameSuggestion() {\n        this.a.focusPreviousRenameSuggestion();\n    }","startLine":281,"endLine":283,"chunkType":"function","mtime":1772878383596.4146}

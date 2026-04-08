@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"for (let i = 0, len = Math.min(one.length, other.length); i < len && equals(one[i], other[i]); i++) {\n        result++;\n    }","startLine":363,"endLine":365,"chunkType":"function","mtime":1772878378138.325}

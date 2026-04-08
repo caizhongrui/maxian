@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/ipynb/src/serializers.ts","code":"result.transient = customMetadata.transient;\n\t}\n\treturn result;\n}","startLine":252,"endLine":255,"chunkType":"block","mtime":1762250468248.7864}

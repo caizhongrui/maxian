@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/dev_tunnels.rs","code":"let (endpoint_tx, endpoint_rx) = watch::channel(None);\n\t\tlet (close_tx, close_rx) = mpsc::channel(1);","startLine":938,"endLine":939,"chunkType":"function","mtime":1762250468184.497}

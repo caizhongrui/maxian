@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/SKILLS_UI_FIX.md","code":"## 总结\n\n问题已修复。通过添加两个contribution文件的导入：\n1. browser层：注册视图\n2. electron-sandbox层：注册服务和初始化系统\n\n现在Skills系统完全集成到IDE中，可以正常使用。","startLine":150,"endLine":158,"chunkType":"block","mtime":1772782077288.9834}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/map.js","code":"fromJSON(data) {\n        this.clear();\n        for (const [key, value] of data) {\n            this.set(key, value);\n        }\n    }","startLine":515,"endLine":520,"chunkType":"function","mtime":1772878378277.2786}

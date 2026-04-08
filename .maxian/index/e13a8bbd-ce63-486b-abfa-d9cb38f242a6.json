@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test.jsx","code":"if (!this.state.showDefault) {\n      message = this.props.alt;\n    }","startLine":22,"endLine":24,"chunkType":"function","mtime":1762250468358.9934}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/tar.rs","code":"let (skip_first, num_entries) = should_skip_first_segment(&tar_gz)?;\n\tlet report_progress_every = num_entries / 20;","startLine":67,"endLine":68,"chunkType":"function","mtime":1762250468187.6743}

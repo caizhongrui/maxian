@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/services/abstractCodeEditorService.js","code":"_removeWatcher(w) {\n        delete this.G[w.uri];\n    }","startLine":228,"endLine":230,"chunkType":"function","mtime":1772878379683.022}

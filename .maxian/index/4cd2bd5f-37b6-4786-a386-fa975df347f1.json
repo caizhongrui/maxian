@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/history.js","code":"h(history) {\n        this.a = new Set();\n        for (const entry of history) {\n            this.a.add(entry);\n        }\n    }","startLine":74,"endLine":79,"chunkType":"function","mtime":1772878378213.08}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/folding/browser/folding.js","code":"getFoldingModel() {\n        return this.D;\n    }","startLine":217,"endLine":219,"chunkType":"function","mtime":1772878382588.2642}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/path.js","code":"toNamespacedPath(path) {\n        // Non-op on posix systems\n        return path;\n    },","startLine":1139,"endLine":1142,"chunkType":"function","mtime":1772878378321.6858}

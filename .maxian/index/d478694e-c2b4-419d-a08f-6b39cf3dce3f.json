@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeBase.js","code":"constructor(buffer, lineStarts) {\n        this.buffer = buffer;\n        this.lineStarts = lineStarts;\n    }","startLine":106,"endLine":109,"chunkType":"function","mtime":1772878380724.943}

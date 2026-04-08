@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/os.rs","code":"Ok(format!(\"{}.{}.{}\", major, minor, build))\n}","startLine":21,"endLine":22,"chunkType":"function","mtime":1762250468187.361}

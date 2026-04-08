@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/wordHighlighter/browser/wordHighlighter.js","code":"restoreViewState(state) {\n        if (this.a && state) {\n            this.a.restore();\n        }\n    }","startLine":724,"endLine":728,"chunkType":"function","mtime":1772878383751.4924}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/textEdit.js","code":"constructor(lines) {\n        super(lineNumber => lines[lineNumber - 1], lines.length);\n    }","startLine":316,"endLine":318,"chunkType":"function","mtime":1772878380471.9346}

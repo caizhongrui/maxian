@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/base.js","code":"recomputeInitiallyAndOnChange(store, handleValue) {\n        store.add(_recomputeInitiallyAndOnChange(this, handleValue));\n        return this;\n    }","startLine":72,"endLine":75,"chunkType":"function","mtime":1772878378283.0334}

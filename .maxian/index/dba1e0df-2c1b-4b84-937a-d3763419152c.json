@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/wordCharacterClassifier.js","code":"k(segment) {\n        if (segment.isWordLike) {\n            return true;\n        }\n        return false;\n    }","startLine":73,"endLine":78,"chunkType":"function","mtime":1772878380473.0513}

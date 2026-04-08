@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/github-authentication/src/node/authServer.ts","code":"});\n\t\t});\n\t}\n\n\tpublic waitForOAuthResponse(): Promise<IOAuthResult> {\n\t\treturn this._resultPromise;\n\t}\n}","startLine":191,"endLine":198,"chunkType":"block","mtime":1762250468226.341}

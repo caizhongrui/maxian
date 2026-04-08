@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/types.js","code":"return (typeof str === 'string');\n}","startLine":9,"endLine":10,"chunkType":"function","mtime":1772878378386.0784}

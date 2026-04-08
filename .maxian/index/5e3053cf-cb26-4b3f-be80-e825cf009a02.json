@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/tokens/contiguousMultilineTokensBuilder.js","code":"finalize() {\n        return this.a;\n    }","startLine":32,"endLine":34,"chunkType":"function","mtime":1772878381089.4946}

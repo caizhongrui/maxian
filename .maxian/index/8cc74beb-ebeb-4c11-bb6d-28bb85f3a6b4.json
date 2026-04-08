@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/stream.js","code":"const errorListener = (error) => {\n            streamListeners.dispose();\n            return reject(error);\n        };","startLine":348,"endLine":351,"chunkType":"function","mtime":1772878378348.1633}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view/domLineBreaksComputer.js","code":"static create(targetWindow) {\n        return new $D8(new WeakRef(targetWindow));\n    }","startLine":14,"endLine":16,"chunkType":"function","mtime":1772878379800.3486}

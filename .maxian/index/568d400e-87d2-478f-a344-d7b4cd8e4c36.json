@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/tsServer/server.ts","code":"export class Errored {\n\t\treadonly type = Type.Errored;\n\n\t\tconstructor(\n\t\t\tpublic readonly err: Error\n\t\t) { }\n\t}","startLine":637,"endLine":643,"chunkType":"class","mtime":1762250468335.7903}

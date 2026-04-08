@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/lineEdit.js","code":"rebase(base) {\n        return new $oD(this.edits.map(e => new $pD(base.mapLineRange(e.lineRange), e.newLines)));\n    }","startLine":92,"endLine":94,"chunkType":"function","mtime":1772878380410.1218}

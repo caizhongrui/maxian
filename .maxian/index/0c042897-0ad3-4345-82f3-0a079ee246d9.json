@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/stickyScroll/browser/stickyScrollModelProvider.js","code":"async h(token) {\n        return this.t?.compute(token) ?? null;\n    }","startLine":322,"endLine":324,"chunkType":"function","mtime":1772878383639.2544}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/iterator.js","code":"if (to < 0) {\n            to += arr.length;\n        }","startLine":112,"endLine":114,"chunkType":"function","mtime":1772878378234.5435}

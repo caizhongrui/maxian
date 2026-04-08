@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/askpass-main.ts","code":"function fatal(err: any): void {\n\tconsole.error('Missing or invalid credentials.');\n\tconsole.error(err);\n\tprocess.exit(1);\n}","startLine":9,"endLine":13,"chunkType":"function","mtime":1762250468216.5918}

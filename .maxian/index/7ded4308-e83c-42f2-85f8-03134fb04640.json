@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/textEdit.js","code":"constructor(base, edit) {\n        this.base = base;\n        this.edit = edit;\n    }","startLine":334,"endLine":337,"chunkType":"function","mtime":1772878380471.9346}

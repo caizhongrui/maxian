@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/tfIdf.js","code":"const normalize = (word) => word.toLowerCase();\n        // Only match on words that are at least 3 characters long and start with a letter","startLine":55,"endLine":56,"chunkType":"function","mtime":1772878378349.3806}

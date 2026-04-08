@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/centered/centeredViewLayout.js","code":"setFixedWidth(option) {\n        this.j = option;\n        if (!!this.a) {\n            this.m();\n            this.l();\n        }\n    }","startLine":99,"endLine":105,"chunkType":"function","mtime":1772878377941.8909}

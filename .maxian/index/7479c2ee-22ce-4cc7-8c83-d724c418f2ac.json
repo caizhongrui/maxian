@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/map.js","code":"for (const [key, value] of a) {\n        if (!b.has(key) || b.get(key) !== value) {\n            return false;\n        }\n    }","startLine":705,"endLine":709,"chunkType":"function","mtime":1772878378277.2786}

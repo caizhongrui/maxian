@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view/viewController.js","code":"compositionEnd() {\n        this.d.endComposition();\n    }","startLine":27,"endLine":29,"chunkType":"function","mtime":1772878379801.3662}

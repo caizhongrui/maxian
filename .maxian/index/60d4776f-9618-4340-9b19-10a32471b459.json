@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/processes.js","code":"if (useQueue) {\n            msgQueue.push(msg); // add to the queue if the process cannot handle more messages\n            return;\n        }","startLine":25,"endLine":28,"chunkType":"function","mtime":1772878378445.782}

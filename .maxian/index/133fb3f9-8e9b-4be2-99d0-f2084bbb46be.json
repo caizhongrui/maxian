@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/notebook-renderers/src/ansi.ts","code":"if (container.childElementCount === 0) {\n\t\t// plain text\n\t\tcontainer = linkify(stringContent, linkOptions, true);\n\t}","startLine":396,"endLine":399,"chunkType":"function","mtime":1762250468286.002}

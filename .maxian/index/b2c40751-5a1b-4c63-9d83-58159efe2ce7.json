@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/simple-browser/src/extension.ts","code":"constructor(input: string, base?: string | URL);\n\thostname: string;","startLine":11,"endLine":12,"chunkType":"function","mtime":1762250468307.5107}

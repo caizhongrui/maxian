@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/port_forwarder.rs","code":"let (tx, rx) = oneshot::channel();\n\t\tlet req = PortForwardingRec::Forward(port, privacy, tx);","startLine":112,"endLine":113,"chunkType":"function","mtime":1762250468185.327}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/commands.ts","code":"class CheckoutProtectedItem extends CheckoutItem {\n\n\toverride get label(): string {\n\t\treturn `$(lock) ${this.ref.name ?? this.shortCommit}`;\n\t}\n\n}","startLine":114,"endLine":120,"chunkType":"class","mtime":1773492784505.2227}

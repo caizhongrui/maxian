@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/code/node/cli.js","code":"if (restoreMode) {\n                chmodSync(target, targetMode);\n            }","startLine":192,"endLine":194,"chunkType":"function","mtime":1772878379287.51}

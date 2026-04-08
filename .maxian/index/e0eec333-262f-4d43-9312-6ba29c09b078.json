@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/prereqs.rs","code":"Err(CodeError::PrerequisitesFailed {\n\t\t\tbullets,\n\t\t\tname: QUALITYLESS_SERVER_NAME,\n\t\t})","startLine":128,"endLine":131,"chunkType":"function","mtime":1762250468187.4563}

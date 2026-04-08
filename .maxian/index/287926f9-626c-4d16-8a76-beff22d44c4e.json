@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/history.js","code":"next() {\n        if (this.d.next) {\n            this.d = this.d.next;\n        }\n        return this.d.value;\n    }","startLine":176,"endLine":181,"chunkType":"function","mtime":1772878378213.08}

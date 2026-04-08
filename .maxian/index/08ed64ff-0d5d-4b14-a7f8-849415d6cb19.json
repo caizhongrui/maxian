@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/lazy.js","code":"return this.b;\n    }\n    /**\n     * Get the wrapped value without forcing evaluation.\n     */\n    get rawValue() { return this.b; }\n}\n//# sourceMappingURL=lazy.js.map","startLine":35,"endLine":42,"chunkType":"block","mtime":1772878378239.6738}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/common/ipc.js","code":"writeInt32VQL(writer, data.length);\n        for (const el of data) {\n            $cu(writer, el);\n        }","startLine":174,"endLine":177,"chunkType":"function","mtime":1772878378450.3462}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/controller/commands.js","code":"async run(accessor, editor) {\n        const controller = $ghb.get(editor);\n        controller?.model.get()?.next();\n    }","startLine":32,"endLine":35,"chunkType":"function","mtime":1772878383115.2769}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"peek() {\n        if (this.length === 0) {\n            return undefined;\n        }\n        return this.g[this.c];\n    }","startLine":622,"endLine":627,"chunkType":"function","mtime":1772878378138.325}

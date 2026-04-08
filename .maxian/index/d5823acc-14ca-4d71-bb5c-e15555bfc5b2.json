@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/microsoft-authentication/src/cryptoUtils.ts","code":"function dec2hex(dec: number): string {\n\treturn ('0' + dec.toString(16)).slice(-2);\n}","startLine":11,"endLine":13,"chunkType":"function","mtime":1762250468283.7876}

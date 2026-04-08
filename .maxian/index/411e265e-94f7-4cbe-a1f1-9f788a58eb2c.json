@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/notebook-renderers/src/rendererTypes.ts","code":"preEvaluate(outputItem: OutputItem, element: HTMLElement, script: string, signal: AbortSignal): string | undefined | Promise<string | undefined>;\n}","startLine":28,"endLine":29,"chunkType":"function","mtime":1762250468286.5002}

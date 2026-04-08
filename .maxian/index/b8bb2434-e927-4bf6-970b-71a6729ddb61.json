@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/find/browser/findController.js","code":"s() {\n        if (this.g) {\n            this.g.dispose();\n            this.g = null;\n        }\n    }","startLine":117,"endLine":122,"chunkType":"function","mtime":1772878382472.2595}

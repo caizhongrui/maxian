@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/stringBuilder.js","code":"constructor(capacity) {\n        this.a = capacity | 0;\n        this.b = new Uint16Array(this.a);\n        this.c = null;\n        this.d = 0;\n    }","startLine":51,"endLine":56,"chunkType":"function","mtime":1772878380471.0583}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/worker/workerMain.js","code":"loadCode(message.data).then((ws) => {\n            setupWorkerServer(ws);\n        }, (err) => {\n            console.error(err);\n        });","startLine":30,"endLine":34,"chunkType":"function","mtime":1772878379209.7517}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/wordHighlighter/browser/wordHighlighter.js","code":"z() {\n        return (this.f.getRanges()\n            .sort($gD.compareRangesUsingStarts));\n    }","startLine":289,"endLine":292,"chunkType":"function","mtime":1772878383751.4924}

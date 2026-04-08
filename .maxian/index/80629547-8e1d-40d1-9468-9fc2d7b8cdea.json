@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/latex/syntaxes/LaTeX.tmLanguage.json","code":"]\n\t\t\t\t\t\t}\n\t\t\t\t\t]\n\t\t\t\t},\n\t\t\t\t{\n\t\t\t\t\t\"begin\": \"\\\\G(\\\\{)(?:__|[a-z\\\\s]*)(?i:bash)\",","startLine":1169,"endLine":1174,"chunkType":"block","mtime":1762250468260.2134}

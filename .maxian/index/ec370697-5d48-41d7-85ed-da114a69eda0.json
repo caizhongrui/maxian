@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"pause() {\n        this.h++;\n    }","startLine":1088,"endLine":1090,"chunkType":"function","mtime":1772878378208.3105}

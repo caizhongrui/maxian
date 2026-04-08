@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/server-main.js","code":"if (firstRequest) {\n            firstRequest = false;\n            perf.$S('code/server/firstRequest');\n        }","startLine":80,"endLine":83,"chunkType":"function","mtime":1772878377505.168}

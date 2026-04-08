@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"queueSize(resource, extUri = defaultExtUri) {\n        const key = extUri.getComparisonKey(resource);\n        return this.a.get(key)?.size ?? 0;\n    }","startLine":664,"endLine":667,"chunkType":"function","mtime":1772878378139.2854}

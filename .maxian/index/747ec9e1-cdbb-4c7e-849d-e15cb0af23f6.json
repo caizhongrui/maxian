@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/dropOrPasteInto/browser/edit.js","code":"if (!yieldsToMap.size) {\n        return Array.from(edits);\n    }","startLine":51,"endLine":53,"chunkType":"function","mtime":1772878382469.046}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlayHints/browser/inlayHintsController.js","code":"static get(editor) {\n        return editor.getContribution($Web_1.ID) ?? undefined;\n    }","startLine":96,"endLine":98,"chunkType":"function","mtime":1772878383113.8022}

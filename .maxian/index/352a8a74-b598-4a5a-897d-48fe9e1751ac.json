@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/control_server.rs","code":"let (tx, mut rx) = mpsc::channel::<ServerSignal>(4);\n\tlet (exit_barrier, signal_exit) = new_barrier();","startLine":186,"endLine":187,"chunkType":"function","mtime":1762250468184.4028}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/commands.ts","code":"class CheckoutDetachedItem extends CheckoutCommandItem {\n\tget label(): string { return l10n.t('{0} Checkout detached...', '$(debug-disconnect)'); }\n}","startLine":37,"endLine":39,"chunkType":"class","mtime":1773492784505.2227}

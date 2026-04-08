@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/coffeescript/syntaxes/coffeescript.tmLanguage.json","code":"{\n\t\t\t\t\t\t\t\"match\": \"(@(?:[a-zA-Z_$][\\\\w$]*)?)(\\\\.\\\\.\\\\.)?\",\n\t\t\t\t\t\t\t\"captures\": {","startLine":688,"endLine":690,"chunkType":"block","mtime":1762250468189.7664}

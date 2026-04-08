@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/test/browser/utils.js","code":"leftDelete() {\n        CoreEditingCommands.DeleteLeft.runEditorCommand(null, this.b, null);\n    }","startLine":103,"endLine":105,"chunkType":"function","mtime":1772878383399.3674}

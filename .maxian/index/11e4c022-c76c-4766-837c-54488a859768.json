@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/self_update.rs","code":"copy_file_metadata(&target_path, &staging_path)\n\t\t\t.map_err(|e| wrap(e, \"failed to set file permissions\"))?;","startLine":99,"endLine":100,"chunkType":"function","mtime":1762250468183.851}

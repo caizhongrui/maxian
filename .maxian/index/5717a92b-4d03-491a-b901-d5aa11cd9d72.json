@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/lifecycle.js","code":"setParent(child, parent) {\n        const data = this.c(child);\n        data.parent = parent;\n    }","startLine":40,"endLine":43,"chunkType":"function","mtime":1772878378239.9001}

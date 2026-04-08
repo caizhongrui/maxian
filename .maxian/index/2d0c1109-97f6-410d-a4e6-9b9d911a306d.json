@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/snippet/test/browser/snippetController2.old.test.js","code":"isInSnippetMode() {\n        return $0bb.InSnippetMode.getValue(this.t);\n    }","startLine":39,"endLine":41,"chunkType":"function","mtime":1772878383635.048}

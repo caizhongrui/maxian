@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/cursorColumns.js","code":"static prevIndentTabStop(column, indentSize) {\n        return $lF.prevRenderTabStop(column, indentSize);\n    }","startLine":125,"endLine":127,"chunkType":"function","mtime":1772878380408.061}

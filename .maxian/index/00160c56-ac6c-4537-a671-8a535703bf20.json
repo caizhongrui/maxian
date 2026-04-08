@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestMemory.js","code":"memorize(model, pos, item) {\n        this.l(model, pos).memorize(model, pos, item);\n        this.f.schedule();\n    }","startLine":207,"endLine":210,"chunkType":"function","mtime":1772878383694.0967}

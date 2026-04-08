@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/stickyScroll/browser/stickyScrollActions.js","code":"runEditorCommand(_accessor, editor) {\n        $Kjb.get(editor)?.focusNext();\n    }","startLine":74,"endLine":76,"chunkType":"function","mtime":1772878383638.344}

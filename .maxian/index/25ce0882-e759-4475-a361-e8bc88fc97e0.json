@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/fastDomNode.js","code":"export function $lZ(domNode) {\n    return new $kZ(domNode);\n}\n//# sourceMappingURL=fastDomNode.js.map","startLine":275,"endLine":278,"chunkType":"block","mtime":1772878377878.2446}

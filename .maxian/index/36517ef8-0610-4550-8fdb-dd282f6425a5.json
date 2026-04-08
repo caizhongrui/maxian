@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/resources.js","code":"joinPath(resource, ...pathFragment) {\n        return URI.joinPath(resource, ...pathFragment);\n    }","startLine":54,"endLine":56,"chunkType":"function","mtime":1772878378344.7244}

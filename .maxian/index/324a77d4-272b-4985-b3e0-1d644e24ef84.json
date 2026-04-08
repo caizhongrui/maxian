@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/linkedEditing/browser/linkedEditing.js","code":"dispose() {\n        this.clearRanges();\n        super.dispose();\n    }","startLine":193,"endLine":196,"chunkType":"function","mtime":1772878383408.0415}

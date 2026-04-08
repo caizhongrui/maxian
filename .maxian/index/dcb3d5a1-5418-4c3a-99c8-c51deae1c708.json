@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"if (regexp.source === '^' || regexp.source === '^$' || regexp.source === '$' || regexp.source === '^\\\\s*$') {\n        return false;\n    }","startLine":199,"endLine":201,"chunkType":"function","mtime":1772878378348.6172}

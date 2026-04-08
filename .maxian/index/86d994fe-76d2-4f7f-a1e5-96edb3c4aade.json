@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/SKILLS_DEBUG.md","code":"constructor() {\n    // 主进程总是使用 ~/.claude/skills\n}","startLine":179,"endLine":181,"chunkType":"function","mtime":1772782077286.6492}

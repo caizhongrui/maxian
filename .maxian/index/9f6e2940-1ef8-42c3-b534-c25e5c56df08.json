@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/languages/supports/tokenization.js","code":"if (!source || !Array.isArray(source)) {\n        return [];\n    }","startLine":20,"endLine":22,"chunkType":"function","mtime":1772878380587.6465}

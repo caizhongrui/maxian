@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"if (arr.length === 0) {\n        throw new Error('Invalid tail call');\n    }","startLine":16,"endLine":18,"chunkType":"function","mtime":1772878378138.325}

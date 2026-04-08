@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/map.js","code":"forEach(callbackfn, thisArg) {\n        this.c.forEach((value, key) => {\n            callbackfn.call(thisArg, value, key, this);\n        });\n    }","startLine":649,"endLine":653,"chunkType":"function","mtime":1772878378277.2786}

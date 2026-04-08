@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/osReleaseInfo.js","code":"if (Platform.$m || Platform.$l) {\n        return;\n    }","startLine":9,"endLine":11,"chunkType":"function","mtime":1772878378444.3962}

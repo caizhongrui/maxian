@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/multicursor/browser/multicursor.js","code":"range: r,\n                options: $Qib(hasSemanticHighlights)\n            };\n        });\n        this.c.set(decorations);\n    }","startLine":901,"endLine":906,"chunkType":"block","mtime":1772878383570.817}

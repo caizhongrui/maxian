@@ -63,6 +63,28 @@ export interface DoomLoopResult {
 export class DoomLoopDetector {
 	/** 每个会话的调用历史 */
 	private callHistory: Map<string, ToolCallRecord[]> = new Map();
+	private static readonly HASH_FULL_STRING_KEYS = new Set([
+		'path',
+		'cwd',
+		'regex',
+		'query',
+		'file_pattern',
+		'start_line',
+		'end_line',
+		'tool_use_id',
+		'id',
+	]);
+
+	private normalizeStringForHash(key: string, value: string): string {
+		const normalized = value.replace(/\r\n/g, '\n');
+		const keyLower = key.toLowerCase();
+		const isPathLikeKey = DoomLoopDetector.HASH_FULL_STRING_KEYS.has(keyLower) || keyLower.endsWith('path');
+		if (isPathLikeKey || normalized.length <= 800) {
+			return normalized;
+		}
+		// 对超长内容保留头尾和长度，避免只看前缀导致不同参数被误判为相同
+		return `${normalized.slice(0, 400)}__LEN_${normalized.length}__TAIL_${normalized.slice(-200)}`;
+	}
 
 	/**
 	 * 计算参数哈希
@@ -73,9 +95,8 @@ export class DoomLoopDetector {
 		const sortedKeys = Object.keys(params).sort();
 		const normalized = sortedKeys.map(key => {
 			const value = params[key];
-			// 对于大字符串，只取前100个字符用于比较
-			const normalizedValue = typeof value === 'string' && value.length > 100
-				? value.substring(0, 100)
+			const normalizedValue = typeof value === 'string'
+				? this.normalizeStringForHash(key, value)
 				: value;
 			return `${key}:${JSON.stringify(normalizedValue)}`;
 		}).join('|');

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/tsServer/logDirectoryProvider.ts","code":"public getNewLogDirectory(): undefined {\n\t\treturn undefined;\n\t}","startLine":13,"endLine":15,"chunkType":"function","mtime":1762250468333.5718}

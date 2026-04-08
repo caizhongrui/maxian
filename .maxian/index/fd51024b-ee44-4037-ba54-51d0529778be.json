@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/range.js","code":"function intersects(one, other) {\n        return !isEmpty(intersect(one, other));\n    }","startLine":27,"endLine":29,"chunkType":"function","mtime":1772878378344.468}

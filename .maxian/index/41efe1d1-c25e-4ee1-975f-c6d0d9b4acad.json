@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/languages/supports/tokenization.js","code":"if (!m) {\n        return 0 /* StandardTokenType.Other */;\n    }","startLine":174,"endLine":176,"chunkType":"function","mtime":1772878380587.6465}

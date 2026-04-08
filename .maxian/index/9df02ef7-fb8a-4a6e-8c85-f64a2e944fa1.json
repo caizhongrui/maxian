@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/color.js","code":"opposite() {\n        return new $Yn(new $Vn(255 - this.rgba.r, 255 - this.rgba.g, 255 - this.rgba.b, this.rgba.a));\n    }","startLine":373,"endLine":375,"chunkType":"function","mtime":1772878378169.5872}

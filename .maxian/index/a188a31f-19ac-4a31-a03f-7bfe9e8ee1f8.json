@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/client/src/customData.ts","code":"function isURI(uriOrPath: string) {\n\treturn /^(?<scheme>\\w[\\w\\d+.-]*):/.test(uriOrPath);\n}","startLine":79,"endLine":81,"chunkType":"function","mtime":1762250468236.6887}

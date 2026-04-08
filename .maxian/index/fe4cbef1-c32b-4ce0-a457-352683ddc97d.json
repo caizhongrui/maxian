@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestController.js","code":"cancelSuggestWidget() {\n        this.model.cancel();\n        this.model.clear();\n        this.widget.value.hideWidget();\n    }","startLine":577,"endLine":581,"chunkType":"function","mtime":1772878383693.3113}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/snippet/browser/snippetParser.js","code":"constructor() {\n        super(...arguments);\n        this.regexp = new RegExp('');\n    }","startLine":273,"endLine":276,"chunkType":"function","mtime":1772878383633.8225}

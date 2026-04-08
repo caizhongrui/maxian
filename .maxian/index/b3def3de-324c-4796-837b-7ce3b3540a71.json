@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/npm/src/npmScriptLens.ts","code":"const getFreshLensLocation = () => workspace.getConfiguration().get(Constants.ConfigKey);","startLine":26,"endLine":27,"chunkType":"function","mtime":1762250468289.0159}

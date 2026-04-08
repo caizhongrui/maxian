@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/php-language-features/src/features/phpGlobalFunctions.ts","code":"abs: {\n\t\tdescription: 'Absolute value',\n\t\tsignature: '( mixed $number ): number'","startLine":2736,"endLine":2738,"chunkType":"block","mtime":1762250468292.3584}

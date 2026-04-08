@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/desktop/version_manager.rs","code":"Ok(p) => p,\n\t\t\t\tErr(e) => {\n\t\t\t\t\twarning!(self.log, \"error looking up installed applications: {}\", e);\n\t\t\t\t\treturn None;\n\t\t\t\t}","startLine":198,"endLine":202,"chunkType":"function","mtime":1762250468183.2607}

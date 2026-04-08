@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/history.js","code":"f() {\n        const data = this.j;\n        if (data.length > this.b) {\n            this.h(data.slice(data.length - this.b));\n        }\n    }","startLine":61,"endLine":66,"chunkType":"function","mtime":1772878378213.08}

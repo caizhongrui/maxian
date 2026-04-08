@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModel.js","code":"popStackElement() {\n        this.Q.popStackElement();\n    }","startLine":936,"endLine":938,"chunkType":"function","mtime":1772878380728.0076}

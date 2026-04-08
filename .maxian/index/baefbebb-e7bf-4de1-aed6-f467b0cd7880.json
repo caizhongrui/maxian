@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/uuid.js","code":"for (let i = 0; i < bucket.length; i++) {\n                bucket[i] = Math.floor(Math.random() * 256);\n            }","startLine":21,"endLine":23,"chunkType":"function","mtime":1772878378387.2075}

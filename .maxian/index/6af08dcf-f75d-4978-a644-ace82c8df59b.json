@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/editorWorkerHost.js","code":"static setChannel(workerClient, obj) {\n        workerClient.setChannel($S9.CHANNEL_NAME, obj);\n    }","startLine":10,"endLine":12,"chunkType":"function","mtime":1772878380882.9116}

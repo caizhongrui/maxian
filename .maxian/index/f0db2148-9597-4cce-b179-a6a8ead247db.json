@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/resourceTree.js","code":"clear() {\n        this.root.clear();\n    }","startLine":120,"endLine":122,"chunkType":"function","mtime":1772878378345.136}

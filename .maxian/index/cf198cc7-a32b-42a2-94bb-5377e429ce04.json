@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/stickyScroll/browser/stickyScrollController.js","code":"selectEditor() {\n        this.G.focus();\n    }","startLine":137,"endLine":139,"chunkType":"function","mtime":1772878383638.806}

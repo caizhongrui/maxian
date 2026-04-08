@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/notebook-renderers/src/index.ts","code":"function clearContainer(container: HTMLElement) {\n\twhile (container.firstChild) {\n\t\tcontainer.firstChild.remove();\n\t}\n}","startLine":12,"endLine":16,"chunkType":"function","mtime":1762250468286.3284}

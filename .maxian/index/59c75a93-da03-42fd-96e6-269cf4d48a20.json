@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/github-authentication/src/test/flows.test.ts","code":"assert.strictEqual(flow.label, testCase.expectedFlows[i]);\n\t\t\t}\n\t\t});\n\t}\n});","startLine":192,"endLine":196,"chunkType":"block","mtime":1762250468226.6277}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestInlineCompletions.js","code":"handleItemDidShow(_completions, item) {\n        item.completion.resolve(CancellationToken.None);\n    }","startLine":163,"endLine":165,"chunkType":"function","mtime":1772878383693.6277}

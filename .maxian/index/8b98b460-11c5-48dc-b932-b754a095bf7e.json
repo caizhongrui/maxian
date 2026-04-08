@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/sandbox/electron-sandbox/preload.js","code":"getPathForFile(file) {\n                return webUtils.getPathForFile(file);\n            }","startLine":140,"endLine":142,"chunkType":"function","mtime":1772878378527.5525}

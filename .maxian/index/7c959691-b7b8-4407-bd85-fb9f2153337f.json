@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/json-language-features/client/src/jsonClient.ts","code":"function isSchemaResolveError(d: Diagnostic) {\n\treturn d.code === /* SchemaResolveError */ 0x300;\n}","startLine":735,"endLine":737,"chunkType":"function","mtime":1762250468252.5417}

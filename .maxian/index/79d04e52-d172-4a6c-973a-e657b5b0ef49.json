@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/textChange.js","code":"static a(str) {\n        return (4 + 2 * str.length);\n    }","startLine":40,"endLine":42,"chunkType":"function","mtime":1772878380471.3652}

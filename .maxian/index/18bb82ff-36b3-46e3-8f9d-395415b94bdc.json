@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/editorScrollbar/editorScrollbar.js","code":"getOverviewRulerLayoutInfo() {\n        return this.a.getOverviewRulerLayoutInfo();\n    }","startLine":92,"endLine":94,"chunkType":"function","mtime":1772878380159.1824}

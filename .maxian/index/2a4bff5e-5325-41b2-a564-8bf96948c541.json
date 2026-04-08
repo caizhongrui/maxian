@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/mouseHandler.js","code":"onCursorStateChanged(e) {\n        this.g.onCursorStateChanged(e);\n        return false;\n    }","startLine":138,"endLine":141,"chunkType":"function","mtime":1772878379371.6948}

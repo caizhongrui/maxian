@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test-issue11.ts","code":"for (; i<5;) {}\nfor (let i=0; 1+( i<<5 ) < 5;i++) {}","startLine":6,"endLine":7,"chunkType":"function","mtime":1762250468356.097}

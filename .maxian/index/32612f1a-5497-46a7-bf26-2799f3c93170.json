@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/browser/indexedDB.test.js","code":"teardown(() => {\n        indexedDB?.close();\n    });","startLine":15,"endLine":17,"chunkType":"function","mtime":1772878378557.359}

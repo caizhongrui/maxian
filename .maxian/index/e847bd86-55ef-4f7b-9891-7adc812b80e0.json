@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/uriIpc.js","code":"transformOutgoing(uri) {\n        return uri;\n    }","startLine":34,"endLine":36,"chunkType":"function","mtime":1772878378386.944}

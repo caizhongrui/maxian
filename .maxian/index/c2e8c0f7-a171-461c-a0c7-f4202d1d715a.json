@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/resources.js","code":"isEqualAuthority(a1, a2) {\n        return a1 === a2 || (a1 !== undefined && a2 !== undefined && $Zf(a1, a2));\n    }","startLine":141,"endLine":143,"chunkType":"function","mtime":1772878378344.7244}

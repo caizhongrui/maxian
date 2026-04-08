@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/github-authentication/src/node/buffer.ts","code":"export function base64Encode(text: string): string {\n\treturn Buffer.from(text, 'binary').toString('base64');\n}","startLine":6,"endLine":8,"chunkType":"function","mtime":1762250468226.3984}

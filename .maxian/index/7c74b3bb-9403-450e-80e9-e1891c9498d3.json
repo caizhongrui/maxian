@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/npm/src/npmBrowserMain.ts","code":"export async function activate(context: vscode.ExtensionContext): Promise<void> {\n\tcontext.subscriptions.push(addJSONProviders(httpRequest.xhr, undefined));\n}","startLine":10,"endLine":12,"chunkType":"function","mtime":1762250468288.8425}

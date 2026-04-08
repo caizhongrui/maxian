@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/path.js","code":"function validateString(value, name) {\n    if (typeof value !== 'string') {\n        throw new ErrorInvalidArgType(name, 'string', value);\n    }\n}","startLine":64,"endLine":68,"chunkType":"function","mtime":1772878378321.6858}

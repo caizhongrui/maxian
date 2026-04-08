@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/breadcrumbs/breadcrumbsWidget.js","code":"setHorizontalScrollbarSize(size) {\n        this.f.updateOptions({\n            horizontalScrollbarSize: size\n        });\n    }","startLine":51,"endLine":55,"chunkType":"function","mtime":1772878377941.2322}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/rename/browser/renameWidget.js","code":"dispose() {\n        this.y.dispose();\n        this.z.removeContentWidget(this);\n    }","startLine":71,"endLine":74,"chunkType":"function","mtime":1772878383596.9014}

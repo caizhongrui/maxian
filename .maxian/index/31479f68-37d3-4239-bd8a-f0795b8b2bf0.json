@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/controller/inlineCompletionsController.js","code":"hide() {\n        transaction(tx => {\n            this.model.get()?.stop(tx);\n        });\n    }","startLine":288,"endLine":292,"chunkType":"function","mtime":1772878383117.1267}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/telemetryReporter.ts","code":"dispose(): void;\n\tsendTelemetryEvent(eventName: string, properties?: {\n\t\t[key: string]: string;\n\t}): void;","startLine":15,"endLine":18,"chunkType":"function","mtime":1762250468271.071}

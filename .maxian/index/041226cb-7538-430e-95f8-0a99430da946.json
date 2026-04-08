@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/multicursor/test/browser/multicursor.test.js","code":"new $iE(4, 1, 4, 4),\n                    new $iE(6, 2, 6, 5),\n                ]);\n            });\n        });\n    });\n});","startLine":491,"endLine":497,"chunkType":"block","mtime":1772878383571.1108}

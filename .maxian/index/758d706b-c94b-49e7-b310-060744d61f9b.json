@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/dom.js","code":"for (const { name, value } of from.attributes) {\n        if (!filter || filter.includes(name)) {\n            to.setAttribute(name, value);\n        }\n    }","startLine":1925,"endLine":1929,"chunkType":"function","mtime":1772878377510.8274}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneTreeSitterService.js","code":"async getTree(content, languageId) {\n        return undefined;\n    }","startLine":15,"endLine":17,"chunkType":"function","mtime":1772878383802.8618}

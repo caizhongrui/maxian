@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/lihuiwang.vue-alias-skip/lib/extension.js","code":"if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];\n    result[\"default\"] = mod;","startLine":5,"endLine":6,"chunkType":"function","mtime":1772782077299.9512}

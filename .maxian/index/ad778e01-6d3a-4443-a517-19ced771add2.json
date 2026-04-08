@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/actionbar/actionViewItems.js","code":"g() {\n        this.B(this.b.onDidSelect(e => this.m(e.selected, e.index)));\n    }","startLine":361,"endLine":363,"chunkType":"function","mtime":1772878377940.2385}

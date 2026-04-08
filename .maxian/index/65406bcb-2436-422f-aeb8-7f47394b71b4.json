@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/offsetEdit.js","code":"static fromJson(data) {\n        return new $nD($hD.ofStartAndLength(data.pos, data.len), data.txt);\n    }","startLine":170,"endLine":172,"chunkType":"function","mtime":1772878380411.8613}

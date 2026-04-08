@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/package.json","code":"\"when\": \"scmProvider == git && scmResourceGroup == workingTree && config.git.untrackedChanges != mixed\",","startLine":1651,"endLine":1651,"chunkType":"block","mtime":1773492854666.838}

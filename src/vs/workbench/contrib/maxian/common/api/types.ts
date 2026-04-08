@@ -82,7 +82,7 @@ export interface ToolDefinition {
 /**
  * API 流式响应块类型
  */
-export type StreamChunkType = 'text' | 'tool_use' | 'usage' | 'error';
+export type StreamChunkType = 'text' | 'tool_use' | 'usage' | 'error' | 'heartbeat';
 
 /**
  * 文本流块
@@ -130,9 +130,17 @@ export interface ErrorStreamChunk {
 }
 
 /**
+ * 心跳流块（用于长等待期间刷新前端进度状态）
+ */
+export interface HeartbeatStreamChunk {
+	type: 'heartbeat';
+	elapsedMs: number;
+}
+
+/**
  * 流响应块联合类型
  */
-export type StreamChunk = TextStreamChunk | ToolUseStreamChunk | UsageStreamChunk | ErrorStreamChunk;
+export type StreamChunk = TextStreamChunk | ToolUseStreamChunk | UsageStreamChunk | ErrorStreamChunk | HeartbeatStreamChunk;
 
 /**
  * API Stream 类型 (AsyncGenerator)

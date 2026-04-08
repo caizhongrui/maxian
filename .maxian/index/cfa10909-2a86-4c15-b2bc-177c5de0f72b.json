@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"if (one.length !== other.length) {\n        return false;\n    }","startLine":28,"endLine":30,"chunkType":"function","mtime":1772878378138.325}

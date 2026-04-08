@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/ternarySearchTree.js","code":"hasElementOrSubtree(key) {\n        return this.g(key, true) !== undefined;\n    }","startLine":628,"endLine":630,"chunkType":"function","mtime":1772878378349.0525}

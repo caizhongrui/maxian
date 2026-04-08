@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/ternarySearchtree.test.js","code":"perfTest('TST, clear', function () {\n        tree.clear();\n    });","startLine":763,"endLine":765,"chunkType":"function","mtime":1772878379171.2532}

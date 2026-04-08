@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/guidesTextModelPart.js","code":"m(lineIndex) {\n        return $4H(this.c.getLineContent(lineIndex + 1), this.c.getOptions().tabSize);\n    }","startLine":22,"endLine":24,"chunkType":"function","mtime":1772878380723.284}

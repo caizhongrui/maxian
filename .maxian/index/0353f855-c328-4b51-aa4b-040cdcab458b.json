@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/pfs.js","code":"async function copy(source, target, options) {\n    return doCopy(source, target, { root: { source, target }, options, handledSourcePaths: new Set() });\n}","startLine":428,"endLine":430,"chunkType":"function","mtime":1772878378444.7122}

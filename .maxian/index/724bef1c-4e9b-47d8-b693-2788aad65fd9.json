@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/OpenCode架构分析与优化建议.md","code":"deletions: z.number(),\n      files: z.number(),\n      diffs: Snapshot.FileDiff.array().optional()\n    }).optional(),\n    title: z.string(),\n    time: z.object({","startLine":361,"endLine":366,"chunkType":"block","mtime":1772782077285.7097}

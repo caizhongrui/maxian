@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/protocol.rs","code":"servermsg(RefServerMessageParams<'a>),\n\tserverclose(ServerClosedParams),","startLine":18,"endLine":19,"chunkType":"function","mtime":1762250468185.4087}

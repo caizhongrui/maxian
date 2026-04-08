@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/colorPicker/browser/hoverColorPicker/hoverColorPickerParticipant.js","code":"constructor(b, c) {\n        this.b = b;\n        this.c = c;\n        this.hoverOrdinal = 2;\n    }","startLine":46,"endLine":50,"chunkType":"function","mtime":1772878382214.9446}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"async join() {\n        return this.b?.promise ?? this.a?.promise;\n    }","startLine":1206,"endLine":1208,"chunkType":"function","mtime":1772878378139.2854}

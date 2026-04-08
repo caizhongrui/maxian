@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/position.js","code":"isBefore(other) {\n        return $fD.isBefore(this, other);\n    }","startLine":58,"endLine":60,"chunkType":"function","mtime":1772878380412.571}

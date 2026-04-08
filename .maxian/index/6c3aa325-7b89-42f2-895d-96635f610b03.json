@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/bootstrap-esm.js","code":"//#endregion\nexport async function $U() {\n    // NLS\n    await setupNLS();\n}\n//# sourceMappingURL=bootstrap-esm.js.map","startLine":102,"endLine":107,"chunkType":"block","mtime":1772878377404.136}

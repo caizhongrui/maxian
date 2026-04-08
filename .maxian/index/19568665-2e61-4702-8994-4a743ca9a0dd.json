@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/common/ipc.js","code":"write(buffer) {\n        this.a.push(buffer);\n    }","startLine":122,"endLine":124,"chunkType":"function","mtime":1772878378450.3462}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/referencesModel.js","code":"dispose() {\n        $Xc(this.c.values());\n        this.c.clear();\n    }","startLine":74,"endLine":77,"chunkType":"function","mtime":1772878382753.8433}

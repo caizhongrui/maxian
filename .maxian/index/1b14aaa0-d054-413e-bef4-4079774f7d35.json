@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/media-preview/media/imagePreview.js","code":"if (scale === 'fit') {\n\t\t\tfirstZoom();\n\t\t}","startLine":259,"endLine":261,"chunkType":"function","mtime":1762250468276.502}

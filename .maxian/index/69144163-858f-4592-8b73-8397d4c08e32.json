@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/scrollDecoration/scrollDecoration.js","code":"render(ctx) {\n        this.a.setWidth(this.c);\n        this.a.setClassName(this.f ? 'scroll-decoration' : '');\n    }","startLine":63,"endLine":66,"chunkType":"function","mtime":1772878380215.1133}

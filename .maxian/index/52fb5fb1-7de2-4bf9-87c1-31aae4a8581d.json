@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/io.rs","code":"Err(e) => {\n\t\t\t\t\ttx.send(TailEvent::Err(e)).ok();\n\t\t\t\t\treturn;\n\t\t\t\t}","startLine":173,"endLine":176,"chunkType":"function","mtime":1762250468187.155}

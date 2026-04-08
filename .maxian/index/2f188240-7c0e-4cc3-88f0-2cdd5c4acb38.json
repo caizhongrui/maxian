@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/viewCursors/viewCursors.js","code":"getLastRenderData() {\n        return this.F;\n    }","startLine":313,"endLine":315,"chunkType":"function","mtime":1772878380217.3767}

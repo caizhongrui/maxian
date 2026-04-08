@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/OpenCode架构分析与优化建议.md","code":"export async function list() {\n  return pipe(\n    await state(),\n    values(),\n    sortBy([(x) => x.name === \"build\", \"desc\"])\n  );\n}","startLine":558,"endLine":564,"chunkType":"function","mtime":1772782077285.7097}

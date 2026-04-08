@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/css-language-features/package.json","code":"\"@types/node\": \"20.x\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/microsoft/vscode.git\"\n  }\n}","startLine":1003,"endLine":1011,"chunkType":"block","mtime":1762250468197.5833}

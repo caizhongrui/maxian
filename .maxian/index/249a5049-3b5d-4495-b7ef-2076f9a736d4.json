@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/hoverUtils.js","code":"if (posx < elementRect.left\n        || posx > elementRect.left + elementRect.width","startLine":8,"endLine":9,"chunkType":"function","mtime":1772878382941.3496}

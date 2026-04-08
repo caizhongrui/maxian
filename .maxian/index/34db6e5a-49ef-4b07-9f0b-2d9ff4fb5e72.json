@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/languages/supports/languageBracketsConfiguration.js","code":"super(config, bracketText);\n        this.openingBrackets = openingBrackets;","startLine":106,"endLine":107,"chunkType":"function","mtime":1772878380586.5881}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestWidget.js","code":"P(theme) {\n        this.u.widget.borderWidth = $as(theme.type) ? 2 : 1;\n    }","startLine":286,"endLine":288,"chunkType":"function","mtime":1772878383697.8738}

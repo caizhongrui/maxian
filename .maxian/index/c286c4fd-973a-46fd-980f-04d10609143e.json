@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-math/package.json","code":"\"extends\": \"vscode.markdown-it-renderer\",\n          \"path\": \"./notebook-out/katex.js\"","startLine":76,"endLine":77,"chunkType":"block","mtime":1762250468274.846}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/extpath.js","code":"if (isWindowsOS && name.length !== name.trim().length) {\n        return false; // Windows: file cannot end with a whitespace\n    }","startLine":166,"endLine":168,"chunkType":"function","mtime":1772878378208.665}

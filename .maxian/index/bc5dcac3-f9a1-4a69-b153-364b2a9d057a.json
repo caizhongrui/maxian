@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/errors.js","code":"constructor() {\n        super(...arguments);\n        this.isExpected = true;\n    }","startLine":195,"endLine":198,"chunkType":"function","mtime":1772878378207.7646}

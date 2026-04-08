@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/diffAlgorithm.js","code":"constructor(offset1, offset2) {\n        this.offset1 = offset1;\n        this.offset2 = offset2;\n    }","startLine":99,"endLine":102,"chunkType":"function","mtime":1772878380534.47}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/history.js","code":"resetCursor() {\n        this.d = this.c;\n        return this.d.value;\n    }","startLine":185,"endLine":188,"chunkType":"function","mtime":1772878378213.08}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/folding/browser/foldingRanges.js","code":"l(index) {\n        return this.e.get(index);\n    }","startLine":105,"endLine":107,"chunkType":"function","mtime":1772878382590.9312}

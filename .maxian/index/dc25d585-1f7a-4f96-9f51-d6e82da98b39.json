@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/editorSimpleWorker.js","code":"export function create(workerServer) {\n    return new $j0($S9.getChannel(workerServer), null);\n}","startLine":436,"endLine":438,"chunkType":"function","mtime":1772878380880.35}

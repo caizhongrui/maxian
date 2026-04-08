@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/server/src/test/formatting.test.ts","code":"await assertFormat(content, expected, options);\n\t});\n\n}); /*","startLine":190,"endLine":193,"chunkType":"block","mtime":1762250468242.6814}

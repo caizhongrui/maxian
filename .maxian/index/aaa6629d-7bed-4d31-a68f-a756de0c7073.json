@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/editorDom.js","code":"onMouseMove(target, callback) {\n        return dom.$$i(target, 'mousemove', (e) => callback(this.b(e)));\n    }","startLine":129,"endLine":131,"chunkType":"function","mtime":1772878379373.9368}

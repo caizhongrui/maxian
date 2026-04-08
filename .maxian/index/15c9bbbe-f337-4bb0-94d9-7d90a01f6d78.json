@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/state.rs","code":"}\n\n\t/// Suggested path for web server storage\n\tpub fn web_server_storage(&self) -> PathBuf {\n\t\tself.root.join(\"serve-web\")\n\t}\n}","startLine":238,"endLine":245,"chunkType":"block","mtime":1762250468184.0547}

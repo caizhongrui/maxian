@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/completions.ts","code":"export function getConfigurationForResource(\n\t\tmodeId: string,","startLine":667,"endLine":668,"chunkType":"function","mtime":1762250468326.671}

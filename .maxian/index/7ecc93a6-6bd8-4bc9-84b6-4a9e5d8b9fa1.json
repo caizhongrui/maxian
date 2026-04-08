@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/ipynb/src/notebookModelStoreSync.ts","code":"function isSupportedNotebook(notebook: NotebookDocument) {\n\treturn notebook.notebookType === 'jupyter-notebook';\n}","startLine":80,"endLine":82,"chunkType":"function","mtime":1762250468248.2917}

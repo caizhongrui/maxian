@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/keybindings.js","code":"constructor(chords) {\n        if (chords.length === 0) {\n            throw $nb(`chords`);\n        }\n        this.chords = chords;\n    }","startLine":148,"endLine":153,"chunkType":"function","mtime":1772878378238.9697}

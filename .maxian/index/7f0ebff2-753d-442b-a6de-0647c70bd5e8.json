@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/dev_tunnels.rs","code":"clean_hostname_for_tunnel(\"hello123\"),\n\t\t\t\"hello123\".to_string()","startLine":1250,"endLine":1251,"chunkType":"function","mtime":1762250468184.497}

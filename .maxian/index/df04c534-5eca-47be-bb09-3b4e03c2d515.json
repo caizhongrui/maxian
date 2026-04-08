@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/view/inlineEdits/inlineDiffView.js","code":"static supportsInlineDiffRendering(mapping) {\n        return allowsTrueInlineDiffRendering(mapping);\n    }","startLine":14,"endLine":16,"chunkType":"function","mtime":1772878383195.0269}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/self_update.rs","code":"unzip_downloaded_release(&archive_path, &archive_contents_path, SilentCopyProgress())?;\n\t\tcopy_updated_cli_to_path(&archive_contents_path, &staging_path)?;","startLine":95,"endLine":96,"chunkType":"function","mtime":1762250468183.851}

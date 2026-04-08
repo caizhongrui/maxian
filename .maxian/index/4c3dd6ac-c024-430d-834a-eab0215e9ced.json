@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/mouseHandler.js","code":"H(e) {\n        this.b.emitMouseWheel(e);\n    }","startLine":252,"endLine":254,"chunkType":"function","mtime":1772878379371.6948}

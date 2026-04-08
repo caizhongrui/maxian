@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/hoverAccessibleViews.js","code":"provideContent() {\n        return this.provideContentAtIndex(this.b, true);\n    }","startLine":154,"endLine":156,"chunkType":"function","mtime":1772878382939.2432}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view/viewController.js","code":"paste(text, pasteOnNewLine, multicursorText, mode) {\n        this.d.paste(text, pasteOnNewLine, multicursorText, mode);\n    }","startLine":15,"endLine":17,"chunkType":"function","mtime":1772878379801.3662}

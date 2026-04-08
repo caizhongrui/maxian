@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"constructor(g) {\n        this.g = g;\n        this.f = new $ye();\n        this.onDidChange = this.f.event;\n    }","startLine":1377,"endLine":1381,"chunkType":"function","mtime":1772878378208.3105}

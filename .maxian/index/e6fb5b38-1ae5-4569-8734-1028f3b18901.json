@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/config/migrateOptions.js","code":"constructor(key, migrate) {\n        this.key = key;\n        this.migrate = migrate;\n    }","startLine":7,"endLine":10,"chunkType":"function","mtime":1772878379326.1082}

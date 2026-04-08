@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/list/rowCache.js","code":"f(domNode) {\n        domNode.classList.remove('scrolling');\n        domNode.remove();\n    }","startLine":77,"endLine":80,"chunkType":"function","mtime":1772878378045.7446}

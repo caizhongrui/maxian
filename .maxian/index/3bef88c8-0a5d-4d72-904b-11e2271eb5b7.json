@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/objective-c/syntaxes/objective-c.tmLanguage.json","code":"\"name\": \"punctuation.section.scope.begin.objc\"\n\t\t\t\t}\n\t\t\t},\n\t\t\t\"end\": \"\\\\]\",\n\t\t\t\"endCaptures\": {","startLine":409,"endLine":413,"chunkType":"block","mtime":1762250468290.2017}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/php-language-features/package.json","code":"\"dependencies\": {\n    \"which\": \"^2.0.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"20.x\",\n    \"@types/which\": \"^2.0.0\"","startLine":76,"endLine":81,"chunkType":"block","mtime":1762250468291.7847}

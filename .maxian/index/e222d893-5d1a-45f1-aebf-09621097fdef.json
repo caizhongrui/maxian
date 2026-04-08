@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/indentGuides/indentGuides.js","code":"onScrollChanged(e) {\n        return e.scrollTopChanged; // || e.scrollWidthChanged;\n    }","startLine":72,"endLine":74,"chunkType":"function","mtime":1772878380159.7664}

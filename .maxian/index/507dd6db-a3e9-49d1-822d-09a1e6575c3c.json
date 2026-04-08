@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/diff/rangeMapping.js","code":"flip() {\n        return new $zD(this.modified, this.original);\n    }","startLine":52,"endLine":54,"chunkType":"function","mtime":1772878380557.872}

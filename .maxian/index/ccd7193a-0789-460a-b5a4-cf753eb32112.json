@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneServices.js","code":"D() {\n        return $Y.document.hasFocus();\n    }","startLine":440,"endLine":442,"chunkType":"function","mtime":1772878383802.3767}

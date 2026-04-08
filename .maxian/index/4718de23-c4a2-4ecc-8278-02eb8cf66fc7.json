@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/OpenCode架构分析与优化建议.md","code":"executeCall(call).catch(err => ({\n      success: false,\n      tool: call.tool,\n      error: err\n    }))","startLine":764,"endLine":768,"chunkType":"function","mtime":1772782077285.7097}

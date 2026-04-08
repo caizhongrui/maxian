@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/code/electron-main/app.js","code":"}\n            else {\n                $wt(this.u.getValue('security.allowedUNCHosts'));\n            }\n        }\n        //#endregion\n    }","startLine":313,"endLine":319,"chunkType":"block","mtime":1772878379281.8267}

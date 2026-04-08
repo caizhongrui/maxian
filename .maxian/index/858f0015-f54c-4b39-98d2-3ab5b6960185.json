@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/notebook-renderers/src/index.ts","code":"if (id) {\n\t\t\t\tdisposables.get(id)?.dispose();\n\t\t\t} else {\n\t\t\t\tdisposables.forEach(d => d.dispose());\n\t\t\t}","startLine":616,"endLine":620,"chunkType":"function","mtime":1762250468286.3284}

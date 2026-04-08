@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/ternarySearchTree.js","code":"static forPaths(ignorePathCasing = false) {\n        return new $2k(new $Zk(undefined, !ignorePathCasing));\n    }","startLine":263,"endLine":265,"chunkType":"function","mtime":1772878378349.0525}

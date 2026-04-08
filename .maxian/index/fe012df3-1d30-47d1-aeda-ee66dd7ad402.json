@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/codeEditor/codeEditorWidget.js","code":"getRawOptions() {\n        return this.qb.getRawOptions();\n    }","startLine":288,"endLine":290,"chunkType":"function","mtime":1772878380256.3677}

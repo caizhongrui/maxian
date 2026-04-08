@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/colorPicker/browser/colorPickerParts/colorPickerStrip.js","code":"u(color) {\n        const value = this.C(color);\n        this.z(value);\n    }","startLine":39,"endLine":42,"chunkType":"function","mtime":1772878382213.8716}

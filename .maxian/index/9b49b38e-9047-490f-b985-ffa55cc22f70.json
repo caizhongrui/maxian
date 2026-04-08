@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/gpu/fullFileRenderStrategy.wgsl.js","code":"if (u32(cell.textureIndex) == 0) {\n\t\tglyph = glyphInfo0[glyphIndex];\n\t} else {\n\t\tglyph = glyphInfo1[glyphIndex];\n\t}","startLine":58,"endLine":62,"chunkType":"function","mtime":1772878379677.988}

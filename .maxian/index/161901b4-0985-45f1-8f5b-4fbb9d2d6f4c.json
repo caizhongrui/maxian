@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/buffer.js","code":"constructor(buffer) {\n        this.buffer = buffer;\n        this.byteLength = this.buffer.byteLength;\n    }","startLine":84,"endLine":87,"chunkType":"function","mtime":1772878378139.7178}

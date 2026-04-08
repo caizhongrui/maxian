@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewLayout/linePart.js","code":"isPseudoAfter() {\n        return (this.metadata & 4 /* LinePartMetadata.PSEUDO_AFTER_MASK */ ? true : false);\n    }","startLine":29,"endLine":31,"chunkType":"function","mtime":1772878381184.9312}

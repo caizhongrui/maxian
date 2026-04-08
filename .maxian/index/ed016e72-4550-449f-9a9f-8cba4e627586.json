@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/scrollbar/scrollbarState.js","code":"getSliderPosition() {\n        return this.k;\n    }","startLine":114,"endLine":116,"chunkType":"function","mtime":1772878378060.1316}

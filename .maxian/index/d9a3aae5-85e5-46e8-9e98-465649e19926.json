@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/codeLens/baseCodeLensProvider.ts","code":"if (!span) {\n\t\treturn undefined;\n\t}","startLine":94,"endLine":96,"chunkType":"function","mtime":1762250468326.372}

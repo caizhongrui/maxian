@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/numbers.js","code":"getNext() {\n        return this.a++;\n    }","startLine":15,"endLine":17,"chunkType":"function","mtime":1772878378281.265}

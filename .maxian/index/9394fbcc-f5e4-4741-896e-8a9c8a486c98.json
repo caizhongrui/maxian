@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/zoneWidget/browser/zoneWidget.js","code":"getDomNode() {\n        return this.b;\n    }","startLine":51,"endLine":53,"chunkType":"function","mtime":1772878383775.5437}

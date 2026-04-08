@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/git-editor-main.ts","code":"function fatal(err: any): void {\n\tconsole.error(err);\n\tprocess.exit(1);\n}","startLine":7,"endLine":10,"chunkType":"function","mtime":1762250468218.145}

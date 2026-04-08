@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/wordHelper.js","code":"if (!config) {\n        config = Iterable.first(_defaultConfig);\n    }","startLine":65,"endLine":67,"chunkType":"function","mtime":1772878380473.4717}

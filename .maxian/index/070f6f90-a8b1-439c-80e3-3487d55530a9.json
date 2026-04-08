@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/services/languageService.js","code":"registerLanguage(def) {\n        return this.n.registerLanguage(def);\n    }","startLine":32,"endLine":34,"chunkType":"function","mtime":1772878381033.703}

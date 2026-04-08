@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/contentHoverWidgetWrapper.js","code":"focusHoverPartWithIndex(index) {\n        this.f?.focusHoverPartWithIndex(index);\n    }","startLine":297,"endLine":299,"chunkType":"function","mtime":1772878382758.941}

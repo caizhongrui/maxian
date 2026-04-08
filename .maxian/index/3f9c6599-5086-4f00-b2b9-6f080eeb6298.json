@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/glob.js","code":"if (!arg1 || typeof path !== 'string') {\n        return false;\n    }","startLine":357,"endLine":359,"chunkType":"function","mtime":1772878378209.8264}

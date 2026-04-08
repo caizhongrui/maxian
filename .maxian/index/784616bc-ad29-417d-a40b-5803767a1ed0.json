@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/worker/simpleWorkerBootstrap.js","code":"if (!initialized) {\n            initialize(factory);\n        }","startLine":20,"endLine":22,"chunkType":"function","mtime":1772878378389.6208}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view.js","code":"onDecorationsChanged(e) {\n        if (e.affectsGlyphMargin) {\n            this.J = true;\n        }\n        return false;\n    }","startLine":307,"endLine":312,"chunkType":"function","mtime":1772878379798.9834}

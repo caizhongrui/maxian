@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/editorBrowser.js","code":"if ($y5(thing) && $w5(thing.activeCodeEditor)) {\n        return thing.activeCodeEditor;\n    }","startLine":153,"endLine":155,"chunkType":"function","mtime":1772878379373.6018}

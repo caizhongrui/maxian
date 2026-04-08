@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/delegatingEditorImpl.js","code":"setSelections(ranges, source = 'api') {\n        this.g.setSelections(ranges, source);\n    }","startLine":63,"endLine":65,"chunkType":"function","mtime":1772878380260.9314}

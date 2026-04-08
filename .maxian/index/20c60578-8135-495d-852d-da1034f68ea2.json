@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/types.js","code":"if (constraint.length === 1 && constraint.call(undefined, arg) === true) {\n            return;\n        }","startLine":152,"endLine":154,"chunkType":"function","mtime":1772878378386.0784}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/snippet/browser/snippetSession.js","code":"dispose() {\n        if (this.c) {\n            this.g.removeDecorations([...this.c.values()]);\n        }\n        this.d.length = 0;\n    }","startLine":47,"endLine":52,"chunkType":"function","mtime":1772878383634.1301}

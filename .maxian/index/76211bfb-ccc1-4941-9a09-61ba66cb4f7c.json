@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsSource.js","code":"clone() {\n        this.b++;\n        return this;\n    }","startLine":213,"endLine":216,"chunkType":"function","mtime":1772878383189.7903}

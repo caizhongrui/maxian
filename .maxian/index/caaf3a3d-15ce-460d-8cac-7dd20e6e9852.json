@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewModelEventDispatcher.js","code":"isNoOp() {\n        return ($R8.c(this.oldSelections, this.selections)\n            && this.oldModelVersionId === this.modelVersionId);\n    }","startLine":275,"endLine":278,"chunkType":"function","mtime":1772878381821.1108}

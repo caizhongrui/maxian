@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/guidesTextModelPart.js","code":"constructor(c, h) {\n        super();\n        this.c = c;\n        this.h = h;\n    }","startLine":14,"endLine":18,"chunkType":"function","mtime":1772878380723.284}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/extpath.js","code":"if (ignoreCase) {\n        path = path.toLowerCase();\n        candidate = candidate.toLowerCase();\n    }","startLine":284,"endLine":287,"chunkType":"function","mtime":1772878378208.665}

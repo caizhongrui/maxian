@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/api/api1.ts","code":"export class ApiGit implements Git {\n\n\tget path(): string { return this._model.git.path; }\n\n\tconstructor(private _model: Model) { }\n}","startLine":273,"endLine":278,"chunkType":"class","mtime":1762250468216.1206}

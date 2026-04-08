@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/delegatingEditorImpl.js","code":"revealRangeInCenter(range, scrollType = 0 /* ScrollType.Smooth */) {\n        this.g.revealRangeInCenter(range, scrollType);\n    }","startLine":81,"endLine":83,"chunkType":"function","mtime":1772878380260.9314}

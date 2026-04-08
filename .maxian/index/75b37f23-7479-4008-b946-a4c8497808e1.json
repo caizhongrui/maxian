@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/json.js","code":"if (_scanner.getToken() !== 17 /* SyntaxKind.EOF */) {\n        handleError(9 /* ParseErrorCode.EndOfFileExpected */, [], []);\n    }","startLine":1093,"endLine":1095,"chunkType":"function","mtime":1772878378235.0315}

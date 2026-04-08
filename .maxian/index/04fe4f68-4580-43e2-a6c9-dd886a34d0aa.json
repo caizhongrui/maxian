@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/stickyScroll/browser/stickyScrollController.js","code":"focusPrevious() {\n        if (this.t > 0) {\n            this.N(false);\n        }\n    }","startLine":132,"endLine":136,"chunkType":"function","mtime":1772878383638.806}

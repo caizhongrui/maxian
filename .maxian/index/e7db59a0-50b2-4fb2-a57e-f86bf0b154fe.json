@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/utils.js","code":"for (const key in source1) {\n        result[key] = source1[key];\n    }","startLine":153,"endLine":155,"chunkType":"function","mtime":1772878380291.6145}

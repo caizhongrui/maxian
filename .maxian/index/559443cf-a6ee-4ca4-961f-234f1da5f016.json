@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/filesystems/autoInstallerFs.ts","code":"delete(_uri: vscode.Uri): void {\n\t\tthrow new Error('not implemented');\n\t}","startLine":131,"endLine":133,"chunkType":"function","mtime":1762250468326.0535}

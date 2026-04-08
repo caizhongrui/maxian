@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/tree/objectTreeModel.js","code":"getFirstElementChild(ref = null) {\n        const location = this.o(ref);\n        return this.c.getFirstElementChild(location);\n    }","startLine":144,"endLine":147,"chunkType":"function","mtime":1772878378135.0793}

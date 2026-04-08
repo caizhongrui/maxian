@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/commands/serve_web.rs","code":"drop(latest);\n\t\tself.get_latest_release().await","startLine":599,"endLine":600,"chunkType":"function","mtime":1762250468182.808}

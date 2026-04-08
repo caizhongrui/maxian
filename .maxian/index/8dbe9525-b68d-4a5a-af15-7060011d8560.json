@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/codeEditor/embeddedCodeEditorWidget.js","code":"getParentEditor() {\n        return this.kb;\n    }","startLine":34,"endLine":36,"chunkType":"function","mtime":1772878380256.6287}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/remotePublisher.ts","code":"getRemoteSourcePublishers(): RemoteSourcePublisher[];\n\tregisterRemoteSourcePublisher(publisher: RemoteSourcePublisher): Disposable;","startLine":13,"endLine":14,"chunkType":"function","mtime":1762250468219.3545}

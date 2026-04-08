@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/gpu/atlas/textureAtlas.js","code":"getUsagePreview() {\n        return Promise.all(this.h.map(e => e.getUsagePreview()));\n    }","startLine":109,"endLine":111,"chunkType":"function","mtime":1772878379376.0544}

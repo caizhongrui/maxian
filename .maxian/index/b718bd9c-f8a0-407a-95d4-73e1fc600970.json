@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/html-language-features/server/src/modes/semanticTokens.ts","code":"getSemanticTokens(document: TextDocument, ranges?: Range[]): Promise<number[]>;\n}","startLine":16,"endLine":17,"chunkType":"function","mtime":1762250468241.14}

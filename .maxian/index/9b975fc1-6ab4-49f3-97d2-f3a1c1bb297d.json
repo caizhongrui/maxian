@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/ipynb/notebook-src/cellAttachmentRenderer.ts","code":"extendMarkdownIt(fn: (md: MarkdownIt) => void): void;\n}","startLine":11,"endLine":12,"chunkType":"function","mtime":1762250468246.9575}

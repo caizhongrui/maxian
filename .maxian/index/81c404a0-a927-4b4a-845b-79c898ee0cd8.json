@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/cursor/cursor.js","code":"startComposition(eventsCollector) {\n        this.w = new CompositionState(this.c, this.getSelections());\n    }","startLine":435,"endLine":437,"chunkType":"function","mtime":1772878380473.827}

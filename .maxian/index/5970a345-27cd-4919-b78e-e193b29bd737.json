@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view/renderingContext.js","code":"getDecorationsInViewport() {\n        return this.viewportData.getDecorationsInViewport();\n    }","startLine":29,"endLine":31,"chunkType":"function","mtime":1772878379801.125}

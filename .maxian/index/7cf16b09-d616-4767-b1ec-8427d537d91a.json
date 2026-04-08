@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/colorPicker/browser/colorPickerParts/colorPickerStrip.js","code":"z(value) {\n        this.j.style.top = `${(1 - value) * this.m}px`;\n    }","startLine":66,"endLine":68,"chunkType":"function","mtime":1772878382213.8716}

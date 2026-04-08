@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModel.js","code":"nb() {\n        // Ensure all decorations get their `range` set.\n        this.$.ensureAllNodesHaveRanges(this);\n    }","startLine":379,"endLine":382,"chunkType":"function","mtime":1772878380728.0076}

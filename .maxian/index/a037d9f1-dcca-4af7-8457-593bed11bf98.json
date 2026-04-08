@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/coreCommands.js","code":"constructor() {\n            super({\n                id: 'lastCursorWordSelect',\n                precondition: undefined\n            });\n        }","startLine":1358,"endLine":1363,"chunkType":"function","mtime":1772878379373.0635}

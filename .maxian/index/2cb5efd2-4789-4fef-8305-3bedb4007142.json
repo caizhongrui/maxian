@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/range.js","code":"delta(lineCount) {\n        return new $gD(this.startLineNumber + lineCount, this.startColumn, this.endLineNumber + lineCount, this.endColumn);\n    }","startLine":293,"endLine":295,"chunkType":"function","mtime":1772878380413.052}

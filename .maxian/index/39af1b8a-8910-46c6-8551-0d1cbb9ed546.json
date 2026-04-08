@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"constructor(options) {\n        super(options);\n        this.h = 0;\n        this.s = new $cd();\n        this.t = options?.merge;\n    }","startLine":1082,"endLine":1087,"chunkType":"function","mtime":1772878378208.3105}

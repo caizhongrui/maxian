@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/sandbox/electron-sandbox/preload.js","code":"on(type, callback) {\n                process.on(type, callback);\n            }","startLine":166,"endLine":168,"chunkType":"function","mtime":1772878378527.5525}

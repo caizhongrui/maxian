@@ -165,6 +165,15 @@ export function executeEdit(
 		};
 	}
 
+	// 明确阻断同内容替换，避免无效写入重试
+	if (old_string === new_string) {
+		return {
+			success: false,
+			message: 'edit 未产生任何修改：old_string 与 new_string 完全相同',
+			path,
+		};
+	}
+
 	const exactMatchCount = content.split(old_string).length - 1;
 	if (exactMatchCount > 1 && !replace_all) {
 		return {
@@ -186,6 +195,14 @@ export function executeEdit(
 		return {
 			success: false,
 			message: 'oldString not found in content',
+			path,
+		};
+	}
+
+	if (fuzzy.result === content) {
+		return {
+			success: false,
+			message: 'edit 未产生任何修改：替换后内容与原文件一致',
 			path,
 		};
 	}

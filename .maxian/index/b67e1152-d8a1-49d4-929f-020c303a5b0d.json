@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-api-tests/src/utils.ts","code":"export async function poll<T>(\n\tfn: () => Thenable<T>,","startLine":164,"endLine":165,"chunkType":"function","mtime":1762250468349.2837}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/sourceDefinition.ts","code":"commandManager.register(new SourceDefinitionCommand(client));\n\treturn client.onTsServerStarted(() => updateContext());\n}","startLine":89,"endLine":92,"chunkType":"block","mtime":1762250468329.1133}

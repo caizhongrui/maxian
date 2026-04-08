@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/utils.js","code":"dispose() {\n                d.dispose();\n                hasValue = false;\n                lastValue = undefined;\n            },","startLine":262,"endLine":266,"chunkType":"function","mtime":1772878378316.9473}

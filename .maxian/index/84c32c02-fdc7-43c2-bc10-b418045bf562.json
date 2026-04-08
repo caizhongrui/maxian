@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/github/src/links.ts","code":"export function getVscodeDevHost(): string {\n\treturn `https://${vscode.env.appName.toLowerCase().includes('insiders') ? 'insiders.' : ''}vscode.dev/github`;\n}","startLine":189,"endLine":191,"chunkType":"function","mtime":1762250468228.4478}

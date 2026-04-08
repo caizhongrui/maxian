@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/util.ts","code":"export function isDefined<T>(arg: T | null | undefined): arg is T {\n\treturn !isUndefinedOrNull(arg);\n}","startLine":365,"endLine":367,"chunkType":"function","mtime":1762250468220.5706}

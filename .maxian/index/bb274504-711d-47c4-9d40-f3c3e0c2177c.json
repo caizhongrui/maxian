@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/offsetEdit.js","code":"static insert(offset, insertText) {\n        return $mD.replace($hD.emptyAt(offset), insertText);\n    }","startLine":19,"endLine":21,"chunkType":"function","mtime":1772878380411.8613}

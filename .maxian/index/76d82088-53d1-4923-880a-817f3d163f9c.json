@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/navigator.js","code":"previous() {\n        this.d = Math.max(this.d - 1, this.b - 1);\n        return this.current();\n    }","startLine":22,"endLine":25,"chunkType":"function","mtime":1772878378279.1292}

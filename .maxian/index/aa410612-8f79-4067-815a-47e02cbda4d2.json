@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/preview/preview.ts","code":"getAdditionalState(): {};\n\topenPreviewLinkToMarkdownFile(markdownLink: vscode.Uri, fragment: string | undefined): void;","startLine":39,"endLine":40,"chunkType":"function","mtime":1762250468270.2476}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/base.js","code":"getDebugName() {\n        if (this.b) {\n            return this.b();\n        }\n        return $fd(this._fn);\n    }","startLine":169,"endLine":174,"chunkType":"function","mtime":1772878378283.0334}

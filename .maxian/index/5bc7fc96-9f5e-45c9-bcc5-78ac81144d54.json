@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/editStack.js","code":"canAppend(model) {\n        return (this.model === model && this.c instanceof $XH);\n    }","startLine":156,"endLine":158,"chunkType":"function","mtime":1772878380722.5027}

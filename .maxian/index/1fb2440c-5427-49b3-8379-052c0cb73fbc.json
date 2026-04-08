@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/code/node/cli.js","code":"if (args.verbose) {\n            env['ELECTRON_ENABLE_LOGGING'] = '1';\n        }","startLine":209,"endLine":211,"chunkType":"function","mtime":1772878379287.51}

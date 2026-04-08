@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/control_server.rs","code":"Ok(std::fs::metadata(path)\n\t\t.map(|m| FsStatResponse {\n\t\t\texists: true,\n\t\t\tsize: Some(m.len()),\n\t\t\tkind: Some(m.file_type().into()),\n\t\t})","startLine":945,"endLine":950,"chunkType":"function","mtime":1762250468184.4028}

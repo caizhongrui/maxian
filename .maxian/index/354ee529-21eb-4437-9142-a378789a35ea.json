@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoError/browser/markerNavigationService.js","code":"resetIndex() {\n        this.g = -1;\n    }","startLine":130,"endLine":132,"chunkType":"function","mtime":1772878382622.5972}

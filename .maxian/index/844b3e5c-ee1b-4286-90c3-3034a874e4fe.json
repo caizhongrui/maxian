@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/tokenizationTextModelPart.js","code":"tokenizeIfCheap(lineNumber) {\n        this.L(lineNumber);\n        this.n.tokenizeIfCheap(lineNumber);\n    }","startLine":164,"endLine":167,"chunkType":"function","mtime":1772878380729.088}

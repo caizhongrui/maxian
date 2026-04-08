@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/config/editorOptions.js","code":"rulers: register(new EditorRulers()),\n    scrollbar: register(new EditorScrollbar()),","startLine":3271,"endLine":3272,"chunkType":"block","mtime":1772878380375.1514}

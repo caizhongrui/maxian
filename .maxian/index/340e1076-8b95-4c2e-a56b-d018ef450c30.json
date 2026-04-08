@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/semanticTokens/common/semanticTokensConfig.js","code":"return themeService.getColorTheme().semanticHighlighting;\n}\n//# sourceMappingURL=semanticTokensConfig.js.map","startLine":11,"endLine":13,"chunkType":"block","mtime":1772878383599.462}

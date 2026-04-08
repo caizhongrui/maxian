@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/codelens/browser/codelensWidget.js","code":"getCommand(link) {\n        return this.d?.getCommand(link);\n    }","startLine":239,"endLine":241,"chunkType":"function","mtime":1772878382000.9082}

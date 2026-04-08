@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/config/editorConfiguration.js","code":"_write(id, value) {\n        this.c[id] = value;\n    }","startLine":215,"endLine":217,"chunkType":"function","mtime":1772878379324.913}

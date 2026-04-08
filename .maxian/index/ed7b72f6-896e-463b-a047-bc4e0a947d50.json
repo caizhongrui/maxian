@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"function isEmojiModifier(codePoint) {\n    return 0x1F3FB <= codePoint && codePoint <= 0x1F3FF;\n}","startLine":959,"endLine":961,"chunkType":"function","mtime":1772878378348.6172}

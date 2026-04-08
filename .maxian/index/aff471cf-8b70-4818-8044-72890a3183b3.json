@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/ipynb/src/serializers.ts","code":"export function getVSCodeCellLanguageId(metadata: CellMetadata): string | undefined {\n\treturn metadata.metadata?.vscode?.languageId;\n}","startLine":74,"endLine":76,"chunkType":"function","mtime":1762250468248.7864}

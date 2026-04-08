@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/mouseTarget.js","code":"isInTopPadding(mouseVerticalOffset) {\n        return this.c.viewLayout.isInTopPadding(mouseVerticalOffset);\n    }","startLine":258,"endLine":260,"chunkType":"function","mtime":1772878379372.1423}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/referencesModel.js","code":"if (this.isEmpty) {\n            return localize(1151, null);\n        }","startLine":150,"endLine":152,"chunkType":"function","mtime":1772878382753.8433}

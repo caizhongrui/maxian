@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/date.js","code":"if (value === 1) {\n            return useFullTimeWords\n                ? localize(93, null, value)\n                : localize(94, null, value);\n        }","startLine":195,"endLine":199,"chunkType":"function","mtime":1772878378177.7314}

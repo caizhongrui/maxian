@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/prefixSumComputer.js","code":"getTotalSum() {\n        this.g();\n        return this.e.length;\n    }","startLine":154,"endLine":157,"chunkType":"function","mtime":1772878380727.7363}

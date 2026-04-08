@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/media-preview/media/imagePreview.js","code":"if (!image || !hasLoadedImage) {\n\t\t\treturn;\n\t\t}","startLine":191,"endLine":193,"chunkType":"function","mtime":1762250468276.502}

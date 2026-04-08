@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/types.js","code":"if (!condition) {\n        throw new Error(type ? `Unexpected type, expected '${type}'` : 'Unexpected type');\n    }","startLine":77,"endLine":79,"chunkType":"function","mtime":1772878378386.0784}

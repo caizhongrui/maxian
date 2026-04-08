@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/node/nls.js","code":"if (!resolvedLanguage) {\n            return defaultNLSConfiguration(userLocale, osLocale, nlsMetadataPath);\n        }","startLine":23,"endLine":25,"chunkType":"function","mtime":1772878378391.1921}

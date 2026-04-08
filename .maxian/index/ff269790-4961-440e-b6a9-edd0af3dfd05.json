@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/request/common/request.js","code":"constructor() {\n        super(offlineName);\n        this.name = this.message;\n    }","startLine":16,"endLine":19,"chunkType":"function","mtime":1772878378524.1956}

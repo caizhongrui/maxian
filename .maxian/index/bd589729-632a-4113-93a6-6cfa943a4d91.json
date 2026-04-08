@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/objects.js","code":"for (const methodName of methodNames) {\n        result[methodName] = createProxyMethod(methodName);\n    }","startLine":237,"endLine":239,"chunkType":"function","mtime":1772878378281.759}

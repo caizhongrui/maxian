@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/npm/src/features/jsonContributions.ts","code":"getDocumentSelector(): DocumentSelector;\n\tgetInfoContribution(resourceUri: Uri, location: Location): Thenable<MarkdownString[] | null> | null;","startLine":24,"endLine":25,"chunkType":"function","mtime":1762250468288.671}

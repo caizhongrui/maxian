@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inPlaceReplace/browser/inPlaceReplaceCommand.js","code":"getEditOperations(model, builder) {\n        builder.addTrackedEditOperation(this.a, this.c);\n    }","startLine":12,"endLine":14,"chunkType":"function","mtime":1772878383400.6194}

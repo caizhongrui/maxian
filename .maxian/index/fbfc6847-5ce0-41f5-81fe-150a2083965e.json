@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/tfIdf.js","code":"if (max > 0) {\n        for (const score of result) {\n            score.score /= max;\n        }\n    }","startLine":171,"endLine":175,"chunkType":"function","mtime":1772878378349.3806}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/strings.js","code":"if (!searchString) {\n        throw new Error('Cannot create regex from empty string');\n    }","startLine":167,"endLine":169,"chunkType":"function","mtime":1772878378348.6172}

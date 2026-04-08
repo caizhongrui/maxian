@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/dom.js","code":"hasWindow(windowId) {\n            return windows.has(windowId);\n        },","startLine":66,"endLine":68,"chunkType":"function","mtime":1772878377510.8274}

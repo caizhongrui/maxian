@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/link/clickLinkGesture.js","code":"y(e) {\n        if (e.keyCodeIsTriggerKey) {\n            this.c.fire();\n        }\n    }","startLine":138,"endLine":142,"chunkType":"function","mtime":1772878382623.359}

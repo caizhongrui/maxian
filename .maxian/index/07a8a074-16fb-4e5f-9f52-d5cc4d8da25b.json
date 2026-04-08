@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/tsServer/logDirectoryProvider.ts","code":"getNewLogDirectory(): vscode.Uri | undefined;\n}","startLine":9,"endLine":10,"chunkType":"function","mtime":1762250468333.5718}

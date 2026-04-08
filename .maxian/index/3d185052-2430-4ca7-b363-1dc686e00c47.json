@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/model/ghostText.js","code":"if (a instanceof $gcb && b instanceof $gcb) {\n        return a.equals(b);\n    }","startLine":115,"endLine":117,"chunkType":"function","mtime":1772878383188.903}

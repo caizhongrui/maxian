@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/markdown-language-features/src/languageFeatures/copyFiles/snippets.ts","code":"if (groups?.['escape']) {\n\t\t\treturn '$';\n\t\t}","startLine":11,"endLine":13,"chunkType":"function","mtime":1762250468269.4316}

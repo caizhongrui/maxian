@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/intervalTree.js","code":"if (node.start > node.end) {\n        node.end = node.start;\n    }","startLine":369,"endLine":371,"chunkType":"function","mtime":1772878380724.168}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoSymbol/browser/goToCommands.js","code":"if (!controller) {\n                return undefined;\n            }","startLine":678,"endLine":680,"chunkType":"function","mtime":1772878382622.8394}

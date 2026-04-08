@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/smallImmutableSet.js","code":"constructor(d, e) {\n        this.d = d;\n        this.e = e;\n    }","startLine":28,"endLine":31,"chunkType":"function","mtime":1772878380617.905}

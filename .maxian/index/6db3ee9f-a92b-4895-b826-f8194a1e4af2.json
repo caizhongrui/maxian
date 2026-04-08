@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/shutdown_signal.rs","code":"wait_until_exe_deleted(&exe_path, 2000).await;\n\t\t\t\tSome(ShutdownSignal::ExeUninstalled)","startLine":65,"endLine":66,"chunkType":"function","mtime":1762250468185.991}

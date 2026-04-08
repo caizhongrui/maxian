@@ -8,6 +8,7 @@
 
 import { MAX_CONDENSE_THRESHOLD, MIN_CONDENSE_THRESHOLD, summarizeConversation, SummarizeResponse } from '../condense/index.js';
 import { ApiMessage } from '../task-persistence/apiMessages.js';
+import { estimateTokensFromChars } from '../utils/tokenEstimate.js';
 
 /**
  * Default percentage of the context window to use as a buffer when deciding when to truncate
@@ -47,7 +48,7 @@ export async function estimateTokenCount(
 		}
 	}
 
-	return Math.ceil(totalChars / 4);
+	return estimateTokensFromChars(totalChars);
 }
 
 /**

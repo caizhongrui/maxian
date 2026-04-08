@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/controller/mouseTarget.js","code":"isAfterLines(mouseVerticalOffset) {\n        return this.c.viewLayout.isAfterLines(mouseVerticalOffset);\n    }","startLine":255,"endLine":257,"chunkType":"function","mtime":1772878379372.1423}

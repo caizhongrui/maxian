@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test-keywords.ts","code":"export var foo = () => new RegExp('');","startLine":1,"endLine":2,"chunkType":"function","mtime":1762250468356.3914}

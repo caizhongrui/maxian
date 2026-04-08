@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/config/migrateOptions.js","code":"function registerEditorSettingMigration(key, migrate) {\n    $O4.items.push(new $O4(key, migrate));\n}","startLine":39,"endLine":41,"chunkType":"function","mtime":1772878379326.1082}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/service_windows.rs","code":"add_arg(\"--log-to-file\");\n\t\tadd_arg(self.log_file.to_string_lossy().as_ref());","startLine":68,"endLine":69,"chunkType":"function","mtime":1762250468185.9302}

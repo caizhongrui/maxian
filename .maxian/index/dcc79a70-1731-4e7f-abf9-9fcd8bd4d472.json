@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/characterClassifier.js","code":"clear() {\n        this.a.fill(this.c);\n        this.b.clear();\n    }","startLine":38,"endLine":41,"chunkType":"function","mtime":1772878380376.322}

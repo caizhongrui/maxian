@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModelTokens.js","code":"k() {\n        if (!this.b) {\n            return false;\n        }\n        return !this.b.store.allStatesValid();\n    }","startLine":437,"endLine":442,"chunkType":"function","mtime":1772878380728.8506}

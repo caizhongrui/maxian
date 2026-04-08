@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/map.js","code":"class ResourceMapEntry {\n    constructor(uri, value) {\n        this.uri = uri;\n        this.value = value;\n    }\n}","startLine":28,"endLine":33,"chunkType":"class","mtime":1772878378277.2786}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/markdownHoverParticipant.js","code":"getAccessibleContent(hoverPart) {\n        return this.a?.getAccessibleContent(hoverPart) ?? '';\n    }","startLine":157,"endLine":159,"chunkType":"function","mtime":1772878382943.333}

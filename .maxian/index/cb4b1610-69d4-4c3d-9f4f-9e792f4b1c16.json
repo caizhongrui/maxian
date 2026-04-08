@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/navigator.js","code":"next() {\n        this.d = Math.min(this.d + 1, this.c);\n        return this.current();\n    }","startLine":18,"endLine":21,"chunkType":"function","mtime":1772878378279.1292}

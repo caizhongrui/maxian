@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/hash.js","code":"if (typeof input === 'string' && input.length < 250) {\n        const sha = new $2i();\n        sha.update(input);\n        return Promise.resolve(sha.digest());\n    }","startLine":68,"endLine":72,"chunkType":"function","mtime":1772878378210.1096}

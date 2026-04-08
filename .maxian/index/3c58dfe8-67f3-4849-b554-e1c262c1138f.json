@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/find/browser/findWidget.js","code":"isEnabled() {\n        return (this.c.tabIndex >= 0);\n    }","startLine":1113,"endLine":1115,"chunkType":"function","mtime":1772878382584.371}

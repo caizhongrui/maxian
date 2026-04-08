@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/arrays.js","code":"removeLast() {\n        const result = this.g[this.d];\n        this.d--;\n        return result;\n    }","startLine":639,"endLine":643,"chunkType":"function","mtime":1772878378138.325}

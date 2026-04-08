@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/filters.js","code":"if (typeof word !== 'string' || typeof wordToMatchAgainst !== 'string') {\n        return null; // return early for invalid input\n    }","startLine":342,"endLine":344,"chunkType":"function","mtime":1772878378209.0073}

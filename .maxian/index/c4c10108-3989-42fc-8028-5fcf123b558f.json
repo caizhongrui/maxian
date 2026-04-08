@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/microsoft-authentication/src/common/loopbackClientAndOpener.ts","code":"openBrowser(url: string): Promise<void>;\n}","startLine":12,"endLine":13,"chunkType":"function","mtime":1762250468282.8228}

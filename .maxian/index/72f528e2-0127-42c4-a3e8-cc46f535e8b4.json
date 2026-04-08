@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/workspaceSymbols.ts","code":"export function register(\n\tclient: ITypeScriptServiceClient,","startLine":144,"endLine":145,"chunkType":"function","mtime":1762250468330.2034}

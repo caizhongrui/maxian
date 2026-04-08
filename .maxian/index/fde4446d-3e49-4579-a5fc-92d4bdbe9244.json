@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/indentation/common/indentUtils.js","code":"for (let i = 0; i < spacesCnt; i++) {\n        result += ' ';\n    }","startLine":27,"endLine":29,"chunkType":"function","mtime":1772878382945.2043}

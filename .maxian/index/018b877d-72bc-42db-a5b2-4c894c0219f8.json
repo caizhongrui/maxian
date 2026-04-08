@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"static fromArray(items) {\n        return new $ii((writer) => {\n            writer.emitMany(items);\n        });\n    }","startLine":1400,"endLine":1404,"chunkType":"function","mtime":1772878378139.2854}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/tokens/lineTokens.js","code":"sliceAndInflate(startOffset, endOffset, deltaOffset) {\n        return new SliceLineTokens(this, startOffset, endOffset, deltaOffset);\n    }","startLine":143,"endLine":145,"chunkType":"function","mtime":1772878381182.3035}

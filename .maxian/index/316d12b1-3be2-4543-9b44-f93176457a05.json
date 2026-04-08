@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/contentHoverWidgetWrapper.js","code":"goToBottom() {\n        this.g.goToBottom();\n    }","startLine":321,"endLine":323,"chunkType":"function","mtime":1772878382758.941}

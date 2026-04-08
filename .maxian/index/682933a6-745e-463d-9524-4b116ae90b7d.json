@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/web/src/workerSession.ts","code":"if (this.logger.hasLevel(ts.server.LogLevel.verbose)) {\n\t\t\t\tthis.logger.info(`${msg.type}:${indent(JSON.stringify(msg))}`);\n\t\t\t}","startLine":98,"endLine":100,"chunkType":"function","mtime":1762250468341.5854}

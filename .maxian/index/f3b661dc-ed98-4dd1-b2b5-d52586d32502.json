@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/navigator.js","code":"current() {\n        if (this.d === this.b - 1 || this.d === this.c) {\n            return null;\n        }\n        return this.a[this.d];\n    }","startLine":12,"endLine":17,"chunkType":"function","mtime":1772878378279.1292}

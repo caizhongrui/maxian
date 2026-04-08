@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/fuzzyScorer.js","code":"if (scoreA !== scoreB) {\n        return scoreA > scoreB ? -1 : 1;\n    }","startLine":473,"endLine":475,"chunkType":"function","mtime":1772878378209.6135}

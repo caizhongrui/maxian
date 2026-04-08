@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/codeEditor/codeEditorWidget.js","code":"getContainerDomNode() {\n        return this.nb;\n    }","startLine":1039,"endLine":1041,"chunkType":"function","mtime":1772878380256.3677}

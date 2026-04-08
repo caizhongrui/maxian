@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/dropOrPasteInto/browser/copyPasteController.js","code":"D(dataTransfer, metadata) {\n        dataTransfer.setData(vscodeClipboardMime, JSON.stringify(metadata));\n    }","startLine":397,"endLine":399,"chunkType":"function","mtime":1772878382466.9634}

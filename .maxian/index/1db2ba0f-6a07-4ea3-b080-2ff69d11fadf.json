@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/observableInternal/utilsCancellation.js","code":"if (!predicate) {\n        predicate = state => state !== null && state !== undefined;\n    }","startLine":11,"endLine":13,"chunkType":"function","mtime":1772878378318.408}

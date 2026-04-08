@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/mime.js","code":"if (textMime !== undefined) {\n        return textMime;\n    }","startLine":80,"endLine":82,"chunkType":"function","mtime":1772878378278.6216}

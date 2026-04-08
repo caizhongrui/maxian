@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/contentHoverStatusBar.js","code":"append(element) {\n        const result = dom.$gk(this.a, element);\n        this.b = true;\n        return result;\n    }","startLine":40,"endLine":44,"chunkType":"function","mtime":1772878382758.2656}

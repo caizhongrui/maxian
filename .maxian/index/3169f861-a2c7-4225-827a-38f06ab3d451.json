@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/objects.js","code":"if (obj instanceof RegExp) {\n        return obj;\n    }","startLine":10,"endLine":12,"chunkType":"function","mtime":1772878378281.759}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/viewLines/viewLine.js","code":"getWidth(context) {\n        if (!this.c) {\n            return 0;\n        }\n        return this.c.getWidth(context);\n    }","startLine":148,"endLine":153,"chunkType":"function","mtime":1772878380218.248}

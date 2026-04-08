@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/update_service.rs","code":"Some(Platform::WindowsX64)\n\t\t} else if cfg!(all(target_os = \"windows\", target_arch = \"x86\")) {","startLine":305,"endLine":306,"chunkType":"function","mtime":1762250468186.4631}

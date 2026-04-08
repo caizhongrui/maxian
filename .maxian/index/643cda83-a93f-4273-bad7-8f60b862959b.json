@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/diff/defaultLinesDiffComputer/heuristicSequenceOptimizations.js","code":"if (diffs.length === 0) {\n        return diffs;\n    }","startLine":254,"endLine":256,"chunkType":"function","mtime":1772878380538.9}

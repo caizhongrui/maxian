@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/viewModel/minimapTokensColorTracker.js","code":"static getInstance() {\n        if (!this.c) {\n            this.c = $Vc(new $e8());\n        }\n        return this.c;\n    }","startLine":11,"endLine":16,"chunkType":"function","mtime":1772878381188.355}

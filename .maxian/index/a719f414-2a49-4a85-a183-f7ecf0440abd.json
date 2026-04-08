@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/ipc/common/ipc.net.js","code":"readEntireBuffer() {\n        return this.r.readEntireBuffer();\n    }","startLine":793,"endLine":795,"chunkType":"function","mtime":1772878378491.1975}

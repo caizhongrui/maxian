@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/snippet/browser/snippetParser.js","code":"constructor(name) {\n        super();\n        this.name = name;\n    }","startLine":399,"endLine":402,"chunkType":"function","mtime":1772878383633.8225}

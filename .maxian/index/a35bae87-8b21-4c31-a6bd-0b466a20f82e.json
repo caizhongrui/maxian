@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/standaloneEditor.js","code":"export function getModelMarkers(filter) {\n    const markerService = StandaloneServices.get($ME);\n    return markerService.read(filter);\n}","startLine":210,"endLine":213,"chunkType":"function","mtime":1772878383800.241}

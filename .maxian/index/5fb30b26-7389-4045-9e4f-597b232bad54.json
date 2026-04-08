@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/json-language-features/client/src/node/schemaCache.ts","code":"function getCacheFileName(uri: string): string {\n\treturn `${createHash('sha256').update(uri).digest('hex')}.schema.json`;\n}","startLine":145,"endLine":147,"chunkType":"function","mtime":1762250468252.9766}

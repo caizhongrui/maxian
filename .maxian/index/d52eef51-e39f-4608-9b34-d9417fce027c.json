@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/utils/hash.ts","code":"function booleanHash(b: boolean, initialHashVal: number): number {\n\treturn numberHash(b ? 433 : 863, initialHashVal);\n}","startLine":35,"endLine":37,"chunkType":"function","mtime":1762250468339.316}

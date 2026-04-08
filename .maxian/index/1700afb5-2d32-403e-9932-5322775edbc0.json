@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/build.rs","code":"ensure_file_headers(&files).expect(\"expected to ensure file headers\");\n\tapply_build_environment_variables();","startLine":21,"endLine":22,"chunkType":"function","mtime":1762250468181.8926}

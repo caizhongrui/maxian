@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/glyphHoverController.js","code":"t(e) {\n        if (e.scrollTopChanged || e.scrollLeftChanged) {\n            this.I();\n        }\n    }","startLine":79,"endLine":83,"chunkType":"function","mtime":1772878382759.7761}

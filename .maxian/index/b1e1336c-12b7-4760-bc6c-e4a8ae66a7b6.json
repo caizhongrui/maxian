@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/microsoft-authentication/src/common/async.ts","code":"export class TimeoutError extends Error {\n\tconstructor() {\n\t\tsuper('Timed out');\n\t}\n}","startLine":70,"endLine":74,"chunkType":"class","mtime":1762250468282.4058}

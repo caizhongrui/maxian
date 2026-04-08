@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/commands/serve_web.rs","code":"let (socket_path, opener) = new_barrier();\n\t\tlet state_map_dup = self.state.clone();","startLine":678,"endLine":679,"chunkType":"function","mtime":1762250468182.808}

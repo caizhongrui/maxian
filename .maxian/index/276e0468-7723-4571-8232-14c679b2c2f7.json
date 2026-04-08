@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/errorMessage.js","code":"else {\n        error = messageOrError;\n    }\n    error.actions = actions;\n    return error;\n}\n//# sourceMappingURL=errorMessage.js.map","startLine":78,"endLine":84,"chunkType":"block","mtime":1772878378179.9573}

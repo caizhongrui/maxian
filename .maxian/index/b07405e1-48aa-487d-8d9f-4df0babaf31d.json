@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/folding/browser/indentRangeProvider.js","code":"constructor(a, b, c) {\n        this.a = a;\n        this.b = b;\n        this.c = c;\n        this.id = ID_INDENT_PROVIDER;\n    }","startLine":10,"endLine":15,"chunkType":"function","mtime":1772878382592.0063}

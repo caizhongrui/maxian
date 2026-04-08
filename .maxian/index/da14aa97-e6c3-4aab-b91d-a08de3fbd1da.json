@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/contentHoverWidgetWrapper.js","code":"hide() {\n        this.j.cancel();\n        this.C(null);\n    }","startLine":324,"endLine":327,"chunkType":"function","mtime":1772878382758.941}

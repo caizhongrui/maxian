@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/common/objects.test.js","code":"const checkNot = (one, other, msg) => {\n    assert(!objects.$Lv(one, other), msg);\n    assert(!objects.$Lv(other, one), '[reverse] ' + msg);\n};","startLine":12,"endLine":15,"chunkType":"function","mtime":1772878379002.628}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/folding/browser/syntaxRangeProvider.js","code":"dispose() {\n        this.disposables.dispose();\n    }","startLine":38,"endLine":40,"chunkType":"function","mtime":1772878382592.492}

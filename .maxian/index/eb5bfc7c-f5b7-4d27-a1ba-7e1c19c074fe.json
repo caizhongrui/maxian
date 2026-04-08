@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/uuid.js","code":"if (typeof crypto === 'object' && typeof crypto.randomUUID === 'function') {\n        return crypto.randomUUID.bind(crypto);\n    }","startLine":11,"endLine":13,"chunkType":"function","mtime":1772878378387.2075}

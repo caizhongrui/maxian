@@ -203,7 +203,11 @@ export interface TaskEvents {
 	'statusChanged': (status: TaskStatus) => void;
 	'messageAdded': (message: ClineMessage) => void;
 	'tokenUsageUpdated': (usage: TokenUsage) => void;
-	'userInputRequired': (data: { question: string; toolUseId: string }) => void;
+	'userInputRequired': (data: {
+		question: string;
+		toolUseId: string;
+		options?: Array<{ label: string; description?: string; value?: string }>;
+	}) => void;
 }
 
 /**

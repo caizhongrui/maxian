@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"dispose() {\n        this.f.dispose();\n        for (const e of this.h) {\n            e.listener?.dispose();\n        }\n        this.h = [];\n    }","startLine":1231,"endLine":1237,"chunkType":"function","mtime":1772878378208.3105}

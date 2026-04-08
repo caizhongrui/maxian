@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/microsoft-authentication/src/common/async.ts","code":"queue(factory: () => Promise<T>): Promise<T>;","startLine":99,"endLine":100,"chunkType":"function","mtime":1762250468282.4058}

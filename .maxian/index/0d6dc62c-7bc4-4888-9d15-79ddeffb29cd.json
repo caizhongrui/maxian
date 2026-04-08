@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/npm/src/npmMain.ts","code":"function invalidateScriptCaches() {\n\tinvalidateHoverScriptsCache();\n\tinvalidateTasksCache();\n\tif (treeDataProvider) {\n\t\ttreeDataProvider.refresh();\n\t}\n}","startLine":18,"endLine":24,"chunkType":"function","mtime":1762250468288.95}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/php-language-features/src/features/completionItemProvider.ts","code":"}\n\t\treturn Promise.resolve(result);\n\t}\n}","startLine":110,"endLine":113,"chunkType":"block","mtime":1762250468292.0447}

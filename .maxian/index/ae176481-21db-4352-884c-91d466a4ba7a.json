@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/intervalTree.js","code":"function resetSentinel() {\n    $$H.parent = $$H;\n    $$H.delta = 0; // optional\n    $$H.start = 0; // optional\n    $$H.end = 0; // optional\n}","startLine":958,"endLine":963,"chunkType":"function","mtime":1772878380724.168}

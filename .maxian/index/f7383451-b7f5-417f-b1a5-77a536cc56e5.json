@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/eslint.config.js","code":"'local/code-no-static-self-ref': 'warn'\n\t\t}\n\t},\n\t// vscode TS\n\t{\n\t\tfiles: [","startLine":148,"endLine":153,"chunkType":"block","mtime":1762250468187.8616}

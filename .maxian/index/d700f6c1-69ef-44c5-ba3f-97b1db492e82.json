@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/gotoError/browser/gotoErrorWidget.js","code":"showStale() {\n        this.b.classList.add('stale');\n        this.E();\n    }","startLine":305,"endLine":308,"chunkType":"function","mtime":1772878382622.2388}

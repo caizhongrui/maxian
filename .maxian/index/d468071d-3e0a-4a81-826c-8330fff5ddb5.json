@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/viewLines/viewLines.js","code":"prepareRender() {\n        throw new Error('Not supported');\n    }","startLine":466,"endLine":468,"chunkType":"function","mtime":1772878380218.7095}

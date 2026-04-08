@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/viewParts/editorScrollbar/editorScrollbar.js","code":"getDomNode() {\n        return this.b;\n    }","startLine":95,"endLine":97,"chunkType":"function","mtime":1772878380159.1824}

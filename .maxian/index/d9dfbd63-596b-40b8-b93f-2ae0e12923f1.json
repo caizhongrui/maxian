@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/lifecycle.js","code":"B(o) {\n        if (o === this) {\n            throw new Error('Cannot register a disposable on itself!');\n        }\n        return this.q.add(o);\n    }","startLine":378,"endLine":383,"chunkType":"function","mtime":1772878378239.9001}

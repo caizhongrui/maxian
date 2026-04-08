@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/utils/arrays.ts","code":"if (a.length !== b.length) {\n\t\treturn false;\n\t}","startLine":16,"endLine":18,"chunkType":"function","mtime":1762250468338.8157}

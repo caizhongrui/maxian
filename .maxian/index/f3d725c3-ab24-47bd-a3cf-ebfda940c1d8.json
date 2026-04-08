@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/event.js","code":"j() {\n        this.g = true;\n        this.h.forEach(e => this.m(e));\n    }","startLine":1216,"endLine":1219,"chunkType":"function","mtime":1772878378208.3105}

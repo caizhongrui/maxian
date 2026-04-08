@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/LSP-Hover实现总结.md","code":"function getUserById(id: string): Promise<User | null>\n```","startLine":169,"endLine":170,"chunkType":"function","mtime":1772782077284.8804}

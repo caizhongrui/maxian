@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/package.json","code":"},\n        {\n          \"command\": \"git.openFile\",\n          \"when\": \"scmProvider == git && scmResourceGroup == workingTree\",\n          \"group\": \"navigation\"","startLine":1877,"endLine":1881,"chunkType":"block","mtime":1773492854666.838}

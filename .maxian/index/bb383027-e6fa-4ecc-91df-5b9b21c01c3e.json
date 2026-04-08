@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/fixedArray.js","code":"constructor(b) {\n        this.b = b;\n        this.a = [];\n    }","startLine":11,"endLine":14,"chunkType":"function","mtime":1772878380722.991}

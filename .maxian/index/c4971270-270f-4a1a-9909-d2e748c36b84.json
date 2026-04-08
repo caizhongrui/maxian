@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/vscode-colorize-tests/test/colorize-fixtures/test-issue11.ts","code":"class A<X, Y> { }\nclass A1<T extends { a: () => string }> { }","startLine":9,"endLine":10,"chunkType":"class","mtime":1762250468356.097}

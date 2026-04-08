@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/util.ts","code":"export function done<T>(promise: Promise<T>): Promise<void> {\n\treturn promise.then<void>(() => undefined);\n}","startLine":67,"endLine":69,"chunkType":"function","mtime":1762250468220.5706}

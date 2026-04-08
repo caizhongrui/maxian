@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/tsServer/cancellation.ts","code":"public tryCancelOngoingRequest(_seq: number): boolean {\n\t\treturn false;\n\t}","startLine":20,"endLine":22,"chunkType":"function","mtime":1762250468333.3271}

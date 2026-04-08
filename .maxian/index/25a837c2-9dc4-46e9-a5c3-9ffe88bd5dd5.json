@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/tunnels/code_server.rs","code":"Ok(ResolvedServerParams {\n\t\t\trelease: self.get_or_fetch_commit_id(log, http).await?,\n\t\t\tcode_server_args: self.code_server_args,\n\t\t})","startLine":195,"endLine":198,"chunkType":"function","mtime":1762250468184.2969}

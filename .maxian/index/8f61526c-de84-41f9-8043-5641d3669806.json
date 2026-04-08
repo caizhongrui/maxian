@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/linkedText.js","code":"constructor(nodes) {\n        this.nodes = nodes;\n    }","startLine":13,"endLine":15,"chunkType":"function","mtime":1772878378240.3694}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/parts/request/common/request.js","code":"if (error instanceof $4u) {\n        return true;\n    }","startLine":10,"endLine":12,"chunkType":"function","mtime":1772878378524.1956}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeTextBuffer.js","code":"getLineContent(lineNumber) {\n        return this.c.getLineContent(lineNumber);\n    }","startLine":135,"endLine":137,"chunkType":"function","mtime":1772878380725.2104}

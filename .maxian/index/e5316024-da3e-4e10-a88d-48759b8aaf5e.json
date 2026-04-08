@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"if (source.token.isCancellationRequested) {\n                    // canceled in the meantime\n                    return;\n                }","startLine":1588,"endLine":1591,"chunkType":"function","mtime":1772878378139.2854}

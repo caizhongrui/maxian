@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/test/browser/utils.js","code":"keyboardType(text) {\n        this.b.trigger('keyboard', 'type', { text });\n    }","startLine":85,"endLine":87,"chunkType":"function","mtime":1772878383399.3674}

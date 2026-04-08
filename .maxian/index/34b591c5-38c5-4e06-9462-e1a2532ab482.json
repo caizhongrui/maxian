@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/view/viewController.js","code":"moveTo(viewPosition, revealType) {\n        CoreNavigationCommands.MoveTo.runCoreEditorCommand(this.b, this.i(viewPosition, revealType));\n    }","startLine":178,"endLine":180,"chunkType":"function","mtime":1772878379801.3662}

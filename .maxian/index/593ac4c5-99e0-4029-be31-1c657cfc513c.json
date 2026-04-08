@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/tsServer/protocol/modifiers.ts","code":"export function parseKindModifier(kindModifiers: string): Set<string> {\n\treturn new Set(kindModifiers.split(/,|\\s+/g));\n}","startLine":6,"endLine":8,"chunkType":"function","mtime":1762250468335.4033}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/nodeReader.js","code":"function lastOrUndefined(arr) {\n    return arr.length > 0 ? arr[arr.length - 1] : undefined;\n}","startLine":122,"endLine":124,"chunkType":"function","mtime":1772878380617.0728}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/github-authentication/src/flows.ts","code":"if (!clientSecret) {\n\t\tthrow new Error('No client secret configured for GitHub authentication.');\n\t}","startLine":90,"endLine":92,"chunkType":"function","mtime":1762250468226.017}

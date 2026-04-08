@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/model/textModel.js","code":"function isNodeInjectedText(node) {\n    return !!node.options.after || !!node.options.before;\n}","startLine":1575,"endLine":1577,"chunkType":"function","mtime":1772878380728.0076}

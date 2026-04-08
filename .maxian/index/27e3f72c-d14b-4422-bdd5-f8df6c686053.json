@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/cursorColumns.js","code":"static nextRenderTabStop(visibleColumn, tabSize) {\n        return visibleColumn + tabSize - visibleColumn % tabSize;\n    }","startLine":104,"endLine":106,"chunkType":"function","mtime":1772878380408.061}

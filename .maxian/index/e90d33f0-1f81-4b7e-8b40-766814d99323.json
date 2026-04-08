@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/server-main.js","code":"if (firstWebSocket) {\n            firstWebSocket = false;\n            perf.$S('code/server/firstWebSocket');\n        }","startLine":88,"endLine":91,"chunkType":"function","mtime":1772878377505.168}

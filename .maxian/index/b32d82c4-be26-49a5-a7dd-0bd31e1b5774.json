@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/model/inlineCompletionsModel.js","code":"async next() {\n        await this.U(1);\n    }","startLine":381,"endLine":383,"chunkType":"function","mtime":1772878383189.4229}

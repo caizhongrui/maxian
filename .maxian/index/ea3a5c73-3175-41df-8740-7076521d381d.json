@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/browser/comparers.test.js","code":"const compareLocale = (a, b) => a.localeCompare(b);\nconst compareLocaleNumeric = (a, b) => a.localeCompare(b, undefined, { numeric: true });","startLine":8,"endLine":9,"chunkType":"function","mtime":1772878378555.167}

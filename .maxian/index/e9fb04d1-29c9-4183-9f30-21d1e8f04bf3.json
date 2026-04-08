@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/stickyScroll/browser/stickyScrollController.js","code":"N(direction) {\n        this.t = direction ? this.t + 1 : this.t - 1;\n        this.a.focusLineWithIndex(this.t);\n    }","startLine":141,"endLine":144,"chunkType":"function","mtime":1772878383638.806}

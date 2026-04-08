@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/css-language-features/client/src/requests.ts","code":"getContent(uri: string, encoding?: string): Promise<string>;","startLine":86,"endLine":87,"chunkType":"function","mtime":1762250468196.9783}

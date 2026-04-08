@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/hover/browser/contentHoverWidgetWrapper.js","code":"containsNode(node) {\n        return (node ? this.g.getDomNode().contains(node) : false);\n    }","startLine":291,"endLine":293,"chunkType":"function","mtime":1772878382758.941}

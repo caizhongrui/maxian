@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/filesystems/memFs.ts","code":"type FsEntry = FsFileEntry | FsDirectoryEntry;","startLine":203,"endLine":205,"chunkType":"block","mtime":1762250468326.1448}

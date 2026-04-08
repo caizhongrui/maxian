@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/errors.rs","code":"pub body: String,\n}\n\nimpl std::fmt::Display for StatusError {\n\tfn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {\n\t\twrite!(","startLine":76,"endLine":81,"chunkType":"block","mtime":1762250468186.8193}

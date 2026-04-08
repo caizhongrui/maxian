@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/async.js","code":"open() {\n        this.a = true;\n        this.d(true);\n    }","startLine":392,"endLine":395,"chunkType":"function","mtime":1772878378139.2854}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/inlineCompletions/browser/model/provideInlineCompletions.js","code":"dispose() {\n        for (const result of this.b) {\n            result.removeRef();\n        }\n    }","startLine":180,"endLine":184,"chunkType":"function","mtime":1772878383190.7805}

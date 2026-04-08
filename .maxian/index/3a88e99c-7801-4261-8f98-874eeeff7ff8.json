@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/gpu/atlas/textureAtlas.js","code":"getStats() {\n        return this.h.map(e => e.getStats());\n    }","startLine":112,"endLine":114,"chunkType":"function","mtime":1772878379376.0544}

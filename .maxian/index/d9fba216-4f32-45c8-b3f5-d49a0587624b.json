@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/indexedDB.js","code":"class MissingStoresError extends Error {\n    constructor(db) {\n        super('Missing stores');\n        this.db = db;\n    }\n}","startLine":8,"endLine":13,"chunkType":"class","mtime":1772878377880.2402}

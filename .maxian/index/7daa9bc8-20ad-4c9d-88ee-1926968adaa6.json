@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/components/accessibleDiffViewer.js","code":"getOriginalOptions() {\n        return this.c.original.getOptions();\n    }","startLine":545,"endLine":547,"chunkType":"function","mtime":1772878380257.2366}

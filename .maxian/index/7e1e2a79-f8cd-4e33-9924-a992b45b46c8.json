@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/standalone/browser/quickAccess/standaloneGotoLineQuickAccess.js","code":"constructor(t) {\n        super();\n        this.t = t;\n        this.h = Event.None;\n    }","startLine":24,"endLine":28,"chunkType":"function","mtime":1772878383779.5037}

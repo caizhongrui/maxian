@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/test/browser/ui/tree/asyncDataTree.test.js","code":"class IdentityProvider {\n    getId(element) {\n        return element.id;\n    }\n}","startLine":46,"endLine":50,"chunkType":"class","mtime":1772878378592.7144}

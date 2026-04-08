@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/uri.js","code":"if (!thing || typeof thing !== 'object') {\n        return false;\n    }","startLine":329,"endLine":331,"chunkType":"function","mtime":1772878378386.6084}

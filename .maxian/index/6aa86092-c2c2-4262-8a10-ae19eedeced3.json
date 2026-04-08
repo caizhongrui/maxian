@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/languages/textToHtmlTokenizer.js","code":"if (!languageId) {\n        return $58(text, languageService.languageIdCodec, fallback);\n    }","startLine":17,"endLine":19,"chunkType":"function","mtime":1772878380588.0376}

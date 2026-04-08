@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/codelens/browser/codelensWidget.js","code":"isDisposed() {\n        return this.g;\n    }","startLine":187,"endLine":189,"chunkType":"function","mtime":1772878382000.9082}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/links/browser/getLinks.js","code":"const result = list.links.slice(0);\n    list.dispose();\n    return result;\n});\n//# sourceMappingURL=getLinks.js.map","startLine":146,"endLine":150,"chunkType":"block","mtime":1772878383569.025}

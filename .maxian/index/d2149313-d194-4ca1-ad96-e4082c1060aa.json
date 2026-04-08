@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/languages/supports/electricCharacter.js","code":"constructor(richEditBrackets) {\n        this.a = richEditBrackets;\n    }","startLine":9,"endLine":11,"chunkType":"function","mtime":1772878380584.3647}

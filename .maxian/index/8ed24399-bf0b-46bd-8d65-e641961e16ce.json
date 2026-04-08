@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/components/accessibleDiffViewer.js","code":"class HeaderViewElement {\n    constructor() {\n        this.type = LineType.Header;\n    }\n}","startLine":253,"endLine":257,"chunkType":"class","mtime":1772878380257.2366}

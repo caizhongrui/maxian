@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/textEdit.js","code":"constructor(d, f) {\n        $id(f >= 1);\n        super();\n        this.d = d;\n        this.f = f;\n    }","startLine":290,"endLine":295,"chunkType":"function","mtime":1772878380471.9346}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/codeEditor/codeEditorWidget.js","code":"handleInitialized() {\n        this._getViewModel()?.visibleLinesStabilized();\n    }","startLine":714,"endLine":716,"chunkType":"function","mtime":1772878380256.3677}

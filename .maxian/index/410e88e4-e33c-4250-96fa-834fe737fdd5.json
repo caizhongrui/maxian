@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/json-language-features/server/src/browser/jsonServerWorkerMain.ts","code":"self.onmessage = messageHandler;","startLine":35,"endLine":36,"chunkType":"block","mtime":1762250468255.0505}

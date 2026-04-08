@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/commands/output.rs","code":"write_columns(&mut bw, table.cols.iter().map(|c| &c.data[i]), &sizes)?;\n\t\t\t}","startLine":114,"endLine":115,"chunkType":"function","mtime":1762250468182.722}

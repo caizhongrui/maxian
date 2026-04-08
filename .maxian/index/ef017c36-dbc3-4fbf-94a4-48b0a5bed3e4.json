@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/cli/src/util/errors.rs","code":"UpdatesNotConfigured(&'static str),\n\t// todo: can be specialized when update service is moved to CodeErrors","startLine":508,"endLine":509,"chunkType":"function","mtime":1762250468186.8193}

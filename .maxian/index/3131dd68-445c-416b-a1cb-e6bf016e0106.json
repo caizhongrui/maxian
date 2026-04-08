@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/common/core/selection.js","code":"static fromPositions(start, end = start) {\n        return new $iE(start.lineNumber, start.column, end.lineNumber, end.column);\n    }","startLine":97,"endLine":99,"chunkType":"function","mtime":1772878380414.3105}

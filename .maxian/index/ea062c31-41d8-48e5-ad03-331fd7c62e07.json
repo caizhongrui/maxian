@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/typescript-language-features/src/languageFeatures/fixAll.ts","code":"async function buildCombinedFix(\n\tfixes: readonly AutoFix[],","startLine":60,"endLine":61,"chunkType":"function","mtime":1762250468327.5151}

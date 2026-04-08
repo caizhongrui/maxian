@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/snippet/test/browser/snippetController2.old.test.js","code":"dispose() {\n        super.dispose();\n        this.s.dispose();\n    }","startLine":35,"endLine":38,"chunkType":"function","mtime":1772878383635.048}

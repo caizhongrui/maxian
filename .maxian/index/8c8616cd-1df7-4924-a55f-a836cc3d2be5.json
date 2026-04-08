@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/browser/ui/list/listWidget.js","code":"focusFirst(browserEvent, filter) {\n        this.focusNth(0, browserEvent, filter);\n    }","startLine":1410,"endLine":1412,"chunkType":"function","mtime":1772878378009.8872}

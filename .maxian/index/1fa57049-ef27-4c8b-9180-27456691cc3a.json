@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/diffEditorWidget.js","code":"getViewWidth() {\n        return this.z.width.get();\n    }","startLine":243,"endLine":245,"chunkType":"function","mtime":1772878380287.317}

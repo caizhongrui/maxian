@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/wordHighlighter/browser/wordHighlighter.js","code":"restore() {\n        if (this.m === 'off') {\n            return;\n        }\n        this.w.cancel();\n        this.H();\n    }","startLine":272,"endLine":278,"chunkType":"function","mtime":1772878383751.4924}

@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/browser/widget/diffEditor/utils.js","code":"for (const id of lastViewZoneIds) {\n                a.removeZone(id);\n                zoneIds?.delete(id);\n            }","startLine":242,"endLine":245,"chunkType":"function","mtime":1772878380291.6145}

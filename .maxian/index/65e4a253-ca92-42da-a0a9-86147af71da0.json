@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/editor/contrib/suggest/browser/suggestMemory.js","code":"select(model, pos, items) {\n        return this.l(model, pos).select(model, pos, items);\n    }","startLine":211,"endLine":213,"chunkType":"function","mtime":1772878383694.0967}

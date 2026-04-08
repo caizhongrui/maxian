@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/base/common/diff/diff.js","code":"class Debug {\n    static Assert(condition, message) {\n        if (!condition) {\n            throw new Error(message);\n        }\n    }\n}","startLine":26,"endLine":32,"chunkType":"class","mtime":1772878378178.947}

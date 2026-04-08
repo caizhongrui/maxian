@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/out-build/vs/code/browser/workbench/callback.html","code":"if (resultQuery) {\n\t\t\t\turi.query = resultQuery;\n\t\t\t}","startLine":56,"endLine":58,"chunkType":"function","mtime":1762250468473.999}

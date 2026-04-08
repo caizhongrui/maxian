@@ -1,0 +1,1 @@
+{"filePath":"/Users/caizhongrui/Documents/workspace/boyo/plugin/ide/src/tianhe-zhikai-ide/extensions/git/src/repository.ts","code":"const timeout = (millis: number) => new Promise(c => setTimeout(c, millis));","startLine":28,"endLine":29,"chunkType":"function","mtime":1773492747785.0356}
