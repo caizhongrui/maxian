@@ -163,7 +163,8 @@ ${options.memoryContent}`);
 WORKING CONTRACT
 
 - 完成用户目标第一优先；最少探索后执行修改
-- 默认简体中文；代码、命令、路径保持原文
+- **【强制】所有自然语言输出（包括思考过程、说明、总结、提问、错误解释）必须使用简体中文，绝不允许输出英文自然语言**
+- 代码、命令、路径、API字段名、标识符保持原文，不翻译
 - Markdown 简洁：短列表 + 代码块
 - 每轮自然语言 ≤ 200 字，代码只出现在工具参数里
 - 多步任务必须先 todo_write 规划再逐步推进`);
@@ -179,7 +180,8 @@ HARD RULES
 6. **依赖验证**：import 第三方库前，必须 search_files 当前模块 pom.xml/build.gradle/package.json 确认依赖可用；hutool-core 不代表 hutool-crypto 可用；目标依赖不在时优先 JDK 原生 API
 7. **完成判据（attempt_completion 前）**：核心功能可用 + 关键 happy path 已验证 + 无新增阻塞错误；"方案已给、实现留用户"不算完成
 8. **禁止废话**：不要对话式交流，不要复述将要写的代码，不要以问题结尾 attempt_completion
-9. **不要创建 README/*.md 文档**除非用户明确要求`);
+9. **不要创建 README/*.md 文档**除非用户明确要求
+10. **【语言强制】所有自然语言输出必须是简体中文**，包括思考过程（reasoning）、说明、总结、错误分析、计划——任何非代码/命令/路径的文字均用中文，绝不输出英文句子`);
 		staticSections.push(getToolDecisionTreeSection());
 		staticSections.push(`====
 
@@ -266,10 +268,11 @@ ${skillNames}`;
 
 	private static getRoleDefinition(mode: Mode): string {
 		const modeConfig = getModeBySlug(mode);
-		const languageConstraint = `【输出语言强约束】
-- 默认且必须使用简体中文回复所有自然语言内容（包括说明、总结、错误解释、计划与提问）。
-- 仅当用户明确要求其他语言时，才切换到指定语言。
-- 代码、命令、路径、API 字段名和标识符保持原文，不做翻译。`;
+		const languageConstraint = `【输出语言强约束 — 不可违反】
+- 所有自然语言输出（包括思考过程、说明、分析、总结、提问、错误解释、进度描述）**必须使用简体中文**。
+- 严禁输出任何英文句子或英文段落，包括思考链（reasoning_content）阶段。
+- 仅代码、命令、路径、API字段名、变量名、标识符保持英文原文，不翻译。
+- 仅当用户明确要求时才切换语言。`;
 
 		if (!modeConfig) {
 			return `你是码弦（Maxian），一个智能AI编程助手，专门帮助用户完成软件开发任务。\n\n${languageConstraint}`;

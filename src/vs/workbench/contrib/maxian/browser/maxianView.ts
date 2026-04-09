@@ -93,7 +93,7 @@ export class MaxianView extends ViewPane {
 	/** 思考链气泡（模型 reasoning_content 阶段，流式展示后折叠） */
 	private reasoningBubbleRow: HTMLElement | null = null;
 	private reasoningBubbleContent: HTMLElement | null = null;
-	private reasoningBubbleHeader: HTMLElement | null = null;
+	// reasoningBubbleHeader removed — bubble is now removed from DOM on collapse instead of being folded
 	private reasoningText: string = '';
 	private reasoningCollapsed: boolean = false;
 	/** 流式返回字数 badge（在流式气泡头部实时显示接收字数） */
@@ -3631,6 +3631,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 	}
 
 	private handleMessageEvent(event: import('./maxianService.js').IMessageEvent): void {
+		console.log('[MaxianView] handleMessageEvent:', event.type, event.content?.slice(0, 30));
 
 		// 任何服务响应事件到达时移除"等待中"气泡（用户消息事件除外）
 		if (event.type !== 'user') {
@@ -3733,8 +3734,8 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			this.apiRequestBackendHint = event.content;
 			this.updateApiRequestProgressText();
 		} else if (event.type === 'assistant') {
-			// 正式内容到来时，折叠思考气泡
-			if (event.isPartial && this.reasoningBubbleRow && !this.reasoningCollapsed) {
+			// 正式内容到来时，或流结束时，移除思考气泡
+			if (this.reasoningBubbleRow && !this.reasoningCollapsed) {
 				this._collapseReasoningBubble();
 			}
 			// 如果是流式消息
@@ -4669,6 +4670,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 	 * 处理思考链 chunk：创建或追加到思考气泡
 	 */
 	private _handleReasoningChunk(text: string): void {
+		console.log('[MaxianView] _handleReasoningChunk, len=', text.length, 'total=', this.reasoningText.length + text.length);
 		this.reasoningText += text;
 
 		if (!this.reasoningBubbleRow) {
@@ -4683,30 +4685,26 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 
 			// 气泡容器
 			const bubble = append(row, $('div.maxian-message.maxian-message-ai'));
-			bubble.style.cssText = `
-				opacity: 0.85;
-				border: 1px solid var(--vscode-editorWidget-border, rgba(127,127,127,0.3));
-				background: var(--vscode-editor-background);
-			`;
+			bubble.style.opacity = '0.9';
 
 			// 头部（可点击展开/折叠）
 			const header = append(bubble, $('div.maxian-message-header'));
 			header.style.cursor = 'pointer';
 			header.style.userSelect = 'none';
-			this.reasoningBubbleHeader = header;
+			// header reference no longer stored (bubble is removed on collapse)
 
+			// 使用 textContent 方式安全设置头部文字（避免 innerHTML CSP 问题）
 			const thinkingLabel = append(header, $('span'));
-			thinkingLabel.style.cssText = `
-				font-size: 12px;
-				color: var(--vscode-descriptionForeground);
-				display: flex; align-items: center; gap: 4px;
-			`;
-			thinkingLabel.innerHTML = '🤔&nbsp;<span class="maxian-reasoning-spinner">⟳</span>&nbsp;深度思考中...';
+			thinkingLabel.style.fontSize = '12px';
+			thinkingLabel.style.color = 'var(--vscode-foreground)';
+			thinkingLabel.style.opacity = '0.7';
+			thinkingLabel.textContent = '🤔 深度思考中...';
 
 			const charCountBadge = append(header, $('span.maxian-reasoning-char-badge'));
 			charCountBadge.style.cssText = `
 				font-size: 11px;
-				color: var(--vscode-descriptionForeground);
+				color: var(--vscode-foreground);
+				opacity: 0.5;
 				margin-left: auto;
 				font-variant-numeric: tabular-nums;
 			`;
@@ -4716,7 +4714,8 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			contentWrap.style.cssText = `
 				font-size: 12px;
 				line-height: 1.5;
-				color: var(--vscode-descriptionForeground);
+				color: var(--vscode-foreground);
+				opacity: 0.75;
 				white-space: pre-wrap;
 				word-break: break-word;
 				max-height: 200px;
@@ -4726,6 +4725,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 				margin-top: 4px;
 			`;
 			this.reasoningBubbleContent = contentWrap;
+			console.log('[MaxianView] reasoning bubble created, contentWrap=', !!contentWrap);
 
 			// 点击头部切换展开/折叠
 			header.onclick = () => {
@@ -4760,34 +4760,32 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 	}
 
 	/**
-	 * 折叠思考气泡（正式内容开始时调用）
+	 * 思考完成时：直接移除气泡（正式内容开始时调用）
 	 */
 	private _collapseReasoningBubble(): void {
 		if (!this.reasoningBubbleRow || this.reasoningCollapsed) { return; }
 		this.reasoningCollapsed = true;
 
-		if (this.reasoningBubbleContent) {
-			this.reasoningBubbleContent.style.display = 'none';
+		// 思考完成后直接从 DOM 移除，不保留折叠态
+		if (this.reasoningBubbleRow.parentElement) {
+			this.reasoningBubbleRow.remove();
 		}
-
-		if (this.reasoningBubbleHeader) {
-			// 更新 label：停止"思考中"动画，改为"查看思考过程"
-			const label = this.reasoningBubbleHeader.querySelector('span') as HTMLElement | null;
-			if (label) {
-				const count = this.reasoningText.length;
-				const countStr = count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count);
-				label.innerHTML = `💭&nbsp;<span class="maxian-reasoning-spinner">▸</span>&nbsp;查看思考过程（${countStr} 字）`;
-			}
-		}
+		this.reasoningBubbleRow = null;
+		this.reasoningBubbleContent = null;
+		this.reasoningText = '';       // 清空累积文本，下次 completions 请求从头开始
+		this.reasoningCollapsed = false; // 重置折叠状态，允许下次重新创建气泡
 	}
 
 	/**
 	 * 重置思考气泡状态（新对话/清空时调用）
 	 */
 	private _resetReasoningBubble(): void {
+		// 同时移除 DOM 元素（防止旧气泡残留）
+		if (this.reasoningBubbleRow && this.reasoningBubbleRow.parentElement) {
+			this.reasoningBubbleRow.remove();
+		}
 		this.reasoningBubbleRow = null;
 		this.reasoningBubbleContent = null;
-		this.reasoningBubbleHeader = null;
 		this.reasoningText = '';
 		this.reasoningCollapsed = false;
 	}
