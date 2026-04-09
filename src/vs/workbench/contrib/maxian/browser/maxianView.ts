@@ -90,6 +90,10 @@ export class MaxianView extends ViewPane {
 	/** 本次任务累计输出 token（AI 实际返回，TaskService 已在新任务创建时清零） */
 	private lastTurnOutputTokens: number = 0;
 	private thinkingMessageElement: HTMLElement | null = null; // "正在思考"消息元素（避免重复显示）
+	/** 流式返回字数 badge（在流式气泡头部实时显示接收字数） */
+	private streamingCharBadge: HTMLElement | null = null;
+	/** 当前流式已接收字符数 */
+	private streamingCharCount: number = 0;
 	private apiRequestStartAt: number | null = null; // 当前 API 请求开始时间
 	private apiRequestProgressTimer: number | null = null; // API 请求进度刷新定时器
 	private apiRequestRetryCount = 0; // 当前请求重试次数
@@ -3751,6 +3755,22 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 					const aiTime = append(aiHeader, $('span.maxian-message-time'));
 					aiTime.textContent = formatTime(Date.now());
 
+					// 流式字数 badge（实时显示已接收字数）
+					const charBadge = append(aiHeader, $('span.maxian-stream-char-badge'));
+					charBadge.style.cssText = `
+						display: inline-flex;
+						align-items: center;
+						gap: 3px;
+						font-size: 11px;
+						color: var(--vscode-charts-blue, #007acc);
+						opacity: 0.85;
+						margin-left: 6px;
+						font-variant-numeric: tabular-nums;
+					`;
+					this.streamingCharCount = event.content.length;
+					this.streamingCharBadge = charBadge;
+					this._updateStreamingCharBadge();
+
 					// 操作按钮区域（流式阶段不加复制按钮，等完整消息到达后添加）
 					append(aiHeader, $('div.maxian-message-actions'));
 
@@ -3771,11 +3791,15 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 				} else {
 					// 累积内容
 					this.currentAiMessageText += event.content;
+					this.streamingCharCount = this.currentAiMessageText.length;
+					this._updateStreamingCharBadge();
 
 					// 实时渲染Markdown
 					MarkdownRendererDom.renderMarkdown(this.currentAiMessageText, this.currentAiMessageElement);
 				}
 			} else {
+				// 流式结束：移除 badge（完整消息即将渲染，不再需要进度提示）
+				this._clearStreamingCharBadge();
 				// 流式结束，重置内容引用（保留currentStreamingMessageElement供renderTextMessage移除旧气泡）
 				this.currentAiMessageElement = null;
 				this.currentAiMessageText = '';
@@ -3960,6 +3984,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 					this.stopApiRequestProgress(true);
 					// 任务完成时，移除最后一轮API调用的流式气泡（与case 'tool'相同）
 					// attempt_completion不调用say('tool')，所以流式气泡未被case 'tool'清理
+					this._clearStreamingCharBadge();
 					if (this.currentStreamingMessageElement) {
 					this.currentStreamingMessageElement.remove();
 					this.currentStreamingMessageElement = null;
@@ -3970,6 +3995,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 
 				case 'error':
 					this.stopApiRequestProgress(true);
+					this._clearStreamingCharBadge();
 					// 错误时也清理流式气泡
 					if (this.currentStreamingMessageElement) {
 						this.currentStreamingMessageElement.remove();
@@ -4002,6 +4028,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 
 				case 'tool':
 					this.stopApiRequestProgress(true);
+					this._clearStreamingCharBadge();
 					// 工具执行时，立即移除上一轮API调用的流式气泡（AI的思考文本不应保留）
 					if (this.currentStreamingMessageElement) {
 						this.currentStreamingMessageElement.remove();
@@ -4589,6 +4616,8 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		this.apiRequestStartAt = Date.now();
 		this.apiRequestRetryCount = 0;
 		this.apiRequestBackendHint = null;
+		// 新轮次开始，清除上一轮遗留的字数 badge
+		this._clearStreamingCharBadge();
 		this.updateApiRequestProgressText();
 		if (this.apiRequestProgressTimer !== null) {
 			clearInterval(this.apiRequestProgressTimer);
@@ -4596,6 +4625,29 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		this.apiRequestProgressTimer = window.setInterval(() => {
 			this.updateApiRequestProgressText();
 		}, 1000);
+	}
+
+	/**
+	 * 更新流式字数 badge 文本
+	 */
+	private _updateStreamingCharBadge(): void {
+		if (!this.streamingCharBadge) { return; }
+		const count = this.streamingCharCount;
+		const display = count >= 1000
+			? `↓ ${(count / 1000).toFixed(1)}k 字`
+			: `↓ ${count} 字`;
+		this.streamingCharBadge.textContent = `⟳ ${display}`;
+	}
+
+	/**
+	 * 清除流式字数 badge
+	 */
+	private _clearStreamingCharBadge(): void {
+		if (this.streamingCharBadge) {
+			this.streamingCharBadge.remove();
+			this.streamingCharBadge = null;
+		}
+		this.streamingCharCount = 0;
 	}
 
 	/**
@@ -4627,16 +4679,24 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		}
 
 		const elapsedSec = this.apiRequestStartAt ? Math.max(1, Math.floor((Date.now() - this.apiRequestStartAt) / 1000)) : 0;
+		// 是否正在流式返回中（已有文本 chunk 到达）
+		const isStreaming = this.streamingCharCount > 0;
 		let text: string;
 
-		if (elapsedSec < 3) {
+		if (isStreaming) {
+			// 有内容在流式返回，显示当前接收状态
+			const charDisplay = this.streamingCharCount >= 1000
+				? `${(this.streamingCharCount / 1000).toFixed(1)}k`
+				: String(this.streamingCharCount);
+			text = `⟳ 正在接收响应... 已返回 ${charDisplay} 字（${elapsedSec}s）`;
+		} else if (elapsedSec < 3) {
 			text = '🤔 码弦正在分析你的请求...';
 		} else if (elapsedSec < 8) {
 			text = `🔎 码弦正在检索上下文（已 ${elapsedSec}s）...`;
 		} else if (elapsedSec < 15) {
 			text = `🧠 码弦正在规划执行步骤（已 ${elapsedSec}s）...`;
 		} else {
-			text = `⏳ 码弦仍在处理中（已等待 ${elapsedSec}s）...`;
+			text = `⏳ 等待模型首字返回（已 ${elapsedSec}s）...`;
 		}
 
 		if (this.apiRequestRetryCount > 0) {
@@ -5410,6 +5470,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 	private handleConversationCleared(): void {
 		this.stopApiRequestProgress(false);
 		this.thinkingMessageElement = null;
+		this._clearStreamingCharBadge();
 
 		// 重置所有状态
 		this.currentAiMessageElement = null;
