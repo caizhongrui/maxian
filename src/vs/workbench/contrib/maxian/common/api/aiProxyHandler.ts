@@ -901,6 +901,15 @@ export class AiProxyHandler implements IApiHandler {
 							yield textChunk;
 						}
 
+						// 处理思考链内容（reasoning_content，Qwen3 等模型在生成正式回复前先吐出思维链）
+						// 不展示给用户，但透传给 TaskService 以便更新进度文案
+						if ((delta as any)?.reasoning_content) {
+							yield {
+								type: 'reasoning',
+								text: (delta as any).reasoning_content
+							};
+						}
+
 						// 处理工具调用（流式累积，与QwenHandler一致）
 						if (delta?.tool_calls) {
 							for (const toolCall of delta.tool_calls) {

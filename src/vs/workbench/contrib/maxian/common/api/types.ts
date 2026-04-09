@@ -82,7 +82,7 @@ export interface ToolDefinition {
 /**
  * API 流式响应块类型
  */
-export type StreamChunkType = 'text' | 'tool_use' | 'usage' | 'error' | 'heartbeat';
+export type StreamChunkType = 'text' | 'tool_use' | 'usage' | 'error' | 'heartbeat' | 'reasoning';
 
 /**
  * 文本流块
@@ -138,9 +138,17 @@ export interface HeartbeatStreamChunk {
 }
 
 /**
+ * 思考链流块（模型 reasoning_content 阶段，内容不展示给用户，只用于进度显示）
+ */
+export interface ReasoningStreamChunk {
+	type: 'reasoning';
+	text: string;
+}
+
+/**
  * 流响应块联合类型
  */
-export type StreamChunk = TextStreamChunk | ToolUseStreamChunk | UsageStreamChunk | ErrorStreamChunk | HeartbeatStreamChunk;
+export type StreamChunk = TextStreamChunk | ToolUseStreamChunk | UsageStreamChunk | ErrorStreamChunk | HeartbeatStreamChunk | ReasoningStreamChunk;
 
 /**
  * API Stream 类型 (AsyncGenerator)

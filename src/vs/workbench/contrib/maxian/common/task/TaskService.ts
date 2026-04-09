@@ -1230,6 +1230,7 @@ export class TaskService extends Disposable {
 		let hasError = false;
 		let stopReason = ''; // E2优化：追踪输出截断原因
 		let firstTokenReceived = false;
+		let reasoningCharsCount = 0; // 思考链累积字符数（用于进度显示）
 		let xmlDetected = false; // XML检测标志
 		let xmlToolName = ''; // XML工具调用时检测到的工具名
 		let xmlStreamingFired = false; // 是否已经发出过XML流式事件
@@ -1411,6 +1412,16 @@ export class TaskService extends Disposable {
 				if (this._streamCheckpoint) {
 					this._streamCheckpoint.partialToolUses = [...toolUses];
 				}
+			} else if (chunk.type === 'reasoning') {
+				// 模型思考链阶段：累积字数并更新进度提示，不展示原始内容
+				reasoningCharsCount += chunk.text.length;
+				const countDisplay = reasoningCharsCount >= 1000
+					? `${(reasoningCharsCount / 1000).toFixed(1)}k`
+					: String(reasoningCharsCount);
+				this._onStreamChunk.fire({
+					progressText: `🤔 模型正在深度思考中... (已输出 ${countDisplay} 字思考内容)`,
+					isPartial: true
+				});
 			} else if (chunk.type === 'heartbeat') {
 				const elapsedSeconds = Math.max(1, Math.floor((chunk.elapsedMs || 0) / 1000));
 				this._onStreamChunk.fire({
