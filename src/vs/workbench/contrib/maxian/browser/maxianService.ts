@@ -328,6 +328,12 @@ export interface IMaxianService {
 	readonly onTodoListUpdate: Event<ITodoListEvent>;
 
 	/**
+	 * P0-2: 流式响应中断事件
+	 * （网络中断/超时导致响应流被截断时触发，UI 显示墓碑标记）
+	 */
+	readonly onStreamInterrupted: Event<{ partialText: string; hasPartialToolCalls: boolean; reason: string }>;
+
+	/**
 	 * 设置工具自动批准规则
 	 * @param toolName 工具名称
 	 * @param autoApprove 是否自动批准
@@ -488,6 +494,10 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	private readonly _onTodoListUpdate = this._register(new Emitter<ITodoListEvent>());
 	readonly onTodoListUpdate: Event<ITodoListEvent> = this._onTodoListUpdate.event;
+
+	// P0-2: 流式响应中断事件
+	private readonly _onStreamInterrupted = this._register(new Emitter<{ partialText: string; hasPartialToolCalls: boolean; reason: string }>());
+	readonly onStreamInterrupted: Event<{ partialText: string; hasPartialToolCalls: boolean; reason: string }> = this._onStreamInterrupted.event;
 
 	private readonly _onTriggerSend = this._register(new Emitter<void>());
 	readonly onTriggerSend: Event<void> = this._onTriggerSend.event;
@@ -1760,6 +1770,12 @@ export class MaxianService extends Disposable implements IMaxianService {
 			});
 			this.taskEventDisposables.add(todoListUpdatedDisposable);
 
+			// P0-2: 流式中断事件透传
+			const streamInterruptedDisposable = this.currentTask.onStreamInterrupted((event) => {
+				this._onStreamInterrupted.fire(event);
+			});
+			this.taskEventDisposables.add(streamInterruptedDisposable);
+
 			// 启动任务
 			await this.startTaskWithHeartbeat(this.currentTask);
 
@@ -2266,7 +2282,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 2. write_to_file - 写入文件
 			{
 				name: 'write_to_file',
-				description: '创建新文件或在极少数情况下完整重写文件。默认优先使用 edit / multiedit 修改已有文件；只有创建新文件或确实需要整体重写时才使用。必须提供完整文件内容，不允许省略部分。不要主动创建 README、说明文档或其他 *.md 文件，除非用户明确要求。',
+				description: '创建新文件或完整重写文件。优先用 edit/multiedit 修改已有文件；只有创建新文件或必须整体重写时才用此工具。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2281,7 +2297,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 3. delete_file - 删除文件
 			{
 				name: 'delete_file',
-				description: '删除文件或目录。必须使用此工具删除文件，不要用 execute_command 执行 rm 命令（rm 命令无法更新 VS Code 文件系统，文件会依然显示在编辑器中）。',
+				description: '删除文件或目录。必须用此工具，禁止用 execute_command 执行 rm（rm 不更新 VS Code 文件系统）。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2295,7 +2311,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 4. create_directory - 创建目录
 			{
 				name: 'create_directory',
-				description: '创建目录（支持多级路径自动创建）。必须使用此工具创建目录，不要用 execute_command 执行 mkdir 命令（mkdir 命令无法更新 VS Code 文件系统，目录在资源管理器中不可见）。',
+				description: '创建目录（支持多级路径自动创建）。必须用此工具，禁止用 execute_command 执行 mkdir（mkdir 不更新 VS Code 文件系统）。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2335,7 +2351,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 4. execute_command - 执行命令
 			{
 				name: 'execute_command',
-				description: '在终端执行 shell 命令并捕获输出。\n\n**⛔ 严格禁止**：\n- **禁止用 rm、del、rm -rf 等命令删除文件或目录**——必须使用 delete_file 工具。原因：rm/del 命令绕过 VS Code 文件系统，编辑器缓存不会更新，文件依然显示为存在\n\n**最佳实践**：\n- 使用 cwd 参数指定工作目录，避免 cd && command 模式\n- 提供 description 参数（5-10字描述），如"安装依赖"、"运行测试"\n- 危险命令（删除、覆盖等）应设置 requires_approval=true\n- 长输出命令考虑添加 | head -100 或 | grep 过滤',
+				description: '在终端执行 shell 命令。⛔ 禁止用 rm/del 删除文件（改用 delete_file）。危险命令设 requires_approval=true，用 cwd 指定工作目录。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2351,7 +2367,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 5. search_files - 搜索文件
 			{
 				name: 'search_files',
-				description: '在文件内容中搜索文本或正则表达式。对齐 Claude Code Grep：默认应优先用 output_mode=files_with_matches 只返回文件路径，再 read_file 精读。如果已经缩小到少数文件，继续主线程精读；只有在搜索明显跨模块、需要多轮独立调查时，才考虑使用 task(subagent_type="explore")。',
+				description: '在文件内容中搜索文本或正则。优先用 output_mode=files_with_matches 返回路径，再 read_file 精读。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2369,7 +2385,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 6. codebase_search - 自然语言兜底搜索
 			{
 				name: 'codebase_search',
-				description: '使用自然语言在代码库中做兜底搜索。仅在你不知道准确关键词时使用，不要默认优先于 glob/search_files。对齐 Claude Code / OpenCode：这是兜底工具，不要持续在主线程做 open-ended 搜索；如果没有推进，立即切回 glob/search_files/read_file。只有在调查明显跨模块、需要多轮独立探索时，才考虑交给 task(subagent_type="explore")。',
+				description: '自然语言搜索代码库（兜底工具）。不知道准确关键词时使用；已知关键词优先用 search_files/glob。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2387,7 +2403,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 7. glob - Glob模式匹配
 			{
 				name: 'glob',
-				description: '使用 Glob 模式匹配文件。支持通配符: *、**、?、[]。对齐 Claude Code Glob：用于快速定位文件路径；如果问题会演变成多轮 open-ended 的 glob + 搜索，应先停止继续扩散，优先收敛候选文件；只有在确实需要独立调查时，才考虑 task(subagent_type="explore")。',
+				description: '按 glob 模式匹配文件路径（支持 *、**、?、[]）。用于快速定位文件。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2416,7 +2432,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 8. apply_diff - 应用差异（⚠️ 非首选工具）
 			{
 				name: 'apply_diff',
-				description: '⚠️ 非首选工具：普通文件修改请使用 edit（单处）或 multiedit（多处），不要使用 apply_diff。\n\napply_diff 仅用于以下特殊场景：\n- 需要 :start_line: 行号精确控制时\n- 外部提供了 patch 格式内容时\n\n格式（SEARCH/REPLACE块）：\n<<<<<<< SEARCH\n[原始内容，必须精确匹配]\n=======\n[替换后内容]\n>>>>>>> REPLACE\n\n⛔ 禁止在 apply_diff 中生成不完整的diff块（必须包含 <<<<<<< SEARCH、=======、>>>>>>> REPLACE 三个标记）。\n\n关键规则：\n1. 同一文件的所有修改必须合并到一次调用中（多个SEARCH/REPLACE块）。\n2. 收到 is_error:true 才表示真正失败，需 read_file 后重试。',
+				description: '非首选工具，仅用于需要行号精确控制或外部 patch 格式时。普通修改请用 edit/multiedit。格式：<<<<<<< SEARCH / ======= / >>>>>>> REPLACE。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2494,7 +2510,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 13. attempt_completion - 完成任务
 			{
 				name: 'attempt_completion',
-				description: '完成任务并报告结果。只有任务真正完成时才使用，而且必须显式提供 result 摘要。不要省略 result，也不要把下一步策略、等待子任务、继续调查或中间结论当成完成结果；结果描述要清晰、完整，不要以问题结尾。',
+				description: '任务真正完成时报告结果。必须提供 result 摘要，不要省略或以下一步/待调查等中间态代替。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2509,7 +2525,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 16. batch - 批量并行执行只读工具【重要：优先使用！】
 			{
 				name: 'batch',
-				description: '并行执行多个彼此独立的工具调用，适合多文件读取、搜索和其他只读探索操作。对齐 Claude Code / OpenCode：不要默认在一个 batch 里并行启动多个 task(explore)；只有当子任务彼此独立、互不阻塞时才这么做。不要把同一条调查链硬拆成多个 explore 子任务。禁止：batch 嵌套、ask_followup_question、attempt_completion。',
+				description: '并行执行多个独立工具调用（适合多文件读取/搜索）。禁止嵌套 batch、禁止在 batch 中使用 ask_followup_question/attempt_completion。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2535,7 +2551,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 17. edit - 精确字符串替换（主力编辑工具，对齐 OpenCode edit.ts）
 			{
 				name: 'edit',
-				description: '【主力编辑工具】对文件进行精确字符串替换。使用前必须先 read_file 读取文件内容。The edit will FAIL if old_string is not found in the file. The edit will FAIL if old_string is found multiple times — provide more surrounding lines to make it unique. 单处修改用 edit，多处修改同文件用 multiedit。create_if_missing 仅在明确需要创建新文件时使用，不要默认拿它替代 write_to_file。',
+				description: '主力编辑工具：精确字符串替换。必须先 read_file。old_string 不存在或匹配多处时失败。单处改 edit，同文件多处改 multiedit。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2552,7 +2568,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 18. multiedit - 单文件多处编辑（原子性，对齐 OpenCode multiedit.ts）
 			{
 				name: 'multiedit',
-				description: '【多处编辑首选】在单个文件中执行多处编辑操作，原子性保证（全成功或全不执行）。比多次调用 edit 更高效。edits 按顺序执行，每个基于前一个结果。The tool will FAIL if any oldString is not found or found multiple times.',
+				description: '同文件多处编辑（原子性：全成功或全回滚）。比多次 edit 更高效。edits 按顺序执行，每个基于前一个结果。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2697,7 +2713,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 26. skill - Skills系统：按需加载专业知识
 			{
 				name: 'skill',
-				description: '加载并使用专业领域的Skill，获取详细指导和最佳实践。使用此工具可以显著提升特定领域任务的质量。',
+				description: '加载专业领域 Skill，获取详细指导和最佳实践（code-review/debugging/testing/refactoring/security/performance 等）。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2713,7 +2729,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 				// 25. task - 子 Agent 委托
 				{
 					name: 'task',
-					description: '将复杂子任务委托给专门的子 Agent 独立执行。子 Agent 拥有独立的对话历史和受限工具集，适合并行执行独立任务。\n\n子 Agent 类型（subagent_type）：\n- explore：只读探索专家，适合跨模块、多轮、开放式代码库调查（默认禁用，需在当前消息明确写“启用 explore 子任务”）\n- plan：规划专家，适合任务分解、风险评估\n- execute/build：全功能执行专家，适合代码实现\n\n对齐 Claude Code / OpenCode 的关键规则：\n- 如果已经缩小到少数明确文件，优先在主线程直接 read_file / edit，不要为了“更规范”强行派发 explore 子 Agent\n- 只有在探索明显跨模块、需要多轮独立调查、或者你想隔离大量搜索上下文时，才考虑使用 task(subagent_type="explore")\n- 禁止把“完整结构 / 所有文件 / 整个模块 / 完整返回每个文件内容”这类宽泛普查直接交给 explore，必须先在主线程收敛到少量候选文件\n- 不要把同一条调查链拆成多个相似的 explore 子 Agent 反复派发',
+					description: '将子任务委托给专门的子 Agent 执行。subagent_type: explore=只读探索; plan=规划分析; execute/build=完整实现。仅在跨模块多轮调查时用 explore，已明确文件时直接 read_file/edit。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2742,7 +2758,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 26. update_todo_list - 更新待办列表
 			{
 				name: 'update_todo_list',
-				description: '更新当前任务的待办列表。用于跟踪任务进度，在 UI 中可视化显示。\n\n**重要：进行复杂多步任务时必须使用此工具创建任务清单。**\n\n每次开始任务时创建完整列表，随着任务推进更新每项的状态。',
+				description: '更新任务待办列表（UI 可视化显示）。复杂多步任务时必须使用，每步更新状态。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2810,7 +2826,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 29. pr_review - PR代码审查
 			{
 				name: 'pr_review',
-				description: '获取当前工作区与基础分支之间的git diff，供Agent进行代码审查。工具返回提交记录和代码变更，Agent根据返回内容分析代码质量、安全性、性能等问题。\n\n**使用场景**：\n- 审查即将合并的功能分支代码\n- 在提交前进行自查\n- 分析某次代码变更的影响范围',
+				description: '获取工作区与基础分支的 git diff，供 Agent 进行代码审查（质量/安全/性能/风格等）。',
 				parameters: {
 					type: 'object',
 					properties: {
@@ -2830,7 +2846,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 30. generate_tests - 测试代码生成
 			{
 				name: 'generate_tests',
-				description: '分析指定源文件的内容，返回文件元信息和源代码，供Agent生成对应的测试代码框架。工具会自动检测语言、推荐测试框架、推导测试文件路径。Agent根据返回内容调用 write_to_file 工具写入测试文件。\n\n**使用场景**：\n- 为新创建的类/模块生成测试骨架\n- 为现有代码补充测试覆盖\n- 生成符合项目约定的测试代码',
+				description: '分析源文件并生成测试代码骨架（自动检测语言和框架）。结果由 Agent 调用 write_to_file 写入测试文件。',
 				parameters: {
 					type: 'object',
 					properties: {

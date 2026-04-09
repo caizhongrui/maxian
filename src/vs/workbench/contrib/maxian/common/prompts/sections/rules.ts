@@ -12,6 +12,14 @@ export function getRulesSection(workspaceRoot: string): string {
 
 RULES
 
+# ⚡ 核心三条（最高优先级，不可违反）
+
+1. **先读后改**：任何 edit/multiedit/apply_diff/write_to_file（已有文件）前，必须先完整 read_file——局部读取不算数。
+2. **失败后禁止原样重试**：工具返回错误后，下一步必须是 read_file 或 search_files 验证真实状态，再决定改法；不允许用相同参数再试一次。
+3. **完成才 attempt_completion**：只有核心目标落地、关键路径走通、没有新的阻塞性错误，才能调用 attempt_completion——"方向正确"或"稍后处理"不是完成。
+
+---
+
 基本规则：
 - 项目根目录：${workspaceRoot}
 - 所有文件路径相对于此目录

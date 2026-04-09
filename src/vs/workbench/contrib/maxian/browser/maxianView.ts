@@ -269,6 +269,11 @@ export class MaxianView extends ViewPane {
 			this.handleTodoListUpdate(event);
 		}));
 
+		// P0-2: 监听流式响应中断事件，显示墓碑标记
+		this._register(this.maxianService.onStreamInterrupted(event => {
+			this.handleStreamInterrupted(event);
+		}));
+
 		// ========== 创建消息区域 ==========
 		this.messageArea = append(this.container, $('div.maxian-messages'));
 
@@ -7990,6 +7995,65 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 
 		// 渲染任务列表
 		this.renderTodoList(todos);
+	}
+
+	/**
+	 * P0-2: 处理流式响应中断事件，在消息区域追加墓碑标记
+	 */
+	private handleStreamInterrupted(event: { partialText: string; hasPartialToolCalls: boolean; reason: string }): void {
+		// 终结当前流式消息显示（若还在流中）
+		this.currentStreamingMessageElement = null;
+		this.currentAiMessageElement = null;
+		this.pendingTextStreamBuffer = '';
+		this.pendingTextStreamPartial = false;
+
+		// 在消息区域追加墓碑卡片
+		const tombstone = append(this.messageArea, $('div.maxian-stream-tombstone'));
+		tombstone.style.cssText = `
+			display: flex;
+			align-items: flex-start;
+			gap: 8px;
+			padding: 8px 10px;
+			margin: 4px 0;
+			border-radius: 6px;
+			background: var(--vscode-inputValidation-warningBackground, rgba(200,150,0,0.08));
+			border: 1px solid var(--vscode-inputValidation-warningBorder, rgba(200,150,0,0.3));
+			font-size: 12px;
+			color: var(--vscode-descriptionForeground);
+		`;
+
+		const icon = append(tombstone, $('span'));
+		icon.textContent = '⚠️';
+		icon.style.flexShrink = '0';
+
+		const textContainer = append(tombstone, $('div'));
+		textContainer.style.flex = '1';
+
+		const title = append(textContainer, $('div'));
+		title.style.cssText = `font-weight: 600; color: var(--vscode-charts-orange, #cc8800); margin-bottom: 2px;`;
+		title.textContent = '响应流中断';
+
+		const desc = append(textContainer, $('div'));
+		desc.style.color = 'var(--vscode-descriptionForeground)';
+
+		// 显示中断时已接收到的内容摘要
+		if (event.partialText.length > 0 || event.hasPartialToolCalls) {
+			const preview = event.partialText.length > 80
+				? event.partialText.substring(0, 80) + '…'
+				: event.partialText;
+			const details: string[] = [];
+			if (event.partialText.length > 0) {
+				details.push(`已接收 ${event.partialText.length} 字符${preview ? '：「' + preview + '」' : ''}`);
+			}
+			if (event.hasPartialToolCalls) {
+				details.push('含部分工具调用');
+			}
+			desc.textContent = details.join('，') + '。可重新发送消息恢复。';
+		} else {
+			desc.textContent = '连接中断，未收到有效内容。可重新发送消息恢复。';
+		}
+
+		this.messageArea.scrollTop = this.messageArea.scrollHeight;
 	}
 
 	/**

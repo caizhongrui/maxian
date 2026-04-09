@@ -170,6 +170,14 @@ export class TaskService extends Disposable {
 	}>());
 	readonly onToolCompleted = this._onToolCompleted.event;
 
+	// P0-2: 流式响应中断事件（网络断开/超时，流被截断）
+	private readonly _onStreamInterrupted = this._register(new Emitter<{
+		partialText: string;
+		hasPartialToolCalls: boolean;
+		reason: string;
+	}>());
+	readonly onStreamInterrupted = this._onStreamInterrupted.event;
+
 	// Task metadata
 	readonly taskId: string;
 	readonly metadata: TaskMetadata;
@@ -316,6 +324,13 @@ export class TaskService extends Disposable {
 
 	// AI 调用计时（用于 AI_CALL 延迟统计）
 	private _aiCallStartTime: number = 0;
+
+	// P0-2: 流式响应检查点（用于流中断时保存已接收的部分数据）
+	private _streamCheckpoint: {
+		partialText: string;
+		partialToolUses: Array<{ id: string; name: string; input: any }>;
+		startedAt: number;
+	} | null = null;
 
 	// 步骤更新事件
 	private readonly _onStepUpdated = this._register(new Emitter<{
@@ -1220,6 +1235,14 @@ export class TaskService extends Disposable {
 		let xmlStreamingFired = false; // 是否已经发出过XML流式事件
 		const XML_STREAM_ID = 'xml-stream-preview'; // 固定ID用于更新同一元素
 
+		// P0-2: 初始化流式检查点
+		this._streamCheckpoint = {
+			partialText: '',
+			partialToolUses: [],
+			startedAt: Date.now()
+		};
+
+		try {
 		for await (const chunk of stream) {
 			// 检查是否已中止，如果是则停止处理流
 			if (this.abort) {
@@ -1230,6 +1253,10 @@ export class TaskService extends Disposable {
 			if (chunk.type === 'text') {
 				// 累积文本
 				assistantMessage += chunk.text;
+				// P0-2: 持续更新检查点中的文本
+				if (this._streamCheckpoint) {
+					this._streamCheckpoint.partialText = assistantMessage;
+				}
 
 				// 记录首Token时间
 				if (!firstTokenReceived) {
@@ -1380,6 +1407,10 @@ export class TaskService extends Disposable {
 					input = { ...(input || {}), __parseError: parseErrorForModel };
 				}
 				toolUses.push({ id: chunk.id, name: chunk.name, input });
+				// P0-2: 更新检查点中的工具调用列表
+				if (this._streamCheckpoint) {
+					this._streamCheckpoint.partialToolUses = [...toolUses];
+				}
 			} else if (chunk.type === 'heartbeat') {
 				const elapsedSeconds = Math.max(1, Math.floor((chunk.elapsedMs || 0) / 1000));
 				this._onStreamChunk.fire({
@@ -1431,6 +1462,26 @@ export class TaskService extends Disposable {
 				input: {},
 				isPartial: false,
 			});
+		}
+
+		} catch (streamError) {
+			// P0-2: 流式响应中断处理（网络错误、超时等导致 for-await 提前退出）
+			const reason = streamError instanceof Error ? streamError.message : String(streamError);
+			console.error('[TaskService] P0-2: 流式响应中断:', reason);
+
+			// 如果检查点中有已接收的部分内容，触发中断事件（UI 显示墓碑标记）
+			if (this._streamCheckpoint &&
+				(this._streamCheckpoint.partialText.length > 0 || this._streamCheckpoint.partialToolUses.length > 0)) {
+				this._onStreamInterrupted.fire({
+					partialText: this._streamCheckpoint.partialText,
+					hasPartialToolCalls: this._streamCheckpoint.partialToolUses.length > 0,
+					reason
+				});
+			}
+			hasError = true;
+		} finally {
+			// P0-2: 清除检查点（流已结束，无论成功还是失败）
+			this._streamCheckpoint = null;
 		}
 
 		if (!this.abort && (assistantMessage || toolUses.length > 0)) {
