@@ -90,6 +90,12 @@ export class MaxianView extends ViewPane {
 	/** 本次任务累计输出 token（AI 实际返回，TaskService 已在新任务创建时清零） */
 	private lastTurnOutputTokens: number = 0;
 	private thinkingMessageElement: HTMLElement | null = null; // "正在思考"消息元素（避免重复显示）
+	/** 思考链气泡（模型 reasoning_content 阶段，流式展示后折叠） */
+	private reasoningBubbleRow: HTMLElement | null = null;
+	private reasoningBubbleContent: HTMLElement | null = null;
+	private reasoningBubbleHeader: HTMLElement | null = null;
+	private reasoningText: string = '';
+	private reasoningCollapsed: boolean = false;
 	/** 流式返回字数 badge（在流式气泡头部实时显示接收字数） */
 	private streamingCharBadge: HTMLElement | null = null;
 	/** 当前流式已接收字符数 */
@@ -3637,6 +3643,8 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			this.currentAiMessageText = '';
 			this.currentStreamingMessageElement = null;
 			this.currentToolStatusElement = null;
+			// 新轮次重置思考气泡状态（不移除DOM，上轮的思考气泡保留在消息区）
+			this._resetReasoningBubble();
 
 			// 显示用户消息 - 左右布局：用户消息在右侧
 			const userRow = append(this.messageArea, $('div.maxian-message-row.row-user'));
@@ -3718,10 +3726,17 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 
 			// 用户消息渲染完成后，立即显示"等待中"气泡（在用户消息下方）
 			this.showWaitingIndicator();
+		} else if (event.type === 'reasoning') {
+			// 思考链内容：流式追加到思考气泡
+			this._handleReasoningChunk(event.content);
 		} else if (event.type === 'progress') {
 			this.apiRequestBackendHint = event.content;
 			this.updateApiRequestProgressText();
 		} else if (event.type === 'assistant') {
+			// 正式内容到来时，折叠思考气泡
+			if (event.isPartial && this.reasoningBubbleRow && !this.reasoningCollapsed) {
+				this._collapseReasoningBubble();
+			}
 			// 如果是流式消息
 			if (event.isPartial) {
 				if (!this.currentAiMessageElement) {
@@ -4651,6 +4666,133 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 	}
 
 	/**
+	 * 处理思考链 chunk：创建或追加到思考气泡
+	 */
+	private _handleReasoningChunk(text: string): void {
+		this.reasoningText += text;
+
+		if (!this.reasoningBubbleRow) {
+			// 创建思考气泡（与 AI 消息同样的行布局，但样式更淡）
+			const row = append(this.messageArea, $('div.maxian-message-row.row-ai'));
+			this.reasoningBubbleRow = row;
+
+			// 左侧头像
+			const avatarWrap = append(row, $('div.maxian-message-avatar-wrap'));
+			const avatarImg = append(avatarWrap, $('img')) as HTMLImageElement;
+			avatarImg.src = FileAccess.asBrowserUri('vs/workbench/contrib/maxian/browser/media/icons/maxian-avatar.png').toString(true);
+
+			// 气泡容器
+			const bubble = append(row, $('div.maxian-message.maxian-message-ai'));
+			bubble.style.cssText = `
+				opacity: 0.85;
+				border: 1px solid var(--vscode-editorWidget-border, rgba(127,127,127,0.3));
+				background: var(--vscode-editor-background);
+			`;
+
+			// 头部（可点击展开/折叠）
+			const header = append(bubble, $('div.maxian-message-header'));
+			header.style.cursor = 'pointer';
+			header.style.userSelect = 'none';
+			this.reasoningBubbleHeader = header;
+
+			const thinkingLabel = append(header, $('span'));
+			thinkingLabel.style.cssText = `
+				font-size: 12px;
+				color: var(--vscode-descriptionForeground);
+				display: flex; align-items: center; gap: 4px;
+			`;
+			thinkingLabel.innerHTML = '🤔&nbsp;<span class="maxian-reasoning-spinner">⟳</span>&nbsp;深度思考中...';
+
+			const charCountBadge = append(header, $('span.maxian-reasoning-char-badge'));
+			charCountBadge.style.cssText = `
+				font-size: 11px;
+				color: var(--vscode-descriptionForeground);
+				margin-left: auto;
+				font-variant-numeric: tabular-nums;
+			`;
+
+			// 内容区
+			const contentWrap = append(bubble, $('div.maxian-reasoning-content'));
+			contentWrap.style.cssText = `
+				font-size: 12px;
+				line-height: 1.5;
+				color: var(--vscode-descriptionForeground);
+				white-space: pre-wrap;
+				word-break: break-word;
+				max-height: 200px;
+				overflow-y: auto;
+				padding: 6px 0 4px 0;
+				border-top: 1px solid var(--vscode-editorWidget-border, rgba(127,127,127,0.2));
+				margin-top: 4px;
+			`;
+			this.reasoningBubbleContent = contentWrap;
+
+			// 点击头部切换展开/折叠
+			header.onclick = () => {
+				if (!this.reasoningBubbleContent) { return; }
+				const isHidden = this.reasoningBubbleContent.style.display === 'none';
+				this.reasoningBubbleContent.style.display = isHidden ? '' : 'none';
+				// 更新箭头指示
+				const spinner = header.querySelector('.maxian-reasoning-spinner') as HTMLElement | null;
+				if (spinner) {
+					spinner.textContent = isHidden ? '▾' : '▸';
+				}
+			};
+		}
+
+		// 更新内容
+		if (this.reasoningBubbleContent) {
+			this.reasoningBubbleContent.textContent = this.reasoningText;
+			// 滚动到底部
+			this.reasoningBubbleContent.scrollTop = this.reasoningBubbleContent.scrollHeight;
+		}
+
+		// 更新字数
+		const charBadge = this.reasoningBubbleRow.querySelector('.maxian-reasoning-char-badge') as HTMLElement | null;
+		if (charBadge) {
+			const count = this.reasoningText.length;
+			charBadge.textContent = count >= 1000
+				? `${(count / 1000).toFixed(1)}k 字`
+				: `${count} 字`;
+		}
+
+		this.messageArea.scrollTop = this.messageArea.scrollHeight;
+	}
+
+	/**
+	 * 折叠思考气泡（正式内容开始时调用）
+	 */
+	private _collapseReasoningBubble(): void {
+		if (!this.reasoningBubbleRow || this.reasoningCollapsed) { return; }
+		this.reasoningCollapsed = true;
+
+		if (this.reasoningBubbleContent) {
+			this.reasoningBubbleContent.style.display = 'none';
+		}
+
+		if (this.reasoningBubbleHeader) {
+			// 更新 label：停止"思考中"动画，改为"查看思考过程"
+			const label = this.reasoningBubbleHeader.querySelector('span') as HTMLElement | null;
+			if (label) {
+				const count = this.reasoningText.length;
+				const countStr = count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count);
+				label.innerHTML = `💭&nbsp;<span class="maxian-reasoning-spinner">▸</span>&nbsp;查看思考过程（${countStr} 字）`;
+			}
+		}
+	}
+
+	/**
+	 * 重置思考气泡状态（新对话/清空时调用）
+	 */
+	private _resetReasoningBubble(): void {
+		this.reasoningBubbleRow = null;
+		this.reasoningBubbleContent = null;
+		this.reasoningBubbleHeader = null;
+		this.reasoningText = '';
+		this.reasoningCollapsed = false;
+	}
+
+	/**
 	 * 停止 API 请求进度提示
 	 */
 	private stopApiRequestProgress(removeElement: boolean): void {
@@ -5471,6 +5613,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		this.stopApiRequestProgress(false);
 		this.thinkingMessageElement = null;
 		this._clearStreamingCharBadge();
+		this._resetReasoningBubble();
 
 		// 重置所有状态
 		this.currentAiMessageElement = null;

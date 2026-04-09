@@ -136,8 +136,8 @@ export class TaskService extends Disposable {
 	private readonly _onMessageAdded = this._register(new Emitter<ClineMessage>());
 	readonly onMessageAdded: Event<ClineMessage> = this._onMessageAdded.event;
 
-	private readonly _onStreamChunk = this._register(new Emitter<{ text?: string; progressText?: string; isPartial: boolean }>());
-	readonly onStreamChunk: Event<{ text?: string; progressText?: string; isPartial: boolean }> = this._onStreamChunk.event;
+	private readonly _onStreamChunk = this._register(new Emitter<{ text?: string; progressText?: string; reasoningText?: string; isPartial: boolean }>());
+	readonly onStreamChunk: Event<{ text?: string; progressText?: string; reasoningText?: string; isPartial: boolean }> = this._onStreamChunk.event;
 
 	private readonly _onTokenUsageUpdated = this._register(new Emitter<TokenUsage>());
 	readonly onTokenUsageUpdated: Event<TokenUsage> = this._onTokenUsageUpdated.event;
@@ -1413,13 +1413,10 @@ export class TaskService extends Disposable {
 					this._streamCheckpoint.partialToolUses = [...toolUses];
 				}
 			} else if (chunk.type === 'reasoning') {
-				// 模型思考链阶段：累积字数并更新进度提示，不展示原始内容
+				// 模型思考链阶段：将思考内容直接透传给UI展示，UI负责在正式内容到来时折叠
 				reasoningCharsCount += chunk.text.length;
-				const countDisplay = reasoningCharsCount >= 1000
-					? `${(reasoningCharsCount / 1000).toFixed(1)}k`
-					: String(reasoningCharsCount);
 				this._onStreamChunk.fire({
-					progressText: `🤔 模型正在深度思考中... (已输出 ${countDisplay} 字思考内容)`,
+					reasoningText: chunk.text,
 					isPartial: true
 				});
 			} else if (chunk.type === 'heartbeat') {

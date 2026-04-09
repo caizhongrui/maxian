@@ -71,7 +71,7 @@ export const IMaxianService = createDecorator<IMaxianService>('maxianService');
  * 消息事件类型 - 保留向后兼容
  */
 export interface IMessageEvent {
-	type: 'user' | 'assistant' | 'tool' | 'error' | 'progress';
+	type: 'user' | 'assistant' | 'tool' | 'error' | 'progress' | 'reasoning';
 	content: string;
 	isPartial?: boolean;
 }
@@ -1655,7 +1655,15 @@ export class MaxianService extends Disposable implements IMaxianService {
 				if (chunk.text || !chunk.isPartial) {
 					this.taskLastStreamActivityTime = Date.now();
 				}
-				if (chunk.text) {
+				if (chunk.reasoningText) {
+					// 思考链内容：直接透传给UI展示，UI负责折叠
+					this.taskLastStreamActivityTime = Date.now();
+					this._onMessage.fire({
+						type: 'reasoning',
+						content: chunk.reasoningText,
+						isPartial: true
+					});
+				} else if (chunk.text) {
 					// 记录首Token时间
 					if (!this.currentFirstTokenTime) {
 						this.currentFirstTokenTime = new Date();
