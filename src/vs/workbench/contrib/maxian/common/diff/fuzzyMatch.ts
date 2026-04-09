@@ -542,6 +542,119 @@ function desanitizeApiTags(text: string): string {
 }
 
 /**
+ * 检测 old_string 与文件内容之间的空白风格不一致（tab vs space）
+ */
+function detectWhitespaceMismatch(content: string, oldString: string): string | null {
+	const oldHasTab = /^[\t]+/m.test(oldString);
+	const oldHasSpaceIndent = /^ {2,}/m.test(oldString);
+	const fileHasTab = /^[\t]+/m.test(content);
+	const fileHasSpaceIndent = /^ {2,}/m.test(content);
+
+	if (oldHasTab && !fileHasTab && fileHasSpaceIndent) {
+		return '[whitespace mismatch: old_string uses TAB but file uses SPACES]';
+	}
+	if (oldHasSpaceIndent && !fileHasSpaceIndent && fileHasTab) {
+		return '[whitespace mismatch: old_string uses SPACES but file uses TAB]';
+	}
+	return null;
+}
+
+/**
+ * 在文件中查找与 old_string 最相似的 N 个片段，用于失败时的结构化反馈
+ * 参考 Claude Code / OpenCode 的候选建议机制
+ */
+export function findTopSimilarSnippets(
+	content: string,
+	oldString: string,
+	topN: number = 3
+): Array<{ startLine: number; endLine: number; snippet: string; similarity: number }> {
+	const contentLines = content.split('\n');
+	const oldLines = oldString.split('\n');
+	const windowSize = oldLines.length;
+
+	if (windowSize === 0 || contentLines.length === 0) {
+		return [];
+	}
+
+	const candidates: Array<{ startLine: number; endLine: number; snippet: string; similarity: number }> = [];
+	const step = Math.max(1, Math.floor(windowSize / 2));
+
+	// 计算 old 的 token 集合（去重），用于快速粗筛
+	const oldNormalized = oldString.trim();
+
+	for (let i = 0; i <= Math.max(0, contentLines.length - windowSize); i += step) {
+		const windowLines = contentLines.slice(i, i + windowSize);
+		const windowText = windowLines.join('\n');
+		const sim = stringSimilarity(windowText.trim(), oldNormalized);
+		if (sim > 0.2) {
+			candidates.push({
+				startLine: i + 1,
+				endLine: i + windowLines.length,
+				snippet: windowText,
+				similarity: sim,
+			});
+		}
+	}
+
+	// 按相似度降序
+	candidates.sort((a, b) => b.similarity - a.similarity);
+
+	// 去重：相近 startLine 的候选只保留最高分
+	const dedup: typeof candidates = [];
+	for (const c of candidates) {
+		if (dedup.every(d => Math.abs(d.startLine - c.startLine) > windowSize)) {
+			dedup.push(c);
+			if (dedup.length >= topN) break;
+		}
+	}
+
+	return dedup;
+}
+
+/**
+ * 构造结构化失败信息：展示 top N 相似片段 + 上下文 + 相似度
+ */
+function buildStructuredFailure(
+	content: string,
+	oldString: string
+): string {
+	const contentLines = content.split('\n');
+	const snippets = findTopSimilarSnippets(content, oldString, 3);
+	const parts: string[] = [];
+
+	parts.push('oldString not found in content.');
+
+	const wsHint = detectWhitespaceMismatch(content, oldString);
+	if (wsHint) {
+		parts.push(wsHint);
+	}
+
+	if (snippets.length > 0) {
+		parts.push('');
+		parts.push('与 old_string 最相似的候选片段（按相似度降序）：');
+		snippets.forEach((s, idx) => {
+			const ctxStart = Math.max(1, s.startLine - 3);
+			const ctxEnd = Math.min(contentLines.length, s.endLine + 3);
+			const contextLines: string[] = [];
+			for (let ln = ctxStart; ln <= ctxEnd; ln++) {
+				const marker = (ln >= s.startLine && ln <= s.endLine) ? '>' : ' ';
+				contextLines.push(`${marker} ${ln.toString().padStart(5)} | ${contentLines[ln - 1] ?? ''}`);
+			}
+			parts.push('');
+			parts.push(`候选 ${idx + 1} — 行 ${s.startLine}-${s.endLine}，相似度 ${(s.similarity * 100).toFixed(1)}%`);
+			parts.push(contextLines.join('\n'));
+		});
+		parts.push('');
+		parts.push('请根据以上上下文重新构造 old_string（注意空白/缩进），或扩大匹配窗口后重试。');
+	} else {
+		parts.push('');
+		parts.push('未在文件中找到与 old_string 相似的片段。请先 read_file 确认目标内容是否存在。');
+	}
+
+	return parts.join('\n');
+}
+
+/**
  * 使用容错匹配执行替换
  * P1优化：返回 error 字段，报告多处匹配错误（对齐 OpenCode "Found multiple matches"）
  */
@@ -550,7 +663,7 @@ export function fuzzyReplace(
 	oldString: string,
 	newString: string,
 	replaceAll: boolean = false
-): { success: boolean; result: string; strategy?: string; matchCount: number; error?: string } {
+): { success: boolean; result: string; strategy?: string; matchCount: number; error?: string; warning?: string } {
 	if (replaceAll) {
 		// replaceAll 模式：使用 MultiOccurrenceReplacer 找到所有精确匹配
 		const exactMatches: MatchResult[] = [];
@@ -570,10 +683,16 @@ export function fuzzyReplace(
 						error: `找到多处匹配 "${oldString.substring(0, 50)}"，无法确定唯一替换位置。请提供更精确的上下文。`
 					};
 				}
-				return { success: false, result: content, matchCount: 0 };
+				return {
+					success: false, result: content, matchCount: 0,
+					error: buildStructuredFailure(content, oldString),
+				};
 			}
 			const result = content.substring(0, match.start!) + newString + content.substring(match.end!);
-			return { success: true, result, strategy: match.strategy, matchCount: 1 };
+			const warning = match.strategy && match.strategy !== 'SimpleReplacer'
+				? `[fuzzy matched: strategy=${match.strategy}]`
+				: undefined;
+			return { success: true, result, strategy: match.strategy, matchCount: 1, warning };
 		}
 
 		// 从后向前替换（避免位置偏移）
@@ -596,11 +715,17 @@ export function fuzzyReplace(
 				error: `找到多处匹配 "${oldString.substring(0, 50)}"，无法确定唯一替换位置。\n请在 old_string 中提供更多上下文（如包含更多行），以唯一定位替换位置。`
 			};
 		}
-		return { success: false, result: content, matchCount: 0 };
+		return {
+			success: false, result: content, matchCount: 0,
+			error: buildStructuredFailure(content, oldString),
+		};
 	}
 
 	const result = content.substring(0, match.start!) + newString + content.substring(match.end!);
-	return { success: true, result, strategy: match.strategy, matchCount: 1 };
+	const warning = match.strategy && match.strategy !== 'SimpleReplacer'
+		? `[fuzzy matched: strategy=${match.strategy}]`
+		: undefined;
+	return { success: true, result, strategy: match.strategy, matchCount: 1, warning };
 }
 
 /**

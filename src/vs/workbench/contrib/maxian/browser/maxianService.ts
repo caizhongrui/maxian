@@ -123,6 +123,9 @@ export interface ITokenUsageEvent {
 	promptTokens: number;      // 本次输入token
 	completionTokens: number;  // 本次输出token
 	totalTokens: number;       // 本次总token
+	contextTokens?: number;    // 当前上下文占用（当前历史估算，非累加）
+	contextOnly?: boolean;     // true=仅更新进度条，不重建 token 统计气泡
+	isEstimated?: boolean;     // true=本次 promptTokens/completionTokens 为字符估算值，非 AI 实际返回，UI 不应用于展示"本次输入/输出 token"
 	mode: string;              // 模式（ask/code/architect等）
 	timestamp: number;         // 时间戳
 }
@@ -751,7 +754,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 			this.skillService,
 			this.commandExecutionService,
 			this.modelService,
-			this.vectorSearchService
+			this.vectorSearchService,
+			this.textFileService
 		);
 
 		// P2优化：注入子 Agent 工厂（支持 task 工具）
@@ -763,6 +767,14 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		// 注入 MCP Hub（支持 use_mcp_tool / access_mcp_resource 工具）
 		(this.toolExecutor as ToolExecutorImpl).setMcpHub(this.mcpHub);
+
+		// 将 FileStateCache 接入 environment_details，生成"已读文件清单"
+		try {
+			const cache = (this.toolExecutor as ToolExecutorImpl).getFileStateCache?.();
+			if (cache) {
+				this.environmentTracker.setFileStateCache(cache);
+			}
+		} catch { /* 非致命，忽略 */ }
 
 		// 加载并连接已配置的 MCP 服务器
 		await this.loadAndConnectMcpServers();
@@ -1301,6 +1313,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 					promptTokens: estimatedInputTokens,
 					completionTokens: estimatedOutputTokens,
 					totalTokens: estimatedInputTokens + estimatedOutputTokens,
+					isEstimated: true,
 					mode: 'ask',
 					timestamp: Date.now()
 				};
@@ -1434,6 +1447,12 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 🔥 新任务开始时清除自动批准设置（始终允许是针对单个任务的）
 			this.clearAutoApproveRules();
 			this._onTodoListUpdate.fire({ todos: [] }); // 新任务开始时清空上次的任务列表
+			// 清空文件状态缓存：模型对上一任务的"已读"状态必须作废，
+			// 否则新任务里首次 read_file 会被错误识别为"未变化"
+			(this.toolExecutor as any)?.resetFileStateCacheForNewTask?.();
+			// 判定本次用户消息是否明确请求"启动 dev server"，
+			// 未命中时模型将被禁止自行执行 npm run dev / vite / next dev 等长时间运行命令。
+			(this.toolExecutor as any)?.noteUserMessageForServerIntent?.(fullMessage || message || '');
 
 				this.currentTask = new TaskService({
 					task: fullMessage,
@@ -1472,10 +1491,13 @@ export class MaxianService extends Disposable implements IMaxianService {
 						// 尝试使用后端返回的精确token数据
 						if (taskUsage && (taskUsage.totalTokensIn > 0 || taskUsage.totalTokensOut > 0)) {
 							// 有精确的token数据
+							const ctxTokens = (taskUsage as any).contextTokens || 0;
 							const usageEvent: ITokenUsageEvent = {
 								promptTokens: taskUsage.totalTokensIn || 0,
 								completionTokens: taskUsage.totalTokensOut || 0,
-								totalTokens: (taskUsage.totalTokensIn || 0) + (taskUsage.totalTokensOut || 0),
+								// 进度条读 totalTokens → 用当前上下文占用，避免累加导致"虚假爆满"
+								totalTokens: ctxTokens || ((taskUsage.totalTokensIn || 0) + (taskUsage.totalTokensOut || 0)),
+								contextTokens: ctxTokens,
 								mode: this.currentMode,
 								timestamp: Date.now()
 							};
@@ -1514,6 +1536,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 								promptTokens: estimatedInputTokens,
 								completionTokens: estimatedOutputTokens,
 								totalTokens: estimatedInputTokens + estimatedOutputTokens,
+								isEstimated: true,
 								mode: this.currentMode,
 								timestamp: Date.now()
 							};
@@ -1653,7 +1676,18 @@ export class MaxianService extends Disposable implements IMaxianService {
 			// 注意：token使用量事件已在onStatusChanged中统一触发，这里不再重复触发
 			// 只记录日志用于调试
 			const tokenUsageDisposable = this.currentTask.onTokenUsageUpdated((tokenUsage) => {
-				if (tokenUsage && (tokenUsage.totalTokensIn > 0 || tokenUsage.totalTokensOut > 0)) {
+				const ctx = tokenUsage ? ((tokenUsage as any).contextTokens || 0) : 0;
+				if (tokenUsage && (ctx > 0 || tokenUsage.totalTokensIn > 0 || tokenUsage.totalTokensOut > 0)) {
+					// 实时推送上下文占用（非累加），让进度条反映当前真实历史大小
+					this._onTokenUsage.fire({
+						promptTokens: tokenUsage.totalTokensIn || 0,
+						completionTokens: tokenUsage.totalTokensOut || 0,
+						totalTokens: ctx,            // 进度条会读这个字段
+						contextTokens: ctx,
+						contextOnly: true,
+						mode: this.currentMode,
+						timestamp: Date.now()
+					});
 				}
 			});
 			this.taskEventDisposables.add(tokenUsageDisposable);
@@ -2745,6 +2779,31 @@ export class MaxianService extends Disposable implements IMaxianService {
 					type: 'object',
 					properties: {},
 					required: []
+				}
+			},
+
+			// 28.1 todo_write - 结构化 TODO 规划（id/activeForm 规范）
+			{
+				name: 'todo_write',
+				description: '规划和跟踪多步任务的 TODO 列表',
+				parameters: {
+					type: 'object',
+					properties: {
+						todos: {
+							type: 'array',
+							items: {
+								type: 'object',
+								properties: {
+									id: { type: 'string' },
+									content: { type: 'string' },
+									status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] },
+									activeForm: { type: 'string' }
+								},
+								required: ['id', 'content', 'status', 'activeForm']
+							}
+						}
+					},
+					required: ['todos']
 				}
 			},
 

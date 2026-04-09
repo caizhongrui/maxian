@@ -140,8 +140,9 @@ export class FileOperationsTool {
 		private readonly fileService: IFileService,
 		private readonly workspaceRoot: string = '',
 		sessionId?: string,
-		private readonly modelService?: IModelService,
-		fileStateCache?: FileStateCache
+		_modelService?: IModelService,
+		fileStateCache?: FileStateCache,
+		private readonly textFileService?: import('../../../../services/textfile/common/textfiles.js').ITextFileService
 	) {
 		// 初始化Diff策略（完整Kilocode实现）
 		this.diffStrategy = new MultiSearchReplaceDiffStrategy(0.9, 40); // 90%匹配阈值，40行缓冲（对齐 OpenCode 容错策略）
@@ -156,6 +157,22 @@ export class FileOperationsTool {
 	 */
 	setSessionId(sessionId: string): void {
 		this.sessionId = sessionId;
+	}
+
+	/**
+	 * 写入文件并同步刷新可能打开的编辑器模型。
+	 * 避免：fileService.writeFile 直接改盘，而编辑器模型仍持有旧内容（tab 显示未保存 ●）
+	 */
+	private async writeFileAndSyncEditor(uri: import('../../../../../base/common/uri.js').URI, buffer: import('../../../../../base/common/buffer.js').VSBuffer): Promise<void> {
+		await this.fileService.writeFile(uri, buffer);
+		// 若文件在编辑器中已打开（textFileService 持有 working copy），
+		// 调用 revert 让它从磁盘重新加载 → 清除 dirty 标记
+		try {
+			const wc = this.textFileService?.files?.get(uri);
+			if (wc) {
+				await wc.revert({ force: true });
+			}
+		} catch { /* 编辑器未打开或 revert 失败都不阻塞工具结果 */ }
 	}
 
 	/**
@@ -449,16 +466,8 @@ export class FileOperationsTool {
 				try {
 					if (exists) {
 						// 文件存在，更新内容
-						// 1. 直接写磁盘（快速路径，与 diffViewProvider.saveAndClose 行为一致）
-						await this.fileService.writeFile(uri, buffer);
-						// 2. 如果文件在编辑器中已打开（有内存模型），同步更新模型内容
-						//    避免编辑器仍显示旧内容（不重新读磁盘，直接更新内存，无额外 I/O）
-						if (this.modelService) {
-							const model = this.modelService.getModel(uri);
-							if (model) {
-								model.setValue(processedContent);
-							}
-						}
+						// 写盘 + revert 已打开模型（避免 setValue 污染 dirty 状态）
+						await this.writeFileAndSyncEditor(uri, buffer);
 					} else {
 						// 文件不存在，创建新文件（包括目录）
 						await this.fileService.createFile(uri, buffer, { overwrite: false });
@@ -643,23 +652,11 @@ write_to_file 未产生任何修改：目标文件内容与待写入内容完全
 			return { error: omissionError };
 		}
 
-		if (predictedLineCount && !Number.isNaN(predictedLineCount) && Math.abs(actualLineCount - predictedLineCount) > 5) {
-			// 空文件恢复场景：允许一次整文件写入，不用行数校验阻断。
-			if (exists && currentFileIsBlank) {
-				console.warn(`[FileOperations] 跳过空文件行数校验: ${absolutePath}, actual=${actualLineCount}, predicted=${predictedLineCount}`);
-			} else {
-			return {
-				error: `<error>
-错误: write_to_file 行数校验失败
-文件: ${absolutePath}
-实际行数: ${actualLineCount}
-预期行数: ${predictedLineCount}
-
-这通常表示整文件内容已经过期、被截断，或者你在基于旧版本继续重写文件。
-请先重新读取目标文件全文，再重新生成完整内容；如果只是修改局部，请改用 edit 或 multiedit。
-</error>`
-			};
-			}
+		// 行数硬校验已移除：模型自报 line_count 不可靠（文件 >100 行时极易数错），
+		// 真正能防内容被截断的是上面 getWriteOmissionError 里的 "// rest of code" 模式检测。
+		// 仅当 currentFileIsBlank 时仍保留 warn 日志，便于排查异常空写。
+		if (predictedLineCount && !Number.isNaN(predictedLineCount) && Math.abs(actualLineCount - predictedLineCount) > 5 && exists && currentFileIsBlank) {
+			console.warn(`[FileOperations] 空文件行数差异: ${absolutePath}, actual=${actualLineCount}, predicted=${predictedLineCount}`);
 		}
 
 		return {
@@ -1402,7 +1399,7 @@ ${assertResult.message}
 			// 写入文件（使用文件锁确保串行写入）
 			const buffer = VSBuffer.fromString(newContent);
 			return await withFileLock(absolutePath, async () => {
-				await this.fileService.writeFile(uri, buffer);
+				await this.writeFileAndSyncEditor(uri, buffer);
 
 				// P1-8: 写入后更新时间戳记录
 				try {
@@ -1410,7 +1407,8 @@ ${assertResult.message}
 					const newMtime = newStat.mtime ?? Date.now();
 					const newSize = newStat.size ?? newContent.length;
 					updateFileAfterWrite(this.sessionId, absolutePath, newMtime, newSize);
-						this.recordWrittenFileState(absolutePath, newContent, newMtime, newSize, 'derived');
+					// apply_diff 后模型已知 "原文 + SEARCH/REPLACE 块" = 完整新内容，标 'full' 避免后续被 manifest 引导重读
+					this.recordWrittenFileState(absolutePath, newContent, newMtime, newSize, 'full');
 				} catch (e) {
 					console.warn(`[FileOperations] 更新时间戳记录失败: ${absolutePath}`, e);
 				}

@@ -49,13 +49,14 @@ import {
 	type ToolInteractionRequest
 } from '../tools/toolExecutionProtocol.js';
 import { estimateTokensFromChars } from '../utils/tokenEstimate.js';
+import { safeParseToolArguments } from '../api/qwenHandler.js';
 
 const MAX_CONSECUTIVE_MISTAKES = 5; // 最大连续错误次数
 
 // ========== 上下文管理常量 ==========
 // 对齐 Claude Code 真实源码（autoCompact.ts）：使用模型实际最大上下文窗口
 // Claude claude-sonnet-4-6 / claude-opus-4-6 均支持 200K 输入 token
-const MAX_CONTEXT_TOKENS = 200000; // 对齐 Claude Code 真实值（Sonnet/Opus 均为 200K）
+const MAX_CONTEXT_TOKENS = 1000000; // Qwen3-Plus 上下文窗 1M
 const MAX_TOOL_RESULT_LENGTH = 20000; // 🚀 优化：对齐OpenCode标准（2000行/50KB），减少token消耗
 const TRUNCATE_FRACTION = 0.5; // 截断时移除的消息比例
 
@@ -64,13 +65,12 @@ const TRUNCATE_FRACTION = 0.5; // 截断时移除的消息比例
 const MAX_OUTPUT_TOKENS = 32768; // 与 aiProxyHandler.ts requestBody.maxTokens 保持一致
 const EFFECTIVE_CONTEXT_WINDOW = MAX_CONTEXT_TOKENS - Math.min(MAX_OUTPUT_TOKENS, 20000); // = 180000
 
-// E1优化：四级阈值（严格对齐 Claude Code autoCompact.ts 常量）
-// AUTOCOMPACT_BUFFER_TOKENS    = 13000 → 压缩触发线 = 180000 - 13000 = 167000（~92.8%）
-// WARNING_THRESHOLD_BUFFER     = 20000 → 警告线     = 167000 - 20000 = 147000（~81.7%）
-// MANUAL_COMPACT_BUFFER_TOKENS = 3000  → 阻断线     = 180000 - 3000  = 177000（~98.3%）
-const CONTEXT_WARNING_THRESHOLD      = EFFECTIVE_CONTEXT_WINDOW - 33000; // 147000，~81.7%
-const CONTEXT_AUTO_COMPACT_THRESHOLD = EFFECTIVE_CONTEXT_WINDOW - 13000; // 167000，~92.8%
-const CONTEXT_BLOCKING_LIMIT         = EFFECTIVE_CONTEXT_WINDOW - 3000;  // 177000，~98.3%
+// Qwen3-Plus 上下文治理：50% 主动压缩，80% 硬上限（blocking）。
+// 之所以比 Claude Code 更激进，是因为 DashScope 的 Context Cache 命中需要稳定前缀 + 较多前缀空间，
+// 早压缩可以为后续命中留出缓存空间。
+const CONTEXT_AUTO_COMPACT_THRESHOLD = Math.floor(MAX_CONTEXT_TOKENS * 0.75); // 75%
+const CONTEXT_WARNING_THRESHOLD      = Math.floor(MAX_CONTEXT_TOKENS * 0.6);  // 60%
+const CONTEXT_BLOCKING_LIMIT         = Math.floor(MAX_CONTEXT_TOKENS * 0.9);  // 90% hard ceiling
 
 /**
  * Agent 配置选项
@@ -217,6 +217,11 @@ export class TaskService extends Disposable {
 	private readonly fileReadTracker: Map<string, number> = new Map();
 	private readonly readFileRequestTracker: Map<string, number> = new Map();
 	private readonly duplicateReadRedirectTracker: Set<string> = new Set();
+	// 压缩保护：本任务内通过 write_to_file / edit / multiedit / apply_diff 成功修改过的文件
+	// 在上下文压缩时需要显式注入到摘要/提醒中，避免模型"忘记"刚改过什么而重复修改同一处
+	private readonly recentlyModifiedFiles: Set<string> = new Set();
+	// 压缩保护：记录最近 1 条 tool_result error 的摘要，压缩后注入提醒
+	private lastToolErrorMessage: string | null = null;
 	private readonly runtimeGuidanceKeys: Set<string> = new Set();
 	private readonly explorationFingerprintsSeen: Set<string> = new Set();
 	private consecutiveNoProgressExplorationRounds = 0;
@@ -1264,9 +1269,24 @@ export class TaskService extends Disposable {
 				}
 
 				let input: any;
+				let parseErrorForModel: string | null = null;
 				try {
-					input = typeof chunk.input === 'string' ? JSON.parse(chunk.input) : chunk.input;
+					if (typeof chunk.input === 'string') {
+						const parsed = safeParseToolArguments(chunk.input, chunk.name);
+						if (parsed.ok) {
+							input = parsed.value;
+							if (parsed.repaired) {
+								console.warn(`[TaskService] safeParseToolArguments 修复成功 (工具:${chunk.name})`);
+							}
+						} else {
+							// 触发下方 catch 分支继续 batch 专项 / 截断兜底
+							throw new Error(parsed.error || 'safeParseToolArguments failed');
+						}
+					} else {
+						input = chunk.input;
+					}
 				} catch (e) {
+					parseErrorForModel = (e instanceof Error ? e.message : String(e));
 					const inputStr = typeof chunk.input === 'string' ? chunk.input : JSON.stringify(chunk.input);
 					const inputLength = inputStr.length;
 					console.error(`[TaskService] 工具参数解析失败 (工具:${chunk.name}, 长度:${inputLength})`);
@@ -1355,6 +1375,10 @@ export class TaskService extends Disposable {
 					isPartial: false, // 工具输入接收完整后发出
 				});
 
+				// 如果所有解析/修复都失败，附加错误标记，稍后以 tool_result.is_error=true 回传模型
+				if (parseErrorForModel && (input === undefined || input === null || (typeof input === 'object' && Object.keys(input).length === 0))) {
+					input = { ...(input || {}), __parseError: parseErrorForModel };
+				}
 				toolUses.push({ id: chunk.id, name: chunk.name, input });
 			} else if (chunk.type === 'heartbeat') {
 				const elapsedSeconds = Math.max(1, Math.floor((chunk.elapsedMs || 0) / 1000));
@@ -1531,6 +1555,11 @@ export class TaskService extends Disposable {
 	private pushHistory(msg: MessageParam): void {
 		this.apiConversationHistory.push(msg);
 		this._estimatedTotalChars += this.countMsgChars(msg);
+		// 每次历史增长后即时更新上下文估算，推给 UI 进度条（不等 usage chunk）
+		try {
+			this.tokenUsage.contextTokens = this.estimateTokens(this.apiConversationHistory);
+			this._onTokenUsageUpdated.fire(this.tokenUsage);
+		} catch { /* ignore */ }
 	}
 
 	private cloneHistoryMessage(msg: MessageParam): MessageParam {
@@ -1683,6 +1712,52 @@ export class TaskService extends Disposable {
 				}
 			}
 		}
+
+		// 每轮在最后一个 tool_result 尾部追加"已读文件上下文清单"
+		// 引导模型复用历史中的内容，避免重复 read_file；随着当轮 tool_result 一起进历史，
+		// 不额外占用独立消息，也不破坏 prefix cache 前缀稳定性
+		try {
+			const execAny = this.toolExecutor as any;
+			if (toolResults.length > 0 && typeof execAny?.getFileStateCache === 'function') {
+				const cache = execAny.getFileStateCache();
+				if (cache && typeof cache.buildManifest === 'function') {
+					const manifest = cache.buildManifest(this.workspaceRoot);
+					if (manifest.unchanged.length > 0 || manifest.modifiedByTool.length > 0 || manifest.partial.length > 0) {
+						const lines: string[] = ['', '---', '# 已读文件上下文（每轮自动更新，复用规则）'];
+						if (manifest.unchanged.length > 0) {
+							lines.push('');
+							lines.push('✅ 下列文件的完整内容已在对话历史中且未被修改——禁止再次 read_file，直接从历史中引用内容构造 edit/multiedit 的 old_string：');
+							for (const f of manifest.unchanged) { lines.push(`  - ${f}`); }
+						}
+						if (manifest.modifiedByTool.length > 0) {
+							lines.push('');
+							lines.push('⚠️ 下列文件你已通过工具写入/修改，历史中是旧内容；若需要当前完整状态必须重新 read_file：');
+							for (const f of manifest.modifiedByTool) { lines.push(`  - ${f}`); }
+						}
+						if (manifest.partial.length > 0) {
+							lines.push('');
+							lines.push('⚠️ 下列文件你只看过局部范围；若要改其他位置需补读：');
+							for (const f of manifest.partial) { lines.push(`  - ${f}`); }
+						}
+						const manifestText = lines.join('\n');
+						const last: any = toolResults[toolResults.length - 1];
+						if (last && last.type === 'tool_result') {
+							if (typeof last.content === 'string') {
+								last.content = last.content + manifestText;
+							} else if (Array.isArray(last.content)) {
+								// 尝试在最后一个 text block 追加，否则新增 text block
+								const lastBlock = last.content[last.content.length - 1];
+								if (lastBlock && lastBlock.type === 'text' && typeof lastBlock.text === 'string') {
+									lastBlock.text = lastBlock.text + manifestText;
+								} else {
+									last.content.push({ type: 'text', text: manifestText });
+								}
+							}
+						}
+					}
+				}
+			}
+		} catch { /* 非致命，忽略 */ }
 
 		// 添加工具结果到历史
 		if (toolResults.length > 0) {
@@ -2590,6 +2665,10 @@ export class TaskService extends Disposable {
 		const currentSignature = this.buildWriteSignature(toolUse);
 		const wroteSuccessfully = execution.success && execution.metadata?.didWrite;
 		if (wroteSuccessfully) {
+			// 登记到"本任务已修改文件"集合，在上下文压缩时注入提醒给模型
+			for (const targetPath of targetPaths) {
+				this.recentlyModifiedFiles.add(targetPath);
+			}
 			let recoveredAttempts = 0;
 			for (const targetPath of targetPaths) {
 				recoveredAttempts += this.fileWriteAttemptCountTracker.get(targetPath) || 0;
@@ -3525,6 +3604,60 @@ export class TaskService extends Disposable {
 		this.readFileRequestTracker.clear();
 		this.duplicateReadRedirectTracker.clear();
 		this.resetExplorationProgress();
+	}
+
+	/**
+	 * 压缩后把"本任务内已成功修改过的文件清单"作为一条 user 提醒注入进 apiConversationHistory，
+	 * 防止模型在压缩后忘记自己刚改过的内容，反复重复修改同一处。
+	 *
+	 * 调用时机：contextCompactor.updateMessages / tieredCompaction 之后，
+	 * resetFileReadTracker() 之前。
+	 */
+	/**
+	 * 扫描 apiConversationHistory，取最后一条 is_error=true 的 tool_result 内容
+	 * （只取前 500 字符），用于压缩后注入"当前未解决 error"提醒。
+	 */
+	private findLatestToolErrorSnippet(): string | null {
+		const history = this.apiConversationHistory as any[];
+		for (let i = history.length - 1; i >= 0; i--) {
+			const msg = history[i];
+			if (!msg || !Array.isArray(msg.content)) {
+				continue;
+			}
+			for (let j = msg.content.length - 1; j >= 0; j--) {
+				const block = msg.content[j];
+				if (block && block.type === 'tool_result' && block.is_error === true) {
+					const raw = typeof block.content === 'string' ? block.content : JSON.stringify(block.content || '');
+					return raw.substring(0, 500);
+				}
+			}
+		}
+		return this.lastToolErrorMessage;
+	}
+
+	private injectRecentlyModifiedFilesReminder(): void {
+		const latestError = this.findLatestToolErrorSnippet();
+		if (this.recentlyModifiedFiles.size === 0 && !latestError) {
+			return;
+		}
+		const fileList = Array.from(this.recentlyModifiedFiles).slice(-30);
+		const listText = fileList.length > 0
+			? fileList.map(p => `- ${p}`).join('\n')
+			: '（无）';
+		const errorSection = latestError
+			? `\n\n[当前未解决的 error 摘要]\n${latestError}\n\n请注意：上次工具执行失败的原因仍然存在，继续工作前请先分析此错误并避免重复同样的参数/调用。`
+			: '';
+		const reminder = `[系统提醒 · 压缩保护] 在本次上下文压缩前，当前任务已经通过 write_to_file / edit / multiedit / apply_diff 成功修改过以下文件：\n${listText}\n\n请注意：\n1. 这些文件的磁盘内容已经包含你之前做过的修改，**不要再次重复相同的修改**。\n2. 如果需要继续改动其中任何一个，必须先用 read_file 完整读取该文件的**最新内容**，再基于最新内容生成新的 old_string。\n3. 如果任务已经完成，直接调用 attempt_completion，不要再打开这些文件重新"检查一遍"。${errorSection}`;
+
+		try {
+			this.apiConversationHistory.push({
+				role: 'user',
+				content: [{ type: 'text', text: reminder }],
+			} as any);
+			this.rebuildCharCount();
+		} catch (error) {
+			console.warn('[TaskService] 注入压缩后"最近修改文件"提醒失败:', error);
+		}
 	}
 
 	/**
@@ -4587,7 +4720,9 @@ case 'execute_command':
 			const stats = this.contextCompactor.getStats();
 			console.log(`[TaskService] ContextCompactor 修剪完成: 修剪了 ${stats.compactedParts} 个工具输出, 节省 ${stats.savedTokens} tokens, 当前 ${newTokens} tokens`);
 
-			// 修剪后重置文件读取追踪器（部分工具输出已移除）
+			// 修剪后：先注入"最近修改文件"提醒，再重置文件读取追踪器
+			// 这样模型知道哪些文件已经改过，不会因为追踪器被清空而重复修改
+			this.injectRecentlyModifiedFilesReminder();
 			this.resetFileReadTracker();
 
 			// 如果修剪后仍在限制内，直接返回
@@ -4677,7 +4812,9 @@ case 'execute_command':
 					}
 				}
 
-				// 分层压缩后重置文件读取追踪器（旧工具输出已移除，AI 可能需要重读某些文件）
+				// 分层压缩后：先注入"最近修改文件"提醒，再重置文件读取追踪器
+				// 这样模型知道哪些文件已经改过，不会因为追踪器被清空而重复修改
+				this.injectRecentlyModifiedFilesReminder();
 				this.resetFileReadTracker();
 				console.log('[TaskService] 上下文压缩完成，重置文件读取追踪器');
 

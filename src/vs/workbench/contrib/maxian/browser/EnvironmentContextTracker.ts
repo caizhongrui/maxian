@@ -11,6 +11,7 @@
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { ITerminalService } from '../../terminal/browser/terminal.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
+import { FileStateCache } from '../common/file/fileStateCache.js';
 
 /**
  * 终端信息接口
@@ -27,11 +28,21 @@ export interface TerminalInfo {
  * 通过依赖注入获取编辑器、终端等服务
  */
 export class EnvironmentContextTracker {
+	private fileStateCache?: FileStateCache;
+
 	constructor(
 		private readonly editorService: IEditorService,
 		private readonly terminalService: ITerminalService,
 		private readonly workspaceService: IWorkspaceContextService
 	) {}
+
+	/**
+	 * 注入当前任务的 FileStateCache，用于在 environment_details 中生成
+	 * "已读文件上下文清单"。由 MaxianService 在创建 ToolExecutor 后调用。
+	 */
+	setFileStateCache(cache: FileStateCache): void {
+		this.fileStateCache = cache;
+	}
 
 	/**
 	 * 获取当前可见的文件
@@ -138,6 +149,27 @@ export class EnvironmentContextTracker {
 		// 4. 最近修改的文件
 		if (recentlyModifiedFiles && recentlyModifiedFiles.length > 0) {
 			sections.push(`## 最近修改的文件\n${recentlyModifiedFiles.map(f => `- ${f}`).join('\n')}\n\n⚠️ 这些文件可能需要重新读取`);
+		}
+
+		// 4.5 已读文件上下文清单（复用判断依据）
+		if (this.fileStateCache) {
+			const workspace = this.workspaceService.getWorkspace();
+			const workspaceRoot = workspace.folders[0]?.uri.fsPath;
+			const manifest = this.fileStateCache.buildManifest(workspaceRoot);
+			if (manifest.unchanged.length > 0 || manifest.modifiedByTool.length > 0 || manifest.partial.length > 0) {
+				const parts: string[] = ['## 已读文件上下文（复用规则）'];
+				if (manifest.unchanged.length > 0) {
+					parts.push(`### ✅ 历史中已有完整内容，禁止重新 read_file：\n${manifest.unchanged.map(f => `- ${f}`).join('\n')}`);
+				}
+				if (manifest.modifiedByTool.length > 0) {
+					parts.push(`### ⚠️ 你已通过工具修改过（历史是旧内容），若需当前完整状态必须重新 read_file：\n${manifest.modifiedByTool.map(f => `- ${f}`).join('\n')}`);
+				}
+				if (manifest.partial.length > 0) {
+					parts.push(`### ⚠️ 历史中只看过局部内容，改其他范围前需要补读：\n${manifest.partial.map(f => `- ${f}`).join('\n')}`);
+				}
+				parts.push('**规则**：列在"✅"下的文件，直接引用对话历史中已有内容来构造 edit/multiedit 的 old_string，不要再 read_file。');
+				sections.push(parts.join('\n\n'));
+			}
 		}
 
 		// 5. 当前时间

@@ -247,6 +247,10 @@ export const DEFAULT_PERMISSION_RULES: Record<ToolName, Record<string, Permissio
 		'*': 'allow'
 	},
 
+	todo_write: {
+		'*': 'allow'
+	},
+
 	// PR代码审查（只读git操作，始终允许）
 	pr_review: {
 		'*': 'allow'

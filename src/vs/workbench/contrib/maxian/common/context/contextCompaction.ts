@@ -31,14 +31,29 @@ export const COMPACTION_CONFIG = {
 	/** 最少需要修剪的 token 数 */
 	PRUNE_MINIMUM: 20000,
 
-	/** 最大上下文 token 数 */
-	MAX_CONTEXT_TOKENS: 100000,
+	/** 最大上下文 token 数（Qwen3-Plus 窗口 1M） */
+	MAX_CONTEXT_TOKENS: 1000000,
 
 	/** 预留给响应的 token 数 */
 	OUTPUT_TOKEN_RESERVE: 20000,
 
-	/** 触发压缩的上下文使用百分比 */
-	COMPACTION_THRESHOLD_PERCENT: 80,
+	/**
+	 * 主动压缩触发阈值（百分比）
+	 * 75% = 96k tokens。之前过早触发（50%）导致小任务也报"即将压缩"。
+	 */
+	COMPACTION_THRESHOLD_PERCENT: 75,
+
+	/**
+	 * 硬上限百分比。超过此比例视为高危，必须立即压缩。
+	 */
+	HARD_CEILING_PERCENT: 80,
+
+	/**
+	 * 前缀稳定化：压缩时前 N 轮（user+assistant+tool_result 算 1 轮）
+	 * 必须完整保留，不得删除/压缩。用于让 Qwen DashScope 的自动
+	 * Context Cache 能命中固定前缀。
+	 */
+	MIN_STABLE_TURNS: 5,
 
 	/** 已压缩输出的占位符文本 */
 	COMPACTED_PLACEHOLDER: '[旧工具结果内容已清除]',
@@ -148,6 +163,89 @@ export function estimateTokens(content: string | ContentBlock[]): number {
 }
 
 /**
+ * 判断一条 tool_result 是否是"关键失败信号"，必须在 prune 中保留。
+ *
+ * 任何下列情况都判定为关键：
+ * - part.is_error === true
+ * - content 中含有 <error> / <fatal_error> 标签
+ * - content 中含有 "oldString not found" / "Found multiple matches" /
+ *   "File has not been read" / "modified since read" / "partial" 等硬失败信号
+ *
+ * 这些结果通常很短（几百字节），保留它们几乎不耗 token，但能避免模型
+ * 用完全相同的参数重复失败。
+ */
+function isCriticalToolResult(part: ToolCallPart): boolean {
+	if (part.is_error === true) {
+		return true;
+	}
+	const content = typeof part.content === 'string' ? part.content : '';
+	if (!content) {
+		return false;
+	}
+	const lower = content.toLowerCase();
+	// TODO 列表相关的工具结果永不压缩——任务规划是任务进度的核心记忆。
+	if (lower.includes('<todo_list>') || lower.includes('</todo_list>')) {
+		return true;
+	}
+	return (
+		lower.includes('<error>') ||
+		lower.includes('<fatal_error>') ||
+		lower.includes('oldstring not found') ||
+		lower.includes('found multiple matches') ||
+		lower.includes('file has not been read') ||
+		lower.includes('has been modified since read') ||
+		lower.includes('has only been partially read')
+	);
+}
+
+/**
+ * 判断一条消息是否包含 TODO 相关内容（tool_use: todo_write 或正文中的 <todo_list>）。
+ * 只要命中，此消息在 prune / 分层压缩里都必须完整保留。
+ */
+function messageContainsTodo(msg: CompactableMessage): boolean {
+	if (typeof msg.content === 'string') {
+		const lower = msg.content.toLowerCase();
+		return lower.includes('<todo_list>') || lower.includes('</todo_list>');
+	}
+	if (!Array.isArray(msg.content)) {
+		return false;
+	}
+	for (const block of msg.content) {
+		if (block.type === 'tool_use') {
+			if ((block as any).name === 'todo_write' || (block as any).name === 'update_todo_list') {
+				return true;
+			}
+		} else if (block.type === 'text') {
+			const lower = (block as any).text?.toLowerCase?.() || '';
+			if (lower.includes('<todo_list>') || lower.includes('</todo_list>')) {
+				return true;
+			}
+		} else if (block.type === 'tool_result') {
+			if (isCriticalToolResult(block as ToolCallPart)) {
+				// 已经含 TODO 的关键结果
+				const content = typeof (block as ToolCallPart).content === 'string'
+					? (block as ToolCallPart).content.toLowerCase()
+					: '';
+				if (content.includes('<todo_list>') || content.includes('</todo_list>')) {
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+/**
+ * 计算"前缀稳定区"边界 index（包含）。前 MIN_STABLE_TURNS 轮消息不得被压缩。
+ * 一轮 = user + assistant + tool_result 三条（或更少），粗略按每 2 条消息算一轮。
+ * 返回值 stableEndIndex：index < stableEndIndex 的消息都属于稳定前缀。
+ */
+function computeStablePrefixEnd(messages: CompactableMessage[]): number {
+	const targetMessages = COMPACTION_CONFIG.MIN_STABLE_TURNS * 2;
+	return Math.min(targetMessages, messages.length);
+}
+
+/**
  * 执行工具输出修剪 (Prune)
  * 参考 OpenCode compaction.ts:prune
  *
@@ -156,15 +254,28 @@ export function estimateTokens(content: string | ContentBlock[]): number {
  * 2. 保护最近 PRUNE_PROTECT tokens
  * 3. 超过保护范围的工具输出标记为 compacted
  * 4. 只有累计超过 PRUNE_MINIMUM 才执行修剪
+ * 5. is_error / 含 <error> 等关键失败信号的结果强制保留
  */
 export function pruneToolOutputs(messages: CompactableMessage[]): PruneResult {
 	let totalTokens = 0;
 	let prunedTokens = 0;
 	const toPrune: Array<{ msgIndex: number; partIndex: number; tokens: number }> = [];
 
+	// 前缀稳定化：前 N 轮（MIN_STABLE_TURNS * 2 条）必须完整保留。
+	const stableEndIndex = computeStablePrefixEnd(messages);
+
 	// 从后向前遍历消息
 	for (let msgIndex = messages.length - 1; msgIndex >= 0; msgIndex--) {
+		// 前缀稳定区：禁止压缩，以保持 Qwen DashScope 自动前缀缓存命中。
+		if (msgIndex < stableEndIndex) {
+			continue;
+		}
 		const msg = messages[msgIndex];
+
+		// TODO 列表消息永不压缩（无论 role）
+		if (messageContainsTodo(msg)) {
+			continue;
+		}
 
 		// 只处理工具结果消息
 		if (msg.role !== 'tool' || !Array.isArray(msg.content)) {
@@ -181,6 +292,13 @@ export function pruneToolOutputs(messages: CompactableMessage[]): PruneResult {
 
 			const partTokens = estimateTokens(part.content);
 			totalTokens += partTokens;
+
+			// 保留错误结果：is_error 的 tool_result 或内容中含 <error>/<fatal_error>/
+			// "oldString not found"/"File has not been read" 等关键失败信号的结果
+			// 不得修剪，否则模型会"忘记"自己刚失败过什么，反复用同样的参数重试。
+			if (isCriticalToolResult(part)) {
+				continue;
+			}
 
 			// 超过保护范围的标记为需要修剪
 			if (totalTokens > COMPACTION_CONFIG.PRUNE_PROTECT) {
@@ -686,6 +804,10 @@ export class TieredCompactionManager {
 		const compressedContent = message.content.map(block => {
 			if (block.type === 'tool_result') {
 				const toolResult = block as ToolCallPart;
+				// 关键失败结果强制原样保留
+				if (isCriticalToolResult(toolResult)) {
+					return block;
+				}
 				if (!toolResult.compactedAt && toolResult.content.length > 200) {
 					return {
 						...toolResult,
@@ -732,6 +854,10 @@ export class TieredCompactionManager {
 		const compressedContent = message.content.map(block => {
 			if (block.type === 'tool_result') {
 				const toolResult = block as ToolCallPart;
+				// 关键失败结果即使在 tier3 也保留原文，避免模型忘记失败原因
+				if (isCriticalToolResult(toolResult)) {
+					return block;
+				}
 				return {
 					...toolResult,
 					originalLength: toolResult.content.length,
@@ -775,7 +901,15 @@ export class TieredCompactionManager {
 		const tier3Messages: CompactableMessage[] = [];
 		const tier4Messages: CompactableMessage[] = [];
 
+		// 前缀稳定化：前 MIN_STABLE_TURNS*2 条消息强制留在 tier1。
+		const stableEndIndex = computeStablePrefixEnd(messages);
+
 		for (let i = 0; i < totalMessages; i++) {
+			// 稳定前缀 + TODO 消息：强制 tier1 不压缩。
+			if (i < stableEndIndex || messageContainsTodo(messages[i])) {
+				tier1Messages.push(messages[i]);
+				continue;
+			}
 			const tier = this.assignTier(i, totalMessages);
 			switch (tier) {
 				case 'tier1':

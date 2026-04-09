@@ -518,6 +518,124 @@ export class QwenHandler implements IApiHandler {
 }
 
 /**
+ * 安全解析工具参数字符串。先直接 JSON.parse；失败则依次尝试修复：
+ *   1. 去除尾随逗号
+ *   2. 未闭合字符串按最后一个 `"` 截断
+ *   3. Python 风格 True/False/None → true/false/null
+ *   4. 字符串内部未转义的换行符替换为 \n
+ * 修复后再 parse 一次。
+ *
+ * 返回：
+ *   - { ok: true, value }                        原文直接成功
+ *   - { ok: true, value, repaired: true }        经修复后成功
+ *   - { ok: false, error }                       全部失败
+ *
+ * 调用方应在 ok=false 时将 error 原文以 tool_result.is_error=true 返回给模型，
+ * 让模型在下一轮自行重试，而不是抛异常或 silently 置空。
+ */
+export function safeParseToolArguments(
+	raw: string,
+	toolName: string,
+): { ok: boolean; value?: any; error?: string; repaired?: boolean } {
+	if (typeof raw !== 'string') {
+		return { ok: true, value: raw };
+	}
+	// Step 0：空串当空对象
+	const trimmed = raw.trim();
+	if (trimmed.length === 0) {
+		return { ok: true, value: {} };
+	}
+	// Step 1：直接 parse
+	try {
+		return { ok: true, value: JSON.parse(trimmed) };
+	} catch (firstErr) {
+		// 进入修复流程
+	}
+
+	// Step 2：依次执行修复策略
+	let repaired = trimmed;
+
+	// 2a. 去除尾随逗号：`, }` / `, ]`
+	repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
+
+	// 2b. Python 风格布尔/None。只替换标识符位置（避免误伤字符串内容的粗暴替换，这里只做全局替换，
+	//     实际风险可接受因为 Qwen 偶尔会直接吐 True/False/None 作为 JS 字面量）。
+	repaired = repaired
+		.replace(/\bTrue\b/g, 'true')
+		.replace(/\bFalse\b/g, 'false')
+		.replace(/\bNone\b/g, 'null');
+
+	// 2c. 字符串内部未转义的换行符：仅在字符串内替换
+	repaired = escapeUnescapedNewlinesInStrings(repaired);
+
+	// 先尝试一次修复后 parse
+	try {
+		return { ok: true, value: JSON.parse(repaired), repaired: true };
+	} catch {
+		// 继续 2d
+	}
+
+	// 2d. 未闭合字符串按最后一个 `"` 截断，再尝试补齐括号
+	const lastQuote = repaired.lastIndexOf('"');
+	if (lastQuote > 0) {
+		let candidate = repaired.substring(0, lastQuote + 1);
+		// 尝试补齐未闭合的 `{`/`[`
+		const openBraces = (candidate.match(/{/g) || []).length;
+		const closeBraces = (candidate.match(/}/g) || []).length;
+		const openBrackets = (candidate.match(/\[/g) || []).length;
+		const closeBrackets = (candidate.match(/]/g) || []).length;
+		candidate += ']'.repeat(Math.max(0, openBrackets - closeBrackets));
+		candidate += '}'.repeat(Math.max(0, openBraces - closeBraces));
+		try {
+			return { ok: true, value: JSON.parse(candidate), repaired: true };
+		} catch {
+			// fallthrough
+		}
+	}
+
+	// 彻底失败
+	const preview = trimmed.length > 300 ? trimmed.substring(0, 300) + '...' : trimmed;
+	return {
+		ok: false,
+		error: `Failed to parse tool arguments for tool "${toolName}": JSON is malformed and could not be repaired. Preview: ${preview}`,
+	};
+}
+
+/**
+ * 在字符串字面量内部，将裸的换行符替换为 \n。
+ * 状态机简单扫描，避免破坏已经正确转义的内容。
+ */
+function escapeUnescapedNewlinesInStrings(input: string): string {
+	let out = '';
+	let inString = false;
+	let escape = false;
+	for (let i = 0; i < input.length; i++) {
+		const ch = input[i];
+		if (escape) {
+			out += ch;
+			escape = false;
+			continue;
+		}
+		if (ch === '\\') {
+			out += ch;
+			escape = true;
+			continue;
+		}
+		if (ch === '"') {
+			inString = !inString;
+			out += ch;
+			continue;
+		}
+		if (inString && (ch === '\n' || ch === '\r')) {
+			out += ch === '\n' ? '\\n' : '\\r';
+			continue;
+		}
+		out += ch;
+	}
+	return out;
+}
+
+/**
  * 清理 Qwen 流式 API 返回的工具参数字符串
  * Qwen API 有时会在完整 JSON 末尾多发一个 `}` 字符，导致 JSON.parse 失败
  */

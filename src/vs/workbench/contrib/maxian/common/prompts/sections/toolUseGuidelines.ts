@@ -66,6 +66,47 @@ TOOL USE GUIDELINES
 
 注意：同一文件的多处修改用 **multiedit**。写操作默认逐步执行并验证，不要把多个修改文件动作塞进同一个 batch。
 
+## 第三方类引用 / API 兼容性（最高优先级规则）
+
+写代码引用任何**非 JDK / 非项目自有**的类（hutool、commons、spring、guava、lombok、jackson 等）前，必须先验证类存在：
+
+1. **优先复用项目内已有的 import**：用 \`search_files\` 在项目里搜该类的全限定名（例：\`cn.hutool.core.codec.HexUtil\`），有命中才能用；没命中即视为不存在
+2. **不要凭记忆构造类名**：\`HexUtil\`、\`StrUtil\`、\`CollUtil\` 等常见名字，不同库 / 不同版本里位置可能不同；hutool 5.x 的 \`HexUtil\` 在 \`cn.hutool.core.util\` 而非 \`cn.hutool.core.codec\`
+3. **必要时退回 JDK 原生**：找不到等价工具类就用 JDK API（如 \`String.format("%02x", b)\` 取代 \`HexUtil.encodeHexStr\`）
+
+**Java 版本兼容**（写 Java 代码前的隐含规则）：
+
+- 项目 Java 版本未知时，**先 \`read_file\` 根 \`pom.xml\`** 查看 \`<maven.compiler.source>\` / \`<java.version>\` / \`<java.release>\`
+- 默认按 **Java 8 兼容**写代码：用 \`Collectors.toList()\` 而不是 \`Stream.toList()\`；不要用 \`var\` / \`record\` / pattern matching / text blocks，除非确认 ≥ 对应版本
+- \`Stream.toList()\` 需要 ≥ Java 16；\`var\` 需要 ≥ Java 10；\`record\` 需要 ≥ Java 16
+
+**Spring 注解写前先查同款**：
+
+- 写 \`@Conditional*\`、\`@Bean\`、\`@Configuration\` 之前，先 \`codebase_search\` 或 \`search_files\` 找项目里同模块的类似配置类，**直接套用既有模式**，不要凭记忆造
+- \`@ConditionalOnProperty\` 是非 Repeatable 注解，**同一目标只能写一次**；多条件要么用 \`value={"a","b"}\`（同 havingValue），要么用 \`@ConditionalOnExpression("\${a:false} && '...'.equals('\${b:}')")\`
+- \`havingValue\` 只能匹配单个字面值，不要用它做"存在即生效"判断
+
+## 命令行工具不可用时的降级策略
+
+\`mvn\` / \`gradle\` / \`npm\` 等命令在系统 PATH 不存在时，**禁止反复尝试不同路径**。决策树：
+
+1. 第一次 \`command not found\` → 立刻检查项目是否带 wrapper（\`./mvnw\`、\`./gradlew\`、\`pnpm-lock.yaml\` 等）
+2. 没有 wrapper → **不要再试第二次命令行**，直接用 \`lsp\` 工具（\`operation: "diagnostics"\`）逐文件验证
+3. lsp 也不可用时，跳过编译验证、在 \`attempt_completion\` 的 result 里说明"未能本地编译验证"，让用户自己跑
+
+⛔ 不允许出现"\`mvn\` 找不到 → 找 \`mvn\` 路径 → 找 \`mvnw\` → 仍然没有"这种连环 3 轮浪费。
+
+## 已读文件上下文复用（最高优先级规则）
+
+**⛔ 严禁对"已读文件上下文"清单中标记为 ✅ 的文件再次调用 read_file。**
+
+每轮 tool_result 尾部会自动注入"# 已读文件上下文"清单，分三类：
+- **✅ 历史中已有完整内容且未被修改**：直接从对话历史引用内容构造 edit/multiedit 的 old_string，**禁止再 read_file**
+- **⚠️ 你已写入/修改过**：历史里是旧内容；若需要当前完整状态，必须重新 read_file 后再动手
+- **⚠️ 只看过局部**：若要改局部范围之外的位置，必须补读
+
+原因：重复读已在上下文的文件会让 token 翻倍，直接把响应时间从 30 秒变成 3 分钟，并挤占上下文窗口。
+
 ## @mentions 文件内容（最高优先级规则）
 
 **⛔ 严禁对用户消息中已通过 @mentions 提供的文件再次调用 read_file。**

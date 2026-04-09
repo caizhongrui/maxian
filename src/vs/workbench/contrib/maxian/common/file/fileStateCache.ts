@@ -246,4 +246,55 @@ export class FileStateCache {
 	get size(): number {
 		return this.cache.size;
 	}
+
+	/**
+	 * 构建"已读文件清单"，供 environment_details 注入到每轮提示中。
+	 *
+	 * 返回三类：
+	 * - unchanged: 模型已经看过当前版本的完整内容，历史里的内容即最新，禁止重读
+	 * - modifiedByTool: 工具（write_to_file / apply_diff / edit）推导出了新版本，
+	 *   但模型尚未完整看过该新版本；历史里是旧内容，若需要当前完整状态必须重读
+	 * - partial: 模型只看过局部范围，历史里不是全文，修改前需要补读或注意范围
+	 *
+	 * 路径在 workspaceRoot 内时返回相对路径，否则返回原始绝对路径。
+	 */
+	buildManifest(workspaceRoot?: string): {
+		unchanged: string[];
+		modifiedByTool: string[];
+		partial: string[];
+	} {
+		const unchanged: string[] = [];
+		const modifiedByTool: string[] = [];
+		const partial: string[] = [];
+
+		const toRel = (abs: string): string => {
+			if (!workspaceRoot) { return abs; }
+			if (abs === workspaceRoot) { return '.'; }
+			const prefix = workspaceRoot.endsWith('/') ? workspaceRoot : workspaceRoot + '/';
+			return abs.startsWith(prefix) ? abs.substring(prefix.length) : abs;
+		};
+
+		for (const [absPath, entry] of this.cache.entries()) {
+			const rel = toRel(absPath);
+			const isCurrentVersionViewed = entry.lastModelViewVersion === entry.version;
+
+			if (isCurrentVersionViewed && entry.lastModelViewKind === 'full') {
+				unchanged.push(rel);
+			} else if (entry.lastModelViewKind === 'derived') {
+				// 工具推导写入后的新版本，模型没完整看过
+				modifiedByTool.push(rel);
+			} else if (isCurrentVersionViewed && entry.lastModelViewKind === 'partial') {
+				const range = (entry.startLine !== undefined && entry.endLine !== undefined)
+					? ` (lines ${entry.startLine}-${entry.endLine})`
+					: '';
+				partial.push(`${rel}${range}`);
+			}
+			// 'unseen' 或版本已失效的不列出（要么模型没看过，要么需要重读）
+		}
+
+		unchanged.sort();
+		modifiedByTool.sort();
+		partial.sort();
+		return { unchanged, modifiedByTool, partial };
+	}
 }

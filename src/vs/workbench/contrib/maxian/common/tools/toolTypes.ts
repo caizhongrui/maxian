@@ -118,6 +118,7 @@ export const toolNames = [
 	'skill',        // Skills系统：按需加载专业知识
 	'todowrite',    // P2优化：写入待办列表（同 update_todo_list 但更丰富）
 	'todoread',     // P2优化：读取当前待办列表
+	'todo_write',   // 规划和跟踪多步任务的 TODO 列表（id/content/status/activeForm 规范）
 	'pr_review',    // PR代码审查：获取git diff供Agent分析
 	'generate_tests', // 测试代码生成：分析源文件供Agent生成测试
 	'use_mcp_tool',   // MCP工具调用：调用已连接的MCP服务器工具
@@ -277,6 +278,7 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 	skill: '加载专业知识',        // Skills系统
 	todowrite: '写入待办列表',    // P2优化
 	todoread: '读取待办列表',     // P2优化
+	todo_write: '规划 TODO 列表',
 	pr_review: 'PR代码审查',      // PR审查工具
 	generate_tests: '生成测试代码', // 测试生成工具
 	use_mcp_tool: '调用MCP工具',   // MCP工具调用
@@ -353,5 +355,6 @@ export const ALWAYS_AVAILABLE_TOOLS: ToolName[] = [
 	'attempt_completion',
 	'new_task',
 	'todowrite',       // 统一待办写入口
+	'todo_write',      // 结构化 TODO 规划（id/activeForm 规范）
 	'skill',           // Skills始终可用
 ] as const;

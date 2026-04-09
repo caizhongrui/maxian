@@ -207,9 +207,13 @@ export function executeEdit(
 		};
 	}
 
+	const successMessage = fuzzy.warning
+		? `Edit applied successfully. ${fuzzy.warning}`
+		: `Edit applied successfully.`;
+
 	return {
 		success: true,
-		message: `Edit applied successfully.`,
+		message: successMessage,
 		newContent: fuzzy.result,
 		strategy: fuzzy.strategy || (exactMatchCount > 0 ? 'exact' : 'fuzzy'),
 		matchCount: fuzzy.matchCount,
@@ -232,12 +236,22 @@ export function formatEditResponse(result: EditResult): string {
 export const EDIT_TOOL_DESCRIPTION = `## edit
 Performs robust string replacements in files.
 
+**关键约束（违反将被 preflight 拦截，工具根本不会执行）：**
+- 编辑前**必须**通过 read_file 完整读取该文件。若上一次仅通过 start_line/end_line 做了局部读取，必须先重新进行一次不带范围参数的完整读取。
+- 如果距上次 read_file 已经经过 edit/multiedit/apply_diff 或用户改动，必须重新 read_file 后再编辑。系统会通过 FileStateCache 自动检测并拒绝过期编辑。
+- old_string 必须从最近一次 read_file 的输出中**逐字节精确复制**，包括所有空白、制表符、缩进与换行——**禁止凭记忆、猜测或改写重排**。
+- 优先使用**最小的唯一上下文**（通常 2-4 行相邻代码）作为 old_string。不要为了保险堆叠 10+ 行，过长反而容易因为行尾空白或缩进细节失配。
+- 如果 old_string 在文件中出现多处，要么扩展上下文使其唯一，要么显式设置 replace_all=true。默认 replace_all=false 时多处匹配会直接失败。
+- old_string 不能等于 new_string，否则视为无效操作。
+- 同一文件不要用 write_to_file 反复整文件重写，修改已有文件请使用 edit / multiedit。
+
 Usage:
 - 必须先使用 read_file 完整读取文件，然后再编辑
 - 优先精确匹配；若精确匹配失败，会尝试安全容错（空白/缩进/引号归一）
 - 如果 old_string 在文件中不存在，编辑会失败并返回 "oldString not found in content"
 - 如果 old_string 命中多处且 replace_all=false，会失败并要求提供更多上下文
 - 优先编辑已有文件，只有在明确需要时才创建新文件
+- 工具失败后**不要**用完全相同的参数重试——先重新 read_file 确认当前内容，再调整 old_string 后再试
 
 **参数：**
 - path (必需): 要编辑的文件路径

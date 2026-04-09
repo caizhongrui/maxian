@@ -33,8 +33,10 @@ export class SearchTool {
 	private readonly searchCache: Map<string, SearchCacheEntry> = new Map();
 	private readonly CACHE_TTL = 30000; // 30秒缓存
 	private readonly MAX_CACHE_SIZE = 100;
-	private readonly MAX_CONTENT_OUTPUT_FILES = 8;
-	private readonly MAX_CONTENT_OUTPUT_MATCHES = 50;
+	private readonly MAX_CONTENT_OUTPUT_FILES = 50;
+	private readonly MAX_CONTENT_OUTPUT_MATCHES = 200;
+	private readonly MAX_PREVIEWS_PER_FILE = 5;
+	private readonly STAT_CONCURRENCY = 32;
 	private readonly MAX_PREVIEW_LINE_CHARS = 400;
 	private readonly verboseLogs = false;
 	private cacheHits = 0;
@@ -45,7 +47,8 @@ export class SearchTool {
 		// @ts-expect-error: ripgrepService保留以备将来使用
 		private readonly _ripgrepService: IRipgrepService,
 		private readonly workspaceRoot: string,
-		private readonly fileService?: IFileService
+		private readonly fileService?: IFileService,
+		private readonly vectorSearchService?: import('../../common/vector/IVectorSearchService.js').IVectorSearchService
 	) {
 		this.debugLog('[SearchTool] 初始化，工作区:', workspaceRoot);
 	}
@@ -205,11 +208,16 @@ export class SearchTool {
 					}
 
 					// content 模式：返回完整内容（filePath:lineNumber: content）
+					// 每个文件最多输出 MAX_PREVIEWS_PER_FILE 行，避免单个大文件占满整个输出
 					const allResults: string[] = [];
 					for (const filePath of sortedFiles) {
 						const fileResults = resultsByFile.get(filePath)!;
-						for (const { lineNumber, line } of fileResults) {
+						const perFile = fileResults.slice(0, this.MAX_PREVIEWS_PER_FILE);
+						for (const { lineNumber, line } of perFile) {
 							allResults.push(`${filePath}:${lineNumber}: ${this.truncatePreviewLine(line)}`);
+						}
+						if (fileResults.length > this.MAX_PREVIEWS_PER_FILE) {
+							allResults.push(`${filePath}: ... (+${fileResults.length - this.MAX_PREVIEWS_PER_FILE} more matches)`);
 						}
 					}
 					const contentLimit = Math.min(headLimit, this.MAX_CONTENT_OUTPUT_MATCHES);
@@ -318,6 +326,29 @@ export class SearchTool {
 			}
 			this.cacheMisses++;
 
+			// 优先走向量语义检索（对齐 Claude Code codebase_search 的体感）
+			// 只有索引模型已就绪且有内容时才用，否则走 ripgrep 兜底
+			if (this.vectorSearchService) {
+				try {
+					const stats = await this.vectorSearchService.getIndexStats(searchPath);
+					if (stats.modelReady && stats.itemCount > 0 && !stats.isIndexing) {
+						const semanticResults = await this.vectorSearchService.semanticSearch(query, searchPath, headLimit);
+						if (semanticResults && semanticResults.length > 0) {
+							const formatted = this.vectorSearchService.formatResults(semanticResults, query);
+							this.setCache(cacheKey, formatted);
+							const elapsed = Date.now() - startTime;
+							this.debugLog('[SearchTool] codebaseSearch 语义检索命中，耗时:', elapsed, 'ms，结果数:', semanticResults.length);
+							return formatted;
+						}
+					} else if (!stats.isIndexing && stats.itemCount === 0 && stats.modelReady) {
+						// 冷启动：异步触发索引但不阻塞本次调用
+						this.vectorSearchService.triggerIndexing(searchPath).catch(() => { });
+					}
+				} catch (err) {
+					this.debugLog('[SearchTool] 语义检索失败，回退 ripgrep:', err);
+				}
+			}
+
 			try {
 				const folderUri = URI.file(searchPath);
 
@@ -404,12 +435,16 @@ export class SearchTool {
 			return `检测到语义搜索 content 模式会跨 ${resultsByFile.size} 个文件返回大量内容，已自动降级为文件路径列表以避免主线程卡住。\n\n请先选定候选文件再 read_file：\n\n${pagedFiles.join('\n')}`;
 		}
 
-		// 按文件 mtime 顺序展开结果
+		// 按文件 mtime 顺序展开结果（每文件限 MAX_PREVIEWS_PER_FILE 行）
 		const allResults: string[] = [];
 		for (const filePath of sortedFiles) {
 			const fileResults = resultsByFile.get(filePath)!;
-			for (const { lineNumber, line } of fileResults) {
+			const perFile = fileResults.slice(0, this.MAX_PREVIEWS_PER_FILE);
+			for (const { lineNumber, line } of perFile) {
 				allResults.push(`${filePath}:${lineNumber}: ${this.truncatePreviewLine(line)}`);
+			}
+			if (fileResults.length > this.MAX_PREVIEWS_PER_FILE) {
+				allResults.push(`${filePath}: ... (+${fileResults.length - this.MAX_PREVIEWS_PER_FILE} more matches)`);
 			}
 		}
 
@@ -425,16 +460,24 @@ export class SearchTool {
 	private async sortFilesByMtime(filePaths: string[]): Promise<string[]> {
 		try {
 			const fsModule = await import('fs');
-			const pathsWithMtime = await Promise.all(
-				filePaths.map(async (filePath) => {
+			// 限制并发避免 EMFILE（大项目一次可能上千个 stat）
+			const concurrency = this.STAT_CONCURRENCY;
+			const pathsWithMtime: { path: string; mtime: number }[] = new Array(filePaths.length);
+			let nextIdx = 0;
+			const workers = Array.from({ length: Math.min(concurrency, filePaths.length) }, async () => {
+				while (true) {
+					const i = nextIdx++;
+					if (i >= filePaths.length) { return; }
+					const filePath = filePaths[i];
 					try {
 						const stat = await fsModule.promises.stat(filePath);
-						return { path: filePath, mtime: stat.mtimeMs };
+						pathsWithMtime[i] = { path: filePath, mtime: stat.mtimeMs };
 					} catch {
-						return { path: filePath, mtime: 0 };
+						pathsWithMtime[i] = { path: filePath, mtime: 0 };
 					}
-				})
-			);
+				}
+			});
+			await Promise.all(workers);
 			// mtime 降序：最近修改的文件优先（最相关）
 			pathsWithMtime.sort((a, b) => b.mtime - a.mtime);
 			return pathsWithMtime.map(p => p.path);
@@ -469,7 +512,10 @@ export class SearchTool {
 					},
 					includePattern,
 					excludePattern,
-					maxResults: 100,
+					// 不再硬截断到 100：大项目里一个常见 regex 轻松 >100 命中，
+					// 截断会导致模型看到残缺结果并反复换关键词重试。
+					// 真正的分页裁剪交给调用方按 headLimit/offset 做。
+					maxResults: 5000,
 					folderQueries: [{ folder: folderUri }]
 				},
 				token

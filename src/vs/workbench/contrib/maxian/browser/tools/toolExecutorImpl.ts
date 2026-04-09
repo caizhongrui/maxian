@@ -9,6 +9,7 @@ import { FileOperationsTool } from './fileOperations.js';
 import { CommandExecutionTool } from './commandExecution.js';
 import { SearchTool } from './searchTools.js';
 import { TodoStore, parseTodos, formatTodoList, IRawTodoInput, shouldAutoClean, getVerificationNudge } from '../../common/tools/todoStore.js';
+import { executeTodoWrite } from '../../common/tools/todoWriteTool.js';
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { IModelService } from '../../../../../editor/common/services/model.js';
 import { ITerminalService } from '../../../terminal/browser/terminal.js';
@@ -86,14 +87,117 @@ export class ToolExecutorImpl implements IToolExecutor {
 	 */
 	private fileReadCount: Map<string, number> = new Map();
 
+	/** mvn 在当前任务中已确认不可用（command not found）→ 后续 mvn 相关命令直接拒绝 */
+	private mvnUnavailable: boolean = false;
+
+	/**
+	 * 当前用户消息是否明确要求启动开发服务器 / 运行项目。
+	 * 由 maxianService 在每次接收到新用户消息时调用 noteUserMessageForServerIntent() 重新计算。
+	 * 默认 false —— 模型不得自行启动 dev server。
+	 */
+	private userExplicitlyRequestedServerStart: boolean = false;
+
+	/**
+	 * 外部（maxianService）在每次接收到用户新消息时调用。
+	 * 用关键字启发式判定本条用户消息是否在明确请求"启动 / 运行 / 跑起来 / start / run"。
+	 * 只要命中就打开本轮的 dev server 放行开关；否则关闭。
+	 */
+	public noteUserMessageForServerIntent(userMessage: string): void {
+		if (!userMessage) {
+			this.userExplicitlyRequestedServerStart = false;
+			return;
+		}
+		const msg = userMessage.toLowerCase();
+		// 中文意图
+		const zh = /(启动|运行起来|跑起来|启一下|开启服务|启服务|启动项目|启动一下|启动服务器|运行项目|运行一下)/;
+		// 英文意图 —— 必须与 "server" / "project" / "dev" / "app" 等语境词共现，
+		// 避免 "run the tests" 这类被误判
+		const en = /\b(start|run|launch|boot|serve)\b[^.]{0,40}\b(server|project|app|dev|site|frontend|backend|service)\b/;
+		const enAlt = /\b(npm|pnpm|yarn|vite|next|nuxt)\s+(dev|start|run)\b/;
+		this.userExplicitlyRequestedServerStart = zh.test(userMessage) || en.test(msg) || enAlt.test(msg);
+	}
+
+	/**
+	 * 判断命令是否属于"长时间运行的开发服务器 / 进程"。
+	 * 模型在写完代码后经常会自行 npm run dev / vite / python manage.py runserver 做"冒烟验证"，
+	 * 这类命令是前台常驻进程，会把工具执行卡到超时，而且最终也不成功。
+	 * 除非用户明确要求启动，否则这些命令一律拒绝，让模型改走 build / lsp 静态校验路径。
+	 */
+	private isLongRunningServerCommand(cmd: string): boolean {
+		if (!cmd) { return false; }
+		const c = cmd.trim().toLowerCase();
+		// 前端 dev server
+		if (/\b(npm|pnpm|yarn|bun|npx)\b[^&;|]*\b(run\s+)?(dev|serve|start|preview)\b/.test(c)) { return true; }
+		if (/(^|[\s;&|`(])vite(\s+(dev|serve|preview))?(\s|$)/.test(c)) { return true; }
+		if (/(^|[\s;&|`(])(next|nuxt|remix|astro|svelte-kit|webpack-dev-server|rollup|parcel)\s+(dev|start|serve)/.test(c)) { return true; }
+		if (/(^|[\s;&|`(])(ng|nest)\s+(serve|start)/.test(c)) { return true; }
+		// Python 服务器
+		if (/python[23]?\s+-m\s+http\.server/.test(c)) { return true; }
+		if (/python[23]?\s+manage\.py\s+runserver/.test(c)) { return true; }
+		if (/\b(uvicorn|gunicorn|hypercorn|flask\s+run|fastapi\s+dev|streamlit\s+run)\b/.test(c)) { return true; }
+		// Java 服务器
+		if (/spring-boot:run/.test(c)) { return true; }
+		if (/gradlew\s+(bootrun|run)/.test(c)) { return true; }
+		// Node 直接起服务（启发式：node xxx.js 配合 server/app/index 常见命名）
+		if (/\bnode\s+[^\s;|&]*(server|app|index|main)\b/.test(c)) { return true; }
+		// Go / Rust / 其他
+		if (/\bgo\s+run\b/.test(c)) { return true; }
+		if (/\bcargo\s+run\b/.test(c)) { return true; }
+		// 通用端口探活 + 启动
+		if (/tail\s+-f\b/.test(c)) { return true; }
+		return false;
+	}
+
+	/** 判断命令是否与 mvn 检索/执行有关，用于一次失败后封禁后续探测 */
+	private isMvnRelatedCommand(cmd: string): boolean {
+		if (!cmd) { return false; }
+		const c = cmd.trim();
+		// 直接执行 mvn / mvnw 或在子句里
+		if (/(^|[\s;&|`(])mvn(\s|$)/.test(c)) { return true; }
+		if (/mvnw(\.cmd)?(\s|$)/.test(c)) { return true; }
+		// 各种"找 mvn"探测
+		if (/which\s+mvn/.test(c)) { return true; }
+		if (/command\s+-v\s+mvn/.test(c)) { return true; }
+		if (/find\b[^|;]*\bmvn\b/.test(c)) { return true; }
+		if (/M2_HOME/.test(c)) { return true; }
+		if (/\.m2\//.test(c)) { return true; }
+		if (/apache-maven/.test(c)) { return true; }
+		return false;
+	}
+
 	/**
 	 * 记录当前任务中 direct write_to_file 的成功次数。
 	 * 同一路径第二次整文件重写必须被阻断，改用精确编辑工具。
 	 */
 	private successfulWriteToFileCounts: Map<string, number> = new Map();
 
+	/**
+	 * 每个文件自上一次 write_to_file 成功后发生的 edit/multiedit/patch 失败次数。
+	 * 当失败 ≥2 次时，放行一次 write_to_file，作为"上次写坏了必须整文件重写"的恢复口子。
+	 */
+	private editFailuresAfterWrite: Map<string, number> = new Map();
+
 	/** D2: 文件内容内存缓存，与 FileOperationsTool 共享同一实例 */
 	private readonly fileStateCache: FileStateCache = new FileStateCache();
+
+	/** 新任务开始时清空：模型没有上一任务的记忆，缓存必须同步重置，
+	 *  否则会错误返回 <file_unchanged> 让模型以为"已经读过" */
+	public resetFileStateCacheForNewTask(): void {
+		this.fileStateCache.clear();
+		this.successfulWriteToFileCounts.clear();
+		this.editFailuresAfterWrite.clear();
+		// 同时清理"重复读取"计数器，避免新任务里第一次读老文件时误报第 N 次
+		this.fileReadCount.clear();
+		// mvn 可用性是环境状态，不随任务清；保留至 IDE 重启
+	}
+
+	/**
+	 * 暴露 FileStateCache 给外部（environment_details 生成清单用）。
+	 * 只读用途：外部仅用于调用 buildManifest()。
+	 */
+	public getFileStateCache(): FileStateCache {
+		return this.fileStateCache;
+	}
 
 	/** C5: Hooks 管理器 */
 	private readonly hooksManager: HooksManager;
@@ -118,17 +222,18 @@ export class ToolExecutorImpl implements IToolExecutor {
 		skillService?: ISkillService,
 		commandExecutionService?: ICommandExecutionService,
 		modelService?: IModelService,
-		vectorSearchService?: IVectorSearchService
+		vectorSearchService?: IVectorSearchService,
+		textFileService?: import('../../../../services/textfile/common/textfiles.js').ITextFileService
 	) {
 		this.fileService = fileService;
 		this.commandExecutionService = commandExecutionService;
-		this.fileOperations = new FileOperationsTool(fileService, context.workspaceRoot || '', undefined, modelService, this.fileStateCache);
+		this.fileOperations = new FileOperationsTool(fileService, context.workspaceRoot || '', undefined, modelService, this.fileStateCache, textFileService);
 		this.hooksManager = new HooksManager(context.workspaceRoot || '');
 		this.commandExecution = new CommandExecutionTool(terminalService);
 		if (commandExecutionService) {
 			this.commandExecution.setCommandExecutionService(commandExecutionService);
 		}
-		this.searchTool = new SearchTool(searchService, ripgrepService, context.workspaceRoot || '', fileService);
+		this.searchTool = new SearchTool(searchService, ripgrepService, context.workspaceRoot || '', fileService, vectorSearchService);
 		this.context = context;
 		this.skillService = skillService;
 		this.vectorSearchService = vectorSearchService;
@@ -277,9 +382,19 @@ export class ToolExecutorImpl implements IToolExecutor {
 
 					result = await this.fileOperations.readFile(toolUse as any);
 
-					// 仅在第2次读取且非 STUB 时（说明文件已被修改）附加一次提示
-					if (newCount === 2 && typeof result === 'string' && !result.includes('<file_unchanged>')) {
-						result = result + `\n\n⚠️ [重复读取] 这是第 ${newCount} 次读取 "${readFilePath}"（文件已变动，本次返回最新内容）。`;
+					// 第 2 次读取的处理：
+					// - 文件已变 → 加 [重复读取] 提示
+					// - 文件未变（返回 STUB）→ 直接返回硬错误，禁止模型继续重读相同状态
+					if (newCount >= 2 && typeof result === 'string') {
+						if (result.includes('<file_unchanged>')) {
+							result = `<error>
+[重复读取拦截] 第 ${newCount} 次读取 "${readFilePath}"，文件自上次读取后未发生变化。
+你已经在对话历史中拥有该文件的完整内容，禁止再次 read_file。
+请直接基于历史中的内容继续工作（构造 edit/multiedit 的 old_string，或调用 attempt_completion）。
+</error>`;
+						} else {
+							result = result + `\n\n⚠️ [重复读取] 这是第 ${newCount} 次读取 "${readFilePath}"（文件已变动，本次返回最新内容）。`;
+						}
 					}
 					break;
 				}
@@ -302,6 +417,8 @@ export class ToolExecutorImpl implements IToolExecutor {
 							resolvedWritePath,
 							(this.successfulWriteToFileCounts.get(resolvedWritePath) || 0) + 1
 						);
+						// 新一次成功整文件写入后，重置"修复失败计数"，恢复口子需要重新累积
+						this.editFailuresAfterWrite.delete(resolvedWritePath);
 						result = await this.appendDiagnosticDelta(resolvedWritePath, result, baseline);
 					}
 					break;
@@ -351,6 +468,43 @@ export class ToolExecutorImpl implements IToolExecutor {
 						break;
 					}
 
+					// dev server / 长时间运行进程拦截：除非用户消息里明确要求启动，否则一律拒绝。
+					// 模型经常在"写完代码"后自动 npm run dev 做冒烟测试，会把工具卡到超时，
+					// 且 UI 端没有进度条，最终也不成功，浪费大量上下文。
+					const cmdText = toolUse.params.command || '';
+					if (this.isLongRunningServerCommand(cmdText) && !this.userExplicitlyRequestedServerStart) {
+						result = `<error>
+[自动启动拦截] 禁止在未获得用户明确指令的情况下启动开发服务器 / 长时间运行的前台进程。
+命令: ${cmdText}
+
+原因：
+1. 这类命令是前台常驻进程，会把工具调用卡到超时
+2. UI 端没有服务器日志的实时进度显示
+3. 用户并没有要求启动项目，而是要求完成开发任务
+
+请改用以下方式验证你的修改：
+1. 运行静态构建命令（如 \`npm run build\` / \`vite build\` / \`tsc --noEmit\` / \`mvn -q -DskipTests compile\`）
+2. 调用 \`lsp\` 工具 operation=diagnostics 检查修改过的文件
+3. 直接 attempt_completion 并在 result 中说明"未启动 dev server，需要用户手动运行 \`${cmdText}\` 验证"
+
+如果确实需要启动，请用 ask_followup_question 询问用户是否授权启动。
+</error>`;
+						break;
+					}
+
+					// mvn 不可用拦截：本任务/会话中已确认 mvn 不存在 → 拒绝任何 mvn 相关命令
+					if (this.mvnUnavailable && this.isMvnRelatedCommand(cmdText)) {
+						result = `<error>
+[mvn 不可用拦截] 当前环境已确认无 mvn 命令、且项目无 mvnw wrapper（之前已尝试并失败）。
+禁止再次执行 \`mvn\`、\`which mvn\`、\`find ... mvn\`、\`./mvnw\` 等任何 mvn 探测/调用。
+
+请立即改用以下方式验证 Java 代码正确性：
+1. 调用 \`lsp\` 工具，operation: "diagnostics"，对修改过的每个 .java 文件逐一检查
+2. 如果 lsp 也不可用，跳过本地编译验证，在 attempt_completion 的 result 中说明"未能本地编译验证"
+</error>`;
+						break;
+					}
+
 					// AI自声明命令是否需要用户确认：true=有副作用，false=只读操作
 					const requiresApproval = toolUse.params.requires_approval;
 					const normalizedCwd = (toolUse.params.cwd || '').trim();
@@ -383,6 +537,11 @@ export class ToolExecutorImpl implements IToolExecutor {
 						);
 					}
 					result = await this.commandExecution.executeCommand(executionToolUse as any);
+					if (this.isMvnRelatedCommand(cmdText) && typeof result === 'string' &&
+						(/command not found/i.test(result) || /mvn:\s*not found/i.test(result) || /no such file or directory.*mvnw/i.test(result))) {
+						this.mvnUnavailable = true;
+						result = result + `\n\n⚠️ [mvn 不可用已登记] 后续任何 mvn/mvnw/which mvn 命令将被直接拒绝。请改用 lsp diagnostics 验证 Java 代码。`;
+					}
 					break;
 				}
 
@@ -466,6 +625,14 @@ export class ToolExecutorImpl implements IToolExecutor {
 				case 'todoread':
 					result = this.handleTodoRead();
 					break;
+
+				case 'todo_write': {
+					const sessionId = this.context.sessionId || 'default';
+					const raw = (toolUse.params as any).todos;
+					const outcome = executeTodoWrite(sessionId, raw);
+					result = outcome.message;
+					break;
+				}
 
 				// P2优化：task 子 Agent 委托
 				case 'task':
@@ -1312,6 +1479,16 @@ export class ToolExecutorImpl implements IToolExecutor {
 	 * 处理待办列表更新（update_todo_list / todowrite）
 	 * 完整实现：解析、验证、持久化、返回确认
 	 */
+	/**
+	 * Qwen 适配：将 "1. foo\n2. bar\n- baz" 纯文本切分为 pending todo 数组
+	 */
+	private splitPlainTodoText(text: string): IRawTodoInput[] {
+		return text.split(/\r?\n/)
+			.map(line => line.replace(/^\s*(?:[-*•]|\d+[.、)])\s*/, '').trim())
+			.filter(line => line.length > 0)
+			.map(content => ({ content, status: 'pending' as const }));
+	}
+
 	private handleUpdateTodoList(toolUse: ToolUse): ToolResponse {
 		const { todos } = toolUse.params;
 
@@ -1321,7 +1498,23 @@ export class ToolExecutorImpl implements IToolExecutor {
 
 		let rawTodos: IRawTodoInput[];
 		try {
-			rawTodos = typeof todos === 'string' ? JSON.parse(todos) : todos;
+			if (typeof todos === 'string') {
+				const trimmed = todos.trim();
+				// 先尝试标准 JSON 解析
+				if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+					try {
+						rawTodos = JSON.parse(trimmed);
+					} catch {
+						// JSON 损坏 → 退回行切分
+						rawTodos = this.splitPlainTodoText(trimmed);
+					}
+				} else {
+					// Qwen 常见失误：直接传 "1. foo\n2. bar" 纯文本 → 按行切分为 pending 数组
+					rawTodos = this.splitPlainTodoText(trimmed);
+				}
+			} else {
+				rawTodos = todos;
+			}
 			if (!Array.isArray(rawTodos)) {
 				return '错误: todos 必须是数组';
 			}
@@ -1523,6 +1716,7 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 		const resolvedEditPath = this.fileOperations.resolveFilePath(editParams.path);
 		const mutationGuard = await this.ensureExplicitReadBeforeMutation(resolvedEditPath, {
 			allowCreate: !!editParams.create_if_missing,
+			allowPartialView: true,
 		});
 		if (mutationGuard) {
 			return mutationGuard;
@@ -1559,10 +1753,12 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			}
 
 			// 写入修改后的内容
+			// edit 后模型已知"原文 + 自己的 diff" = 完整新内容，标 'full' 让 manifest 归入 ✅，
+			// 避免模型在收尾时被引导重读自己刚改完的文件
 			const writeResult = await this.fileOperations.writeToFile({
 				type: 'tool_use',
 				name: 'write_to_file',
-				params: { path: editParams.path, content: result.newContent, write_visibility: 'derived' },
+				params: { path: editParams.path, content: result.newContent, write_visibility: 'full' },
 				partial: false,
 			} as any);
 			if (this.isFailureText(this.toTextResult(writeResult))) {
@@ -1598,8 +1794,10 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 		const resolvedEditPath = this.fileOperations.resolveFilePath(editParams.path);
 		const mutationGuard = await this.ensureExplicitReadBeforeMutation(resolvedEditPath, {
 			allowCreate: !!editParams.create_if_missing,
+			allowPartialView: true,
 		});
 		if (mutationGuard) {
+			this.noteEditFailureForRecovery(resolvedEditPath);
 			return this.createExecutionResult(toolUse, false, 'error', mutationGuard, this.stripXmlTags(mutationGuard));
 		}
 
@@ -1609,8 +1807,24 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			return null;
 		}
 
+		this.noteEditFailureForRecovery(resolvedEditPath);
 		const message = `edit 预检查失败: ${result.message}。这表示当前 old_string 已不匹配目标文件内容，必须先重新读取目标文件全文或重新定位待修改代码块，不能继续批准这次修改。`;
 		return this.createExecutionResult(toolUse, false, 'error', `<error>${message}</error>`, message);
+	}
+
+	/**
+	 * 记录一次 edit/multiedit/patch 失败，用于 write_to_file 的恢复口子逻辑。
+	 * 仅在该文件在当前任务中已有 ≥1 次成功 write_to_file 之后才计数——
+	 * 我们只关心"写过一次之后又改不动"这种被单次规则锁死的情况。
+	 */
+	private noteEditFailureForRecovery(resolvedPath: string): void {
+		if (!resolvedPath) { return; }
+		const hasPriorWrite = (this.successfulWriteToFileCounts.get(resolvedPath) || 0) >= 1;
+		if (!hasPriorWrite) { return; }
+		this.editFailuresAfterWrite.set(
+			resolvedPath,
+			(this.editFailuresAfterWrite.get(resolvedPath) || 0) + 1
+		);
 	}
 
 	private async preflightWriteToFileToolUse(toolUse: ToolUse): Promise<ToolExecutionResult | null> {
@@ -1629,8 +1843,20 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 
 			const previousSuccessfulWrites = this.successfulWriteToFileCounts.get(resolvedWritePath) || 0;
 			if (previousSuccessfulWrites >= 1) {
-				const message = `write_to_file 预检查失败: 文件 ${resolvedWritePath} 在当前任务中已经通过 write_to_file 成功写入过一次。后续修改必须先重新 read_file 当前全文，再改用 edit 或 multiedit，不能继续整文件重写。`;
-				return this.createExecutionResult(toolUse, false, 'error', `<error>${message}</error>`, message);
+				// 恢复口子：如果上一次 write_to_file 之后 edit/multiedit/patch 已经连续失败 ≥2 次，
+				// 说明上次产出的文件状态已坏到无法局部修复（例如被 patch(action=modify) 截断、
+				// 或结构缺闭合标签无法精确定位）。此时放行一次整文件重写，并重置写入次数，
+				// 让模型走"read_file → write_to_file 恢复"路径而不是卡死在 edit 循环里。
+				const editFailures = this.editFailuresAfterWrite.get(resolvedWritePath) || 0;
+				if (editFailures >= 2) {
+					this.successfulWriteToFileCounts.delete(resolvedWritePath);
+					this.editFailuresAfterWrite.delete(resolvedWritePath);
+					console.log(`[Maxian] write_to_file 恢复口子放行: ${resolvedWritePath}（edit 失败 ${editFailures} 次）`);
+					// 继续后续 preflight 流程
+				} else {
+					const message = `write_to_file 预检查失败: 文件 ${resolvedWritePath} 在当前任务中已经通过 write_to_file 成功写入过一次。后续修改必须先重新 read_file 当前全文，再改用 edit 或 multiedit，不能继续整文件重写。`;
+					return this.createExecutionResult(toolUse, false, 'error', `<error>${message}</error>`, message);
+				}
 			}
 		}
 
@@ -1721,10 +1947,11 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			}
 
 			// 写入修改后的内容
+			// multiedit 后模型已知"原文 + 一组 diff" = 完整新内容，标 'full' 避免被引导重读
 			const writeResult = await this.fileOperations.writeToFile({
 				type: 'tool_use',
 				name: 'write_to_file',
-				params: { path, content: result.finalContent, write_visibility: 'derived' },
+				params: { path, content: result.finalContent, write_visibility: 'full' },
 				partial: false,
 			} as any);
 			if (this.isFailureText(this.toTextResult(writeResult))) {
@@ -1752,8 +1979,11 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 		}
 
 		const resolvedMultieditPath = this.fileOperations.resolveFilePath(path);
-		const mutationGuard = await this.ensureExplicitReadBeforeMutation(resolvedMultieditPath);
+		const mutationGuard = await this.ensureExplicitReadBeforeMutation(resolvedMultieditPath, {
+			allowPartialView: true,
+		});
 		if (mutationGuard) {
+			this.noteEditFailureForRecovery(resolvedMultieditPath);
 			return this.createExecutionResult(toolUse, false, 'error', mutationGuard, this.stripXmlTags(mutationGuard));
 		}
 
@@ -1788,6 +2018,7 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			return null;
 		}
 
+		this.noteEditFailureForRecovery(resolvedMultieditPath);
 		const message = `multiedit 预检查失败: ${result.error}。这表示当前编辑计划已不能安全应用，必须先重新读取目标文件全文或拆分后重新定位修改点，不能继续批准这次修改。`;
 		return this.createExecutionResult(toolUse, false, 'error', `<error>${message}</error>`, message);
 	}
@@ -1853,9 +2084,26 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 						continue;
 					}
 
-					if ((patch.action === 'create' || patch.action === 'modify' || (!patch.action && typeof patch.content === 'string'))
+					// P0 修复：patch(action=modify) 必须提供 operations（old_string/new_string）。
+					// 历史实现会在 action=modify 但只给 content 时把 content 当整文件写入，导致大文件被
+					// 模型意图补一小段时整个截断。现在强制拒绝，避免静默数据丢失。
+					if (patch.action === 'modify' && !patch.operations) {
+						results.push(`❌ ${patch.path}: patch(action=modify) 必须提供 operations（old_string/new_string 对），不能只给 content。单独的 content 会被当作整文件覆写，已被禁止以防文件内容被截断丢失。请改用 edit / multiedit 做精确修改，或使用 write_to_file 做完整全量重写。`);
+						failCount++;
+						continue;
+					}
+
+					// action=create（或省略 action 仅给 content）：只允许创建新文件，
+					// 禁止通过 create 去覆写已存在的文件。
+					if ((patch.action === 'create' || (!patch.action && typeof patch.content === 'string'))
 						&& !patch.operations
 						&& typeof patch.content === 'string') {
+						const existingInfo = await this.fileOperations.getFileInfo(resolvedPatchPath);
+						if (existingInfo && !existingInfo.isDirectory) {
+							results.push(`❌ ${patch.path}: patch(action=create) 不能用于已存在的文件，以免整文件覆写丢失内容。请改用 edit / multiedit（局部修改）或 write_to_file（明确的全量重写）。`);
+							failCount++;
+							continue;
+						}
 						const baseline = await this.captureDiagnosticBaseline(resolvedPatchPath);
 						const writeResult = await this.fileOperations.writeToFile({
 							type: 'tool_use',
@@ -1870,7 +2118,7 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 						}
 						const successMessage = await this.appendDiagnosticDelta(
 							resolvedPatchPath,
-							`✅ ${patch.path}: 已按 patch.content 整体写入`,
+							`✅ ${patch.path}: 已创建`,
 							baseline
 						);
 						results.push(typeof successMessage === 'string' ? successMessage : this.toTextResult(successMessage));
@@ -2072,7 +2320,7 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 
 	private async ensureExplicitReadBeforeMutation(
 		filePath: string,
-		options: { allowCreate?: boolean } = {}
+		options: { allowCreate?: boolean; allowPartialView?: boolean } = {}
 	): Promise<string | null> {
 		if (!filePath) {
 			return '错误: 未提供文件路径';
@@ -2099,6 +2347,11 @@ File has not been read yet. Read it first before writing to it.
 路径: ${filePath}
 </error>`;
 			case 'partial_view':
+				// edit / multiedit 本身会基于读到的原文全量重新匹配，所以局部视图并不会破坏安全性。
+				// 只对 write_to_file 这类整文件重写保留强约束。
+				if (options.allowPartialView) {
+					return null;
+				}
 				return `<error>
 File has only been partially read. Read the full file before attempting to write it.
 路径: ${filePath}

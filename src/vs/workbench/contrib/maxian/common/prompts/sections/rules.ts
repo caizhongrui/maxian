@@ -21,7 +21,11 @@ RULES
 文件操作规则：
 - 创建新项目时，在专用目录中组织文件
 - 保持代码风格一致，遵循最佳实践
-- 如果距上次读取该文件已超过 5 轮对话，编辑前必须重新读取（参考Cursor）
+- **强制的"先读后改"**：任何 edit / multiedit / apply_diff / write_to_file（对已存在文件）之前，必须先用 read_file 对该文件进行**完整**读取；仅按行范围局部读取不算数，系统会在 preflight 阶段直接拦截未读编辑并返回 "File has not been read yet"
+- 一旦文件被 edit / multiedit / apply_diff / write_to_file 修改过，或怀疑用户/其他工具改动过，**必须重新 read_file**，不得基于旧内容继续编辑；系统通过 FileStateCache 自动检测并拒绝过期编辑
+- edit 的 old_string 必须从最近一次 read_file 的输出中**逐字节精确复制**，包括全部空白、缩进和换行——禁止凭记忆、改写或重排
+- 优先使用最小的唯一上下文（通常 2-4 行）作为 old_string；过长的 old_string 更容易因不可见字符失配
+- 同一 edit 在短时间内失败后，不得使用完全相同的参数重试，必须先重新 read_file 确认当前内容
 - 写入文件时确保内容完整
 - write_to_file 仅用于创建新文件或完全重写；对已有文件的部分修改必须使用 edit / multiedit / apply_diff
 - 不要主动创建 README、说明文档或其他 *.md 文件，除非用户明确要求
@@ -70,6 +74,16 @@ RULES
 - Java：mvn dependency:add 或 Gradle 命令
 - 只有当包管理器无法完成的复杂配置（自定义脚本、构建配置）才直接编辑包文件
 
+依赖验证规则（写代码前强制，违反会导致返工 × 2）：
+- 在 import 任何第三方库（例如 cn.hutool.*、okhttp3.*、com.fasterxml.jackson.*、com.google.guava.*、org.apache.commons.*、lombok.*、com.squareup.*、io.netty.*、org.slf4j.* 等）之前，必须先确认该 artifact 在当前模块的编译 classpath 中实际可用
+- 确认步骤（至少完成其一）：
+  1. search_files 在目标模块自己的 pom.xml / build.gradle 中查 \`<artifactId>xxx</artifactId>\` 或 \`implementation 'group:artifact'\`
+  2. 若目标模块通过父模块或公共模块（如 boyo-common）继承依赖，必须 read_file 父模块 / 公共模块的 pom.xml 确认
+  3. hutool、spring 等家族化依赖不要整体默认可用——hutool-core 存在不代表 hutool-crypto / hutool-http 存在；spring-context 存在不代表 spring-webflux 存在；必须逐个 artifact 核实
+- 禁止仅凭"这是常见库一定有"的直觉 import；一次因为依赖缺失导致的返工会让整个任务轮数翻倍，并在上下文里留下容易被压缩层丢掉的陈旧错误代码
+- 如果目标依赖确实不在 classpath：优先使用 JDK 原生 API（例如用 java.security.MessageDigest 替代 hutool DigestUtil、用 java.net.http.HttpClient 替代 okhttp）；只有在 JDK 无法覆盖、且功能确属任务必需时才按"包管理规则"新增依赖，并先向用户确认
+- 新写的文件在 write_to_file 之前，必须已经完成上述依赖确认；写完才发现依赖缺失属于可预防的错误
+
 安全性：
 - 不执行危险命令（rm -rf /、mkfs等）
 - 不修改系统关键文件
@@ -89,8 +103,24 @@ RULES
 - 一次只执行一个MCP操作
 
 错误处理规则：
-- 工具返回 <error> 时：分析原因，尝试修复后重试
+- 工具返回 <error> 时：**禁止立即用相同参数重试**。下一步必须是 read_file 或 search_files 先验证当前真实状态，再决定改法。
 - 工具返回 <fatal_error> 时：⛔ 立即停止，不要重试，直接向用户报告错误内容并请求人工介入
 - 遇到权限/安全限制错误时，不得循环重试同一操作，必须立即停止
-- 连续使用同一种方法两次仍无进展时，必须切换策略，而不是继续重复同类修改`;
+- 连续使用同一种方法两次仍无进展时，必须切换策略，而不是继续重复同类修改
+- 编译/类型错误：先 read_file 读错误行 ±5 行，不要只看错误消息就改
+- edit 返回 "oldString not found" 或 "multiple matches"：必须重新 read_file 当前文件后再重试，不允许猜 old_string
+- 命令执行失败：先看 stderr 原文，不要靠经验猜测失败原因
+
+任务完成判据（attempt_completion 前必须核对）：
+- ✅ 用户明确要求的核心目标已经落地（不是"方向正确"而是"功能可用"）
+- ✅ 关键 happy path 已经走通（至少做了最小验证）
+- ✅ 没有引入新的阻塞性错误（lint/类型/编译新增错误必须修完）
+- ❌ 只要还有"下一步/待调查/稍后再改"的内容，就不是完成
+- ❌ 不允许把"方案已给出、实现留给用户"当作完成
+
+输出与效率规则：
+- 每轮自然语言输出 ≤ 200 字；代码和长内容只能在 edit/write_to_file 工具的参数里出现，不要在对话里复述工具将要写的代码
+- 多步任务必须先 todo_write 规划，再逐步推进；开始每一步前更新 status 为 in_progress
+- 多个独立的只读操作（read_file、search_files、list_files）优先同一轮批量发起，但一轮**最多 3 个**
+- 同文件多个修改点合并为一次 multiedit，禁止连续多次 edit 同一文件`;
 }

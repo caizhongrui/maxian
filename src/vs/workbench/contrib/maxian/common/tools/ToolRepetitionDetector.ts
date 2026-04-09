@@ -18,6 +18,8 @@ interface ToolCallHistoryEntry {
 	name: string;
 	paramsHash: string;
 	timestamp: number;
+	/** 可选：工具目标文件路径（已规范化），仅对 lsp / 写入类工具记录，用于"中间写入清零 lsp 循环计数"逻辑 */
+	path?: string;
 }
 
 interface FileActivityEntry {
@@ -42,6 +44,12 @@ export class ToolRepetitionDetector {
 	private previousToolCallJson: string | null = null;
 	private consecutiveIdenticalToolCallCount: number = 0;
 	private readonly consecutiveIdenticalToolCallLimit: number;
+	/**
+	 * 写入类工具（edit / multiedit / apply_diff / write_to_file / patch）专用的严格阈值。
+	 * 对这类工具，连续相同调用 2 次就必须拦截——一次重试已经足够说明模型用了相同参数重试，
+	 * 继续放行只会在同一个失败点反复撞墙。
+	 */
+	private readonly writeToolConsecutiveLimit: number = 2;
 	private readonly workspaceRoot: string;
 
 	// P2优化：Doom Loop检测
@@ -51,6 +59,9 @@ export class ToolRepetitionDetector {
 	private readonly TIME_WINDOW_MS = 60000; // 60秒时间窗口
 	private doomLoopDetected = false;
 	private doomLoopCount = 0;
+
+	// 原始字节级写入签名（绕开规范化，专门用于捕捉"完全相同的 old_string 重试"）
+	private lastRawWriteSignature: string | null = null;
 
 	// 同一文件反复写入检测
 	private fileWriteHistory: Array<{ file: string; tool: string; signature: string; timestamp: number }> = [];
@@ -62,6 +73,14 @@ export class ToolRepetitionDetector {
 	private fileActivityHistory: FileActivityEntry[] = [];
 	private taskDelegationHistory: TaskDelegationEntry[] = [];
 	private readonly TASK_DELEGATION_LOOP_THRESHOLD = 2;
+
+	/**
+	 * 最近的错误签名队列（最多保留 10 个）。
+	 * 同一签名出现 ≥3 次时，check() 会立即拒绝后续同类调用。
+	 */
+	private recentErrorSignatures: string[] = [];
+	private readonly ERROR_SIGNATURE_HISTORY_SIZE = 10;
+	private readonly SAME_ERROR_LOOP_THRESHOLD = 3;
 	/**
 	 * Creates a new ToolRepetitionDetector
 	 * @param limit The maximum number of identical consecutive tool calls allowed (default: 3)
@@ -91,11 +110,42 @@ export class ToolRepetitionDetector {
 		const currentToolCallJson = JSON.stringify(normalizedToolCall);
 		const paramsHash = this.hashParams(normalizedToolCall.parameters);
 
-		// P2优化：记录到历史
-		this.addToHistory(currentToolCallBlock.name, paramsHash);
+		// P2优化：记录到历史（同时登记 path 以便 lsp 循环检测豁免）
+		const entryPath = this.normalizePathValue((currentToolCallBlock.params as any)?.path as string | undefined) || undefined;
+		this.addToHistory(currentToolCallBlock.name, paramsHash, entryPath);
+
+		// Same-error-loop 检测：若历史中存在同一 error signature 出现 ≥3 次，
+		// 立即拦截当前调用，要求模型换一种参数/策略。
+		const sameErrorInfo = this.findDominantErrorSignature();
+		if (sameErrorInfo) {
+			return {
+				allowExecution: false,
+				askUser: {
+					messageKey: 'doom_loop_detected',
+					messageDetail: `🔴 same_error_loop: 最近同一错误签名出现了 ${sameErrorInfo.count} 次。签名：${sameErrorInfo.signature}\n\n请先分析失败原因，更换参数或策略后再重试；禁止继续用相同的调用方式撞墙。`,
+				},
+			};
+		}
 
 		// 同一文件反复写入检测（优先级最高，在连续相同检测之前）
 		if (this.WRITE_TOOLS.has(currentToolCallBlock.name)) {
+			// 对 edit 类工具额外做一次"原始字节级"签名检查，绕开规范化带来的宽松匹配：
+			// 即使规范化后看起来不一样的两次 edit，只要原始 old_string/new_string 字节完全相同，
+			// 就立即判定为重试并拦截。这能兜住"复制粘贴同一失败参数"这种最常见的死循环。
+			const rawSignature = this.buildRawWriteSignature(currentToolCallBlock);
+			if (rawSignature && this.lastRawWriteSignature === rawSignature) {
+				return {
+					allowExecution: false,
+					askUser: {
+						messageKey: 'doom_loop_detected',
+						messageDetail: `🔴 检测到对写入工具 "${currentToolCallBlock.name}" 的字节级完全相同的重复调用。上一次调用刚刚失败或未产生效果，本次参数完全未变。请先 read_file 确认当前文件状态，再调整参数——禁止使用完全相同的 old_string / diff / content 重试。`,
+					},
+				};
+			}
+			if (rawSignature) {
+				this.lastRawWriteSignature = rawSignature;
+			}
+
 			const fileWriteResult = this.detectSameFileWriteLoop(currentToolCallBlock, paramsHash);
 			if (fileWriteResult.detected) {
 				this.doomLoopDetected = true;
@@ -108,6 +158,9 @@ export class ToolRepetitionDetector {
 					},
 				};
 			}
+		} else {
+			// 非写入工具调用会"打断"字节级连续重试的判断
+			this.lastRawWriteSignature = null;
 		}
 
 		if (currentToolCallBlock.name === 'task') {
@@ -146,10 +199,18 @@ export class ToolRepetitionDetector {
 			this.previousToolCallJson = currentToolCallJson;
 		}
 
+		// 写入类工具走更严的阈值：同参数同工具连续调用 2 次就拦截
+		// 这里 consecutiveIdenticalToolCallCount 是"重复次数"（0 代表第一次出现），
+		// 所以 >=1 即表示"第二次连续相同"
+		const isWriteTool = this.WRITE_TOOLS.has(currentToolCallBlock.name);
+		const effectiveLimit = isWriteTool
+			? Math.min(this.writeToolConsecutiveLimit, this.consecutiveIdenticalToolCallLimit)
+			: this.consecutiveIdenticalToolCallLimit;
+
 		// 检查连续相同限制
 		if (
-			this.consecutiveIdenticalToolCallLimit > 0 &&
-			this.consecutiveIdenticalToolCallCount >= this.consecutiveIdenticalToolCallLimit
+			effectiveLimit > 0 &&
+			this.consecutiveIdenticalToolCallCount >= effectiveLimit
 		) {
 			this.consecutiveIdenticalToolCallCount = 0;
 			this.previousToolCallJson = null;
@@ -160,7 +221,7 @@ export class ToolRepetitionDetector {
 					messageKey: 'mistake_limit_reached',
 					messageDetail: t('tools:toolRepetitionLimitReached', {
 						toolName: currentToolCallBlock.name,
-						limit: this.consecutiveIdenticalToolCallLimit
+						limit: effectiveLimit
 					}),
 				},
 			};
@@ -187,11 +248,12 @@ export class ToolRepetitionDetector {
 	/**
 	 * P2优化：添加工具调用到历史
 	 */
-	private addToHistory(name: string, paramsHash: string): void {
+	private addToHistory(name: string, paramsHash: string, path?: string): void {
 		const entry: ToolCallHistoryEntry = {
 			name,
 			paramsHash,
-			timestamp: Date.now()
+			timestamp: Date.now(),
+			path
 		};
 
 		this.toolCallHistory.push(entry);
@@ -215,17 +277,39 @@ export class ToolRepetitionDetector {
 		const now = Date.now();
 		const windowStart = now - this.TIME_WINDOW_MS;
 
+		// lsp 是纯只读验证工具：每次对同一文件的 edit/multiedit/write_to_file/apply_diff/patch
+		// 都代表"文件状态已改变，前面的 lsp 结果已失效"，应作为循环计数的清零点。
+		// 于是 lsp 的有效起点 = max(windowStart, 最近一次对同路径的写入时间 + 1)。
+		// 同时 lsp 的阈值放宽到 5，避免"改一版看诊断再改"这种正常修复闭环被误杀。
+		let effectiveWindowStart = windowStart;
+		let threshold = this.LOOP_DETECTION_THRESHOLD;
+		if (name === 'lsp') {
+			threshold = 5;
+			// 从当前 entry 反向找 path
+			const currentEntry = this.toolCallHistory[this.toolCallHistory.length - 1];
+			const currentPath = currentEntry?.path;
+			if (currentPath) {
+				for (let i = this.toolCallHistory.length - 1; i >= 0; i--) {
+					const e = this.toolCallHistory[i];
+					if (this.WRITE_TOOLS.has(e.name) && e.path === currentPath && e.timestamp > effectiveWindowStart) {
+						effectiveWindowStart = e.timestamp + 1;
+						break;
+					}
+				}
+			}
+		}
+
 		// 统计时间窗口内相同工具调用的次数
 		const recentCalls = this.toolCallHistory.filter(entry =>
-			entry.timestamp >= windowStart &&
+			entry.timestamp >= effectiveWindowStart &&
 			entry.name === name &&
 			entry.paramsHash === paramsHash
 		);
 
-		if (recentCalls.length >= this.LOOP_DETECTION_THRESHOLD) {
+		if (recentCalls.length >= threshold) {
 			return {
 				detected: true,
-				message: `🔴 检测到死循环！工具 "${name}" 在 ${Math.round(this.TIME_WINDOW_MS / 1000)} 秒内被调用了 ${recentCalls.length} 次，参数相同。\n\n⚠️ 这表示你陷入了重复操作，请立即停止并尝试完全不同的策略！\n\n💡 建议：\n1. 如果搜索不到文件，不要继续搜索，应该创建文件\n2. 如果某个工具一直失败，换用其他工具\n3. 如果不确定如何继续，使用 ask_followup_question 询问用户`
+				message: `🔴 检测到死循环！工具 "${name}" 在 ${Math.round(this.TIME_WINDOW_MS / 1000)} 秒内被调用了 ${recentCalls.length} 次（阈值 ${threshold}），参数相同。\n\n⚠️ 这表示你陷入了重复操作，请立即停止并尝试完全不同的策略！\n\n💡 建议：\n1. 如果搜索不到文件，不要继续搜索，应该创建文件\n2. 如果某个工具一直失败，换用其他工具\n3. 如果不确定如何继续，使用 ask_followup_question 询问用户`
 			};
 		}
 
@@ -319,6 +403,19 @@ export class ToolRepetitionDetector {
 		const readCount = recentSameFile.filter(entry => entry.kind === 'read').length;
 
 		if (!isAlternating || writeCount < 3 || readCount < 3) {
+			return { detected: false, message: '' };
+		}
+
+		// 错误驱动豁免：如果时间窗口内存在对同一文件的 lsp 调用，
+		// 说明模型是在"看诊断→改→再看→再改"的正常修复闭环中，不是无意义循环。
+		// 同样地，如果窗口内有 execute_command（通常是 build/test 失败）也豁免——
+		// 那是"build 报错→读→改→build"的正常修复路径。
+		const hasErrorSignal = this.toolCallHistory.some(entry =>
+			entry.timestamp >= windowStart &&
+			(entry.name === 'lsp' || entry.name === 'execute_command') &&
+			(entry.path === undefined || entry.path === filePath || entry.name === 'execute_command')
+		);
+		if (hasErrorSignal) {
 			return { detected: false, message: '' };
 		}
 
@@ -523,6 +620,30 @@ export class ToolRepetitionDetector {
 		}
 	}
 
+	/**
+	 * 构建"原始字节级"写入签名：不经过 normalizeTextValue 的 trim/折叠，
+	 * 确保只要 old_string / new_string / diff / content 一个字节都没变，就能被识别为
+	 * 完全等价的重试。
+	 */
+	private buildRawWriteSignature(toolUse: ToolUse): string | null {
+		const params = (toolUse.params || {}) as any;
+		const path = typeof params.path === 'string' ? params.path : '';
+		switch (toolUse.name) {
+			case 'edit':
+				return `edit|${path}|${params.old_string ?? ''}|${params.new_string ?? ''}|${params.replace_all ?? ''}`;
+			case 'multiedit':
+				return `multiedit|${path}|${typeof params.edits === 'string' ? params.edits : JSON.stringify(params.edits ?? [])}`;
+			case 'apply_diff':
+				return `apply_diff|${path}|${params.diff ?? ''}`;
+			case 'write_to_file':
+				return `write_to_file|${path}|${params.content ?? ''}`;
+			case 'patch':
+				return `patch|${typeof params.patches === 'string' ? params.patches : JSON.stringify(params.patches ?? [])}`;
+			default:
+				return null;
+		}
+	}
+
 	private normalizeEditSignature(edit: { old_string?: string; new_string?: string; replace_all?: unknown }): Record<string, unknown> {
 		return {
 			old_string: this.normalizeTextValue(edit.old_string ?? ''),
@@ -577,6 +698,65 @@ export class ToolRepetitionDetector {
 	}
 
 	/**
+	 * 从工具执行结果中提取错误签名。
+	 * 只在返回文本中含明显错误关键字时生成签名，否则返回 null。
+	 * 签名 = 错误消息前 100 字符 + 工具名 + 目标文件路径。
+	 */
+	public extractErrorSignature(toolName: string, toolInput: any, toolResult: string): string | null {
+		if (!toolResult || typeof toolResult !== 'string') {
+			return null;
+		}
+		const lower = toolResult.toLowerCase();
+		const hasError =
+			lower.includes('<error>') ||
+			lower.includes('is_error') ||
+			lower.includes('error:') ||
+			lower.includes('not found') ||
+			lower.includes('cannot find') ||
+			lower.includes('failed');
+		if (!hasError) {
+			return null;
+		}
+		const head = toolResult.substring(0, 100);
+		const targetPath = (toolInput && (toolInput.path || toolInput.target_file || toolInput.file_path)) || '';
+		return `${toolName}|${targetPath}|${head}`;
+	}
+
+	/**
+	 * 记录一条工具执行结果。调用方在每次 tool_result 回流时调用；
+	 * 如果返回是 error，则推入 recentErrorSignatures（保持最多 10 条）。
+	 */
+	public recordToolResult(toolName: string, toolInput: any, toolResult: string): void {
+		const sig = this.extractErrorSignature(toolName, toolInput, toolResult);
+		if (!sig) {
+			return;
+		}
+		this.recentErrorSignatures.push(sig);
+		if (this.recentErrorSignatures.length > this.ERROR_SIGNATURE_HISTORY_SIZE) {
+			this.recentErrorSignatures.shift();
+		}
+	}
+
+	/**
+	 * 返回已达阈值的 dominant 错误签名（若存在）。
+	 */
+	private findDominantErrorSignature(): { signature: string; count: number } | null {
+		if (this.recentErrorSignatures.length < this.SAME_ERROR_LOOP_THRESHOLD) {
+			return null;
+		}
+		const counts = new Map<string, number>();
+		for (const s of this.recentErrorSignatures) {
+			counts.set(s, (counts.get(s) || 0) + 1);
+		}
+		for (const [signature, count] of counts) {
+			if (count >= this.SAME_ERROR_LOOP_THRESHOLD) {
+				return { signature: signature.substring(0, 160), count };
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Reset the detector state
 	 * Useful when starting a new task or conversation
 	 * P2优化：同时重置Doom Loop检测状态
@@ -584,9 +764,12 @@ export class ToolRepetitionDetector {
 	public reset(): void {
 		this.previousToolCallJson = null;
 		this.consecutiveIdenticalToolCallCount = 0;
+		this.lastRawWriteSignature = null;
 		this.toolCallHistory = [];
 		this.fileWriteHistory = [];
+		this.fileActivityHistory = [];
 		this.taskDelegationHistory = [];
+		this.recentErrorSignatures = [];
 		this.doomLoopDetected = false;
 		// 不重置doomLoopCount，保留统计
 	}

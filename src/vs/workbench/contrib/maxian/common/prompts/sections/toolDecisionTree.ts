@@ -4,109 +4,36 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
- * 工具选择决策树 Section
- * 帮助AI在不同场景下选择最合适的工具
+ * 工具选择决策树 Section（Qwen 精简版，决策表直给结论）
  */
 export function getToolDecisionTreeSection(): string {
 	return `====
 
-TOOL SELECTION DECISION TREE
+TOOL SELECTION
 
-在使用工具之前，请根据以下决策树选择最合适的工具：
+按目标直接选工具，不要犹豫：
 
-## 获取信息
+| 我想... | 用这个工具 |
+|---|---|
+| 找"某个字符串/符号/函数名"在哪 | search_files（regex） |
+| 找"某个文件名/扩展名" | search_files（file_pattern）或 glob |
+| 不知道关键词、只知道功能描述 | codebase_search |
+| 看一个已知路径文件 | read_file |
+| 浏览一个目录结构 | list_files |
+| 改一个位置 | edit |
+| 改同一文件多个位置 | multiedit（一次性，禁止拆成多轮 edit） |
+| 创建新文件 | write_to_file |
+| 删文件/批量创建 | patch |
+| 执行命令/测试/构建 | execute_command |
+| 看变量类型/跳定义/查引用 | lsp |
+| 缺少关键信息必须问用户 | ask_followup_question（必带 2-4 个 options） |
+| 任务完成 | attempt_completion |
 
-\`\`\`
-需要获取代码/文件信息？
-├── 探索未知代码区域
-│   └── codebase_search（语义搜索，首选）
-│       └── 找到相关文件后 → read_file 深入了解
-│
-├── 知道要搜索的关键词
-│   └── search_files（正则搜索）
-│       └── 搜索后 → read_file 查看上下文
-│
-├── 按文件名/类型查找
-│   └── glob（文件名模式匹配）
-│
-├── 浏览目录结构
-│   └── list_files
-│
-└── 已知文件路径
-    └── read_file（直接读取）
-\`\`\`
-
-## 修改文件
-
-\`\`\`
-需要修改文件？
-├── 创建新文件
-│   └── write_to_file
-│
-├── 修改现有文件
-│   ├── 单处明确文本替换
-│   │   └── edit（首选）
-│   │
-│   ├── 同文件多处修改
-│   │   └── multiedit（首选）
-│   │
-│   ├── 行号敏感 / 外部补丁
-│   │   └── apply_diff（特殊场景）
-│   │
-│   ├── 完全重写（变化极大）
-│   │   └── write_to_file（谨慎）
-│   │
-│
-└── 修改前必须先做
-    └── read_file（了解当前内容）
-\`\`\`
-
-## 执行操作
-
-\`\`\`
-需要执行操作？
-├── 构建/测试/安装
-│   └── execute_command
-│       └── npm install / npm run build / npm test 等
-│
-├── Git 操作
-│   └── execute_command
-│       └── 遵循 Git 安全协议
-│
-└── 危险操作
-    └── 先 ask_followup_question 询问用户
-\`\`\`
-
-## 交互决策
-
-\`\`\`
-需要与用户交互？
-├── 缺少关键信息
-│   └── ask_followup_question
-│
-├── 任务完成
-│   └── attempt_completion
-│
-└── 复杂任务
-    └── 先明确步骤列表再逐步执行
-\`\`\`
-
-## 关键原则
-
-1. **探索优先于修改**
-   - 修改代码前，必须先理解现有代码
-   - 使用 codebase_search 或 read_file 先了解上下文
-
-2. **edit / multiedit 优先于 apply_diff / write_to_file**
-   - 普通文本替换先用 edit / multiedit
-   - apply_diff 只留给特殊补丁场景
-   - write_to_file 只留给新文件或极少数完整重写
-
-3. **codebase_search 优先于 search_files**
-   - 当不确定关键词时
-   - 探索未知代码区域时
-
-4. **一次做好**
-   - 同文件多处修改优先一次 multiedit 完成
-   - 减少工具调用次数`;
+**硬性规则**：
+1. 改文件前**必须**先 read_file 完整读一次
+2. 同文件多个改动点 → 一次 multiedit，**不允许连续多次 edit**
+3. 多个只读操作（多个 read_file / search_files）可以同轮发起，**上限 3 个**
+4. search_files 返回 >10 个候选时，先加过滤条件（path / file_pattern）再搜，不要直接 read_file 全读
+5. codebase_search 只在不知道关键词时用；知道关键词优先 search_files
+6. 任何写类工具 error 后，**禁止立即用相同参数重试**——先 read_file 确认当前内容`;
 }

@@ -13,6 +13,7 @@ import {
 	getToolUseSection,
 	getModesSection,
 	getGitSafetyProtocolSection,
+	getToolDecisionTreeSection,
 	type SystemInfo
 } from './sections/index.js';
 import { getModeBySlug, DEFAULT_MODE, type Mode } from '../modes/modeTypes.js';
@@ -152,40 +153,58 @@ ${options.memoryContent}`);
 			profile?: 'full' | 'lean';
 		}
 	): string {
-		const sections: string[] = [];
-		sections.push(this.getRoleDefinition(mode));
-		sections.push(`====
+		// ================ 静态段（前缀缓存命中区） ================
+		// 顺序固定，内容只与 mode/workspaceRoot/availableTools 有关，
+		// 保证同一工作区内 Qwen Context Cache 可命中。
+		const staticSections: string[] = [];
+		staticSections.push(this.getRoleDefinition(mode));
+		staticSections.push(`====
 
 WORKING CONTRACT
 
-- 以完成用户目标为第一优先，先做最少探索再执行修改。
-- 默认使用简体中文；代码、命令、路径保持原文。
-- Markdown 保持简洁：必要时用短列表与代码块。
-- 工具调用失败时，不要机械重试同一写入；先判断是否“已生效/需重读/需改策略”。`);
-		sections.push(`====
+- 完成用户目标第一优先；最少探索后执行修改
+- 默认简体中文；代码、命令、路径保持原文
+- Markdown 简洁：短列表 + 代码块
+- 每轮自然语言 ≤ 200 字，代码只出现在工具参数里
+- 多步任务必须先 todo_write 规划再逐步推进`);
+		staticSections.push(`====
 
-TOOL CORE RULES
+HARD RULES
 
-- 读：优先 \`search_files(output_mode=files_with_matches)\` → \`read_file\`，减少大范围扫描。
-- 改：单点用 \`edit\`，同文件多点用 \`multiedit\`，新文件才用 \`write_to_file\`。
-- 并行：多个独立只读操作时用 \`batch\`。
-- 提问：\`ask_followup_question\` 必须带 options（2-4 个）。
-- 完成：仅在目标实现且验证后调用 \`attempt_completion\`。`);
-		sections.push(`====
+1. **先读后改**：任何 edit/multiedit/apply_diff/write_to_file 前必须先 read_file 完整读过；未读直接失败
+2. **同文件多点**：合并为一次 multiedit，禁止连续多次 edit 同一文件
+3. **工具失败后**：禁止立即用相同参数重试；下一步必须是 read_file 或 search_files 验证当前真实状态
+4. **edit oldString 失配**：必须重新 read_file 当前内容，禁止猜测或重组 old_string
+5. **编译/类型错误**：先 read_file 错误行 ±5 行，不要只看错误消息就改
+6. **依赖验证**：import 第三方库前，必须 search_files 当前模块 pom.xml/build.gradle/package.json 确认依赖可用；hutool-core 不代表 hutool-crypto 可用；目标依赖不在时优先 JDK 原生 API
+7. **完成判据（attempt_completion 前）**：核心功能可用 + 关键 happy path 已验证 + 无新增阻塞错误；"方案已给、实现留用户"不算完成
+8. **禁止废话**：不要对话式交流，不要复述将要写的代码，不要以问题结尾 attempt_completion
+9. **不要创建 README/*.md 文档**除非用户明确要求`);
+		staticSections.push(getToolDecisionTreeSection());
+		staticSections.push(`====
 
 AVAILABLE TOOLS
 
 ${availableTools.join(', ')}`);
-		sections.push(getSystemInfoSection(workspaceRoot, systemInfo));
-		sections.push(getObjectiveSection());
+		staticSections.push(getSystemInfoSection(workspaceRoot, systemInfo));
+		staticSections.push(getObjectiveSection());
 
 		const customInstructions = this.getCustomInstructions(mode);
 		if (customInstructions) {
-			sections.push(customInstructions);
+			staticSections.push(customInstructions);
 		}
 
+		// Skills 列表按 workspace 稳定，放在静态段尾部
+		if (options?.reserveForSkills && options?.preloadedSkills && options.preloadedSkills.length > 0) {
+			staticSections.push(this.getSkillsDirectory(options.preloadedSkills));
+		}
+
+		// ================ 动态段（不参与前缀缓存） ================
+		// 每次请求可能不同的内容放这里，放在最后
+		const dynamicSections: string[] = [];
+
 		if (options?.steeringContent) {
-			sections.push(`====
+			dynamicSections.push(`====
 
 STEERING
 
@@ -193,7 +212,7 @@ ${this.truncateLongSection(options.steeringContent, 2200)}`);
 		}
 
 		if (options?.memoryContent) {
-			sections.push(`====
+			dynamicSections.push(`====
 
 MEMORY
 
@@ -201,12 +220,10 @@ ${this.truncateLongSection(options.memoryContent, 1600)}`);
 		}
 
 		if (options?.diagnosticText) {
-			sections.push(this.truncateLongSection(options.diagnosticText, 1200));
+			dynamicSections.push(this.truncateLongSection(options.diagnosticText, 1200));
 		}
 
-		if (options?.reserveForSkills && options?.preloadedSkills && options.preloadedSkills.length > 0) {
-			sections.push(this.getSkillsDirectory(options.preloadedSkills));
-		}
+		const sections = [...staticSections, ...dynamicSections];
 
 		const prompt = sections.join('\n\n');
 

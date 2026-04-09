@@ -685,41 +685,50 @@ function formatCommandResult(
 
 	const output: string[] = [...header];
 
+	// 输出头尾截断：超过 30KB 时保留头 10KB + 尾 10KB（字节级）
+	const BYTE_LIMIT = 30 * 1024;
+	const BYTE_HEAD = 10 * 1024;
+	const BYTE_TAIL = 10 * 1024;
+
 	// 添加 stdout
 	if (stdout.content.trim()) {
+		const stdoutBytes = Buffer.byteLength(stdout.content, 'utf8');
+		const needsByteTruncate = stdoutBytes > BYTE_LIMIT;
+		const truncatedLabel = (stdout.truncated || needsByteTruncate) ? ' (已截断)' : '';
 		output.push('');
-		output.push(`📤 输出${stdout.truncated ? ' (已截断)' : ''} (${stdout.lineCount} 行):`);
+		output.push(`📤 输出${truncatedLabel} (${stdout.lineCount} 行):`);
 		output.push('```');
 
+		let content = stdout.content;
 		if (stdout.truncated) {
-			// 使用智能截断
-			const truncatedContent = truncateOutput(
-				stdout.content,
-				EXECUTE_CONFIG.SUMMARY_LINES_TO_KEEP
-			);
-			output.push(truncatedContent);
-		} else {
-			output.push(stdout.content);
+			// 行级截断优先（保留行级智能裁剪）
+			content = truncateOutput(content, EXECUTE_CONFIG.SUMMARY_LINES_TO_KEEP);
 		}
+		if (Buffer.byteLength(content, 'utf8') > BYTE_LIMIT) {
+			content = truncateByBytes(content, BYTE_LIMIT, BYTE_HEAD, BYTE_TAIL);
+		}
+		output.push(content);
 
 		output.push('```');
 	}
 
 	// 添加 stderr
 	if (stderr.content.trim()) {
+		const stderrBytes = Buffer.byteLength(stderr.content, 'utf8');
+		const needsByteTruncate = stderrBytes > BYTE_LIMIT;
+		const truncatedLabel = (stderr.truncated || needsByteTruncate) ? ' (已截断)' : '';
 		output.push('');
-		output.push(`⚠️ 错误输出${stderr.truncated ? ' (已截断)' : ''} (${stderr.lineCount} 行):`);
+		output.push(`⚠️ 错误输出${truncatedLabel} (${stderr.lineCount} 行):`);
 		output.push('```');
 
+		let content = stderr.content;
 		if (stderr.truncated) {
-			const truncatedContent = truncateOutput(
-				stderr.content,
-				EXECUTE_CONFIG.SUMMARY_LINES_TO_KEEP / 2
-			);
-			output.push(truncatedContent);
-		} else {
-			output.push(stderr.content);
+			content = truncateOutput(content, EXECUTE_CONFIG.SUMMARY_LINES_TO_KEEP / 2);
 		}
+		if (Buffer.byteLength(content, 'utf8') > BYTE_LIMIT) {
+			content = truncateByBytes(content, BYTE_LIMIT, BYTE_HEAD, BYTE_TAIL);
+		}
+		output.push(content);
 
 		output.push('```');
 	}
@@ -744,6 +753,38 @@ function formatCommandResult(
 	}
 
 	return output.join('\n');
+}
+
+/**
+ * 按字节数做头尾截断：超过 limit 时保留头 headBytes + 尾 tailBytes，
+ * 中间折叠为 "... [N lines / M bytes omitted] ..."
+ */
+function truncateByBytes(content: string, limit: number, headBytes: number, tailBytes: number): string {
+	const totalBytes = Buffer.byteLength(content, 'utf8');
+	if (totalBytes <= limit) {
+		return content;
+	}
+
+	// 按字节切（避免 UTF-8 截断异常，使用 Buffer + 回退到字符边界）
+	const buf = Buffer.from(content, 'utf8');
+	// 从头往后找 headBytes 附近的换行，确保不截断多字节字符
+	let headEnd = Math.min(headBytes, buf.length);
+	// 向前回退，直到遇到完整字符边界
+	while (headEnd > 0 && (buf[headEnd] & 0xC0) === 0x80) {
+		headEnd--;
+	}
+	let tailStart = Math.max(buf.length - tailBytes, headEnd);
+	while (tailStart < buf.length && (buf[tailStart] & 0xC0) === 0x80) {
+		tailStart++;
+	}
+
+	const head = buf.slice(0, headEnd).toString('utf8');
+	const tail = buf.slice(tailStart).toString('utf8');
+
+	const omittedBytes = totalBytes - Buffer.byteLength(head, 'utf8') - Buffer.byteLength(tail, 'utf8');
+	const omittedLines = content.split('\n').length - head.split('\n').length - tail.split('\n').length;
+
+	return `${head}\n... [${omittedLines} lines / ${omittedBytes} bytes omitted] ...\n${tail}`;
 }
 
 /**

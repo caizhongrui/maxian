@@ -91,8 +91,14 @@ export interface BatchToolResult {
  * Batch 工具配置
  */
 export const BATCH_CONFIG = {
-	/** 最大并行工具数 */
+	/** 最大并行工具数（batch 总调用数上限，仍允许超过并发上限但会被追加为串行尾部） */
 	MAX_PARALLEL_TOOLS: 25,
+
+	/**
+	 * 真实的并发执行上限：任意时刻最多 3 个工具同时 in-flight。
+	 * 超过 3 个的调用会排队串行执行，保持原有顺序。
+	 */
+	MAX_CONCURRENCY: 3,
 
 	/**
 	 * 禁止在 batch 中执行的工具
@@ -268,69 +274,45 @@ export class BatchToolExecutor {
 	}
 
 	/**
-	 * 混合执行策略：
-	 * - 同一文件的写操作串行（保证顺序）
-	 * - 不同文件的写操作、所有只读操作并行
+	 * 执行策略：
+	 * 1. 如果 calls 中包含任一写类工具（edit/multiedit/apply_diff/write_to_file/patch 等），
+	 *    整个 batch 降级为"全串行"，按原顺序逐个执行。
+	 * 2. 否则执行并行，但并发上限为 MAX_CONCURRENCY (=3)，前 3 个并行执行，
+	 *    其余按顺序串行追加，保持返回结果顺序与输入一致。
 	 */
 	private async executeMixed(calls: BatchToolCall[]): Promise<BatchToolResult[]> {
 		// 结果数组，按原始顺序填充
 		const results: (BatchToolResult | null)[] = new Array(calls.length).fill(null);
 
-		// 提取目标文件路径（写操作才需要串行保护）
-		const getFilePath = (call: BatchToolCall): string | null => {
-			if (!BATCH_CONFIG.WRITE_TOOLS.has(call.tool)) return null;
-			return call.parameters?.path || call.parameters?.target_file || null;
-		};
+		// 检测写工具：只要 batch 中任一 call 是写工具，整个 batch 全串行。
+		const hasWriteTool = calls.some(c => BATCH_CONFIG.WRITE_TOOLS.has(c.tool));
 
-		// 按文件路径分组写操作，收集每个文件的调用索引（有序）
-		const fileGroups = new Map<string, number[]>(); // filePath -> [index...]
-		const parallelIndices: number[] = [];           // 可并行执行的索引
+		if (hasWriteTool) {
+			console.log(`[BatchTool] 检测到写类工具，整个 batch 降级为全串行执行 (calls=${calls.length})`);
+			for (let i = 0; i < calls.length; i++) {
+				results[i] = await this.executeCall(calls[i]);
+			}
+		} else {
+			// 并发上限为 3 的受限并行：工作池模式
+			const concurrency = Math.min(BATCH_CONFIG.MAX_CONCURRENCY, calls.length);
+			console.log(`[BatchTool] 受限并行执行：并发上限=${concurrency}，总数=${calls.length}`);
 
-		for (let i = 0; i < calls.length; i++) {
-			const filePath = getFilePath(calls[i]);
-			if (filePath) {
-				// 写操作：按文件分组
-				if (!fileGroups.has(filePath)) {
-					fileGroups.set(filePath, []);
+			let nextIndex = 0;
+			const workers: Promise<void>[] = [];
+			const runWorker = async (): Promise<void> => {
+				while (true) {
+					const idx = nextIndex++;
+					if (idx >= calls.length) {
+						return;
+					}
+					results[idx] = await this.executeCall(calls[idx]);
 				}
-				fileGroups.get(filePath)!.push(i);
-			} else {
-				parallelIndices.push(i);
+			};
+			for (let w = 0; w < concurrency; w++) {
+				workers.push(runWorker());
 			}
+			await Promise.all(workers);
 		}
-
-		// 1. 并行执行所有只读操作 + 单个文件只有一次写操作的情况
-		const parallelPromises: Promise<void>[] = [];
-
-		// 只读操作：全部并行
-		for (const idx of parallelIndices) {
-			parallelPromises.push(
-				this.executeCall(calls[idx]).then(r => { results[idx] = r; })
-			);
-		}
-
-		// 每个文件组：内部串行，不同文件组之间并行
-		for (const [filePath, indices] of fileGroups) {
-			if (indices.length === 1) {
-				// 该文件只有一次写操作，可以并行
-				const idx = indices[0];
-				parallelPromises.push(
-					this.executeCall(calls[idx]).then(r => { results[idx] = r; })
-				);
-			} else {
-				// 该文件有多次写操作，必须串行
-				console.log(`[BatchTool] 文件 "${filePath}" 有 ${indices.length} 次写操作，改为串行执行`);
-				parallelPromises.push(
-					(async () => {
-						for (const idx of indices) {
-							results[idx] = await this.executeCall(calls[idx]);
-						}
-					})()
-				);
-			}
-		}
-
-		await Promise.all(parallelPromises);
 
 		// 确保所有结果都有值（防御性）
 		const now = Date.now();

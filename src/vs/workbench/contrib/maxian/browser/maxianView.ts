@@ -50,6 +50,7 @@ import {
 	// type TokenStats,
 } from './uiUtils.js';
 import { ensureFollowupOptions } from '../common/tools/toolExecutionProtocol.js';
+import { COMPACTION_CONFIG } from '../common/context/contextCompaction.js';
 
 /**
  * 码弦 Agent 视图面板
@@ -79,6 +80,15 @@ export class MaxianView extends ViewPane {
 	private awaitingUserResponse: boolean = false; // 是否正在等待用户回答AI的问题
 	private currentToolStatusElement: HTMLElement | null = null; // 当前工具状态元素（更新而非新建）
 	private toolStatusElements: Map<string, HTMLElement> = new Map(); // 工具ID到状态元素的映射（支持并行工具）
+	private toolCardExpandedState: Map<string, boolean> = new Map(); // 工具卡片展开状态（按 toolId 持久化）
+	// Token 进度条元素（持久化于输入区上方）
+	private tokenProgressContainer: HTMLElement | null = null;
+	private tokenProgressBarFill: HTMLElement | null = null;
+	private tokenProgressLabel: HTMLElement | null = null;
+	/** 本次任务累计输入 token（AI 实际返回，TaskService 已在新任务创建时清零） */
+	private lastTurnInputTokens: number = 0;
+	/** 本次任务累计输出 token（AI 实际返回，TaskService 已在新任务创建时清零） */
+	private lastTurnOutputTokens: number = 0;
 	private thinkingMessageElement: HTMLElement | null = null; // "正在思考"消息元素（避免重复显示）
 	private apiRequestStartAt: number | null = null; // 当前 API 请求开始时间
 	private apiRequestProgressTimer: number | null = null; // API 请求进度刷新定时器
@@ -327,6 +337,9 @@ export class MaxianView extends ViewPane {
 		welcomeSubtitle.style.letterSpacing = '1px';
 		welcomeSubtitle.style.textAlign = 'center';
 
+
+		// ========== 创建 Token 上下文进度条（输入区上方） ==========
+		this._createTokenProgressBar();
 
 		// ========== 创建输入区域容器（类似 kilocode 的 ChatTextArea） ==========
 		const inputContainer = append(this.container, $('div.maxian-input-container'));
@@ -4864,6 +4877,20 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 				if (loadingDots) {
 					loadingDots.style.display = status === 'running' ? 'inline' : 'none';
 				}
+
+				// 刷新详情面板内容（包含最新结果）
+				const detailsPanel = toolStatusElement.querySelector('.maxian-tool-details') as HTMLElement;
+				if (detailsPanel) {
+					this._updateToolDetailsPanelContent(detailsPanel, toolInfo);
+				}
+
+				// 当从 running 转为 completed/error 时，如果用户未手动切换过状态，则自动折叠
+				if (status !== 'running' && toolId) {
+					const persisted = this.toolCardExpandedState.get(toolId);
+					if (persisted === undefined) {
+						this._applyToolCardExpanded(toolStatusElement, false);
+					}
+				}
 			} else {
 				// 创建新的工具状态元素 - 使用优化后的卡片样式
 				const statusClass = status === 'running' ? 'tool-running' :
@@ -4871,6 +4898,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 					status === 'error' ? 'tool-error' : '';
 
 				const toolStatusContainer = append(this.messageArea, $(`div.maxian-tool-card.${statusClass}`));
+				toolStatusContainer.style.cursor = 'pointer';
 
 				// 工具头部
 				const toolHeader = append(toolStatusContainer, $('div.maxian-tool-header'));
@@ -4912,6 +4940,52 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 				const statusBadge = append(toolHeader, $(`span.maxian-tool-status-badge.tool-status-badge.${statusBadgeClass}`));
 				statusBadge.textContent = statusText;
 				statusBadge.style.display = status !== 'running' ? 'inline-block' : 'none';
+
+				// 展开/折叠指示器（chevron）
+				const chevron = append(toolHeader, $('span.codicon.codicon-chevron-down.tool-chevron'));
+				chevron.style.fontSize = '14px';
+				chevron.style.color = 'var(--vscode-descriptionForeground)';
+				chevron.style.marginLeft = '6px';
+				chevron.style.transition = 'transform 0.15s ease';
+
+				// 详情面板：显示完整工具参数/结果（默认隐藏）
+				const detailsPanel = append(toolStatusContainer, $('div.maxian-tool-details'));
+				detailsPanel.style.display = 'none';
+				detailsPanel.style.marginTop = '10px';
+				detailsPanel.style.padding = '10px 12px';
+				detailsPanel.style.background = 'var(--vscode-textCodeBlock-background)';
+				detailsPanel.style.borderRadius = '6px';
+				detailsPanel.style.fontFamily = 'var(--vscode-editor-font-family)';
+				detailsPanel.style.fontSize = '12px';
+				detailsPanel.style.maxHeight = '300px';
+				detailsPanel.style.overflow = 'auto';
+				detailsPanel.style.whiteSpace = 'pre-wrap';
+				detailsPanel.style.wordBreak = 'break-word';
+				detailsPanel.style.cursor = 'text';
+				this._updateToolDetailsPanelContent(detailsPanel, toolInfo);
+
+				// 阻止详情面板内部点击冒泡导致折叠
+				detailsPanel.addEventListener('click', (e: MouseEvent) => {
+					e.stopPropagation();
+				});
+
+				// 默认展开策略：running 状态展开；其它（completed/error）默认折叠
+				// 允许 toolId 持久化记忆展开状态
+				const persistedExpanded = toolId ? this.toolCardExpandedState.get(toolId) : undefined;
+				const initialExpanded = persistedExpanded !== undefined
+					? persistedExpanded
+					: (status === 'running');
+				this._applyToolCardExpanded(toolStatusContainer, initialExpanded);
+
+				// 点击卡片头部切换展开/折叠
+				toolHeader.addEventListener('click', () => {
+					const curr = toolStatusContainer.getAttribute('data-expanded') === 'true';
+					const next = !curr;
+					this._applyToolCardExpanded(toolStatusContainer, next);
+					if (toolId) {
+						this.toolCardExpandedState.set(toolId, next);
+					}
+				});
 
 				// 🔧 保存元素引用
 				toolStatusElement = toolStatusContainer;
@@ -4960,35 +5034,88 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 					this.renderEditDiffBlock(toolInfo);
 				}
 
-				// 🔥 工具完成后，1秒后自动移除状态卡片（缩短延迟以便快速看到效果）
-				const elementToRemove = toolStatusElement; // 捕获引用
-				const capturedToolId = toolId; // 捕获 toolId
-
-				setTimeout(() => {
-					if (elementToRemove && elementToRemove.parentElement) {
-						// 添加淡出动画
-						elementToRemove.style.transition = 'opacity 0.5s ease-out';
-						elementToRemove.style.opacity = '0';
-						setTimeout(() => {
-							elementToRemove.remove();
-							// 清除引用
-							if (this.currentToolStatusElement === elementToRemove) {
-								this.currentToolStatusElement = null;
-							}
-							if (capturedToolId && this.toolStatusElements.has(capturedToolId)) {
-								this.toolStatusElements.delete(capturedToolId);
-							}
-						}, 500); // 等待动画完成
-					} else {
-						console.warn(`[MaxianView] 无法移除工具状态（元素或父节点不存在）: ${toolInfo.tool}`);
-					}
-				}, 1000); // 缩短到1秒以便更快看到效果
+				// 工具完成后保留卡片（默认折叠形式），便于用户回溯查看参数与结果。
+				// 清理 currentToolStatusElement 引用，避免后续工具复用同一元素。
+				if (this.currentToolStatusElement === toolStatusElement) {
+					this.currentToolStatusElement = null;
+				}
 			}
 
 			this.messageArea.scrollTop = this.messageArea.scrollHeight;
 		} catch {
 			// 解析失败时，显示原始文本
 			this.renderSystemMessage(`🔧 ${toolStatusJson}`);
+		}
+	}
+
+	/**
+	 * 应用工具卡片展开/折叠状态
+	 */
+	private _applyToolCardExpanded(card: HTMLElement, expanded: boolean): void {
+		card.setAttribute('data-expanded', expanded ? 'true' : 'false');
+		const details = card.querySelector('.maxian-tool-details') as HTMLElement | null;
+		if (details) {
+			details.style.display = expanded ? 'block' : 'none';
+		}
+		const chevron = card.querySelector('.tool-chevron') as HTMLElement | null;
+		if (chevron) {
+			chevron.style.transform = expanded ? 'rotate(180deg)' : 'rotate(0deg)';
+		}
+	}
+
+	/**
+	 * 渲染工具卡片详情面板内容（参数 + 结果）
+	 */
+	private _updateToolDetailsPanelContent(panel: HTMLElement, toolInfo: Record<string, any>): void {
+		// 清空现有内容
+		while (panel.firstChild) {
+			panel.removeChild(panel.firstChild);
+		}
+		try {
+			// 参数摘要
+			const paramsBlock: Record<string, any> = {};
+			for (const key of Object.keys(toolInfo || {})) {
+				if (key === 'result' || key === 'output' || key === 'status' || key === 'toolId') {
+					continue;
+				}
+				paramsBlock[key] = (toolInfo as any)[key];
+			}
+			if (Object.keys(paramsBlock).length > 0) {
+				const paramsTitle = append(panel, $('div'));
+				paramsTitle.textContent = '参数';
+				paramsTitle.style.fontWeight = '600';
+				paramsTitle.style.marginBottom = '4px';
+				paramsTitle.style.color = 'var(--vscode-descriptionForeground)';
+				const paramsPre = append(panel, $('pre'));
+				paramsPre.style.margin = '0 0 10px 0';
+				paramsPre.style.whiteSpace = 'pre-wrap';
+				paramsPre.style.wordBreak = 'break-word';
+				try {
+					paramsPre.textContent = JSON.stringify(paramsBlock, null, 2);
+				} catch {
+					paramsPre.textContent = String(paramsBlock);
+				}
+			}
+			// 结果
+			const result = (toolInfo as any).result ?? (toolInfo as any).output;
+			if (result !== undefined && result !== null && result !== '') {
+				const resultTitle = append(panel, $('div'));
+				resultTitle.textContent = '结果';
+				resultTitle.style.fontWeight = '600';
+				resultTitle.style.marginBottom = '4px';
+				resultTitle.style.color = 'var(--vscode-descriptionForeground)';
+				const resultPre = append(panel, $('pre'));
+				resultPre.style.margin = '0';
+				resultPre.style.whiteSpace = 'pre-wrap';
+				resultPre.style.wordBreak = 'break-word';
+				resultPre.textContent = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+			}
+			if (panel.childElementCount === 0) {
+				panel.textContent = '（无额外信息）';
+				(panel as HTMLElement).style.color = 'var(--vscode-descriptionForeground)';
+			}
+		} catch {
+			panel.textContent = '（详情解析失败）';
 		}
 	}
 
@@ -5087,6 +5214,24 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 	 * 在消息区域显示token统计
 	 */
 	private handleTokenUsage(event: ITokenUsageEvent): void {
+		// 只接受 AI 实际返回的数据，拒绝字符数估算
+		if (!event.isEstimated) {
+			const curIn = event.promptTokens || 0;
+			const curOut = event.completionTokens || 0;
+			// TaskService.tokenUsage 是"本次任务"从 0 开始累计的值，每个新任务都会重新创建
+			// 一个 Task 实例并把 totalTokensIn/Out 初始化为 0。所以"本次"直接 = 当前累计，
+			// 不需要做 delta —— 做 delta 只会把每次 chunk 之间的增量当成显示值，导致
+			// 流式第一个 chunk（如 ↓8.2k ↑1）之后被后续小增量覆盖。
+			if (curIn > 0 || curOut > 0) {
+				this.lastTurnInputTokens = curIn;
+				this.lastTurnOutputTokens = curOut;
+			}
+		}
+		// 流式更新：只刷进度条，不重建聊天区的 token 统计气泡
+		if (event.contextOnly) {
+			this._updateTokenProgress(event.totalTokens);
+			return;
+		}
 		// 移除旧的token统计元素（避免每次API调用都累加一行）
 		if (this.tokenStatsElement && this.tokenStatsElement.parentElement) {
 			this.tokenStatsElement.remove();
@@ -5128,6 +5273,130 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		// 保存引用，供下次更新时移除
 		this.tokenStatsElement = tokenStatsContainer;
 		this.messageArea.scrollTop = this.messageArea.scrollHeight;
+
+		// 同步更新 Token 进度条
+		this._updateTokenProgress(event.totalTokens);
+	}
+
+	/**
+	 * 创建 Token 上下文进度条（持久化于输入区上方）
+	 */
+	private _createTokenProgressBar(): void {
+		const container = append(this.container, $('div.maxian-token-progress'));
+		container.style.display = 'none'; // 未开始时隐藏
+		container.style.padding = '4px 12px 2px 12px';
+		container.style.backgroundColor = 'var(--vscode-editor-background)';
+		container.style.borderTop = '1px solid var(--vscode-widget-border, rgba(128,128,128,0.15))';
+		container.style.fontSize = '11px';
+		container.style.color = 'var(--vscode-descriptionForeground)';
+		container.style.userSelect = 'none';
+
+		// 标签（label）
+		const labelRow = append(container, $('div'));
+		labelRow.style.display = 'flex';
+		labelRow.style.alignItems = 'center';
+		labelRow.style.justifyContent = 'space-between';
+		labelRow.style.marginBottom = '3px';
+
+		const leftLabel = append(labelRow, $('span'));
+		leftLabel.textContent = '上下文';
+
+		const rightLabel = append(labelRow, $('span'));
+		this.tokenProgressLabel = rightLabel;
+
+		// 进度条外框
+		const barOuter = append(container, $('div'));
+		barOuter.style.position = 'relative';
+		barOuter.style.height = '6px';
+		barOuter.style.width = '100%';
+		barOuter.style.background = 'var(--vscode-editorWidget-background, rgba(128,128,128,0.15))';
+		barOuter.style.borderRadius = '3px';
+		barOuter.style.overflow = 'hidden';
+
+		// 进度条填充
+		const barFill = append(barOuter, $('div'));
+		barFill.style.height = '100%';
+		barFill.style.width = '0%';
+		barFill.style.background = 'var(--vscode-charts-green)';
+		barFill.style.transition = 'width 0.25s ease, background-color 0.25s ease';
+
+		this.tokenProgressContainer = container;
+		this.tokenProgressBarFill = barFill;
+	}
+
+	/**
+	 * 更新 Token 进度条
+	 */
+	private _updateTokenProgress(tokensUsed: number): void {
+		if (!this.tokenProgressContainer || !this.tokenProgressBarFill || !this.tokenProgressLabel) {
+			return;
+		}
+		if (!tokensUsed || tokensUsed <= 0) {
+			this.tokenProgressContainer.style.display = 'none';
+			return;
+		}
+
+		const maxTokens = COMPACTION_CONFIG.MAX_CONTEXT_TOKENS || 128000;
+		const thresholdPercent = COMPACTION_CONFIG.COMPACTION_THRESHOLD_PERCENT || 50;
+		const hardCeilingPercent = COMPACTION_CONFIG.HARD_CEILING_PERCENT || 80;
+		const thresholdTokens = Math.floor((maxTokens * thresholdPercent) / 100);
+
+		const percent = Math.min(100, (tokensUsed / maxTokens) * 100);
+		this.tokenProgressContainer.style.display = 'block';
+		this.tokenProgressBarFill.style.width = `${percent.toFixed(1)}%`;
+
+		// 阈值颜色
+		let color = 'var(--vscode-charts-green)';
+		let warning = '';
+		if (percent >= hardCeilingPercent) {
+			color = 'var(--vscode-errorForeground)';
+			warning = '已接近上下文上限';
+		} else if (percent >= thresholdPercent) {
+			color = 'var(--vscode-charts-yellow, #d7ba7d)';
+			warning = '即将自动压缩';
+		}
+		this.tokenProgressBarFill.style.background = color;
+
+		const format = (n: number) => {
+			if (n >= 1000) {
+				return `${(n / 1000).toFixed(1)}k`;
+			}
+			return String(n);
+		};
+
+		// 本次输入/输出 token（AI 实际返回，非估算）。只有拿到过真实数据才显示。
+		const turnSuffix = (this.lastTurnInputTokens > 0 || this.lastTurnOutputTokens > 0)
+			? ` · 本次 ↓${format(this.lastTurnInputTokens)} ↑${format(this.lastTurnOutputTokens)}`
+			: '';
+
+		const labelText = warning
+			? `${format(tokensUsed)} / ${format(maxTokens)} tokens (${percent.toFixed(0)}%)${turnSuffix} · ${warning}`
+			: `${format(tokensUsed)} / ${format(maxTokens)} tokens (${percent.toFixed(0)}%)${turnSuffix}`;
+		this.tokenProgressLabel.textContent = labelText;
+
+		// hover tooltip 显示具体数字 + 下次压缩触发点
+		const turnTooltip = (this.lastTurnInputTokens > 0 || this.lastTurnOutputTokens > 0)
+			? `\n本次输入: ${this.lastTurnInputTokens.toLocaleString()} tokens\n本次输出: ${this.lastTurnOutputTokens.toLocaleString()} tokens（AI 实际返回值）`
+			: '';
+		const tooltip = `已使用 ${tokensUsed.toLocaleString()} / ${maxTokens.toLocaleString()} tokens (${percent.toFixed(1)}%)\n自动压缩阈值: ${thresholdTokens.toLocaleString()} tokens (${thresholdPercent}%)\n硬上限: ${hardCeilingPercent}%${turnTooltip}`;
+		this.tokenProgressContainer.title = tooltip;
+	}
+
+	/**
+	 * 重置 Token 进度条（清空会话时调用）
+	 */
+	private _resetTokenProgress(): void {
+		if (this.tokenProgressContainer) {
+			this.tokenProgressContainer.style.display = 'none';
+		}
+		if (this.tokenProgressBarFill) {
+			this.tokenProgressBarFill.style.width = '0%';
+		}
+		if (this.tokenProgressLabel) {
+			this.tokenProgressLabel.textContent = '';
+		}
+		this.lastTurnInputTokens = 0;
+		this.lastTurnOutputTokens = 0;
 	}
 
 	/**
@@ -5142,6 +5411,9 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 		this.currentAiMessageText = '';
 		this.currentStreamingMessageElement = null;
 		this.currentToolStatusElement = null;
+		this.toolStatusElements.clear();
+		this.toolCardExpandedState.clear();
+		this._resetTokenProgress();
 		this.tokenStatsElement = null;
 		this.awaitingUserResponse = false;
 		this.setInputPlaceholder(this.getInputPlaceholder('normal'));

@@ -45,6 +45,9 @@ const READ_FILE_CONFIG = {
 
 	/** 每行最大字符数（超出截断，参考 OpenCode read.ts MAX_LINE_LENGTH = 2000） */
 	MAX_LINE_LENGTH: 2000,
+
+	/** 默认分块读取的最大行数 */
+	DEFAULT_CHUNK_LINES: 2000,
 };
 
 // ========== 文件缓存 ==========
@@ -656,16 +659,48 @@ function formatFileContent(
 	let resultLines: string[];
 	let actualStart = 1;
 	let actualEnd = totalLines;
+	let isPartialView = false;
+	let chunkTruncated = false;
+
+	const MAX_CHUNK = READ_FILE_CONFIG.DEFAULT_CHUNK_LINES;
 
 	if (startLine !== undefined && endLine !== undefined) {
 		actualStart = Math.max(1, startLine);
 		actualEnd = Math.min(totalLines, endLine);
+		// 区间超过 MAX_CHUNK 时截断
+		if (actualEnd - actualStart + 1 > MAX_CHUNK) {
+			actualEnd = actualStart + MAX_CHUNK - 1;
+			chunkTruncated = true;
+		}
 		resultLines = lines.slice(actualStart - 1, actualEnd);
+		isPartialView = !(actualStart === 1 && actualEnd === totalLines);
 	} else if (startLine !== undefined) {
 		actualStart = Math.max(1, startLine);
-		resultLines = lines.slice(actualStart - 1);
+		actualEnd = Math.min(totalLines, actualStart + MAX_CHUNK - 1);
+		if (actualEnd < totalLines) {
+			chunkTruncated = true;
+		}
+		resultLines = lines.slice(actualStart - 1, actualEnd);
+		isPartialView = !(actualStart === 1 && actualEnd === totalLines);
+	} else if (endLine !== undefined) {
+		actualEnd = Math.min(totalLines, endLine);
+		actualStart = Math.max(1, actualEnd - MAX_CHUNK + 1);
+		if (actualEnd - actualStart + 1 >= MAX_CHUNK && actualStart > 1) {
+			chunkTruncated = true;
+		}
+		resultLines = lines.slice(actualStart - 1, actualEnd);
+		isPartialView = !(actualStart === 1 && actualEnd === totalLines);
 	} else {
-		resultLines = lines;
+		// 用户未指定任何范围：文件 > MAX_CHUNK 行时默认只读前 MAX_CHUNK 行
+		if (totalLines > MAX_CHUNK) {
+			actualStart = 1;
+			actualEnd = MAX_CHUNK;
+			resultLines = lines.slice(0, MAX_CHUNK);
+			chunkTruncated = true;
+			isPartialView = true;
+		} else {
+			resultLines = lines;
+		}
 	}
 
 	// 添加行号（超长行截断，参考 OpenCode read.ts MAX_LINE_LENGTH）
@@ -683,8 +718,13 @@ function formatFileContent(
 		`Total Lines: ${totalLines}`,
 	];
 
-	if (startLine || endLine) {
+	if (startLine || endLine || isPartialView) {
 		header.push(`Range: ${actualStart}-${actualEnd} (${resultLines.length} lines)`);
+	}
+
+	if (chunkTruncated) {
+		const nextStart = actualEnd + 1;
+		header.push(`[文件共 ${totalLines} 行，本次显示 ${actualStart}-${actualEnd} 行。如需继续请带 start_line=${nextStart}]`);
 	}
 
 	if (encoding !== 'UTF-8') {
