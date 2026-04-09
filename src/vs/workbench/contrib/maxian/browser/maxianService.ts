@@ -853,16 +853,18 @@ export class MaxianService extends Disposable implements IMaxianService {
 		this.currentKnowledgeBaseConfig = knowledgeBaseConfig || null;
 
 
-		// 确保已初始化
-		if (!this._initialized) {
-			await this.initialize();
-		}
-
 		// 触发用户消息事件（显示原始消息，含@mention标记）
+		// 注意：必须在 initialize() 之前触发，否则首次发送时初始化耗时（MCP/RepoMap/SteeringService）
+		// 会导致用户长时间看不到自己发的消息，误以为没有生效
 		this._onMessage.fire({
 			type: 'user',
 			content: message
 		});
+
+		// 确保已初始化
+		if (!this._initialized) {
+			await this.initialize();
+		}
 
 		// 解析 @文件引用，将文件内容注入到发给AI的消息中
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
