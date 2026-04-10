@@ -51,6 +51,7 @@ import {
 } from './uiUtils.js';
 import { ensureFollowupOptions } from '../common/tools/toolExecutionProtocol.js';
 import { COMPACTION_CONFIG } from '../common/context/contextCompaction.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
 
 /**
  * 码弦 Agent 视图面板
@@ -178,7 +179,8 @@ export class MaxianView extends ViewPane {
 		@IHoverService hoverService: IHoverService,
 		@IMaxianService private readonly maxianService: IMaxianService,
 		@IAuthService private readonly authService: IAuthService,
-		@IStorageService private readonly storageService: IStorageService
+		@IStorageService private readonly storageService: IStorageService,
+		@ICommandService private readonly commandService: ICommandService
 	) {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, telemetryService, hoverService);
 	}
@@ -878,6 +880,43 @@ export class MaxianView extends ViewPane {
 				refreshButton.style.transform = 'rotate(0deg)';
 				refreshButton.style.transition = 'all 0.15s';
 			}, 500);
+		};
+
+		// ⚡ Solo 模式按钮 — 点击在主编辑区打开 Solo 全屏面板
+		const soloButton = append(leftControls, $('button')) as HTMLButtonElement;
+		soloButton.title = '打开 Solo 自主模式（在主编辑区全屏运行，无需确认任何操作）';
+		soloButton.style.cssText = `
+			display: inline-flex;
+			align-items: center;
+			gap: 4px;
+			padding: 3px 8px;
+			border: 1px solid rgba(255,140,0,0.4);
+			border-radius: 10px;
+			background: rgba(255,140,0,0.08);
+			color: rgba(255,140,0,0.85);
+			font-size: 11px;
+			font-weight: 600;
+			cursor: pointer;
+			flex-shrink: 0;
+			margin-left: 6px;
+			font-family: inherit;
+			transition: all 0.15s;
+			white-space: nowrap;
+			letter-spacing: 0.3px;
+		`;
+		soloButton.innerHTML = '<span class="codicon codicon-rocket" style="font-size:11px;"></span> Solo';
+		soloButton.onmouseenter = () => {
+			soloButton.style.background = 'rgba(255,140,0,0.18)';
+			soloButton.style.borderColor = 'rgba(255,140,0,0.7)';
+			soloButton.style.color = '#FFA500';
+		};
+		soloButton.onmouseleave = () => {
+			soloButton.style.background = 'rgba(255,140,0,0.08)';
+			soloButton.style.borderColor = 'rgba(255,140,0,0.4)';
+			soloButton.style.color = 'rgba(255,140,0,0.85)';
+		};
+		soloButton.onclick = () => {
+			this.commandService.executeCommand('maxian.openSoloPanel');
 		};
 
 		// 连续对话复选框（仅在ask模式下显示）

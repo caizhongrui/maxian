@@ -47,6 +47,11 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { FimCompletionProvider } from './fim/fimCompletionProvider.js';
 import { VectorSearchStatusBarContribution } from './vectorSearchStatusBar.js';
 import { VectorIndexFileWatcherContribution } from './vectorIndexFileWatcher.js';
+import { IEditorPaneRegistry, EditorPaneDescriptor } from '../../../browser/editor.js';
+import { EditorExtensions } from '../../../common/editor.js';
+import { SoloEditorInput } from './soloEditorInput.js';
+import { SoloEditorPane } from './soloEditorPane.js';
+import { IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 
 // 确保ripgrep服务被注册（导入副作用）
 import '../../../services/ripgrep/browser/ripgrep.contribution.js';
@@ -128,6 +133,22 @@ class MaxianViewDescriptor {
 // 注册视图
 const viewsRegistry = Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry);
 viewsRegistry.registerViews([new MaxianViewDescriptor()], VIEW_CONTAINER);
+
+// ====== 注册 Solo 模式 EditorPane ======
+Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane(
+	EditorPaneDescriptor.create(
+		SoloEditorPane,
+		SoloEditorInput.EditorID,
+		'Solo 自主模式'
+	),
+	[new SyncDescriptor(SoloEditorInput)]
+);
+
+// ====== 打开 Solo 面板命令 ======
+CommandsRegistry.registerCommand('maxian.openSoloPanel', async (accessor) => {
+	const editorGroupsService = accessor.get(IEditorGroupsService);
+	await editorGroupsService.activeGroup.openEditor(SoloEditorInput.instance, { pinned: true });
+});
 
 // ====== 自动打开码弦视图 ======
 
