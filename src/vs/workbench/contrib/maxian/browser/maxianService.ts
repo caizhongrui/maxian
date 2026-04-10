@@ -1404,6 +1404,12 @@ export class MaxianService extends Disposable implements IMaxianService {
 			if (this.canReuseCurrentTaskSession(effectiveMode, images, isFigmaTask)) {
 				this.currentTaskCancelled = false;
 				this.clearAutoApproveRules();
+				// Solo模式：自动批准所有工具和命令
+				if (effectiveMode === 'solo') {
+					this.setToolAutoApprove('*', true);
+					this.setCommandAutoApprove('*', true);
+					console.log('[Maxian] Solo模式：已自动批准所有工具调用');
+				}
 				this._onTodoListUpdate.fire({ todos: [] });
 				this.currentTask!.prepareForResumeRun();
 				this.currentTask!.addUserMessage(message, images);
@@ -1458,6 +1464,12 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 			// 🔥 新任务开始时清除自动批准设置（始终允许是针对单个任务的）
 			this.clearAutoApproveRules();
+			// Solo模式：自动批准所有工具和命令
+			if (effectiveMode === 'solo') {
+				this.setToolAutoApprove('*', true);
+				this.setCommandAutoApprove('*', true);
+				console.log('[Maxian] Solo模式：已自动批准所有工具调用');
+			}
 			this._onTodoListUpdate.fire({ todos: [] }); // 新任务开始时清空上次的任务列表
 			// 清空文件状态缓存：模型对上一任务的"已读"状态必须作废，
 			// 否则新任务里首次 read_file 会被错误识别为"未变化"

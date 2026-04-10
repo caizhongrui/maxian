@@ -7048,7 +7048,9 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			'ask': 'codicon-comment-discussion',
 			'debug': 'codicon-bug',
 			'orchestrator': 'codicon-hubot',
-			'spec': 'codicon-checklist'
+			'spec': 'codicon-checklist',
+			'figma': 'codicon-layout',
+			'solo': 'codicon-rocket'
 		};
 
 		// 添加模式列表项
@@ -7080,6 +7082,21 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 			name.style.whiteSpace = 'nowrap';
 			name.style.wordBreak = 'normal';
 			name.style.lineHeight = '1.2';
+
+			// Solo模式：添加"自动"徽标
+			if (mode.slug === 'solo') {
+				const badge = append(li, $('span'));
+				badge.textContent = '自动';
+				badge.style.fontSize = '10px';
+				badge.style.padding = '1px 5px';
+				badge.style.borderRadius = '8px';
+				badge.style.backgroundColor = 'rgba(255, 165, 0, 0.2)';
+				badge.style.color = 'rgba(255, 165, 0, 0.9)';
+				badge.style.border = '1px solid rgba(255, 165, 0, 0.4)';
+				badge.style.fontWeight = '500';
+				badge.style.flexShrink = '0';
+				badge.style.letterSpacing = '0.3px';
+			}
 
 			// 选中标记（默认隐藏）
 			const checkmark = append(li, $('span.codicon.codicon-check'));
@@ -7120,6 +7137,17 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 					textSpan.textContent = mode.name;
 				}
 				this.modeSelectorIcon.className = `codicon ${modeIconMap[mode.slug] || 'codicon-circle-outline'}`;
+
+				// Solo模式：模式选择器显示橙色边框提示
+				if (this.currentMode === 'solo') {
+					this.modeSelector.style.borderColor = 'rgba(255, 165, 0, 0.6)';
+					this.modeSelector.style.boxShadow = '0 0 0 1px rgba(255, 165, 0, 0.3)';
+					this.modeSelector.title = 'Solo模式：所有工具调用自动批准，无需确认';
+				} else {
+					this.modeSelector.style.borderColor = '';
+					this.modeSelector.style.boxShadow = '';
+					this.modeSelector.title = '选择模式';
+				}
 
 				// 控制连续对话复选框的显示（仅ask模式显示）
 				if (this.currentMode === 'ask') {
@@ -7177,6 +7205,17 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 
 		// 根据当前模式更新知识库选择器显示状态
 		this.knowledgeBaseSelectorWrapper.style.display = this.currentMode === 'ask' ? '' : 'none';
+
+		// Solo模式：初始化时同步橙色边框状态
+		if (this.currentMode === 'solo') {
+			this.modeSelector.style.borderColor = 'rgba(255, 165, 0, 0.6)';
+			this.modeSelector.style.boxShadow = '0 0 0 1px rgba(255, 165, 0, 0.3)';
+			this.modeSelector.title = 'Solo模式：所有工具调用自动批准，无需确认';
+		} else {
+			this.modeSelector.style.borderColor = '';
+			this.modeSelector.style.boxShadow = '';
+			this.modeSelector.title = '选择模式';
+		}
 	}
 
 	/**
