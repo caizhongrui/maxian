@@ -238,6 +238,26 @@ export class DiffViewProvider extends Disposable {
 	}
 
 	/**
+	 * 用显式的原始内容和修改后内容打开 Diff 编辑器（适用于文件已被写入后的情况）
+	 * @param filePath 文件路径（绝对路径）
+	 * @param originalContent 原始内容（写入前）
+	 * @param newContent 修改后内容（写入后）
+	 */
+	async openDiffWithContent(filePath: string, originalContent: string, newContent: string): Promise<boolean> {
+		try {
+			this.filePath = filePath;
+			this.originalContent = originalContent;
+			this.modifiedContent = newContent;
+			this.isNewFile = !originalContent;
+			await this.openDiffEditor(URI.file(filePath));
+			return true;
+		} catch (error) {
+			console.error('[Maxian] DiffViewProvider.openDiffWithContent 失败:', error);
+			return false;
+		}
+	}
+
+	/**
 	 * 应用SEARCH/REPLACE差异
 	 * @param filePath 文件路径
 	 * @param diff SEARCH/REPLACE格式的差异，或直接的新文件内容

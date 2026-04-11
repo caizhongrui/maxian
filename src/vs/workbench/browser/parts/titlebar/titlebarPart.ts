@@ -570,6 +570,62 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 			this._register(this.windowTitle.onDidChange(() => this.updateWorkspaceButton()));
 		}
 
+		// IDE / CODING mode segmented toggle pill
+		if (!this.isAuxiliary) {
+			const modePill = append(this.leftContent, $('div.mode-toggle-pill'));
+			modePill.setAttribute('role', 'group');
+			modePill.setAttribute('aria-label', 'Mode Toggle');
+			modePill.style.setProperty('-webkit-app-region', 'no-drag');
+
+			// IDE 段
+			const ideSegEl = append(modePill, $('span.mode-seg.ide-seg'));
+			ideSegEl.textContent = 'IDE';
+			ideSegEl.setAttribute('role', 'button');
+			ideSegEl.setAttribute('tabindex', '0');
+			ideSegEl.title = '切换到 IDE 模式';
+
+			// 分隔线
+			const dividerEl = append(modePill, $('span.mode-seg-divider'));
+			dividerEl.setAttribute('aria-hidden', 'true');
+
+			// CODING 段
+			const codingSegEl = append(modePill, $('span.mode-seg.coding-seg'));
+			codingSegEl.textContent = 'CODING';
+			codingSegEl.setAttribute('role', 'button');
+			codingSegEl.setAttribute('tabindex', '0');
+			codingSegEl.title = '切换到 Coding Agent 模式';
+
+			const updateModePill = () => {
+				const isSolo = this.editorService.activeEditor?.typeId === 'maxian.solo.input';
+				modePill.classList.toggle('solo-active', isSolo);
+				ideSegEl.classList.toggle('active', !isSolo);
+				codingSegEl.classList.toggle('active', isSolo);
+			};
+
+			updateModePill();
+			this._register(this.editorService.onDidActiveEditorChange(() => updateModePill()));
+
+			// 点 IDE 段 → 退出 Solo
+			this._register(addDisposableListener(ideSegEl, EventType.CLICK, () => {
+				const isSolo = this.editorService.activeEditor?.typeId === 'maxian.solo.input';
+				if (isSolo) {
+					const activeGroup = this.editorGroupService.activeGroup;
+					const activeEditor = activeGroup.activeEditor;
+					if (activeEditor) {
+						activeGroup.closeEditor(activeEditor);
+					}
+				}
+			}));
+
+			// 点 CODING 段 → 进入 Solo
+			this._register(addDisposableListener(codingSegEl, EventType.CLICK, () => {
+				const isSolo = this.editorService.activeEditor?.typeId === 'maxian.solo.input';
+				if (!isSolo) {
+					this.commandService.executeCommand('maxian.openSoloPanel');
+				}
+			}));
+		}
+
 		// Title
 		this.title = append(this.centerContent, $('div.window-title'));
 		this.createTitle();

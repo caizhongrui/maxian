@@ -44,7 +44,7 @@ export class SoloEditorInput extends EditorInput {
 	}
 
 	override getName(): string {
-		return '⚡ Solo 自主模式';
+		return '⚡ Coding 自主模式';
 	}
 
 	override getIcon(): ThemeIcon {

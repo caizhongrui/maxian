@@ -534,3 +534,82 @@
 	flex-shrink: 0;
 	opacity: 0.7;
 }
+
+/* ===== IDE / CODING Mode Segmented Toggle ===== */
+.monaco-workbench .part.titlebar .mode-toggle-pill {
+	display: flex;
+	align-items: center;
+	margin-left: 8px;
+	border-radius: 8px;
+	cursor: pointer;
+	text-decoration: none;
+	-webkit-app-region: no-drag;
+	order: 4;
+	z-index: 2500;
+	flex-shrink: 0;
+	background: rgba(255,255,255,0.06);
+	border: 1px solid rgba(255,255,255,0.10);
+	overflow: hidden;
+	height: 24px;
+}
+
+.monaco-workbench .part.titlebar .mode-toggle-pill .mode-seg {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0 10px;
+	height: 100%;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.6px;
+	color: var(--vscode-titleBar-activeForeground);
+	opacity: 0.45;
+	transition: background 0.15s ease, opacity 0.15s ease, color 0.15s ease;
+	white-space: nowrap;
+	user-select: none;
+	-webkit-user-select: none;
+}
+
+.monaco-workbench .part.titlebar .mode-toggle-pill .mode-seg:hover {
+	opacity: 0.75;
+	background: rgba(255,255,255,0.08);
+}
+
+/* IDE 段 —— 激活：蓝色高亮 */
+.monaco-workbench .part.titlebar .mode-toggle-pill .mode-seg.ide-seg.active {
+	background: rgba(60,130,255,0.18);
+	color: #6ab0ff;
+	opacity: 1;
+}
+
+/* CODING 段 —— 激活：橙绿色高亮 */
+.monaco-workbench .part.titlebar .mode-toggle-pill .mode-seg.coding-seg.active {
+	background: rgba(30,200,100,0.18);
+	color: #1ec864;
+	opacity: 1;
+}
+
+/* 分隔线 */
+.monaco-workbench .part.titlebar .mode-toggle-pill .mode-seg-divider {
+	width: 1px;
+	height: 14px;
+	background: rgba(255,255,255,0.15);
+	flex-shrink: 0;
+}
+
+/* Solo 激活整体状态（保留兼容） */
+.monaco-workbench .part.titlebar .mode-toggle-pill.solo-active {
+	border-color: rgba(30,200,100,0.25);
+}
+
+/* Solo 模式下隐藏编辑器 tab 区锁定/解锁按钮 */
+body.solo-mode-active .editor-group-container .action-label.codicon-lock,
+body.solo-mode-active .editor-group-container .action-label.codicon-unlock {
+	display: none !important;
+}
+
+/* Solo 模式下隐藏拆分编辑器按钮 */
+body.solo-mode-active .editor-group-container .action-label.codicon-split-horizontal,
+body.solo-mode-active .editor-group-container .action-label.codicon-split-vertical {
+	display: none !important;
+}

@@ -139,7 +139,7 @@ Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane
 	EditorPaneDescriptor.create(
 		SoloEditorPane,
 		SoloEditorInput.EditorID,
-		'Solo 自主模式'
+		'Coding 自主模式'
 	),
 	[new SyncDescriptor(SoloEditorInput)]
 );

@@ -540,32 +540,58 @@
 	width: 2px;
 }
 
-/* ===== Trae-style Tab Improvements ===== */
+/* ===== Trae-style Tab Overhaul ===== */
 
-/* Rounded top corners on all tabs for a modern pill-like appearance */
+/* Tab strip: no gap between tabs */
+.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container {
+	gap: 0;
+	padding: 0;
+}
+
+/* All tabs: same fixed height, rounded top corners, white top border on active */
 .monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab {
-	border-radius: 5px 5px 0 0;
-	margin: 0 1px;
-	transition: background-color 0.1s ease;
+	border-radius: 6px 6px 0 0;
+	margin: 0;
+	height: var(--editor-group-tab-height);
+	padding-left: 12px;
+	transition: background-color 0.15s ease, opacity 0.15s ease;
+	border-top: 1px solid transparent;
 }
 
-/* Remove extra left/right margin for first/last tab */
-.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab:first-child {
-	margin-left: 0;
-}
-.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab:last-child {
-	margin-right: 0;
-}
-
-/* Active tab: subtle top shadow for elevated "floating" card effect */
+/* Active tab: white top border */
 .monaco-workbench .part.editor > .content .editor-group-container.active > .title .tabs-container > .tab.active {
-	box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.18);
+	border-top: 1px solid rgba(255, 255, 255, 0.85);
 }
 
-/* Dark theme: inactive tabs are more transparent to let active tab stand out */
+/* Inactive tabs: slightly dimmed */
 .monaco-workbench.vs-dark .part.editor > .content .editor-group-container > .title .tabs-container > .tab:not(.active) {
-	opacity: 0.82;
+	opacity: 0.6;
 }
 .monaco-workbench.vs-dark .part.editor > .content .editor-group-container > .title .tabs-container > .tab:not(.active):hover {
+	opacity: 0.85;
+}
+
+/* Active tab label: slightly bolder */
+.monaco-workbench .part.editor > .content .editor-group-container.active > .title .tabs-container > .tab.active .tab-label a,
+.monaco-workbench .part.editor > .content .editor-group-container.active > .title .tabs-container > .tab.active .tab-label span {
+	font-weight: 500;
+}
+
+/* Hide bottom active border line */
+.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab.active.tab-border-bottom > .tab-border-bottom-container {
+	display: none !important;
+}
+
+/* Hide top border line */
+.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab.active.tab-border-top > .tab-border-top-container,
+.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab.selected.tab-border-top > .tab-border-top-container {
+	display: none !important;
+}
+
+/* Tab close button: hidden on inactive, shown on hover */
+.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab:not(.active) .action-label {
+	opacity: 0;
+}
+.monaco-workbench .part.editor > .content .editor-group-container > .title .tabs-container > .tab:not(.active):hover .action-label {
 	opacity: 1;
 }

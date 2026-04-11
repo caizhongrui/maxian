@@ -22,6 +22,14 @@ export class CommandExecutionTool {
 
 	private commandExecutionService: ICommandExecutionService | undefined;
 
+	/** AI 命令执行回调（由 maxianService 注入，用于终端面板镜像） */
+	private _aiCommandCallback?: (command: string, cwd?: string) => void;
+
+	/** 设置 AI 命令执行回调 */
+	setAiCommandCallback(cb: (command: string, cwd?: string) => void): void {
+		this._aiCommandCallback = cb;
+	}
+
 	constructor(
 		private readonly terminalService: ITerminalService
 	) { }
@@ -58,6 +66,9 @@ export class CommandExecutionTool {
 	 */
 	private async executeWithService(command: string, cwd?: string, abortSignal?: AbortSignal): Promise<ToolResponse> {
 		const commandId = generateUuid();
+
+		// 触发 AI 命令镜像回调（终端面板联动）
+		this._aiCommandCallback?.(command, cwd);
 
 		// 如果已经被取消，直接返回
 		if (abortSignal?.aborted) {
@@ -166,6 +177,8 @@ export class CommandExecutionTool {
 	 */
 	private async executeWithTerminal(command: string, cwd?: string): Promise<ToolResponse> {
 		try {
+			// 触发 AI 命令镜像回调
+			this._aiCommandCallback?.(command, cwd);
 			const terminal = await this.getOrCreateTerminal(cwd);
 			await terminal.sendText(command, true);
 

@@ -1585,6 +1585,13 @@ ${formatTodoList(todos)}`;
 	}
 
 	/**
+	 * 注入 AI 命令执行回调（由 maxianService 在 initialize 后调用）
+	 */
+	setAiCommandCallback(cb: (command: string, cwd?: string) => void): void {
+		this.commandExecution.setAiCommandCallback(cb);
+	}
+
+	/**
 	 * 注入 MCP Hub（由 maxianService 注入）
 	 */
 	setMcpHub(hub: McpHub): void {

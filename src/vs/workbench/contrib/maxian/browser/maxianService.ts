@@ -71,9 +71,10 @@ export const IMaxianService = createDecorator<IMaxianService>('maxianService');
  * 消息事件类型 - 保留向后兼容
  */
 export interface IMessageEvent {
-	type: 'user' | 'assistant' | 'tool' | 'error' | 'progress' | 'reasoning';
+	type: 'user' | 'assistant' | 'tool' | 'error' | 'progress' | 'reasoning' | 'complete';
 	content: string;
 	isPartial?: boolean;
+	sessionId?: string;  // Solo模式会话ID，IDE模式为undefined
 }
 
 /**
@@ -81,6 +82,7 @@ export interface IMessageEvent {
  */
 export interface IClineMessageEvent {
 	message: ClineMessage;
+	sessionId?: string;  // Solo模式会话ID，IDE模式为undefined
 }
 
 /**
@@ -128,6 +130,7 @@ export interface ITokenUsageEvent {
 	isEstimated?: boolean;     // true=本次 promptTokens/completionTokens 为字符估算值，非 AI 实际返回，UI 不应用于展示"本次输入/输出 token"
 	mode: string;              // 模式（ask/code/architect等）
 	timestamp: number;         // 时间戳
+	sessionId?: string;        // Solo 模式会话ID，有值则为 Solo 专属事件
 }
 
 /**
@@ -166,6 +169,7 @@ export interface IToolCompletedEvent {
  */
 export interface ITodoListEvent {
 	todos: ITodoItem[];        // 任务列表
+	sessionId?: string;        // Solo模式会话ID，IDE模式为undefined
 }
 
 /**
@@ -208,8 +212,10 @@ export interface IMaxianService {
 	 * @param message 用户消息
 	 * @param mode 当前模式（默认为code模式）
 	 * @param knowledgeBaseConfig 知识库配置（ask模式专用）
+	 * @param images 图片数据（可选）
+	 * @param sessionId Solo模式会话ID（有值走Solo路径，无值走IDE路径）
 	 */
-	sendMessage(message: string, mode?: Mode, knowledgeBaseConfig?: IKnowledgeBaseConfig, images?: string[]): Promise<void>;
+	sendMessage(message: string, mode?: Mode, knowledgeBaseConfig?: IKnowledgeBaseConfig, images?: string[], sessionId?: string): Promise<void>;
 
 	/**
 	 * 提交用户回复（回答AI的问题）- 旧版本
@@ -223,8 +229,9 @@ export interface IMaxianService {
 	 * @param response 响应类型
 	 * @param text 响应文本（可选）
 	 * @param images 响应图片（可选）
+	 * @param sessionId Solo模式会话ID（有值路由到对应Solo会话，无值走IDE路径）
 	 */
-	handleAskResponse(askTs: number, response: ClineAskResponse, text?: string, images?: string[]): void;
+	handleAskResponse(askTs: number, response: ClineAskResponse, text?: string, images?: string[], sessionId?: string): void;
 
 	/**
 	 * 执行工具调用
@@ -263,6 +270,16 @@ export interface IMaxianService {
 	applyDiffView(filePath: string, diff: string): Promise<boolean>;
 
 	/**
+	 * 用原始内容和修改后内容打开原生 Diff 编辑器（Coding 模式专用）
+	 */
+	openNativeDiff(filePath: string, originalContent: string, newContent: string): Promise<void>;
+
+	/**
+	 * 在原生 VSCode 编辑器中打开文件（Coding 模式专用）
+	 */
+	openNativeEditor(filePath: string): Promise<void>;
+
+	/**
 	 * 保存diff修改并关闭diff编辑器，打开修改后的文件
 	 */
 	saveDiffAndClose(): Promise<boolean>;
@@ -274,8 +291,9 @@ export interface IMaxianService {
 
 	/**
 	 * 取消当前正在执行的任务
+	 * @param sessionId Solo模式会话ID（有值取消指定Solo会话，无值取消IDE模式任务）
 	 */
-	cancelTask(): void;
+	cancelTask(sessionId?: string): void;
 
 	/**
 	 * 清空对话历史
@@ -331,7 +349,12 @@ export interface IMaxianService {
 	 * P0-2: 流式响应中断事件
 	 * （网络中断/超时导致响应流被截断时触发，UI 显示墓碑标记）
 	 */
-	readonly onStreamInterrupted: Event<{ partialText: string; hasPartialToolCalls: boolean; reason: string }>;
+	readonly onStreamInterrupted: Event<{ partialText: string; hasPartialToolCalls: boolean; reason: string; sessionId?: string }>;
+
+	/**
+	 * AI 执行 execute_command 工具时触发（用于终端面板镜像显示）
+	 */
+	readonly onAiExecuteCommand: Event<{ command: string; cwd?: string; sessionId?: string }>;
 
 	/**
 	 * 设置工具自动批准规则
@@ -392,6 +415,16 @@ export interface IMaxianService {
 	 * 获取 MemoryService 实例（供外部调用保存记忆）
 	 */
 	getMemoryService(): import('../common/services/memoryService.js').MemoryService | null;
+
+	/**
+	 * 预加载 Solo 会话的历史消息（IDE 重启后恢复上下文）
+	 */
+	setSoloSessionHistory(sessionId: string, history: MessageParam[]): void;
+
+	/**
+	 * 获取 Solo 会话的历史消息（用于持久化保存）
+	 */
+	getSoloSessionHistory(sessionId: string): MessageParam[];
 
 	// ====== 快捷键触发事件（由 VSCode 命令系统触发，视图响应） ======
 
@@ -460,6 +493,23 @@ export interface EditPreviewOpenResult {
 }
 
 /**
+ * Solo 模式单个会话的任务上下文
+ */
+interface ISoloTaskContext {
+	task: TaskService | null;
+	mode: Mode;
+	cancelled: boolean;
+	eventDisposables: DisposableStore;
+	heartbeatTimer: ReturnType<typeof setInterval> | null;
+	lastStreamActivityTime: number;
+	pendingUserInputRequestCount: number;
+	message: string;  // 原始消息（用于日志）
+	traceId: string;         // 用于 Solo 模式日志上传
+	callStartTime: Date;     // 用于 Solo 模式日志上传
+	completedHistory?: MessageParam[];  // 任务完成时立即捕获的历史（IDE 重启后恢复上下文）
+}
+
+/**
  * 码弦服务实现
  */
 export class MaxianService extends Disposable implements IMaxianService {
@@ -495,9 +545,15 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private readonly _onTodoListUpdate = this._register(new Emitter<ITodoListEvent>());
 	readonly onTodoListUpdate: Event<ITodoListEvent> = this._onTodoListUpdate.event;
 
-	// P0-2: 流式响应中断事件
-	private readonly _onStreamInterrupted = this._register(new Emitter<{ partialText: string; hasPartialToolCalls: boolean; reason: string }>());
-	readonly onStreamInterrupted: Event<{ partialText: string; hasPartialToolCalls: boolean; reason: string }> = this._onStreamInterrupted.event;
+	// P0-2: 流式响应中断事件（含 sessionId 以便 IDE 视图过滤 Solo 模式事件）
+	private readonly _onStreamInterrupted = this._register(new Emitter<{ partialText: string; hasPartialToolCalls: boolean; reason: string; sessionId?: string }>());
+	readonly onStreamInterrupted: Event<{ partialText: string; hasPartialToolCalls: boolean; reason: string; sessionId?: string }> = this._onStreamInterrupted.event;
+
+	private readonly _onAiExecuteCommand = this._register(new Emitter<{ command: string; cwd?: string; sessionId?: string }>());
+	readonly onAiExecuteCommand: Event<{ command: string; cwd?: string; sessionId?: string }> = this._onAiExecuteCommand.event;
+
+	/** 当前正在执行任务的 Solo sessionId（用于命令事件归属） */
+	private _executingSessionId: string | undefined = undefined;
 
 	private readonly _onTriggerSend = this._register(new Emitter<void>());
 	readonly onTriggerSend: Event<void> = this._onTriggerSend.event;
@@ -522,6 +578,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private currentTask: TaskService | null = null;
 	private currentTaskMode: Mode | null = null;
 	private currentTaskCancelled: boolean = false;  // 标记当前任务是否已被取消，防止重复处理
+
+	// ─── Solo 模式多任务支持 ────────────────────────────────
+	private readonly _soloTasks = new Map<string, ISoloTaskContext>();
+	/** 预加载的会话历史（IDE 重启后从文件恢复，首次发消息时注入） */
+	private readonly _soloPreloadedHistory = new Map<string, MessageParam[]>();
 	private readonly taskHistoryByMode: Map<Mode, MessageParam[]> = new Map();
 	private readonly taskEventDisposables = this._register(new DisposableStore());
 	private taskHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -610,7 +671,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 		@IRipgrepService private readonly ripgrepService: IRipgrepService,
 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IEditorService _editorService: IEditorService,
+		@IEditorService private readonly editorService: IEditorService,
 		@IModelService private readonly modelService: IModelService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IStorageService private readonly storageService: IStorageService,
@@ -637,7 +698,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		// P0优化：初始化环境上下文跟踪器
 		this.environmentTracker = new EnvironmentContextTracker(
-			_editorService,
+			this.editorService,
 			this.terminalService,
 			this.workspaceContextService
 		);
@@ -775,6 +836,15 @@ export class MaxianService extends Disposable implements IMaxianService {
 			}
 		);
 
+		// 注入 AI 命令执行回调，用于终端面板镜像
+		(this.toolExecutor as ToolExecutorImpl).setAiCommandCallback?.((command, cwd) => {
+			this._onAiExecuteCommand.fire({
+				command,
+				cwd,
+				sessionId: this._executingSessionId,
+			});
+		});
+
 		// 注入 MCP Hub（支持 use_mcp_tool / access_mcp_resource 工具）
 		(this.toolExecutor as ToolExecutorImpl).setMcpHub(this.mcpHub);
 
@@ -841,24 +911,28 @@ export class MaxianService extends Disposable implements IMaxianService {
 		this.behaviorReporter?.reportSessionStart();
 	}
 
-	async sendMessage(message: string, mode: Mode = DEFAULT_MODE, knowledgeBaseConfig?: IKnowledgeBaseConfig, images?: string[]): Promise<void> {
+	async sendMessage(message: string, mode: Mode = DEFAULT_MODE, knowledgeBaseConfig?: IKnowledgeBaseConfig, images?: string[], sessionId?: string): Promise<void> {
 
-		// 更新当前模式
-		this.currentMode = mode;
+		// 更新当前模式（Solo模式不影响 currentMode，以免干扰IDE路径）
+		if (!sessionId) {
+			this.currentMode = mode;
+		}
 
-		// 生成新的TraceId和记录开始时间
-		this.currentTraceId = this.generateTraceId();
-		this.currentCallStartTime = new Date();
-		this.currentFirstTokenTime = null;
-		this.currentKnowledgeBaseConfig = knowledgeBaseConfig || null;
-
+		// 生成新的TraceId和记录开始时间（仅IDE路径）
+		if (!sessionId) {
+			this.currentTraceId = this.generateTraceId();
+			this.currentCallStartTime = new Date();
+			this.currentFirstTokenTime = null;
+			this.currentKnowledgeBaseConfig = knowledgeBaseConfig || null;
+		}
 
 		// 触发用户消息事件（显示原始消息，含@mention标记）
 		// 注意：必须在 initialize() 之前触发，否则首次发送时初始化耗时（MCP/RepoMap/SteeringService）
 		// 会导致用户长时间看不到自己发的消息，误以为没有生效
 		this._onMessage.fire({
 			type: 'user',
-			content: message
+			content: message,
+			sessionId,
 		});
 
 		// 确保已初始化
@@ -877,8 +951,11 @@ export class MaxianService extends Disposable implements IMaxianService {
 		if (mode === 'ask') {
 			// ask 模式：使用 DifyHandler 调用知识库接口
 			await this.sendDifyMessage(resolvedMessage, knowledgeBaseConfig);
+		} else if (sessionId) {
+			// Solo 模式：使用独立的 TaskService 实例，按 sessionId 路由
+			await this._sendSoloMessage(resolvedMessage, sessionId, images);
 		} else {
-			// 其他模式：使用 TaskService 进行完整的任务处理
+			// IDE 模式：原有单 TaskService 路径
 			await this.sendTaskMessage(resolvedMessage, images);
 		}
 	}
@@ -1817,6 +1894,370 @@ export class MaxianService extends Disposable implements IMaxianService {
 			});
 		}
 	}
+
+	// ════════════════════════════════════════════════════════════
+	// Solo 模式多任务支持 - 独立于 IDE 路径的并行任务管理
+	// ════════════════════════════════════════════════════════════
+
+	/**
+	 * Solo 模式发送消息：为每个 sessionId 维护独立的 TaskService 实例
+	 */
+	private async _sendSoloMessage(message: string, sessionId: string, images?: string[]): Promise<void> {
+		if (!this.apiHandler || !this.toolExecutor) {
+			this._onMessage.fire({ type: 'error', content: '错误: 服务未初始化。', sessionId });
+			return;
+		}
+
+		const effectiveMode: Mode = 'solo';
+		const effectiveApiHandler = this.apiHandler;
+
+		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
+		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
+
+		// 获取或查找此会话的上下文
+		let ctx = this._soloTasks.get(sessionId);
+
+		// 如果会话已有任务在执行中，拒绝重复提交
+		if (ctx && ctx.task && ctx.task.status === TaskStatus.PROCESSING) {
+			this._onMessage.fire({
+				type: 'error',
+				content: '当前会话任务正在执行中，请等待完成后再发送新消息。',
+				sessionId
+			});
+			return;
+		}
+
+		try {
+			// 会话复用：同会话内上一任务已完成，可以复用 TaskService 继续对话
+			const canReuse = !!(ctx && ctx.task && this._canReuseSoloTaskSession(ctx));
+			console.log(`[ToolTrace] [Solo-Route] ctx=${!!ctx}, task=${!!ctx?.task}, status=${ctx?.task?.status}, canReuse=${canReuse}, abort=${ctx?.task?.abort}`);
+			if (canReuse && ctx && ctx.task) {
+				const histLen = ctx.task.getMessageHistory().length;
+				console.log(`[ToolTrace] [Solo-Route] REUSE PATH: history=${histLen}条`);
+				ctx.cancelled = false;
+				ctx.pendingUserInputRequestCount = 0;
+				ctx.message = message;
+				this._onTodoListUpdate.fire({ todos: [], sessionId });
+				ctx.task.prepareForResumeRun();
+				ctx.task.addUserMessage(message, images);
+				await this._startSoloTaskWithHeartbeat(ctx, sessionId);
+				return;
+			}
+
+			// 新任务：使用历史种子（如有）初始化上下文
+			// 优先级：当前 task 的历史 > 预加载的历史（IDE 重启后恢复）> 模式级别历史
+			let initialMessageHistory: MessageParam[];
+			if (ctx?.task) {
+				initialMessageHistory = this._getSoloTaskHistorySeed(ctx);
+				console.log(`[ToolTrace] [Solo-Route] NEW TASK (ctx.task): history=${initialMessageHistory.length}条, completedHistory=${ctx.completedHistory?.length ?? 0}条`);
+			} else if (this._soloPreloadedHistory.has(sessionId)) {
+				initialMessageHistory = this._soloPreloadedHistory.get(sessionId)!;
+				this._soloPreloadedHistory.delete(sessionId); // 用一次即清除
+				console.log(`[ToolTrace] [Solo-Route] NEW TASK (preloaded): history=${initialMessageHistory.length}条`);
+			} else {
+				// Solo 模式全新会话：强制从空历史开始，不继承 IDE 模式历史，避免跨模式内容污染
+				initialMessageHistory = [];
+				console.log(`[ToolTrace] [Solo-Route] NEW TASK (fresh start): history=0条`);
+			}
+
+			const recentlyModifiedFiles = this.fileTracker?.getAndClearRecentlyModifiedFiles() || [];
+			const environmentDetails = await this.environmentTracker.generateEnvironmentDetails(recentlyModifiedFiles);
+			const keywords = this.extractKeywordsSync(message);
+
+			let repoMap = '';
+			if (this.repoMapService && this.shouldGenerateRepoMap(recentlyModifiedFiles) && initialMessageHistory.length === 0) {
+				repoMap = await this.generateRepoMap(workspaceRoot, keywords);
+			} else if (this.lastRepoMap && initialMessageHistory.length === 0) {
+				repoMap = this.lastRepoMap;
+			}
+
+			let preloadedCode = '';
+			if (repoMap && keywords.length > 0 && initialMessageHistory.length === 0) {
+				preloadedCode = await this.smartPreloadCodeWithKeywords(message, repoMap, workspaceRoot, keywords);
+			} else if (repoMap && initialMessageHistory.length === 0) {
+				preloadedCode = await this.smartPreloadCode(message, repoMap, workspaceRoot);
+			}
+
+			const messageParts = [message];
+			if (environmentDetails) { messageParts.push(environmentDetails); }
+			if (repoMap) { messageParts.push(repoMap); }
+			if (preloadedCode) { messageParts.push(preloadedCode); }
+			const fullMessage = messageParts.join('\n\n');
+
+			// 清理旧会话的事件订阅和心跳
+			if (ctx) {
+				ctx.eventDisposables.clear();
+				if (ctx.heartbeatTimer) { clearInterval(ctx.heartbeatTimer); ctx.heartbeatTimer = null; }
+			}
+
+			// 重置工具缓存，准备新任务
+			(this.toolExecutor as any)?.resetFileStateCacheForNewTask?.();
+			(this.toolExecutor as any)?.noteUserMessageForServerIntent?.(fullMessage || message);
+
+			// Solo 模式自动批准所有工具和命令
+			this.setToolAutoApprove('*', true);
+			this.setCommandAutoApprove('*', true);
+
+			// 创建新的 TaskService 实例
+			const newTask = new TaskService({
+				task: fullMessage,
+				images,
+				initialMessageHistory,
+				apiHandler: effectiveApiHandler,
+				toolExecutor: this.toolExecutor!,
+				getSystemPrompt: () => this.getSystemPromptForMode(effectiveMode),
+				getToolDefinitions: () => this.getToolDefinitions(),
+				workspaceRoot,
+				consecutiveMistakeLimit: 3,
+				currentMode: effectiveMode,
+				behaviorReporter: this.behaviorReporter ?? undefined,
+			});
+
+			this._executingSessionId = sessionId;
+			const newCtx: ISoloTaskContext = {
+				task: newTask,
+				mode: effectiveMode,
+				cancelled: false,
+				eventDisposables: new DisposableStore(),
+				heartbeatTimer: null,
+				lastStreamActivityTime: Date.now(),
+				pendingUserInputRequestCount: 0,
+				message,
+				traceId: this.generateTraceId(),
+				callStartTime: new Date(),
+			};
+			this._soloTasks.set(sessionId, newCtx);
+			ctx = newCtx;
+
+			this._onTodoListUpdate.fire({ todos: [], sessionId });
+
+			// ── 事件订阅 ──────────────────────────────────────────────
+
+			ctx.eventDisposables.add(newTask.onStatusChanged(async (status) => {
+				if (ctx!.cancelled && status !== TaskStatus.ABORTED) { return; }
+
+				if (status === TaskStatus.COMPLETED || status === TaskStatus.ERROR || status === TaskStatus.ABORTED) {
+					if (ctx!.task && !ctx!.cancelled) {
+						const taskUsage = ctx!.task.getTokenUsage();
+						if (taskUsage && (taskUsage.totalTokensIn > 0 || taskUsage.totalTokensOut > 0)) {
+							const ctxTokens = (taskUsage as any).contextTokens || 0;
+							this._onTokenUsage.fire({
+								promptTokens: taskUsage.totalTokensIn || 0,
+								completionTokens: taskUsage.totalTokensOut || 0,
+								totalTokens: ctxTokens || ((taskUsage.totalTokensIn || 0) + (taskUsage.totalTokensOut || 0)),
+								contextTokens: ctxTokens,
+								mode: effectiveMode,
+								timestamp: Date.now(),
+								sessionId
+							});
+						}
+					}
+				}
+
+				if (status === TaskStatus.COMPLETED) {
+					// ① 立即捕获历史（防止异步保存时 task 已被清理）
+					if (ctx!.task) {
+						const h = ctx!.task.getMessageHistory();
+						if (h && h.length > 0) {
+							ctx!.completedHistory = this.compactHistorySeed(h).map(msg => this.cloneMessageParam(msg));
+						}
+					}
+
+					// ② 先结束最后一条流式消息，再发送任务完成信号
+					this._onMessage.fire({ type: 'assistant', content: '', isPartial: false, sessionId });
+					this._onMessage.fire({ type: 'complete', content: '', sessionId });
+
+					// ③ 文件变更汇总
+					if (ctx!.task) {
+						const changes = ctx!.task.getFileChanges();
+						if (changes.written.length > 0 || changes.deleted.length > 0) {
+							this._onClineMessage.fire({
+								message: { ts: Date.now(), type: 'say', say: 'file_changes', text: JSON.stringify(changes) },
+								sessionId
+							});
+						}
+					}
+
+					// ④ 上传日志（Solo 模式每次任务完成均记录）
+					if (ctx!.task && !ctx!.cancelled) {
+						const taskUsage = ctx!.task.getTokenUsage();
+						const prevTraceId = this.currentTraceId;
+						const prevCallStartTime = this.currentCallStartTime;
+						this.currentTraceId = ctx!.traceId;
+						this.currentCallStartTime = ctx!.callStartTime;
+						try {
+							if (taskUsage && (taskUsage.totalTokensIn > 0 || taskUsage.totalTokensOut > 0)) {
+								await this.logAICall({
+									inputTokens: taskUsage.totalTokensIn || 0,
+									outputTokens: taskUsage.totalTokensOut || 0,
+									status: 'success',
+									requestSummary: ctx!.message,
+								});
+							} else {
+								// 估算 token
+								const estimatedInputTokens = estimateTokensFromChars(ctx!.message.length);
+								await this.logAICall({
+									inputTokens: estimatedInputTokens,
+									outputTokens: 0,
+									status: 'success',
+									requestSummary: ctx!.message,
+								});
+							}
+						} catch (e) {
+							console.warn('[Maxian][Solo] logAICall 失败:', e);
+						} finally {
+							this.currentTraceId = prevTraceId;
+							this.currentCallStartTime = prevCallStartTime;
+						}
+					}
+
+					ctx!.pendingUserInputRequestCount = 0;
+					this._onTodoListUpdate.fire({ todos: [], sessionId });
+					this._executingSessionId = undefined;
+				} else if (status === TaskStatus.ERROR) {
+					this._onMessage.fire({ type: 'error', content: '任务错误', sessionId });
+					ctx!.pendingUserInputRequestCount = 0;
+					this._onTodoListUpdate.fire({ todos: [], sessionId });
+					this._executingSessionId = undefined;
+				} else if (status === TaskStatus.ABORTED) {
+					ctx!.pendingUserInputRequestCount = 0;
+					ctx!.task = null;
+					this._onTodoListUpdate.fire({ todos: [], sessionId });
+					this._executingSessionId = undefined;
+				}
+			}));
+
+			ctx.eventDisposables.add(newTask.onMessageAdded(clineMessage => {
+				ctx!.lastStreamActivityTime = Date.now();
+				this._onClineMessage.fire({ message: clineMessage, sessionId });
+				if (clineMessage.type === 'say' && clineMessage.say === 'error') {
+					this._onMessage.fire({ type: 'error', content: clineMessage.text || '未知错误', sessionId });
+				}
+			}));
+
+			ctx.eventDisposables.add(newTask.onStreamChunk(chunk => {
+				if (chunk.text || !chunk.isPartial) { ctx!.lastStreamActivityTime = Date.now(); }
+				if (chunk.reasoningText) {
+					ctx!.lastStreamActivityTime = Date.now();
+					this._onMessage.fire({ type: 'reasoning', content: chunk.reasoningText, isPartial: true, sessionId });
+				} else if (chunk.text) {
+					this._onMessage.fire({ type: 'assistant', content: chunk.text, isPartial: chunk.isPartial, sessionId });
+				} else if (chunk.progressText) {
+					this._onMessage.fire({ type: 'progress', content: chunk.progressText, isPartial: true, sessionId });
+				} else if (!chunk.isPartial) {
+					this._onMessage.fire({ type: 'assistant', content: '', isPartial: false, sessionId });
+				}
+			}));
+
+			ctx.eventDisposables.add(newTask.onUserInputRequired(({ toolUseId }) => {
+				ctx!.lastStreamActivityTime = Date.now();
+				ctx!.pendingUserInputRequestCount++;
+				// Solo 模式不触发 _onQuestionAsked，避免在 IDE 视图中弹出问答卡片
+				// Solo 模式的提问通过 _onClineMessage (type='ask') 在 Solo 面板内渲染
+				void toolUseId; // suppress unused warning
+			}));
+
+			ctx.eventDisposables.add(newTask.onTodoListUpdated((event) => {
+				this._onTodoListUpdate.fire({ todos: event.todos, sessionId });
+			}));
+
+			ctx.eventDisposables.add(newTask.onStreamInterrupted((event) => {
+				// 传入 sessionId，使 IDE 视图可以过滤 Solo 模式的中断事件
+				this._onStreamInterrupted.fire({ ...event, sessionId });
+			}));
+
+			await this._startSoloTaskWithHeartbeat(ctx, sessionId);
+
+		} catch (error) {
+			console.error('[Maxian][Solo] 任务执行错误:', error);
+			this._onMessage.fire({ type: 'error', content: `错误: ${error instanceof Error ? error.message : String(error)}`, sessionId });
+		}
+	}
+
+	/**
+	 * 判断 Solo 会话是否可复用（上一任务已完成/错误，且未被中止）
+	 */
+	private _canReuseSoloTaskSession(ctx: ISoloTaskContext): boolean {
+		if (!ctx.task) { return false; }
+		if (ctx.task.abort) { return false; }
+		return ctx.task.status === TaskStatus.COMPLETED || ctx.task.status === TaskStatus.ERROR;
+	}
+
+	/**
+	 * 从 Solo 任务上下文提取历史消息种子（用于会话复用时的初始化）
+	 */
+	private _getSoloTaskHistorySeed(ctx: ISoloTaskContext): MessageParam[] {
+		// 优先使用任务完成时立即捕获的历史（最可靠）
+		if (ctx.completedHistory && ctx.completedHistory.length > 0) {
+			return ctx.completedHistory.map(msg => this.cloneMessageParam(msg));
+		}
+		if (!ctx.task) { return []; }
+		const history = ctx.task.getMessageHistory();
+		if (!history || history.length === 0) { return []; }
+		return this.compactHistorySeed(history).map(msg => this.cloneMessageParam(msg));
+	}
+
+	setSoloSessionHistory(sessionId: string, history: MessageParam[]): void {
+		if (history && history.length > 0) {
+			this._soloPreloadedHistory.set(sessionId, history);
+		}
+	}
+
+	getSoloSessionHistory(sessionId: string): MessageParam[] {
+		const ctx = this._soloTasks.get(sessionId);
+		if (ctx) {
+			// 优先使用任务完成时立即捕获的历史（最可靠，避免异步保存时 task 已被清理）
+			if (ctx.completedHistory && ctx.completedHistory.length > 0) {
+				return ctx.completedHistory.map(msg => this.cloneMessageParam(msg));
+			}
+			if (ctx.task) {
+				const h = ctx.task.getMessageHistory();
+				if (h && h.length > 0) {
+					return this.compactHistorySeed(h).map(msg => this.cloneMessageParam(msg));
+				}
+			}
+		}
+		return this._soloPreloadedHistory.get(sessionId) || [];
+	}
+
+	/**
+	 * 启动 Solo 任务并附加心跳看门狗（流式静默超时自动中止）
+	 */
+	private async _startSoloTaskWithHeartbeat(ctx: ISoloTaskContext, sessionId: string): Promise<void> {
+		if (ctx.heartbeatTimer) { clearInterval(ctx.heartbeatTimer); ctx.heartbeatTimer = null; }
+		ctx.lastStreamActivityTime = Date.now();
+		ctx.pendingUserInputRequestCount = 0;
+
+		const STALL_TIMEOUT = 120_000; // 2分钟静默超时
+		ctx.heartbeatTimer = setInterval(() => {
+			if (!ctx.task || ctx.task.status !== TaskStatus.PROCESSING) {
+				clearInterval(ctx.heartbeatTimer!);
+				ctx.heartbeatTimer = null;
+				return;
+			}
+			const idleMs = Date.now() - ctx.lastStreamActivityTime;
+			if (ctx.pendingUserInputRequestCount > 0) {
+				// 等待用户输入期间无限等待，不触发超时
+				return;
+			}
+			if (idleMs >= STALL_TIMEOUT) {
+				console.warn(`[Maxian][Solo] 会话 ${sessionId} 流式静默超时（${idleMs}ms），自动中止`);
+				ctx.task.abortTask(ClineApiReqCancelReason.UserCancelled);
+				clearInterval(ctx.heartbeatTimer!);
+				ctx.heartbeatTimer = null;
+			}
+		}, 2500);
+
+		try {
+			await ctx.task!.start();
+		} finally {
+			if (ctx.heartbeatTimer) { clearInterval(ctx.heartbeatTimer); ctx.heartbeatTimer = null; }
+		}
+	}
+
+	// ════════════════════════════════════════════════════════════
+	// IDE 路径原有辅助方法（不作修改）
+	// ════════════════════════════════════════════════════════════
 
 	private canReuseCurrentTaskSession(mode: Mode, images?: string[], isFigmaTask: boolean = false): boolean {
 		if (!this.currentTask) {
@@ -3138,10 +3579,13 @@ export class MaxianService extends Disposable implements IMaxianService {
 		});
 
 		// 将子 Agent 的工具进度实时转发给主 UI
+		// 注意：仅在 IDE 模式（this.currentTask 不为 null）时才向全局事件总线推送，
+		// Solo 模式通过 _onClineMessage 显示工具调用，不需要此事件
 		let subAgentToolCount = 0;
 		const streamingDisposable = taskToolId ? subTask.onToolInputStreaming((event) => {
 			touchSubAgentActivity();
 			subAgentToolCount++;
+			if (!this.currentTask) { return; } // Solo 模式：不向 IDE 视图推送子 Agent 流式事件
 			const toolLabel = event.toolName === 'batch' ? 'batch(并行)' : event.toolName;
 			let keyParam = '';
 			if (event.input) {
@@ -3236,7 +3680,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 				subTask.abortTask(ClineApiReqCancelReason.UserCancelled);
 			}
 			subTask.dispose();
-			if (taskToolId && subAgentToolCount > 0) {
+			if (taskToolId && subAgentToolCount > 0 && this.currentTask) {
+				// Solo 模式不向 IDE 视图推送子 Agent 完成事件
 				this._onToolInputStreaming.fire({
 					toolId: taskToolId,
 					toolName: 'task',
@@ -3392,8 +3837,22 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	/**
 	 * 处理Ask响应 - 新版本
+	 * sessionId 有值时路由到对应 Solo 会话，无值时走 IDE 路径
 	 */
-	handleAskResponse(askTs: number, response: ClineAskResponse, text?: string, images?: string[]): void {
+	handleAskResponse(askTs: number, response: ClineAskResponse, text?: string, images?: string[], sessionId?: string): void {
+		if (sessionId) {
+			// Solo 模式：路由到对应会话的 task
+			const ctx = this._soloTasks.get(sessionId);
+			if (!ctx || !ctx.task) {
+				console.error('[Maxian][Solo] 无对应会话任务，无法提交ask响应. sessionId:', sessionId);
+				return;
+			}
+			ctx.pendingUserInputRequestCount = Math.max(0, ctx.pendingUserInputRequestCount - 1);
+			ctx.lastStreamActivityTime = Date.now();
+			ctx.task.handleWebviewAskResponse(askTs, response, text, images);
+			return;
+		}
+		// IDE 模式：原有逻辑不变
 		if (!this.currentTask) {
 			console.error('[Maxian] 无当前任务，无法提交ask响应');
 			return;
@@ -3512,6 +3971,28 @@ export class MaxianService extends Disposable implements IMaxianService {
 	}
 
 	/**
+	 * 用原始内容和修改后内容打开原生 Diff 编辑器（Coding 模式专用）
+	 */
+	async openNativeDiff(filePath: string, originalContent: string, newContent: string): Promise<void> {
+		if (!this.diffViewProvider) {
+			console.error('[Maxian] DiffViewProvider未初始化');
+			return;
+		}
+		await this.diffViewProvider.openDiffWithContent(filePath, originalContent, newContent);
+	}
+
+	/**
+	 * 在原生 VSCode 编辑器中打开文件（Coding 模式专用）
+	 */
+	async openNativeEditor(filePath: string): Promise<void> {
+		try {
+			await this.editorService.openEditor({ resource: URI.file(filePath) });
+		} catch (e) {
+			console.error('[Maxian] openNativeEditor 失败:', e);
+		}
+	}
+
+	/**
 	 * 保存diff修改并关闭diff编辑器，打开修改后的文件
 	 */
 	async saveDiffAndClose(): Promise<boolean> {
@@ -3535,10 +4016,28 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 	/**
 	 * 取消当前正在执行的任务
+	 * sessionId 有值时取消对应 Solo 会话，无值时取消 IDE 模式任务
 	 */
-	cancelTask(): void {
+	cancelTask(sessionId?: string): void {
 
-		// 如果任务已经被取消，直接返回，不做任何处理
+		if (sessionId) {
+			// Solo 模式：取消指定会话
+			const ctx = this._soloTasks.get(sessionId);
+			if (!ctx || !ctx.task || ctx.task.status !== TaskStatus.PROCESSING) { return; }
+			if (ctx.cancelled) { return; }
+			ctx.cancelled = true;
+			const soloTask = ctx.task;
+			ctx.task = null;
+			ctx.eventDisposables.clear();
+			if (ctx.heartbeatTimer) { clearInterval(ctx.heartbeatTimer); ctx.heartbeatTimer = null; }
+			soloTask.abortTask(ClineApiReqCancelReason.UserCancelled);
+			this._onTodoListUpdate.fire({ todos: [], sessionId });
+			// Solo 模式不触发 _onTaskCancelled（避免污染 IDE 模式视图的取消状态）
+			// soloEditorPane 通过 TaskStatus.ABORTED 事件自行处理取消 UI
+			return;
+		}
+
+		// IDE 模式：如果任务已经被取消，直接返回，不做任何处理
 		if (this.currentTaskCancelled) {
 			return;
 		}

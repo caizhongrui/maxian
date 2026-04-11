@@ -541,6 +541,11 @@ export class TaskService extends Disposable {
 		this.mainThreadSearchBurstCount = 0;
 		this.runtimeGuidanceKeys.clear();
 		this.resetExplorationProgress();
+		// 重置工具使用计数，避免上一轮 hasUsedTools=true 触发"必须 attempt_completion"死循环
+		this.toolUsage = {};
+		// 重置全局 API 轮次计数，避免第二条消息继承第一条的轮次导致提前触发轮次上限
+		this.totalApiRounds = 0;
+		this._outputLimitHits = 0;
 	}
 
 	/**

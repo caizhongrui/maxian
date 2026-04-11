@@ -51,7 +51,6 @@ import {
 } from './uiUtils.js';
 import { ensureFollowupOptions } from '../common/tools/toolExecutionProtocol.js';
 import { COMPACTION_CONFIG } from '../common/context/contextCompaction.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
 
 /**
  * 码弦 Agent 视图面板
@@ -179,8 +178,7 @@ export class MaxianView extends ViewPane {
 		@IHoverService hoverService: IHoverService,
 		@IMaxianService private readonly maxianService: IMaxianService,
 		@IAuthService private readonly authService: IAuthService,
-		@IStorageService private readonly storageService: IStorageService,
-		@ICommandService private readonly commandService: ICommandService
+		@IStorageService private readonly storageService: IStorageService
 	) {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, telemetryService, hoverService);
 	}
@@ -225,13 +223,15 @@ export class MaxianView extends ViewPane {
 			this.refreshInputPlaceholderText();
 		}));
 
-		// 监听旧版消息事件（向后兼容）
+		// 监听旧版消息事件（向后兼容）- Solo 模式事件（有 sessionId）不处理
 		this._register(this.maxianService.onMessage(event => {
+			if (event.sessionId) { return; }
 			this.handleMessageEvent(event);
 		}));
 
-		// 监听新版Cline消息事件
+		// 监听新版Cline消息事件 - Solo 模式事件（有 sessionId）不处理
 		this._register(this.maxianService.onClineMessage(event => {
+			if (event.sessionId) { return; }
 			this.renderClineMessage(event.message);
 		}));
 
@@ -256,8 +256,9 @@ export class MaxianView extends ViewPane {
 			this.loadKnowledgeBases(); // 重新加载知识库列表
 		}));
 
-		// 监听Token使用量事件
+		// 监听Token使用量事件 - Solo 模式事件（有 sessionId）不处理
 		this._register(this.maxianService.onTokenUsage(event => {
+			if (event.sessionId) { return; }
 			this.handleTokenUsage(event);
 		}));
 
@@ -276,13 +277,15 @@ export class MaxianView extends ViewPane {
 			this.handleToolCompleted(event);
 		}));
 
-		// 监听任务列表更新事件
+		// 监听任务列表更新事件 - Solo 模式事件（有 sessionId）不处理
 		this._register(this.maxianService.onTodoListUpdate(event => {
+			if (event.sessionId) { return; }
 			this.handleTodoListUpdate(event);
 		}));
 
-		// P0-2: 监听流式响应中断事件，显示墓碑标记
+		// P0-2: 监听流式响应中断事件，显示墓碑标记 - Solo 模式事件（有 sessionId）不处理
 		this._register(this.maxianService.onStreamInterrupted(event => {
+			if ((event as any).sessionId) { return; }
 			this.handleStreamInterrupted(event);
 		}));
 
@@ -880,43 +883,6 @@ export class MaxianView extends ViewPane {
 				refreshButton.style.transform = 'rotate(0deg)';
 				refreshButton.style.transition = 'all 0.15s';
 			}, 500);
-		};
-
-		// ⚡ Solo 模式按钮 — 点击在主编辑区打开 Solo 全屏面板
-		const soloButton = append(leftControls, $('button')) as HTMLButtonElement;
-		soloButton.title = '打开 Solo 自主模式（在主编辑区全屏运行，无需确认任何操作）';
-		soloButton.style.cssText = `
-			display: inline-flex;
-			align-items: center;
-			gap: 4px;
-			padding: 3px 8px;
-			border: 1px solid rgba(255,140,0,0.4);
-			border-radius: 10px;
-			background: rgba(255,140,0,0.08);
-			color: rgba(255,140,0,0.85);
-			font-size: 11px;
-			font-weight: 600;
-			cursor: pointer;
-			flex-shrink: 0;
-			margin-left: 6px;
-			font-family: inherit;
-			transition: all 0.15s;
-			white-space: nowrap;
-			letter-spacing: 0.3px;
-		`;
-		soloButton.innerHTML = '<span class="codicon codicon-rocket" style="font-size:11px;"></span> Solo';
-		soloButton.onmouseenter = () => {
-			soloButton.style.background = 'rgba(255,140,0,0.18)';
-			soloButton.style.borderColor = 'rgba(255,140,0,0.7)';
-			soloButton.style.color = '#FFA500';
-		};
-		soloButton.onmouseleave = () => {
-			soloButton.style.background = 'rgba(255,140,0,0.08)';
-			soloButton.style.borderColor = 'rgba(255,140,0,0.4)';
-			soloButton.style.color = 'rgba(255,140,0,0.85)';
-		};
-		soloButton.onclick = () => {
-			this.commandService.executeCommand('maxian.openSoloPanel');
 		};
 
 		// 连续对话复选框（仅在ask模式下显示）
@@ -7181,7 +7147,7 @@ ${stylesRef ? '\n' + stylesRef + '\n' : ''}${imageAssetsSection}
 				if (this.currentMode === 'solo') {
 					this.modeSelector.style.borderColor = 'rgba(255, 165, 0, 0.6)';
 					this.modeSelector.style.boxShadow = '0 0 0 1px rgba(255, 165, 0, 0.3)';
-					this.modeSelector.title = 'Solo模式：所有工具调用自动批准，无需确认';
+					this.modeSelector.title = 'Coding模式：所有工具调用自动批准，无需确认';
 				} else {
 					this.modeSelector.style.borderColor = '';
 					this.modeSelector.style.boxShadow = '';
