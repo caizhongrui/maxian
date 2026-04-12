@@ -2413,7 +2413,7 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 				return null;
 			case 'not_read':
 				return `<error>
-File has not been read yet. Read it first before writing to it.
+文件未读取，禁止直接写入。请先用 read_file 完整读取，然后用 edit 或 multiedit 修改具体位置。
 路径: ${filePath}
 </error>`;
 			case 'partial_view':
@@ -2423,12 +2423,12 @@ File has not been read yet. Read it first before writing to it.
 					return null;
 				}
 				return `<error>
-File has only been partially read. Read the full file before attempting to write it.
+文件仅被局部读取，禁止整文件重写。请先用 read_file（不带 start_line/end_line）完整读取，然后用 edit 或 multiedit 修改具体位置，禁止用 write_to_file 重写整个文件。
 路径: ${filePath}
 </error>`;
 			case 'modified_since_read':
 				return `<error>
-File has been modified since read, either by the user or by a previous tool write. Read it again before attempting to write it.
+文件自上次读取后已被修改。请先用 read_file 重新读取最新内容，然后用 edit 或 multiedit 修改具体位置。
 路径: ${filePath}
 </error>`;
 			default:

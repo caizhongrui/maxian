@@ -646,14 +646,7 @@ write_to_file 安全拦截：不允许通过空内容覆盖已存在文件
 				}
 				if (currentContent === processedContent) {
 					return {
-						error: `<error>
-write_to_file 未产生任何修改：目标文件内容与待写入内容完全一致
-文件: ${absolutePath}
-
-请不要重复写入相同内容。
-如果目标已完成，请直接 attempt_completion；
-如果仅需局部修改，请改用 edit / multiedit。
-</error>`
+						error: `文件内容已是目标状态，无需修改。如果任务已完成请调用 attempt_completion。如果还需修改其他位置，用 edit 工具指定 old_string/new_string。`
 					};
 				}
 			} catch (e) {

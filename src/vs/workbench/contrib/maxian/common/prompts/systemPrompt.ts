@@ -192,6 +192,9 @@ ${availableTools.join(', ')}`);
 		staticSections.push(getSystemInfoSection(workspaceRoot, systemInfo));
 		staticSections.push(getObjectiveSection());
 
+		// 尾部再次强调中文输出（防止长上下文后模型遗忘）
+		staticSections.push(`⚠️ REMINDER: 所有自然语言输出必须使用简体中文。禁止输出英文句子。`);
+
 		const customInstructions = this.getCustomInstructions(mode);
 		if (customInstructions) {
 			staticSections.push(customInstructions);

@@ -1053,6 +1053,13 @@ export class TaskService extends Disposable {
 						const hasUsedTools = Object.values(this.toolUsage).some(count => (count || 0) > 0);
 						const shouldRequireExplicitCompletion = this.requireExplicitCompletionAfterToolUse && hasUsedTools;
 
+						// Solo 模式：纯文本回复也可以结束任务，不强制 attempt_completion
+						if (this.currentMode === 'solo' && trimmedMessage.length > 0) {
+							await this.say('text', assistantMessage);
+							console.log('[TaskService][Solo] 纯文本回复，直接结束任务');
+							return true;
+						}
+
 						if (shouldRequireExplicitCompletion && trimmedMessage.length > 0) {
 							console.warn('[TaskService] 工具执行后收到纯文本回复，不视为完成，要求显式调用 attempt_completion');
 							this.pushHistory({
@@ -1743,6 +1750,19 @@ export class TaskService extends Disposable {
 		// 3. 顺序执行特殊工具（attempt_completion, ask_followup_question）
 		for (const toolUse of specialTools) {
 			if (toolUse.name === 'attempt_completion') {
+				// Solo 模式：直接结束循环，不需要 attempt_completion 验证流程
+				if (this.currentMode === 'solo') {
+					const completionText = typeof toolUse.input.result === 'string' ? toolUse.input.result.trim() : '';
+					if (completionText) {
+						await this.say('completion_result', completionText);
+					}
+					if (toolResults.length > 0) {
+						this.pushHistory({ role: 'tool', content: toolResults });
+					}
+					console.log('[TaskService][Solo] attempt_completion 拦截，直接结束任务');
+					return { shouldContinue: true, shouldEndLoop: true };
+				}
+
 				const result = await this.handleAttemptCompletion(toolUse);
 				if (result.shouldEndLoop) {
 					// 添加已收集的结果
@@ -4298,15 +4318,15 @@ case 'execute_command':
 		// 显示完成结果
 		await this.say('completion_result', result);
 
-		// 对于问答模式，不需要用户确认，直接结束
-		if (this.currentMode === 'ask') {
+		// 问答模式和 Solo 模式：不需要用户确认，直接结束
+		if (this.currentMode === 'ask' || this.currentMode === 'solo') {
 			return {
 				shouldContinue: true,
 				shouldEndLoop: true
 			};
 		}
 
-		// 询问用户
+		// 询问用户（仅 IDE 模式的非 ask/solo）
 		const { response, text, images } = await this.ask('completion_result', '');
 
 		if (response === 'yesButtonClicked') {

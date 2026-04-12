@@ -22,90 +22,37 @@ export interface BehaviorEventPayload {
 	extraData?: Record<string, unknown>
 }
 
+/**
+ * 行为上报器 — 已停用
+ * knowledge/behavior/event 接口已关闭，所有 report 方法均为空操作。
+ * 保留类签名以避免调用方编译错误。
+ */
 export class BehaviorReporter {
-	private sessionId: string
-	private featureViewTsMap: Map<string, number> = new Map()
-	private baseUrl: string
-	private token: string | undefined
 
-	constructor(baseUrl: string) {
-		this.baseUrl = baseUrl
-		this.sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
-	}
+	constructor(_baseUrl: string) { }
 
-	setToken(token: string): void {
-		this.token = token
-	}
+	setToken(_token: string): void { }
 
-	private report(eventType: BehaviorEventType, featureCode?: string, extraData?: Record<string, unknown>): void {
-		const payload: BehaviorEventPayload = {
-			sessionId: this.sessionId,
-			eventType,
-			featureCode,
-			clientTs: Date.now(),
-			extraData,
-		}
-		this.postEvent(payload).catch(() => { /* 静默失败 */ })
-	}
+	reportSessionStart(): void { }
 
-	private async postEvent(payload: BehaviorEventPayload): Promise<void> {
-		if (!this.token) return
-		try {
-			await fetch(`${this.baseUrl}/knowledge/behavior/event`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'Authorization': `Bearer ${this.token}`,
-				},
-				body: JSON.stringify(payload),
-			})
-		} catch {
-			// 网络错误静默处理
-		}
-	}
+	reportSessionEnd(): void { }
 
-	reportSessionStart(): void {
-		this.report(BehaviorEventType.SESSION_START)
-	}
+	reportTaskStart(_taskId: string): void { }
 
-	reportSessionEnd(): void {
-		this.report(BehaviorEventType.SESSION_END)
-	}
+	reportTaskEnd(_taskId: string, _status: 'success' | 'failed' | 'aborted'): void { }
 
-	reportTaskStart(taskId: string): void {
-		this.report(BehaviorEventType.TASK_START, undefined, { taskId })
-	}
+	reportToolUse(_toolName: string): void { }
 
-	reportTaskEnd(taskId: string, status: 'success' | 'failed' | 'aborted'): void {
-		this.report(BehaviorEventType.TASK_END, undefined, { taskId, status })
-	}
+	reportFeatureView(_featureCode: string): void { }
 
-	reportToolUse(toolName: string): void {
-		this.report(BehaviorEventType.TOOL_USE, undefined, { toolName })
-	}
-
-	reportFeatureView(featureCode: string): void {
-		this.featureViewTsMap.set(featureCode, Date.now())
-		this.report(BehaviorEventType.FEATURE_VIEW, featureCode)
-	}
-
-	reportFeatureLeave(featureCode: string): void {
-		const enterTs = this.featureViewTsMap.get(featureCode)
-		const duration = enterTs ? Math.round((Date.now() - enterTs) / 1000) : undefined
-		this.featureViewTsMap.delete(featureCode)
-		this.report(BehaviorEventType.FEATURE_LEAVE, featureCode, { duration })
-	}
+	reportFeatureLeave(_featureCode: string): void { }
 
 	reportAiCall(
-		model: string,
-		tokensIn: number,
-		tokensOut: number,
-		cost: number,
-		latencyMs: number,
-		success: boolean
-	): void {
-		this.report(BehaviorEventType.AI_CALL, undefined, {
-			model, tokensIn, tokensOut, cost, latencyMs, success
-		})
-	}
+		_model: string,
+		_tokensIn: number,
+		_tokensOut: number,
+		_cost: number,
+		_latencyMs: number,
+		_success: boolean
+	): void { }
 }

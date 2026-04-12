@@ -28,6 +28,7 @@ import { IWorkspaceContextService } from '../../../../platform/workspace/common/
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { ITerminalService } from '../../terminal/browser/terminal.js';
 import { SoloTerminalPanel } from './soloTerminalPanel.js';
+import { createCopyButton } from './uiUtils.js';
 
 /**
  * Solo 模式编辑器面板
@@ -38,6 +39,30 @@ import { SoloTerminalPanel } from './soloTerminalPanel.js';
  * │（左栏）   │                     │（Tab 文件）   │  │（资源管理器等）│
  * └──────────┴─────────────────────┴──────────────┘  └──────────────┘
  */
+/**
+ * Solo 会话恢复用的 DOMPurify 配置：在默认白名单基础上追加 table 等标签和自定义 data 属性，
+ * 避免 sessions.json 中保存的表格、图片等 HTML 被消毒移除。
+ */
+const SOLO_SESSION_PURIFY_CONFIG = {
+	ALLOWED_TAGS: [
+		// 默认白名单
+		'a', 'button', 'blockquote', 'code', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+		'hr', 'input', 'label', 'li', 'p', 'pre', 'select', 'small', 'span', 'strong',
+		'textarea', 'ul', 'ol',
+		// Solo markdown 渲染会用到的额外标签
+		'table', 'thead', 'tbody', 'tr', 'th', 'td',
+		'em', 'b', 'i', 'br', 'img', 'mark', 'del', 'sub', 'sup',
+	],
+	ALLOWED_ATTR: [
+		// 默认白名单
+		'href', 'data-href', 'data-command', 'target', 'title', 'name', 'src', 'alt',
+		'class', 'id', 'role', 'tabindex', 'style', 'data-code', 'width', 'height',
+		'align', 'x-dispatch', 'required', 'checked', 'placeholder', 'type', 'start',
+		// Solo 自定义属性
+		'data-finalized', 'data-session-id', 'data-tool-id',
+	],
+};
+
 export class SoloEditorPane extends EditorPane {
 
 	static readonly ID = SoloEditorInput.EditorID;
@@ -236,7 +261,7 @@ export class SoloEditorPane extends EditorPane {
 				const stored = this._sessions.map(s => ({
 					id: s.id, title: s.title,
 					status: s.status === 'running' ? 'done' : s.status,
-					time: s.time, html: s.msgContainer.innerHTML,
+					time: s.time, html: this._cleanHtmlForSave(s.msgContainer.innerHTML),
 					history: this.maxianService.getSoloSessionHistory(s.id),
 				}));
 				const json = JSON.stringify(stored, null, 2);
@@ -260,6 +285,15 @@ export class SoloEditorPane extends EditorPane {
 			@keyframes solo-pulse {
 				0%, 100% { opacity: 1; }
 				50% { opacity: 0.4; }
+			}
+			/* 消息区域允许文本选择和复制 */
+			.solo-message-area,
+			.solo-message-area * {
+				user-select: text !important;
+				-webkit-user-select: text !important;
+			}
+			.solo-message-area ::selection {
+				background: var(--vscode-editor-selectionBackground, rgba(0,122,204,0.3));
 			}
 			.solo-session-item.active {
 				background: rgba(255,140,0,0.12) !important;
@@ -285,7 +319,19 @@ export class SoloEditorPane extends EditorPane {
 				margin: 6px 0;
 				color: var(--vscode-foreground);
 				line-height: 1.5;
+				position: relative;
 			}
+			.solo-md-code-block .solo-code-copy {
+				position: absolute;
+				top: 4px;
+				right: 4px;
+				opacity: 0;
+				transition: opacity 0.15s;
+			}
+			.solo-md-code-block:hover .solo-code-copy {
+				opacity: 1;
+			}
+			/* 已移至内联样式 */
 			.solo-md-inline-code {
 				background: rgba(128,128,128,0.15);
 				border-radius: 3px;
@@ -629,6 +675,9 @@ export class SoloEditorPane extends EditorPane {
 			display: none;
 			flex-direction: column;
 			gap: 0;
+			user-select: text;
+			-webkit-user-select: text;
+			cursor: text;
 		`;
 
 		// ── 输入区（始终显示）──
@@ -1174,11 +1223,113 @@ export class SoloEditorPane extends EditorPane {
 		this._register(this.maxianService.onAiExecuteCommand((event) => {
 			if (!this.isVisible()) { return; }
 			if (event.sessionId && event.sessionId !== this._currentSessionId) {
-				// 后台会话的命令：只在当前 session 时展示（避免干扰）
 				return;
 			}
 			this._terminalPanel.mirrorAiCommand(event.command, event.cwd, event.sessionId);
 		}));
+
+		// 自动给所有消息行加复制按钮（AI消息、用户消息、完成摘要）
+
+		const getContentText = (el: HTMLElement): string => {
+			// 克隆节点，移除时间戳和复制按钮，再取文本
+			const clone = el.cloneNode(true) as HTMLElement;
+			// 移除所有时间戳（font-size:10px + opacity）
+			clone.querySelectorAll('span[style*="opacity: 0.45"], span[style*="opacity:0.45"], div[style*="opacity: 0.45"], div[style*="opacity:0.45"]').forEach(ts => ts.remove());
+			// 移除复制按钮
+			clone.querySelectorAll('.solo-copy-btn').forEach(btn => btn.remove());
+			// 移除头像（单字母 S 或文字）
+			clone.querySelectorAll('div[style*="border-radius:50%"], div[style*="border-radius: 50%"]').forEach(av => av.remove());
+			return clone.innerText.trim();
+		};
+
+		const addCopyBtn = (el: HTMLElement) => {
+			if (el.querySelector('.solo-copy-btn')) { return; }
+			const btn = document.createElement('div');
+			btn.className = 'solo-copy-btn';
+			btn.title = '复制';
+			btn.style.cssText = `
+				position:absolute;top:6px;right:6px;
+				width:28px;height:28px;
+				background:var(--vscode-editor-background, #1e1e1e);
+				border:1px solid var(--vscode-widget-border, rgba(128,128,128,0.3));
+				border-radius:6px;cursor:pointer;
+				opacity:0;transition:opacity 0.15s;z-index:10;
+				display:flex;align-items:center;justify-content:center;
+			`;
+			// 用两个小方块叠在一起模拟复制图标
+			const icon = document.createElement('div');
+			icon.style.cssText = `
+				width:10px;height:10px;
+				border:1.5px solid var(--vscode-descriptionForeground);
+				border-radius:2px;
+				position:relative;
+			`;
+			const shadow = document.createElement('div');
+			shadow.style.cssText = `
+				width:10px;height:10px;
+				border:1.5px solid var(--vscode-descriptionForeground);
+				border-radius:2px;
+				position:absolute;top:-4px;left:4px;
+				background:var(--vscode-editor-background, #1e1e1e);
+			`;
+			icon.appendChild(shadow);
+			btn.appendChild(icon);
+
+			btn.onclick = (e) => {
+				e.stopPropagation();
+				const text = getContentText(el);
+				navigator.clipboard.writeText(text).catch(() => {
+					const ta = document.createElement('textarea');
+					ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;';
+					document.body.appendChild(ta); ta.select();
+					document.execCommand('copy'); document.body.removeChild(ta);
+				});
+				// 确认反馈
+				icon.style.display = 'none';
+				btn.style.color = '#4EC9B0';
+				btn.textContent = '✓';
+				btn.style.fontSize = '14px';
+				btn.style.fontWeight = '700';
+				setTimeout(() => {
+					btn.textContent = '';
+					icon.style.display = '';
+					btn.appendChild(icon);
+					btn.style.color = '';
+					btn.style.fontSize = '';
+					btn.style.fontWeight = '';
+				}, 2000);
+			};
+			btn.onmouseenter = () => { btn.style.borderColor = 'var(--vscode-focusBorder, #007acc)'; };
+			btn.onmouseleave = () => { btn.style.borderColor = 'var(--vscode-widget-border, rgba(128,128,128,0.3))'; };
+			el.style.position = 'relative';
+			el.appendChild(btn);
+			el.addEventListener('mouseenter', () => { btn.style.opacity = '1'; });
+			el.addEventListener('mouseleave', () => { btn.style.opacity = '0'; });
+		};
+
+		const scanAndAddCopyBtns = () => {
+			// 用户消息、任务完成摘要 — 立即加
+			this.messageArea.querySelectorAll('.solo-msg-row-user, .solo-ask-confirmation').forEach(el => {
+				addCopyBtn(el as HTMLElement);
+			});
+			// AI 消息 — 只给非当前流式的加（当前流式气泡会被 textContent='' 清掉）
+			this.messageArea.querySelectorAll('.solo-msg-row-ai').forEach(el => {
+				if (el === this.lastAiBubble) { return; } // 跳过正在流式的
+				addCopyBtn(el as HTMLElement);
+			});
+		};
+
+		// 监听子树变化，但 addCopyBtn 内部会跳过正在流式的 AI 行
+		let scanTimer: any = null;
+		const debouncedScan = () => {
+			if (scanTimer) { clearTimeout(scanTimer); }
+			scanTimer = setTimeout(scanAndAddCopyBtns, 200);
+		};
+		const observer = new MutationObserver(debouncedScan);
+		observer.observe(this.messageArea, { childList: true, subtree: true });
+
+		// 初始扫描（恢复的旧会话）
+		setTimeout(scanAndAddCopyBtns, 500);
 	}
 
 	// ── 会话管理 ──────────────────────────────────────────────────────────────
@@ -1518,7 +1669,7 @@ export class SoloEditorPane extends EditorPane {
 					title: s.title,
 					status: s.status === 'running' ? 'done' : s.status,
 					time: s.time,
-					html: s.msgContainer.innerHTML,
+					html: this._cleanHtmlForSave(s.msgContainer.innerHTML),
 					history,
 				};
 			});
@@ -1529,6 +1680,73 @@ export class SoloEditorPane extends EditorPane {
 	}
 
 	/** 从 {workspaceRoot}/.maxian/sessions.json 读取历史会话（异步，加载后渲染） */
+	/** 恢复 HTML 后重新绑定事件（reasoning 展开/收起、工具批次展开/收起、复制按钮） */
+	/** 保存前清理 HTML：用正则移除 UI 功能元素（避免 innerHTML 赋值触发 CSP TrustedHTML） */
+	private _cleanHtmlForSave(html: string): string {
+		return html
+			// 移除复制按钮（各种形式）
+			.replace(/<button[^>]*class="[^"]*solo-copy-btn[^"]*"[^>]*>[\s\S]*?<\/button>/g, '')
+			.replace(/<div[^>]*class="[^"]*solo-copy-btn[^"]*"[^>]*>[\s\S]*?<\/div>/g, '')
+			.replace(/<div[^>]*class="[^"]*solo-code-copy[^"]*"[^>]*>[\s\S]*?<\/div>/g, '')
+			.replace(/<div[^>]*class="[^"]*solo-bubble-copy[^"]*"[^>]*>[\s\S]*?<\/div>/g, '')
+			.replace(/<button[^>]*class="codicon codicon-copy[^"]*"[^>]*>[\s\S]*?<\/button>/g, '')
+			// 移除进度提示
+			.replace(/<div[^>]*class="[^"]*solo-progress-hint[^"]*"[^>]*>[\s\S]*?<\/div>/g, '');
+	}
+
+	private _rebindRestoredEvents(container: HTMLElement): void {
+		// 0. 清理旧的复制按钮（从 sessions.json HTML 恢复的，codicon 不可见且无事件）
+		container.querySelectorAll('.solo-copy-btn, .solo-code-copy, .solo-bubble-copy').forEach(el => el.remove());
+		// 旧的 codicon-copy 按钮（可能残留在保存的 HTML 中）
+		container.querySelectorAll('button.codicon.codicon-copy').forEach(el => el.remove());
+
+		// 1. Reasoning bubble 展开/收起
+		container.querySelectorAll('.solo-reasoning-header').forEach(header => {
+			const wrapper = header.parentElement;
+			if (!wrapper) { return; }
+			const contentEl = wrapper.querySelector('.solo-reasoning-text') as HTMLElement;
+			const chevron = header.querySelector('.codicon-chevron-down, .codicon-chevron-right') as HTMLElement;
+			if (!contentEl) { return; }
+			let collapsed = contentEl.style.display === 'none';
+			header.addEventListener('click', () => {
+				collapsed = !collapsed;
+				contentEl.style.display = collapsed ? 'none' : 'block';
+				if (chevron) {
+					chevron.style.transform = collapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+				}
+			});
+		});
+
+		// 2. 工具批次展开/收起
+		container.querySelectorAll('.solo-tool-batch-summary').forEach(summary => {
+			const wrapper = summary.parentElement;
+			if (!wrapper) { return; }
+			const details = wrapper.querySelector('div[style*="border-top"]') as HTMLElement;
+			const chevron = summary.querySelector('.codicon-chevron-right') as HTMLElement;
+			if (!details) { return; }
+			let expanded = details.style.display !== 'none';
+			summary.addEventListener('click', () => {
+				expanded = !expanded;
+				details.style.display = expanded ? 'block' : 'none';
+				if (chevron) {
+					chevron.style.transform = expanded ? 'rotate(90deg)' : 'rotate(0deg)';
+				}
+			});
+		});
+
+		// 3. 代码块复制按钮
+		container.querySelectorAll('.solo-md-code-block').forEach(pre => {
+			// 移除旧的（可能是空的）复制按钮占位
+			const oldCopy = pre.querySelector('.solo-code-copy');
+			if (oldCopy) { oldCopy.remove(); }
+			const codeCopyWrap = document.createElement('div');
+			codeCopyWrap.className = 'solo-code-copy';
+			const codeText = (pre as HTMLElement).textContent || '';
+			createCopyButton(codeCopyWrap, () => codeText);
+			pre.appendChild(codeCopyWrap);
+		});
+	}
+
 	private _loadSessionsFromStorage(): void {
 		const uri = this._getSessionsFileUri();
 		if (!uri) { return; }
@@ -1542,7 +1760,11 @@ export class SoloEditorPane extends EditorPane {
 					if (this._sessions.find(s => s.id === item.id)) { continue; }
 					const msgContainer = document.createElement('div');
 					msgContainer.style.cssText = 'display:none;flex-direction:column;gap:12px;';
-					if (item.html) { safeInnerHtml(msgContainer, item.html); }
+					if (item.html) {
+						// 使用扩展的白名单恢复 HTML，包含 table/img/em 等 Solo 渲染用到的标签
+						safeInnerHtml(msgContainer, item.html, SOLO_SESSION_PURIFY_CONFIG);
+						this._rebindRestoredEvents(msgContainer);
+					}
 					this.messageArea.appendChild(msgContainer);
 
 					// 恢复 AI 消息历史，使后续对话可以延续上下文
@@ -2179,6 +2401,7 @@ export class SoloEditorPane extends EditorPane {
 		row.style.cssText = 'display:flex;justify-content:flex-end;';
 
 		const bubble = document.createElement('div');
+		bubble.className = 'solo-bubble-content';
 		bubble.style.cssText = `
 			max-width: 100%;
 			padding: 8px 12px;
@@ -2234,6 +2457,7 @@ export class SoloEditorPane extends EditorPane {
 			avatar.textContent = 'S';
 
 			const bubble = document.createElement('div');
+			bubble.className = 'solo-bubble-content';
 			bubble.style.cssText = `
 				flex: 1;
 				padding: 8px 12px;
@@ -2246,17 +2470,23 @@ export class SoloEditorPane extends EditorPane {
 				word-break: break-word;
 			`;
 
-			// 时间戳（显示在气泡下方）
-			const aiTsEl = document.createElement('div');
-			aiTsEl.style.cssText = 'font-size:10px;color:var(--vscode-descriptionForeground);opacity:0.45;margin-top:2px;padding-left:2px;';
+			// 时间戳 + 复制按钮（显示在气泡下方，一行）
+			const aiFooter = document.createElement('div');
+			aiFooter.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-top:2px;padding:0 2px;';
+
+			const aiTsEl = document.createElement('span');
+			aiTsEl.style.cssText = 'font-size:10px;color:var(--vscode-descriptionForeground);opacity:0.45;';
 			const aiNow = new Date();
 			const aiPad = (n: number) => n.toString().padStart(2, '0');
 			aiTsEl.textContent = `${aiNow.getFullYear()}-${aiPad(aiNow.getMonth()+1)}-${aiPad(aiNow.getDate())} ${aiPad(aiNow.getHours())}:${aiPad(aiNow.getMinutes())}:${aiPad(aiNow.getSeconds())}`;
+			aiFooter.appendChild(aiTsEl);
+			// 复制按钮由 MutationObserver 统一添加，不在这里创建
 
+			// bubbleWrap: 包含气泡 + footer
 			const bubbleWrap = document.createElement('div');
 			bubbleWrap.style.cssText = 'flex:1;display:flex;flex-direction:column;min-width:0;';
 			bubbleWrap.appendChild(bubble);
-			bubbleWrap.appendChild(aiTsEl);
+			bubbleWrap.appendChild(aiFooter);
 
 			row.appendChild(avatar);
 			row.appendChild(bubbleWrap);
@@ -2277,11 +2507,18 @@ export class SoloEditorPane extends EditorPane {
 	}
 
 	private _finalizeAIText(_text: string): void {
-		// 流结束：确保最终文本已渲染（_appendOrUpdateAIText 已实时渲染，这里只清空引用）
+		// 流结束：清空引用，让 Observer 的 scanAndAddCopyBtns 自动加复制按钮
+		const finishedRow = this.lastAiBubble;
 		this._lastAiAccText = '';
 		this.lastAiBubble = null;
 		this.lastAiBubbleText = null;
 		this._scrollToBottom();
+		// 触发一次 DOM mutation 让 Observer 扫描到
+		if (finishedRow) {
+			requestAnimationFrame(() => {
+				finishedRow.setAttribute('data-finalized', 'true');
+			});
+		}
 	}
 
 	/** 思考过程：流式追加，默认展开，AI 文字开始时自动折叠 */
@@ -2899,6 +3136,12 @@ export class SoloEditorPane extends EditorPane {
 				pre.className = 'solo-md-code-block';
 				pre.textContent = codeLines.join('\n');
 				if (lang) { pre.setAttribute('data-lang', lang); }
+				// 代码块复制按钮
+				const codeCopyWrap = document.createElement('div');
+				codeCopyWrap.className = 'solo-code-copy';
+				const codeText = codeLines.join('\n');
+				createCopyButton(codeCopyWrap, () => codeText);
+				pre.appendChild(codeCopyWrap);
 				parent.appendChild(pre);
 				continue;
 			}

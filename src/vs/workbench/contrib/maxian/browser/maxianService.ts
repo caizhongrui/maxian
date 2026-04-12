@@ -4308,10 +4308,13 @@ export class MaxianService extends Disposable implements IMaxianService {
 			if (this.currentMode === 'ask' && this.difyHandler) {
 				provider = 'dify';
 				model = 'dify-workflow';
+			} else if (this.currentMode === 'solo' && this._soloApiHandler) {
+				const modelInfo = this._soloApiHandler.getModel();
+				model = modelInfo.id;
+				provider = 'qwen';
 			} else if (this.apiHandler) {
 				const modelInfo = this.apiHandler.getModel();
 				model = modelInfo.id;
-				// ModelInfo没有provider字段,使用默认值
 				provider = 'qwen';
 			}
 
