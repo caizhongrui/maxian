@@ -462,6 +462,9 @@ export class SoloEditorPane extends EditorPane {
 		// 隐藏编辑器标签栏，让 Solo 面板独占整个编辑区
 		await this.configurationService.updateValue('workbench.editor.showTabs', 'none', ConfigurationTarget.MEMORY);
 
+		// 隐藏 Solo 所在 editor group 的拆分/锁定/关闭按钮
+		this._hideSoloGroupActions();
+
 		// Solo 面板打开即就绪，聚焦输入框
 		requestAnimationFrame(() => this.inputEl?.focus());
 	}
@@ -482,6 +485,8 @@ export class SoloEditorPane extends EditorPane {
 	}
 
 	private _restoreLayout(): void {
+		// 恢复 Solo 所在 editor group 的操作按钮
+		this._showSoloGroupActions();
 		// 解锁 Solo 组，允许普通编辑器恢复
 		this.group.lock(false);
 
@@ -495,6 +500,52 @@ export class SoloEditorPane extends EditorPane {
 		if (this._savedPanelVisible) { this.layoutService.setPartHidden(false, Parts.PANEL_PART); }
 		if (this._savedAuxBarVisible) { this.layoutService.setPartHidden(false, Parts.AUXILIARYBAR_PART); }
 		this.configurationService.updateValue('workbench.editor.showTabs', this._savedShowTabs, ConfigurationTarget.MEMORY);
+	}
+
+	/** 标题栏中编辑器相关操作按钮（split/lock/close）— 隐藏 */
+	private _hiddenActionItems: HTMLElement[] = [];
+	private _titlebarObserver: MutationObserver | null = null;
+	private _hideSoloGroupActions(): void {
+		const doHide = () => {
+			// 先恢复之前隐藏的（防止重复）
+			for (const li of this._hiddenActionItems) { li.style.display = ''; }
+			this._hiddenActionItems = [];
+
+			const codicons = ['.codicon-split-horizontal', '.codicon-lock', '.codicon-close', '.codicon.separator'];
+			for (const sel of codicons) {
+				document.querySelectorAll(`.titlebar-right ${sel}`).forEach(a => {
+					const li = a.closest('li.action-item') as HTMLElement | null;
+					if (li && li.style.display !== 'none') {
+						li.style.display = 'none';
+						this._hiddenActionItems.push(li);
+					}
+				});
+			}
+		};
+
+		// 立即执行一次 + 延迟执行（titlebar 可能在 setInput 后重建）
+		doHide();
+		requestAnimationFrame(doHide);
+		setTimeout(doHide, 200);
+
+		// 监听 titlebar-right 变化，toolbar 重建时重新隐藏
+		const titlebarRight = document.querySelector('.titlebar-right');
+		if (titlebarRight && !this._titlebarObserver) {
+			this._titlebarObserver = new MutationObserver(() => doHide());
+			this._titlebarObserver.observe(titlebarRight, { childList: true, subtree: true });
+		}
+	}
+
+	/** 标题栏中编辑器相关操作按钮 — 恢复 */
+	private _showSoloGroupActions(): void {
+		if (this._titlebarObserver) {
+			this._titlebarObserver.disconnect();
+			this._titlebarObserver = null;
+		}
+		for (const li of this._hiddenActionItems) {
+			li.style.display = '';
+		}
+		this._hiddenActionItems = [];
 	}
 
 	override dispose(): void {
