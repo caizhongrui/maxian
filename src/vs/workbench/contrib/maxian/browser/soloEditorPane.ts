@@ -62,6 +62,10 @@ export class SoloEditorPane extends EditorPane {
 	private _mentionItems: string[] = [];
 	private _mentionIndex = -1;
 
+	// ─── 图片支持 ─────────────────────────────────────────
+	private _pendingImages: string[] = [];  // base64 图片数据
+	private _imagePreviewContainer: HTMLElement | null = null;
+
 	// ─── 会话管理 ─────────────────────────────────────────
 	private _sessions: Array<{
 		id: string;
@@ -860,7 +864,8 @@ export class SoloEditorPane extends EditorPane {
 			display: flex;
 			flex-direction: column;
 			transition: border-color 0.15s, box-shadow 0.15s;
-			overflow: hidden;
+			overflow: visible;
+			position: relative;
 		`;
 
 		// 顶部标签行
@@ -909,9 +914,25 @@ export class SoloEditorPane extends EditorPane {
 			inputCard.style.boxShadow = 'none';
 		});
 
-		// 纯文本粘贴：去除所有富文本格式，只保留纯文本
+		// 粘贴：支持图片 + 纯文本（去除富文本格式）
 		this.inputEl.addEventListener('paste', (e) => {
 			e.preventDefault();
+
+			// 检查是否有图片
+			const files = e.clipboardData?.files;
+			if (files && files.length > 0) {
+				for (let i = 0; i < files.length; i++) {
+					const file = files[i];
+					if (file.type.startsWith('image/')) {
+						this._addImageFromFile(file);
+					}
+				}
+				// 如果只粘贴了图片（没有文本），直接返回
+				const text = e.clipboardData?.getData('text/plain') ?? '';
+				if (!text.trim()) { return; }
+			}
+
+			// 纯文本粘贴
 			const text = e.clipboardData?.getData('text/plain') ?? '';
 			if (!text) { return; }
 			const sel = window.getSelection();
@@ -924,8 +945,39 @@ export class SoloEditorPane extends EditorPane {
 			sel.addRange(range);
 		});
 
-		// Enter 发送（Shift+Enter 换行）
+		// 拖拽图片支持
+		this.inputEl.addEventListener('dragover', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			inputCard.style.borderColor = 'var(--vscode-focusBorder, #007acc)';
+		});
+		this.inputEl.addEventListener('dragleave', () => {
+			inputCard.style.borderColor = 'var(--vscode-input-border, rgba(128,128,128,0.3))';
+		});
+		this.inputEl.addEventListener('drop', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			inputCard.style.borderColor = 'var(--vscode-input-border, rgba(128,128,128,0.3))';
+			const files = e.dataTransfer?.files;
+			if (files) {
+				for (let i = 0; i < files.length; i++) {
+					if (files[i].type.startsWith('image/')) {
+						this._addImageFromFile(files[i]);
+					}
+				}
+			}
+		});
+
+		// 键盘事件：Enter 发送、Ctrl+A 全选
+		// 注意：mention dropdown 的 ArrowDown/ArrowUp/Enter/Escape 由 _mentionKeyHandler 处理
 		this.inputEl.addEventListener('keydown', (e) => {
+			// mention dropdown 打开时，不处理 Enter/ArrowDown/ArrowUp/Escape（交给 _mentionKeyHandler）
+			const dropdownOpen = this._mentionDropdown && this._mentionDropdown.style.display !== 'none';
+			if (dropdownOpen && (e.key === 'Enter' || e.key === 'Tab' || e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape')) {
+				return; // 让 _mentionKeyHandler 处理
+			}
+
+			// Enter 发送（Shift+Enter 换行）
 			if (e.key === 'Enter' && !e.shiftKey) {
 				e.preventDefault();
 				this._sendMessage();
@@ -2597,48 +2649,13 @@ export class SoloEditorPane extends EditorPane {
 		if (atIdx === -1) { this._hideMentionDropdown(); return; }
 
 		const query = before.substring(atIdx + 1);
-		// @ 后面不能有空格或换行
 		if (query.includes(' ') || query.includes('\n')) { this._hideMentionDropdown(); return; }
 
-		// 搜索文件
-		this._searchFilesForMention(query).then(files => {
+		// 使用 maxianService.getWorkspaceFiles（与 IDE 模式一致）
+		this.maxianService.getWorkspaceFiles(query).then(files => {
 			if (files.length === 0) { this._hideMentionDropdown(); return; }
-			this._showMentionDropdown(files, node as Text, atIdx, cursorPos);
+			this._showMentionDropdown(files.slice(0, 20), node as Text, atIdx, cursorPos);
 		}).catch(() => this._hideMentionDropdown());
-	}
-
-	/** 搜索工作区文件 */
-	private async _searchFilesForMention(query: string): Promise<string[]> {
-		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
-		if (workspaceFolders.length === 0) { return []; }
-		const rootUri = workspaceFolders[0].uri;
-
-		try {
-			const results = await this.fileService.resolve(rootUri, { resolveMetadata: false });
-			if (!results.children) { return []; }
-
-			// 简单递归收集文件路径（最多 20 个）
-			const files: string[] = [];
-			const collect = (children: typeof results.children, prefix: string) => {
-				for (const child of children) {
-					if (files.length >= 20) { break; }
-					const name = child.name;
-					const path = prefix ? `${prefix}/${name}` : name;
-					if (child.isDirectory) {
-						if (name === 'node_modules' || name === '.git' || name === 'dist' || name === 'build') { continue; }
-						// 不递归太深
-					} else {
-						if (!query || name.toLowerCase().includes(query.toLowerCase())) {
-							files.push(path);
-						}
-					}
-				}
-			};
-			collect(results.children, '');
-			return files;
-		} catch {
-			return [];
-		}
 	}
 
 	/** 显示 @mention 下拉列表 */
@@ -3126,6 +3143,106 @@ export class SoloEditorPane extends EditorPane {
 
 	// ── 发送消息 ──────────────────────────────────────────────────────────────
 
+	/** 从 File 对象添加图片（压缩后存入 _pendingImages） */
+	private _addImageFromFile(file: File): void {
+		const reader = new FileReader();
+		reader.onload = () => {
+			const img = new Image();
+			img.onload = () => {
+				// 压缩：最大 1024px，JPEG 质量 0.7
+				const maxSize = 1024;
+				let { width, height } = img;
+				if (width > maxSize || height > maxSize) {
+					const ratio = Math.min(maxSize / width, maxSize / height);
+					width = Math.round(width * ratio);
+					height = Math.round(height * ratio);
+				}
+				const canvas = document.createElement('canvas');
+				canvas.width = width;
+				canvas.height = height;
+				const ctx = canvas.getContext('2d');
+				if (!ctx) { return; }
+				ctx.drawImage(img, 0, 0, width, height);
+				const base64 = canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
+				this._pendingImages.push(base64);
+				this._renderImagePreviews();
+			};
+			img.src = reader.result as string;
+		};
+		reader.readAsDataURL(file);
+	}
+
+	/** 渲染图片预览区 */
+	private _renderImagePreviews(): void {
+		if (!this._imagePreviewContainer) {
+			this._imagePreviewContainer = document.createElement('div');
+			this._imagePreviewContainer.style.cssText = `
+				display: flex;
+				gap: 6px;
+				padding: 6px 12px;
+				flex-wrap: wrap;
+			`;
+			// 插入到输入框之前
+			this.inputEl.parentElement?.insertBefore(this._imagePreviewContainer, this.inputEl);
+		}
+
+		// 清空重建
+		while (this._imagePreviewContainer.firstChild) {
+			this._imagePreviewContainer.removeChild(this._imagePreviewContainer.firstChild);
+		}
+
+		if (this._pendingImages.length === 0) {
+			this._imagePreviewContainer.style.display = 'none';
+			return;
+		}
+
+		this._imagePreviewContainer.style.display = 'flex';
+
+		this._pendingImages.forEach((base64, idx) => {
+			const wrapper = document.createElement('div');
+			wrapper.style.cssText = `
+				position: relative;
+				width: 60px;
+				height: 60px;
+				border-radius: 8px;
+				overflow: hidden;
+				border: 1px solid var(--vscode-input-border, rgba(128,128,128,0.3));
+				flex-shrink: 0;
+			`;
+
+			const img = document.createElement('img');
+			img.src = `data:image/jpeg;base64,${base64}`;
+			img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+			wrapper.appendChild(img);
+
+			// 删除按钮
+			const removeBtn = document.createElement('div');
+			removeBtn.style.cssText = `
+				position: absolute;
+				top: 2px;
+				right: 2px;
+				width: 16px;
+				height: 16px;
+				background: rgba(0,0,0,0.6);
+				border-radius: 50%;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				cursor: pointer;
+				color: #fff;
+				font-size: 10px;
+			`;
+			removeBtn.textContent = '×';
+			removeBtn.onclick = () => {
+				this._pendingImages.splice(idx, 1);
+				this._renderImagePreviews();
+			};
+			wrapper.appendChild(removeBtn);
+
+			this._imagePreviewContainer!.appendChild(wrapper);
+		});
+	}
+
 	private async _sendMessage(): Promise<void> {
 		// 收集 @mention 的文件路径
 		const mentionChips = this.inputEl.querySelectorAll('[data-mention]');
@@ -3176,8 +3293,13 @@ export class SoloEditorPane extends EditorPane {
 		this.lastAiBubbleText = null;
 		this._lastAiAccText = '';
 
-		// 发送到 maxianService（solo 模式）
-		this.maxianService.sendMessage(text, 'solo', undefined, undefined, this._currentSessionId || undefined);
+		// 收集待发送图片并清空预览
+		const images = this._pendingImages.length > 0 ? [...this._pendingImages] : undefined;
+		this._pendingImages = [];
+		this._renderImagePreviews();
+
+		// 发送到 maxianService（solo 模式，带图片）
+		this.maxianService.sendMessage(text, 'solo', undefined, images, this._currentSessionId || undefined);
 	}
 
 	// ── 状态管理 ──────────────────────────────────────────────────────────────
