@@ -55,6 +55,12 @@ export class SoloEditorPane extends EditorPane {
 	private taskProgressText!: HTMLElement;
 	private taskStatsEl!: HTMLElement;
 	private taskElapsedText!: HTMLElement;
+	private _todoListEl!: HTMLElement;  // Todo 列表显示区域
+
+	// ─── @mention 文件引用 ─────────────────────────────────
+	private _mentionDropdown: HTMLElement | null = null;
+	private _mentionItems: string[] = [];
+	private _mentionIndex = -1;
 
 	// ─── 会话管理 ─────────────────────────────────────────
 	private _sessions: Array<{
@@ -539,6 +545,15 @@ export class SoloEditorPane extends EditorPane {
 		this.taskElapsedText = append(this.taskStatsEl, $('div'));
 		this.taskElapsedText.style.cssText = 'font-size:11px;color:var(--vscode-descriptionForeground);text-align:center;line-height:1.5;';
 		this.taskElapsedText.textContent = '和智能体对话，\n开始你的第一个任务吧';
+
+		// Todo 列表显示区域
+		this._todoListEl = append(this.leftPanel, $('div.solo-todo-list'));
+		this._todoListEl.style.cssText = `
+			flex: 1;
+			overflow-y: auto;
+			padding: 8px 10px;
+			display: none;
+		`;
 	}
 
 	/** 中间主面板：欢迎卡 + 消息流 + 输入框 */
@@ -894,12 +909,42 @@ export class SoloEditorPane extends EditorPane {
 			inputCard.style.boxShadow = 'none';
 		});
 
+		// 纯文本粘贴：去除所有富文本格式，只保留纯文本
+		this.inputEl.addEventListener('paste', (e) => {
+			e.preventDefault();
+			const text = e.clipboardData?.getData('text/plain') ?? '';
+			if (!text) { return; }
+			const sel = window.getSelection();
+			if (!sel || sel.rangeCount === 0) { return; }
+			const range = sel.getRangeAt(0);
+			range.deleteContents();
+			range.insertNode(document.createTextNode(text));
+			range.collapse(false);
+			sel.removeAllRanges();
+			sel.addRange(range);
+		});
+
 		// Enter 发送（Shift+Enter 换行）
 		this.inputEl.addEventListener('keydown', (e) => {
 			if (e.key === 'Enter' && !e.shiftKey) {
 				e.preventDefault();
 				this._sendMessage();
 			}
+			// Ctrl/Cmd+A 全选输入框内容
+			if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
+				e.preventDefault();
+				e.stopPropagation();
+				const sel = window.getSelection();
+				const range = document.createRange();
+				range.selectNodeContents(this.inputEl);
+				sel?.removeAllRanges();
+				sel?.addRange(range);
+			}
+		});
+
+		// @mention 文件引用
+		this.inputEl.addEventListener('input', () => {
+			this._checkMentionTrigger();
 		});
 
 		// 底部操作栏
@@ -1002,6 +1047,7 @@ export class SoloEditorPane extends EditorPane {
 
 		// Todo 列表更新（只更新对应会话的 todo 计数，UI 进度只刷新当前会话）
 		this._register(this.maxianService.onTodoListUpdate((event: ITodoListEvent) => {
+			console.log(`[ToolTrace] [Todo] sessionId=${event.sessionId}, currentSession=${this._currentSessionId}, todos=${event.todos?.length}`);
 			if (!event.sessionId) { return; }
 			const isCurrentSession = event.sessionId === this._currentSessionId;
 			if (!isCurrentSession) {
@@ -2005,18 +2051,66 @@ export class SoloEditorPane extends EditorPane {
 			}
 		}
 
-		// 更新顶部状态文字
-		const current = todos.find(t => t.status === 'in_progress');
-		if (current) {
-			const shortText = (current.activeForm || current.content || '').slice(0, 60);
-			this.headerStatusText.textContent = `正在执行：${shortText}`;
-		} else if (this.todoDone === this.todoTotal && this.todoTotal > 0) {
-			this.headerStatusText.textContent = '全部步骤已完成';
+		// 渲染 todo 列表到左侧面板
+		if (todos.length === 0) {
+			this._todoListEl.style.display = 'none';
+			return;
 		}
 
-		// 更新计时器区域的进度文字
-		if (this.todoTotal > 0) {
-			this.taskElapsedText.textContent = `进度 ${this.todoDone}/${this.todoTotal}`;
+		this._todoListEl.style.display = 'block';
+		// 清空旧内容
+		while (this._todoListEl.firstChild) {
+			this._todoListEl.removeChild(this._todoListEl.firstChild);
+		}
+
+		// 标题
+		const header = document.createElement('div');
+		header.style.cssText = 'font-size:11px;font-weight:600;color:var(--vscode-foreground);margin-bottom:6px;display:flex;align-items:center;gap:4px;';
+		const headerIcon = document.createElement('span');
+		headerIcon.className = 'codicon codicon-checklist';
+		headerIcon.style.cssText = 'font-size:12px;';
+		header.appendChild(headerIcon);
+		header.appendChild(document.createTextNode(`执行计划 ${this.todoDone}/${this.todoTotal}`));
+		this._todoListEl.appendChild(header);
+
+		// 列表项
+		for (const todo of todos) {
+			const item = document.createElement('div');
+			item.style.cssText = `
+				display: flex;
+				align-items: flex-start;
+				gap: 5px;
+				padding: 3px 0;
+				font-size: 11px;
+				line-height: 1.4;
+				color: var(--vscode-descriptionForeground);
+			`;
+
+			const icon = document.createElement('span');
+			if (todo.status === 'completed') {
+				icon.className = 'codicon codicon-check';
+				icon.style.cssText = 'font-size:11px;color:var(--vscode-charts-green,#4EC9B0);flex-shrink:0;margin-top:1px;';
+			} else if (todo.status === 'in_progress') {
+				icon.className = 'codicon codicon-loading codicon-modifier-spin';
+				icon.style.cssText = 'font-size:11px;color:#FFA500;flex-shrink:0;margin-top:1px;';
+			} else {
+				icon.className = 'codicon codicon-circle-outline';
+				icon.style.cssText = 'font-size:11px;opacity:0.4;flex-shrink:0;margin-top:1px;';
+			}
+			item.appendChild(icon);
+
+			const text = document.createElement('span');
+			text.textContent = (todo.activeForm || todo.content || '').slice(0, 40);
+			if (todo.status === 'completed') {
+				text.style.opacity = '0.5';
+				text.style.textDecoration = 'line-through';
+			} else if (todo.status === 'in_progress') {
+				text.style.color = 'var(--vscode-foreground)';
+				text.style.fontWeight = '500';
+			}
+			item.appendChild(text);
+
+			this._todoListEl.appendChild(item);
 		}
 	}
 
@@ -2482,6 +2576,246 @@ export class SoloEditorPane extends EditorPane {
 	/** 工具参数生成进度提示（流式更新，工具完成后自动消失） */
 	private _progressHintEl: HTMLElement | null = null;
 
+	// ── @mention 文件引用 ──────────────────────────────────────────────────
+
+	/** 检测输入框中是否触发了 @ */
+	private _checkMentionTrigger(): void {
+		const sel = window.getSelection();
+		if (!sel || sel.rangeCount === 0) { return; }
+		const range = sel.getRangeAt(0);
+		if (!range.collapsed) { this._hideMentionDropdown(); return; }
+
+		const node = range.startContainer;
+		if (node.nodeType !== Node.TEXT_NODE) { this._hideMentionDropdown(); return; }
+
+		const text = node.textContent || '';
+		const cursorPos = range.startOffset;
+
+		// 找到光标前最近的 @
+		const before = text.substring(0, cursorPos);
+		const atIdx = before.lastIndexOf('@');
+		if (atIdx === -1) { this._hideMentionDropdown(); return; }
+
+		const query = before.substring(atIdx + 1);
+		// @ 后面不能有空格或换行
+		if (query.includes(' ') || query.includes('\n')) { this._hideMentionDropdown(); return; }
+
+		// 搜索文件
+		this._searchFilesForMention(query).then(files => {
+			if (files.length === 0) { this._hideMentionDropdown(); return; }
+			this._showMentionDropdown(files, node as Text, atIdx, cursorPos);
+		}).catch(() => this._hideMentionDropdown());
+	}
+
+	/** 搜索工作区文件 */
+	private async _searchFilesForMention(query: string): Promise<string[]> {
+		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
+		if (workspaceFolders.length === 0) { return []; }
+		const rootUri = workspaceFolders[0].uri;
+
+		try {
+			const results = await this.fileService.resolve(rootUri, { resolveMetadata: false });
+			if (!results.children) { return []; }
+
+			// 简单递归收集文件路径（最多 20 个）
+			const files: string[] = [];
+			const collect = (children: typeof results.children, prefix: string) => {
+				for (const child of children) {
+					if (files.length >= 20) { break; }
+					const name = child.name;
+					const path = prefix ? `${prefix}/${name}` : name;
+					if (child.isDirectory) {
+						if (name === 'node_modules' || name === '.git' || name === 'dist' || name === 'build') { continue; }
+						// 不递归太深
+					} else {
+						if (!query || name.toLowerCase().includes(query.toLowerCase())) {
+							files.push(path);
+						}
+					}
+				}
+			};
+			collect(results.children, '');
+			return files;
+		} catch {
+			return [];
+		}
+	}
+
+	/** 显示 @mention 下拉列表 */
+	private _showMentionDropdown(files: string[], textNode: Text, atOffset: number, cursorOffset: number): void {
+		this._mentionItems = files;
+		this._mentionIndex = 0;
+
+		if (!this._mentionDropdown) {
+			this._mentionDropdown = document.createElement('div');
+			this._mentionDropdown.style.cssText = `
+				position: absolute;
+				bottom: 100%;
+				left: 12px;
+				right: 12px;
+				max-height: 200px;
+				overflow-y: auto;
+				background: var(--vscode-dropdown-background);
+				border: 1px solid var(--vscode-dropdown-border, rgba(128,128,128,0.4));
+				border-radius: 8px;
+				box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+				z-index: 10000;
+				padding: 4px 0;
+			`;
+			// 挂载到输入框的父容器
+			const inputParent = this.inputEl.parentElement;
+			if (inputParent) {
+				inputParent.style.position = 'relative';
+				inputParent.appendChild(this._mentionDropdown);
+			}
+		}
+
+		// 渲染列表
+		this._mentionDropdown.style.display = 'block';
+		while (this._mentionDropdown.firstChild) {
+			this._mentionDropdown.removeChild(this._mentionDropdown.firstChild);
+		}
+
+		files.forEach((file, idx) => {
+			const item = document.createElement('div');
+			item.style.cssText = `
+				padding: 6px 12px;
+				font-size: 12px;
+				cursor: pointer;
+				display: flex;
+				align-items: center;
+				gap: 6px;
+				color: var(--vscode-foreground);
+				${idx === this._mentionIndex ? 'background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.15));' : ''}
+			`;
+			const icon = document.createElement('span');
+			icon.className = 'codicon codicon-file';
+			icon.style.cssText = 'font-size:12px;opacity:0.6;flex-shrink:0;';
+			item.appendChild(icon);
+			const nameEl = document.createElement('span');
+			nameEl.textContent = file;
+			item.appendChild(nameEl);
+
+			item.addEventListener('mousedown', (e) => {
+				e.preventDefault();
+				this._insertMention(file, textNode, atOffset, cursorOffset);
+			});
+			item.addEventListener('mouseenter', () => {
+				this._mentionIndex = idx;
+				// 更新高亮
+				Array.from(this._mentionDropdown!.children).forEach((child, i) => {
+					(child as HTMLElement).style.background = i === idx
+						? 'var(--vscode-list-hoverBackground, rgba(128,128,128,0.15))'
+						: 'transparent';
+				});
+			});
+			this._mentionDropdown!.appendChild(item);
+		});
+
+		// 键盘导航
+		this.inputEl.addEventListener('keydown', this._mentionKeyHandler);
+	}
+
+	private _mentionKeyHandler = (e: KeyboardEvent): void => {
+		if (!this._mentionDropdown || this._mentionDropdown.style.display === 'none') { return; }
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			this._mentionIndex = Math.min(this._mentionIndex + 1, this._mentionItems.length - 1);
+			this._updateMentionHighlight();
+		} else if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			this._mentionIndex = Math.max(this._mentionIndex - 1, 0);
+			this._updateMentionHighlight();
+		} else if (e.key === 'Enter' || e.key === 'Tab') {
+			if (this._mentionItems.length > 0 && this._mentionIndex >= 0) {
+				e.preventDefault();
+				e.stopPropagation();
+				// 需要重新获取当前文本节点和偏移
+				const sel = window.getSelection();
+				if (sel && sel.rangeCount > 0) {
+					const range = sel.getRangeAt(0);
+					const node = range.startContainer as Text;
+					const text = node.textContent || '';
+					const atIdx = text.lastIndexOf('@', range.startOffset - 1);
+					this._insertMention(this._mentionItems[this._mentionIndex], node, atIdx, range.startOffset);
+				}
+			}
+		} else if (e.key === 'Escape') {
+			e.preventDefault();
+			this._hideMentionDropdown();
+		}
+	};
+
+	private _updateMentionHighlight(): void {
+		if (!this._mentionDropdown) { return; }
+		Array.from(this._mentionDropdown.children).forEach((child, i) => {
+			(child as HTMLElement).style.background = i === this._mentionIndex
+				? 'var(--vscode-list-hoverBackground, rgba(128,128,128,0.15))'
+				: 'transparent';
+		});
+		// 滚动到可见
+		const active = this._mentionDropdown.children[this._mentionIndex] as HTMLElement;
+		if (active) { active.scrollIntoView({ block: 'nearest' }); }
+	}
+
+	/** 插入 @file 引用 */
+	private _insertMention(filePath: string, textNode: Text, atOffset: number, cursorOffset: number): void {
+		// 替换 @query 为 @filePath
+		const text = textNode.textContent || '';
+		const before = text.substring(0, atOffset);
+		const after = text.substring(cursorOffset);
+
+		// 创建 mention chip
+		const chip = document.createElement('span');
+		chip.contentEditable = 'false';
+		chip.setAttribute('data-mention', filePath);
+		chip.style.cssText = `
+			display: inline-flex;
+			align-items: center;
+			gap: 3px;
+			background: rgba(99,132,255,0.15);
+			color: var(--vscode-textLink-foreground, #6384ff);
+			border-radius: 4px;
+			padding: 1px 6px;
+			font-size: 12px;
+			margin: 0 2px;
+			cursor: default;
+			vertical-align: baseline;
+		`;
+		const chipIcon = document.createElement('span');
+		chipIcon.className = 'codicon codicon-file';
+		chipIcon.style.cssText = 'font-size:11px;';
+		chip.appendChild(chipIcon);
+		chip.appendChild(document.createTextNode(filePath.split('/').pop() || filePath));
+
+		// 替换文本节点
+		const parent = textNode.parentNode!;
+		const beforeNode = document.createTextNode(before);
+		const afterNode = document.createTextNode(after.startsWith(' ') ? after : ' ' + after);
+
+		parent.insertBefore(beforeNode, textNode);
+		parent.insertBefore(chip, textNode);
+		parent.insertBefore(afterNode, textNode);
+		parent.removeChild(textNode);
+
+		// 光标移到 chip 后面
+		const sel = window.getSelection();
+		const range = document.createRange();
+		range.setStart(afterNode, afterNode.textContent?.startsWith(' ') ? 1 : 0);
+		range.collapse(true);
+		sel?.removeAllRanges();
+		sel?.addRange(range);
+
+		this._hideMentionDropdown();
+	}
+
+	private _hideMentionDropdown(): void {
+		if (this._mentionDropdown) {
+			this._mentionDropdown.style.display = 'none';
+		}
+		this.inputEl.removeEventListener('keydown', this._mentionKeyHandler);
+	}
+
 	private _updateProgressHint(text: string): void {
 		const container = this._getCurrentMsgContainer();
 
@@ -2793,9 +3127,22 @@ export class SoloEditorPane extends EditorPane {
 	// ── 发送消息 ──────────────────────────────────────────────────────────────
 
 	private async _sendMessage(): Promise<void> {
+		// 收集 @mention 的文件路径
+		const mentionChips = this.inputEl.querySelectorAll('[data-mention]');
+		const mentionedFiles: string[] = [];
+		mentionChips.forEach(chip => {
+			const filePath = chip.getAttribute('data-mention');
+			if (filePath) { mentionedFiles.push(filePath); }
+		});
+
 		// 用 innerText 而非 textContent，避免 contentEditable 内部 div/br 产生隐式换行
-		const text = (this.inputEl.innerText || '').replace(/\n+$/, '').replace(/^\n+/, '').trim();
+		let text = (this.inputEl.innerText || '').replace(/\n+$/, '').replace(/^\n+/, '').trim();
 		if (!text) { return; }
+
+		// 如果有 @mention 的文件，追加到消息末尾
+		if (mentionedFiles.length > 0) {
+			text += '\n\n<mentioned_files>\n' + mentionedFiles.map(f => `- ${f}`).join('\n') + '\n</mentioned_files>';
+		}
 		// 只阻止当前会话正在运行时的重复发送（其他会话并发运行不影响）
 		const currentSession = this._sessions.find(s => s.id === this._currentSessionId);
 		if (currentSession && currentSession.status === 'running') { return; }
