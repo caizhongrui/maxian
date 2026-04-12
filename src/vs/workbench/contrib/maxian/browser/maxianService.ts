@@ -580,6 +580,7 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private currentTaskCancelled: boolean = false;  // 标记当前任务是否已被取消，防止重复处理
 
 	// ─── Solo 模式多任务支持 ────────────────────────────────
+	private _soloApiHandler: IApiHandler | null = null; // 缓存 Solo 模式的 API handler
 	private readonly _soloTasks = new Map<string, ISoloTaskContext>();
 	/** 预加载的会话历史（IDE 重启后从文件恢复，首次发消息时注入） */
 	private readonly _soloPreloadedHistory = new Map<string, MessageParam[]>();
@@ -1909,12 +1910,14 @@ export class MaxianService extends Disposable implements IMaxianService {
 		}
 
 		const effectiveMode: Mode = 'solo';
-		// Solo 模式使用 code 模式的 API（IDE_CHAT_CODE），而不是默认的 ask 模式
-		let effectiveApiHandler = this.apiHandler;
-		const credentials = this.loadAuthCredentials();
-		if (credentials) {
-			effectiveApiHandler = this.apiFactory.createHandler(credentials, 'code');
+		// Solo 模式使用 code 模式的 API（IDE_CHAT_CODE），缓存避免每次创建
+		if (!this._soloApiHandler) {
+			const credentials = this.loadAuthCredentials();
+			if (credentials) {
+				this._soloApiHandler = this.apiFactory.createHandler(credentials, 'code');
+			}
 		}
+		const effectiveApiHandler = this._soloApiHandler || this.apiHandler;
 
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
 		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';

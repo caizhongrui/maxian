@@ -61,6 +61,8 @@ export interface ToolParameterSchema {
 	default?: any;
 	enum?: string[];
 	items?: ToolParameterSchema;
+	properties?: Record<string, ToolParameterSchema>;
+	required?: string[];
 }
 
 /**
@@ -523,7 +525,20 @@ export function registerBuiltinTools(): void {
 				type: 'object',
 				properties: {
 					path: { type: 'string', description: '文件路径' },
-					edits: { type: 'array', description: '编辑操作数组，每个元素为 {old_string: string, new_string: string, replace_all?: boolean}。同一文件的所有修改点必须放在一个 edits 数组中一次性提交，禁止拆分为多次 multiedit 调用' },
+					edits: {
+						type: 'array',
+						description: '编辑操作数组。同一文件的所有修改必须放在一个 edits 数组中一次提交',
+						items: {
+							type: 'object',
+							description: '单个编辑操作',
+							properties: {
+								old_string: { type: 'string', description: '要替换的原始文本（必须精确匹配文件内容）' },
+								new_string: { type: 'string', description: '替换后的新文本' },
+								replace_all: { type: 'boolean', description: '是否替换所有匹配项（默认false）' },
+							},
+							required: ['old_string', 'new_string'],
+						},
+					},
 				},
 				required: ['path', 'edits'],
 			},

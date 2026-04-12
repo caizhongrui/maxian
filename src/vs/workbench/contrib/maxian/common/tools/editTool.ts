@@ -224,9 +224,17 @@ export function executeEdit(
 
 /**
  * 格式化 Edit 结果为响应文本
+ * 成功时包含文件名和行数统计，帮助模型了解当前状态
  */
 export function formatEditResponse(result: EditResult): string {
-	return result.message;
+	if (!result.success || !result.newContent || !result.path) {
+		return result.message;
+	}
+
+	const filename = result.path.split('/').pop() || result.path;
+	const totalLines = result.newContent.split('\n').length;
+	const strategyHint = result.strategy === 'fuzzy' ? ' (fuzzy match)' : '';
+	return `Edit applied successfully.${strategyHint} File: ${filename} (${totalLines} lines)`;
 }
 
 /**

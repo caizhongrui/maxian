@@ -176,9 +176,9 @@ export class SearchTool {
 
 					if (results.size === 0) {
 						if (rawResults.size > 0) {
-							return `未找到匹配正则表达式 "${regex}" 的可用结果（原始命中 ${rawResults.size} 条均位于噪音目录，已自动过滤）。\n\n📁 搜索路径: "${searchPath}"${file_pattern ? '\n📄 文件模式: ' + file_pattern : ''}\n\n💡 提示：如需搜索构建产物目录，请把 path 明确指向该目录后重试。`;
+							return `No matches for "${regex}" (${rawResults.size} hits in ignored dirs). Try: search_files with explicit path.`;
 						}
-						return `未找到匹配正则表达式 "${regex}" 的内容。\n\n📁 搜索路径: "${searchPath}"${file_pattern ? '\n📄 文件模式: ' + file_pattern : ''}\n\n💡 建议：\n1. 检查正则表达式语法是否正确\n2. 或使用 codebase_search 进行关键词搜索\n3. 或使用 glob 工具按文件名搜索`;
+						return `No matches for "${regex}" in ${searchPath}${file_pattern ? ' (' + file_pattern + ')' : ''}. Try: glob or codebase_search.`;
 					}
 
 					// 按文件分组
@@ -248,12 +248,12 @@ export class SearchTool {
 				if (allFiles.length === 0) {
 					const dirExists = await this.checkDirectoryExists(searchPath);
 					if (!dirExists) {
-						return `未找到匹配的文件。\n\n📁 目录 "${searchPath}" 不存在。\n\n💡 建议：如果你需要创建文件，请逐步使用 write_to_file 创建，并在关键步骤后验证结果。`;
+						return `Directory "${searchPath}" does not exist.`;
 					} else {
 						if (allFilesRaw.length > 0) {
-							return `未找到匹配的文件（原始命中 ${allFilesRaw.length} 项均位于噪音目录，已自动过滤）。\n\n📁 搜索路径: "${searchPath}"\n📄 文件模式: "${includePattern}"\n\n💡 提示：如需搜索构建产物目录，请把 path 明确指向该目录后重试。`;
+							return `No files matching "${includePattern}" (${allFilesRaw.length} in ignored dirs). Try explicit path.`;
 						}
-						return `未找到匹配的文件。\n\n📁 目录 "${searchPath}" 存在但为空或没有匹配 "${includePattern}" 的文件。\n\n💡 建议：\n1. 检查目录路径是否正确\n2. 或使用 list_files 查看目录内容\n3. 或逐步创建所需文件并验证`;
+						return `No files matching "${includePattern}" in "${searchPath}". Try: list_files to see contents.`;
 					}
 				}
 

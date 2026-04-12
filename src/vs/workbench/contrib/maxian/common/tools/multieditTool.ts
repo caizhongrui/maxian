@@ -223,15 +223,16 @@ export function executeMultiedit(content: string, edits: EditOperation[]): Multi
  * 格式化 multiedit 结果为工具响应
  */
 export function formatMultieditResponse(result: MultieditResult, filePath: string): ToolResponse {
+	const filename = filePath.split('/').pop() || filePath;
 	if (result.success) {
-		return `Edit applied successfully.`;
+		const totalLines = result.finalContent ? result.finalContent.split('\n').length : 0;
+		return `Edit applied successfully. File: ${filename} (${result.successCount}/${result.totalCount} edits, ${totalLines} lines)`;
 	} else {
-		// 对齐 OpenCode 失败消息风格
 		const failedEdit = result.details.find(d => !d.success);
 		if (failedEdit?.error?.includes('multiple matches') || failedEdit?.error?.includes('多处匹配')) {
 			return `Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.`;
 		}
-		return `oldString not found in content\n\nFailed edit #${(result.details.find(d => !d.success)?.index ?? 0) + 1}: "${result.details.find(d => !d.success)?.oldString}"`;
+		return `oldString not found in content\n\nFailed edit #${(failedEdit?.index ?? 0) + 1}: "${failedEdit?.oldString}"`;
 	}
 }
 

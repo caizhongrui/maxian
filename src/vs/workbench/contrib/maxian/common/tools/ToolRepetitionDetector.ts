@@ -58,7 +58,6 @@ export class ToolRepetitionDetector {
 
 	// 同一文件反复写入检测
 	private fileWriteHistory: Array<{ file: string; tool: string; signature: string; timestamp: number }> = [];
-	private readonly FILE_WRITE_LOOP_THRESHOLD = 20; // 低多样性写入检测阈值
 	private readonly WRITE_TOOLS = new Set(['apply_diff', 'edit', 'write_to_file', 'multiedit', 'patch']);
 	private taskDelegationHistory: TaskDelegationEntry[] = [];
 	private readonly TASK_DELEGATION_LOOP_THRESHOLD = 2;
@@ -336,9 +335,7 @@ export class ToolRepetitionDetector {
 		);
 
 		const sameSignatureWrites = previousWrites.filter(e => e.signature === paramsHash);
-		const totalWritesIncludingCurrent = previousWrites.length + 1;
 		const sameSignatureWritesIncludingCurrent = sameSignatureWrites.length + 1;
-		const distinctSignatures = new Set(previousWrites.map(e => e.signature)).size + (previousWrites.some(e => e.signature === paramsHash) ? 0 : 1);
 		// 完全相同的写入参数重复提交 >= 3 次（同签名说明模型在无效重试同一个补丁）
 		if (sameSignatureWritesIncludingCurrent >= 3) {
 			return {
@@ -347,22 +344,7 @@ export class ToolRepetitionDetector {
 			};
 		}
 
-		// 如果每次写入的签名都不同（distinctSignatures 接近总次数），说明是有效推进（如修改多处CSS），放行
-		// 只有当重复签名比例很高（distinctSignatures <= 总次数的 30%）时才认为是死循环
-		const repetitionRatio = distinctSignatures / totalWritesIncludingCurrent;
-		if (repetitionRatio > 0.5) {
-			// 超过一半的写入是不同内容，说明在有效推进，不拦截
-			return { detected: false, message: '' };
-		}
-
-		// 低多样性写入：大量写入但内容变化很少，可能在做无效重试
-		if (totalWritesIncludingCurrent > this.FILE_WRITE_LOOP_THRESHOLD && distinctSignatures <= 3) {
-			return {
-				detected: true,
-				message: `🔴 检测到对同一文件的低效重复修改！文件 “${filePath}” 在短时间内已被写入 ${totalWritesIncludingCurrent} 次，但只有 ${distinctSignatures} 种不同的修改内容。\n\n请立即切换策略：\n1. 如果同一文件还要改多处，先完整读取当前版本，再合并成一次 multiedit\n2. 如果错误已经转移到其他文件，去查调用方、配置入口或引用方\n3. 如果当前修改实际上已经完成，直接总结并调用 attempt_completion`
-			};
-		}
-
+		// 只要签名有变化就放行——模型在有效推进
 		return { detected: false, message: '' };
 	}
 
