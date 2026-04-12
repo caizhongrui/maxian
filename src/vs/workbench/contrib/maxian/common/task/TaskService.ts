@@ -1322,10 +1322,8 @@ export class TaskService extends Disposable {
 					parseErrorForModel = (e instanceof Error ? e.message : String(e));
 					const inputStr = typeof chunk.input === 'string' ? chunk.input : JSON.stringify(chunk.input);
 					const inputLength = inputStr.length;
-					console.error(`[TaskService] 工具参数解析失败 (工具:${chunk.name}, 长度:${inputLength})`);
-					console.error('[TaskService] 错误信息:', e);
-					console.error('[TaskService] 参数内容预览 (前500字符):', inputStr.substring(0, 500));
-					console.error('[TaskService] 参数内容预览 (后500字符):', inputStr.substring(Math.max(0, inputLength - 500)));
+					console.log(`[ToolTrace] [ParseError] 工具参数解析失败 (工具:${chunk.name}, 长度:${inputLength}, 错误:${parseErrorForModel})`);
+					console.log(`[ToolTrace] [ParseError] 参数完整内容:`, inputStr);
 
 					// 🔧 修复：对于batch工具，尝试手动解析JSON（可能被大内容影响）
 					// chunk.name 可能因模型流式响应分块问题为空，同时通过 input 内容检测是否是 batch 调用

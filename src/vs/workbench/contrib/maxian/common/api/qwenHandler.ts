@@ -583,21 +583,86 @@ export function safeParseToolArguments(
 		// 继续 2d
 	}
 
-	// 2d. 未闭合字符串按最后一个 `"` 截断，再尝试补齐括号
-	const lastQuote = repaired.lastIndexOf('"');
-	if (lastQuote > 0) {
-		let candidate = repaired.substring(0, lastQuote + 1);
-		// 尝试补齐未闭合的 `{`/`[`
-		const openBraces = (candidate.match(/{/g) || []).length;
-		const closeBraces = (candidate.match(/}/g) || []).length;
-		const openBrackets = (candidate.match(/\[/g) || []).length;
-		const closeBrackets = (candidate.match(/]/g) || []).length;
-		candidate += ']'.repeat(Math.max(0, openBrackets - closeBrackets));
-		candidate += '}'.repeat(Math.max(0, openBraces - closeBraces));
+	// 2d. 状态机方式计算括号深度，正确处理字符串内的引号和括号
+	//     解决 SVG/HTML 等内容中包含大量 " 和 {} 导致简单正则计数失准的问题
+	{
+		// 首先尝试：关闭可能未闭合的字符串，再补齐括号
+		// 状态机扫描：跟踪是否在字符串内部
+		let inStr = false;
+		let esc = false;
+		const bracketStack: string[] = []; // 只记录字符串外的 { [
+		let lastValidPos = -1; // 最后一个有效 JSON 结构字符的位置
+
+		for (let i = 0; i < repaired.length; i++) {
+			const c = repaired[i];
+			if (esc) { esc = false; continue; }
+			if (c === '\\' && inStr) { esc = true; continue; }
+			if (c === '"') {
+				inStr = !inStr;
+				lastValidPos = i;
+				continue;
+			}
+			if (inStr) { continue; } // 字符串内的一切都跳过
+			if (c === '{' || c === '[') {
+				bracketStack.push(c);
+				lastValidPos = i;
+			} else if (c === '}') {
+				if (bracketStack.length > 0 && bracketStack[bracketStack.length - 1] === '{') {
+					bracketStack.pop();
+				}
+				lastValidPos = i;
+			} else if (c === ']') {
+				if (bracketStack.length > 0 && bracketStack[bracketStack.length - 1] === '[') {
+					bracketStack.pop();
+				}
+				lastValidPos = i;
+			} else if (c === ':' || c === ',' || c === ' ' || c === '\n' || c === '\r' || c === '\t') {
+				// JSON 结构字符，标记有效位置
+				if (c === ':' || c === ',') { lastValidPos = i; }
+			}
+		}
+
+		// 如果扫描结束时仍在字符串内，说明有未闭合的字符串
+		let candidate = repaired;
+		if (inStr) {
+			// 关闭未闭合的字符串
+			candidate += '"';
+		}
+		// 补齐未闭合的括号（从栈顶开始，按正确顺序关闭）
+		for (let i = bracketStack.length - 1; i >= 0; i--) {
+			candidate += bracketStack[i] === '[' ? ']' : '}';
+		}
+
 		try {
 			return { ok: true, value: JSON.parse(candidate), repaired: true };
 		} catch {
-			// fallthrough
+			// 尝试截断到 lastValidPos 再补齐
+			if (lastValidPos > 0 && lastValidPos < repaired.length - 1) {
+				let truncated = repaired.substring(0, lastValidPos + 1);
+				// 重新扫描截断后的内容
+				let inStr2 = false;
+				let esc2 = false;
+				const stack2: string[] = [];
+				for (let i = 0; i < truncated.length; i++) {
+					const c = truncated[i];
+					if (esc2) { esc2 = false; continue; }
+					if (c === '\\' && inStr2) { esc2 = true; continue; }
+					if (c === '"') { inStr2 = !inStr2; continue; }
+					if (inStr2) { continue; }
+					if (c === '{' || c === '[') { stack2.push(c); }
+					else if (c === '}' && stack2.length > 0 && stack2[stack2.length - 1] === '{') { stack2.pop(); }
+					else if (c === ']' && stack2.length > 0 && stack2[stack2.length - 1] === '[') { stack2.pop(); }
+				}
+				if (inStr2) { truncated += '"'; }
+				for (let i = stack2.length - 1; i >= 0; i--) {
+					truncated += stack2[i] === '[' ? ']' : '}';
+				}
+				try {
+					return { ok: true, value: JSON.parse(truncated), repaired: true };
+				} catch {
+					// fallthrough
+				}
+			}
 		}
 	}
 

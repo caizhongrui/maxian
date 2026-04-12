@@ -643,8 +643,8 @@ export class MaxianService extends Disposable implements IMaxianService {
 	private consoleSilenceInstalled = false;
 	private originalConsoleMethods: Partial<Pick<Console, 'log' | 'warn' | 'error' | 'info' | 'debug'>> | null = null;
 	private static readonly TOOL_TRACE_CONSOLE_PREFIX = '[ToolTrace]';
-	private static readonly HISTORY_SEED_MAX_MESSAGES = 24;
-	private static readonly HISTORY_SEED_MAX_CHARS = 80000;
+	private static readonly HISTORY_SEED_MAX_MESSAGES = 8;
+	private static readonly HISTORY_SEED_MAX_CHARS = 20000;
 	private static readonly PROMPT_PROFILE: 'full' | 'lean' = 'lean';
 	private static readonly TASK_STREAM_STALL_TIMEOUT_MS = 90000;
 	private static readonly SUB_AGENT_MAX_RUNTIME_MS = 120000;
@@ -1909,7 +1909,12 @@ export class MaxianService extends Disposable implements IMaxianService {
 		}
 
 		const effectiveMode: Mode = 'solo';
-		const effectiveApiHandler = this.apiHandler;
+		// Solo 模式使用 code 模式的 API（IDE_CHAT_CODE），而不是默认的 ask 模式
+		let effectiveApiHandler = this.apiHandler;
+		const credentials = this.loadAuthCredentials();
+		if (credentials) {
+			effectiveApiHandler = this.apiFactory.createHandler(credentials, 'code');
+		}
 
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
 		const workspaceRoot = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : '';
@@ -2149,6 +2154,21 @@ export class MaxianService extends Disposable implements IMaxianService {
 				}
 			}));
 
+			// Solo 模式：订阅工具参数流式进度，避免长参数生成时 UI 看起来卡住
+			ctx.eventDisposables.add(newTask.onToolInputStreaming(event => {
+				// 工具参数流式也算活跃，防止心跳看门狗误判超时
+				ctx!.lastStreamActivityTime = Date.now();
+				if (event.isPartial && event.input) {
+					const inputLen = typeof event.input === 'string' ? event.input.length : JSON.stringify(event.input).length;
+					this._onMessage.fire({
+						type: 'progress',
+						content: `${event.toolName} 生成中... ${inputLen} 字符`,
+						isPartial: true,
+						sessionId,
+					});
+				}
+			}));
+
 			ctx.eventDisposables.add(newTask.onUserInputRequired(({ toolUseId }) => {
 				ctx!.lastStreamActivityTime = Date.now();
 				ctx!.pendingUserInputRequestCount++;
@@ -2307,6 +2327,9 @@ export class MaxianService extends Disposable implements IMaxianService {
 
 		for (let index = history.length - 1; index >= 0; index--) {
 			const normalized = this.normalizeHistoryMessageForSeed(history[index]);
+			if (!normalized) {
+				continue; // 跳过被丢弃的消息（纯 tool_result / 纯 tool_use）
+			}
 			const chars = this.estimateMessageChars(normalized);
 			if (selected.length >= MaxianService.HISTORY_SEED_MAX_MESSAGES) {
 				break;
@@ -2318,21 +2341,77 @@ export class MaxianService extends Disposable implements IMaxianService {
 			totalChars += chars;
 		}
 
-		return selected;
+		return this.enforceMessageAlternation(selected);
 	}
 
-	private normalizeHistoryMessageForSeed(msg: MessageParam): MessageParam {
-		const cloned = this.cloneMessageParam(msg);
-		if (cloned.role === 'user' && typeof cloned.content === 'string') {
-			let content = cloned.content;
-			content = content.replace(/<environment_details>[\s\S]*?<\/environment_details>/g, '<environment_details>...省略...</environment_details>');
-			content = content.replace(/<repo_map>[\s\S]*?<\/repo_map>/g, '<repo_map>...省略...</repo_map>');
-			content = content.replace(/<preloaded_code>[\s\S]*?<\/preloaded_code>/g, '<preloaded_code>...省略...</preloaded_code>');
-			if (content.length > 12000) {
-				content = `${content.slice(0, 12000)}\n\n[...历史上下文已截断...]`;
+	/**
+	 * 确保消息序列满足 user/assistant 严格交替规则（API 要求）
+	 * 从头扫描，去掉破坏交替的消息；序列必须以 user 开头
+	 */
+	private enforceMessageAlternation(messages: MessageParam[]): MessageParam[] {
+		if (messages.length === 0) { return messages; }
+
+		const result: MessageParam[] = [];
+		let expectRole: 'user' | 'assistant' = 'user';
+
+		for (const msg of messages) {
+			if (msg.role === expectRole) {
+				result.push(msg);
+				expectRole = expectRole === 'user' ? 'assistant' : 'user';
 			}
-			cloned.content = content;
 		}
+
+		// 若最后一条是 user，去掉——seed 末尾应是 assistant，
+		// 这样新的用户消息追加后仍满足交替规则
+		if (result.length > 0 && result[result.length - 1].role === 'user') {
+			result.pop();
+		}
+
+		return result;
+	}
+
+	private normalizeHistoryMessageForSeed(msg: MessageParam): MessageParam | null {
+		const cloned = this.cloneMessageParam(msg);
+
+		if (cloned.role === 'user') {
+			if (typeof cloned.content === 'string') {
+				let content = cloned.content;
+				content = content.replace(/<environment_details>[\s\S]*?<\/environment_details>/g, '<environment_details>...省略...</environment_details>');
+				content = content.replace(/<repo_map>[\s\S]*?<\/repo_map>/g, '<repo_map>...省略...</repo_map>');
+				content = content.replace(/<preloaded_code>[\s\S]*?<\/preloaded_code>/g, '<preloaded_code>...省略...</preloaded_code>');
+				if (content.length > 6000) {
+					content = `${content.slice(0, 6000)}\n\n[...历史上下文已截断...]`;
+				}
+				cloned.content = content;
+				return cloned;
+			} else if (Array.isArray(cloned.content)) {
+				// Array 类型 user 消息 = tool_result 集合，只保留 text 类型块
+				const textBlocks = (cloned.content as any[]).filter(b => b.type === 'text');
+				if (textBlocks.length === 0) {
+					return null; // 纯 tool_result，直接丢弃
+				}
+				cloned.content = textBlocks;
+				return cloned;
+			}
+		}
+
+		if (cloned.role === 'assistant') {
+			if (Array.isArray(cloned.content)) {
+				// assistant 消息只保留 text 块，去掉所有 tool_use（写文件、编辑等调用记录）
+				const textBlocks = (cloned.content as any[]).filter(b => b.type === 'text');
+				if (textBlocks.length === 0) {
+					return null; // 纯工具调用的 assistant 消息，丢弃
+				}
+				cloned.content = textBlocks;
+				return cloned;
+			} else if (typeof cloned.content === 'string') {
+				if (!cloned.content.trim()) {
+					return null;
+				}
+				return cloned;
+			}
+		}
+
 		return cloned;
 	}
 

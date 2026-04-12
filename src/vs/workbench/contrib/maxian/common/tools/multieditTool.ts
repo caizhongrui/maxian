@@ -149,22 +149,17 @@ export function executeMultiedit(content: string, edits: EditOperation[]): Multi
 			};
 		}
 
-		// 检查 oldString 和 newString 是否相同
+		// oldString 和 newString 相同时静默跳过，不阻断后续编辑
 		if (edit.oldString === edit.newString) {
 			details.push({
 				index: i,
-				success: false,
+				success: true,
 				oldString: edit.oldString.substring(0, 50),
 				matchCount: 0,
-				error: 'oldString 和 newString 相同，无需修改',
+				error: '跳过: oldString 和 newString 相同',
 			});
-			return {
-				success: false,
-				successCount,
-				totalCount: edits.length,
-				error: `编辑 #${i + 1} 失败: oldString 和 newString 相同`,
-				details,
-			};
+			successCount++;
+			continue;
 		}
 
 		const exactMatchCount = currentContent.split(edit.oldString).length - 1;

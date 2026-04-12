@@ -451,6 +451,20 @@ export class FileOperationsTool {
 		const writeVisibility = this.resolveWriteVisibility(toolUse);
 		const fallbackPath = toolUse.params.path ? this.resolveFilePath(toolUse.params.path) : '(unknown)';
 
+		// 危险路径保护：拒绝写入敏感文件
+		const protectedPatterns = [
+			'.git/', 'node_modules/', '.env', '.env.local', '.env.production',
+			'.gitconfig', '.bashrc', '.zshrc', '.bash_profile', '.profile',
+			'.ssh/', '.claude/', '.maxian/',
+		];
+		const normalizedPath = fallbackPath.replace(/\\/g, '/');
+		const matchedPattern = protectedPatterns.find((p: string) =>
+			normalizedPath.includes(p) || normalizedPath.endsWith(p.replace(/\/$/, ''))
+		);
+		if (matchedPattern) {
+			return `Error: 文件 "${fallbackPath}" 匹配受保护路径规则 "${matchedPattern}"，拒绝写入。如确实需要修改，请用户手动操作。`;
+		}
+
 		try {
 			const prepared = await this.prepareWriteToFile(toolUse);
 			if ('error' in prepared) {

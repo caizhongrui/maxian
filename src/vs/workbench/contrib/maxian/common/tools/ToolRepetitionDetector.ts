@@ -22,13 +22,6 @@ interface ToolCallHistoryEntry {
 	path?: string;
 }
 
-interface FileActivityEntry {
-	file: string;
-	kind: 'read' | 'write';
-	tool: string;
-	timestamp: number;
-}
-
 interface TaskDelegationEntry {
 	key: string;
 	subagentType: string;
@@ -65,12 +58,8 @@ export class ToolRepetitionDetector {
 
 	// 同一文件反复写入检测
 	private fileWriteHistory: Array<{ file: string; tool: string; signature: string; timestamp: number }> = [];
-	private readonly FILE_WRITE_LOOP_THRESHOLD = 5; // 第五次写同一文件时开始评估高风险
-	private readonly SAME_FILE_SAME_TOOL_THRESHOLD = 3; // 同一种写入工具至少重复三次才进入高风险
-	private readonly READ_WRITE_OSCILLATION_WINDOW = 6;
+	private readonly FILE_WRITE_LOOP_THRESHOLD = 20; // 低多样性写入检测阈值
 	private readonly WRITE_TOOLS = new Set(['apply_diff', 'edit', 'write_to_file', 'multiedit', 'patch']);
-	private readonly READ_TOOLS = new Set(['read_file']);
-	private fileActivityHistory: FileActivityEntry[] = [];
 	private taskDelegationHistory: TaskDelegationEntry[] = [];
 	private readonly TASK_DELEGATION_LOOP_THRESHOLD = 2;
 
@@ -346,83 +335,42 @@ export class ToolRepetitionDetector {
 			e => e.file === filePath && e.timestamp < now
 		);
 
-		const sameToolWrites = previousWrites.filter(e => e.tool === toolUse.name);
 		const sameSignatureWrites = previousWrites.filter(e => e.signature === paramsHash);
 		const totalWritesIncludingCurrent = previousWrites.length + 1;
-		const sameToolWritesIncludingCurrent = sameToolWrites.length + 1;
 		const sameSignatureWritesIncludingCurrent = sameSignatureWrites.length + 1;
 		const distinctSignatures = new Set(previousWrites.map(e => e.signature)).size + (previousWrites.some(e => e.signature === paramsHash) ? 0 : 1);
-		if (sameSignatureWritesIncludingCurrent >= 2) {
+		// 完全相同的写入参数重复提交 >= 3 次（同签名说明模型在无效重试同一个补丁）
+		if (sameSignatureWritesIncludingCurrent >= 3) {
 			return {
 				detected: true,
-				message: `🔴 检测到对同一文件提交了重复写入参数！文件 "${filePath}" 已至少 2 次收到等价写入请求（同工具/同参数签名）。\n\n这通常是“未生效就重复提交同一补丁”或“写入内容完全一致”的无效重试。\n\n请立即切换策略：\n1. 先 read_file 确认当前文件是否已包含目标改动\n2. 若改动已存在，直接 attempt_completion\n3. 若未生效，重新定位并生成新的最小补丁，禁止继续提交等价参数`
+				message: `🔴 检测到对同一文件提交了重复写入参数！文件 “${filePath}” 已 ${sameSignatureWritesIncludingCurrent} 次收到完全相同的写入请求。\n\n请立即切换策略：\n1. 先 read_file 确认当前文件是否已包含目标改动\n2. 若改动已存在，直接 attempt_completion\n3. 若未生效，重新定位并生成新的最小补丁`
 			};
 		}
-		const sameFileHighRisk =
-			(totalWritesIncludingCurrent >= this.FILE_WRITE_LOOP_THRESHOLD && sameToolWritesIncludingCurrent >= this.SAME_FILE_SAME_TOOL_THRESHOLD) ||
-			(totalWritesIncludingCurrent > this.FILE_WRITE_LOOP_THRESHOLD && distinctSignatures <= 2);
-		if (
-			sameFileHighRisk
-		) {
+
+		// 如果每次写入的签名都不同（distinctSignatures 接近总次数），说明是有效推进（如修改多处CSS），放行
+		// 只有当重复签名比例很高（distinctSignatures <= 总次数的 30%）时才认为是死循环
+		const repetitionRatio = distinctSignatures / totalWritesIncludingCurrent;
+		if (repetitionRatio > 0.5) {
+			// 超过一半的写入是不同内容，说明在有效推进，不拦截
+			return { detected: false, message: '' };
+		}
+
+		// 低多样性写入：大量写入但内容变化很少，可能在做无效重试
+		if (totalWritesIncludingCurrent > this.FILE_WRITE_LOOP_THRESHOLD && distinctSignatures <= 3) {
 			return {
 				detected: true,
-				message: `🔴 检测到对同一文件的重复修改！文件 "${filePath}" 在短时间内已被写入 ${totalWritesIncludingCurrent} 次，其中同一种写入工具 "${toolUse.name}" 已重复 ${sameToolWritesIncludingCurrent} 次。\n\n这通常意味着你没有真正推进，只是在围绕同一个文件重试。\n\n请立即切换策略：\n1. 如果同一文件还要改多处，先完整读取当前版本，再合并成一次 multiedit\n2. 如果错误已经转移到其他文件，去查调用方、配置入口或引用方\n3. 如果当前修改实际上已经完成，直接总结并调用 attempt_completion`
+				message: `🔴 检测到对同一文件的低效重复修改！文件 “${filePath}” 在短时间内已被写入 ${totalWritesIncludingCurrent} 次，但只有 ${distinctSignatures} 种不同的修改内容。\n\n请立即切换策略：\n1. 如果同一文件还要改多处，先完整读取当前版本，再合并成一次 multiedit\n2. 如果错误已经转移到其他文件，去查调用方、配置入口或引用方\n3. 如果当前修改实际上已经完成，直接总结并调用 attempt_completion`
 			};
 		}
 
 		return { detected: false, message: '' };
 	}
 
-	private detectFileReadWriteOscillation(toolUse: ToolUse): { detected: boolean; message: string } {
-		const filePath = this.normalizePathValue((toolUse.params as any).path as string | undefined);
-		if (!filePath) {
-			return { detected: false, message: '' };
-		}
-
-		const kind: 'read' | 'write' | null = this.READ_TOOLS.has(toolUse.name)
-			? 'read'
-			: (this.WRITE_TOOLS.has(toolUse.name) ? 'write' : null);
-
-		if (!kind) {
-			return { detected: false, message: '' };
-		}
-
-		const now = Date.now();
-		const windowStart = now - this.TIME_WINDOW_MS;
-		this.fileActivityHistory.push({ file: filePath, kind, tool: toolUse.name, timestamp: now });
-		this.fileActivityHistory = this.fileActivityHistory.filter(entry => entry.timestamp >= windowStart);
-
-		const recentSameFile = this.fileActivityHistory.filter(entry => entry.file === filePath).slice(-this.READ_WRITE_OSCILLATION_WINDOW);
-		if (recentSameFile.length < this.READ_WRITE_OSCILLATION_WINDOW) {
-			return { detected: false, message: '' };
-		}
-
-		const kinds = recentSameFile.map(entry => entry.kind);
-		const isAlternating = kinds.every((entryKind, index) => index === 0 || entryKind !== kinds[index - 1]);
-		const writeCount = recentSameFile.filter(entry => entry.kind === 'write').length;
-		const readCount = recentSameFile.filter(entry => entry.kind === 'read').length;
-
-		if (!isAlternating || writeCount < 3 || readCount < 3) {
-			return { detected: false, message: '' };
-		}
-
-		// 错误驱动豁免：如果时间窗口内存在对同一文件的 lsp 调用，
-		// 说明模型是在"看诊断→改→再看→再改"的正常修复闭环中，不是无意义循环。
-		// 同样地，如果窗口内有 execute_command（通常是 build/test 失败）也豁免——
-		// 那是"build 报错→读→改→build"的正常修复路径。
-		const hasErrorSignal = this.toolCallHistory.some(entry =>
-			entry.timestamp >= windowStart &&
-			(entry.name === 'lsp' || entry.name === 'execute_command') &&
-			(entry.path === undefined || entry.path === filePath || entry.name === 'execute_command')
-		);
-		if (hasErrorSignal) {
-			return { detected: false, message: '' };
-		}
-
-		return {
-			detected: true,
-			message: `🔴 检测到同一文件的读写振荡！文件 "${filePath}" 在短时间内出现了 ${recentSameFile.map(entry => `${entry.kind}:${entry.tool}`).join(' → ')}。\n\n这表示你正在围绕同一文件反复读取、修改、再读取、再修改，而不是在推进任务。\n\n立即停止继续围绕这个文件打转，并改用不同策略：\n1. 先判断新增错误是否真的仍在这个文件中\n2. 如果同一文件还需要继续改，先完整 read_file 当前版本，再合并为一次 multiedit\n3. 如果错误已经在其他文件，转去查调用链或配置入口`
-		};
+	private detectFileReadWriteOscillation(_toolUse: ToolUse): { detected: boolean; message: string } {
+		// 已禁用：read→write→read→write 是合法的多步编辑模式（如 CSS 样式修改），
+		// 不应被检测为振荡。Claude Code 也没有此类检测。
+		// 真正的无效循环由 detectSameFileWriteLoop 的签名重复检测来捕获。
+		return { detected: false, message: '' };
 	}
 
 	private detectRepeatedTaskDelegation(toolUse: ToolUse): { detected: boolean; message: string } {
@@ -767,7 +715,6 @@ export class ToolRepetitionDetector {
 		this.lastRawWriteSignature = null;
 		this.toolCallHistory = [];
 		this.fileWriteHistory = [];
-		this.fileActivityHistory = [];
 		this.taskDelegationHistory = [];
 		this.recentErrorSignatures = [];
 		this.doomLoopDetected = false;

@@ -94,8 +94,12 @@ export class ToolExecutorImpl implements IToolExecutor {
 	 * 当前用户消息是否明确要求启动开发服务器 / 运行项目。
 	 * 由 maxianService 在每次接收到新用户消息时调用 noteUserMessageForServerIntent() 重新计算。
 	 * 默认 false —— 模型不得自行启动 dev server。
+	 * 当 ask_followup_question 确认后也会被设为 true。
 	 */
 	private userExplicitlyRequestedServerStart: boolean = false;
+
+	/** dev server 命令是否已被拦截过一次（第二次自动放行） */
+	private _serverBlockedOnce: boolean = false;
 
 	/**
 	 * 外部（maxianService）在每次接收到用户新消息时调用。
@@ -108,10 +112,9 @@ export class ToolExecutorImpl implements IToolExecutor {
 			return;
 		}
 		const msg = userMessage.toLowerCase();
-		// 中文意图
-		const zh = /(启动|运行起来|跑起来|启一下|开启服务|启服务|启动项目|启动一下|启动服务器|运行项目|运行一下)/;
-		// 英文意图 —— 必须与 "server" / "project" / "dev" / "app" 等语境词共现，
-		// 避免 "run the tests" 这类被误判
+		// 中文意图 —— "启动"必须与项目/服务/dev等共现，或使用明确的启动表达
+		const zh = /(启动|运行起来|跑起来|把项目跑|开启服务|启服务|npm\s*run\s*dev|启动dev)/;
+		// 英文意图 —— 必须与 "server" / "project" / "dev" / "app" 等语境词共现
 		const en = /\b(start|run|launch|boot|serve)\b[^.]{0,40}\b(server|project|app|dev|site|frontend|backend|service)\b/;
 		const enAlt = /\b(npm|pnpm|yarn|vite|next|nuxt)\s+(dev|start|run)\b/;
 		this.userExplicitlyRequestedServerStart = zh.test(userMessage) || en.test(msg) || enAlt.test(msg);
@@ -320,6 +323,9 @@ export class ToolExecutorImpl implements IToolExecutor {
 	}
 
 	async executeToolWithResult(toolUse: ToolUse): Promise<ToolExecutionResult> {
+		// 参数名标准化：兼容模型使用驼峰/下划线/别名等变体
+		this.normalizeToolParams(toolUse);
+
 		// P2-9: Agent 工具过滤检查
 		const agentName = this.context.agentName || 'build';
 		if (!isToolEnabledForAgent(agentName, toolUse.name as ToolName)) {
@@ -472,24 +478,25 @@ export class ToolExecutorImpl implements IToolExecutor {
 					// 模型经常在"写完代码"后自动 npm run dev 做冒烟测试，会把工具卡到超时，
 					// 且 UI 端没有进度条，最终也不成功，浪费大量上下文。
 					const cmdText = toolUse.params.command || '';
+					console.log(`[ToolTrace] [CmdCheck] cmd="${cmdText.substring(0, 80)}", isServer=${this.isLongRunningServerCommand(cmdText)}, userRequested=${this.userExplicitlyRequestedServerStart}`);
 					if (this.isLongRunningServerCommand(cmdText) && !this.userExplicitlyRequestedServerStart) {
-						result = `<error>
+						// 第一次拦截：记录被拦截的命令，提示模型去 ask_followup_question
+						// 如果已被拦截过一次（模型走了 ask 流程后再次调用），自动放行
+						if (this._serverBlockedOnce) {
+							// 第二次调用：说明模型已通过 ask_followup_question 获得用户确认，放行
+							this.userExplicitlyRequestedServerStart = true;
+							this._serverBlockedOnce = false;
+							console.log(`[ToolTrace] [CmdCheck] 第二次调用，自动放行`);
+						} else {
+							this._serverBlockedOnce = true;
+							result = `<error>
 [自动启动拦截] 禁止在未获得用户明确指令的情况下启动开发服务器 / 长时间运行的前台进程。
 命令: ${cmdText}
 
-原因：
-1. 这类命令是前台常驻进程，会把工具调用卡到超时
-2. UI 端没有服务器日志的实时进度显示
-3. 用户并没有要求启动项目，而是要求完成开发任务
-
-请改用以下方式验证你的修改：
-1. 运行静态构建命令（如 \`npm run build\` / \`vite build\` / \`tsc --noEmit\` / \`mvn -q -DskipTests compile\`）
-2. 调用 \`lsp\` 工具 operation=diagnostics 检查修改过的文件
-3. 直接 attempt_completion 并在 result 中说明"未启动 dev server，需要用户手动运行 \`${cmdText}\` 验证"
-
-如果确实需要启动，请用 ask_followup_question 询问用户是否授权启动。
+请用 ask_followup_question 询问用户是否授权启动。用户确认后再次调用此命令即可。
 </error>`;
-						break;
+							break;
+						}
 					}
 
 					// mvn 不可用拦截：本任务/会话中已确认 mvn 不存在 → 拒绝任何 mvn 相关命令
@@ -672,7 +679,7 @@ export class ToolExecutorImpl implements IToolExecutor {
 
 				// P1优化：多处编辑工具
 				case 'multiedit': {
-					const multieditPath = toolUse.params?.path as string || '';
+					const multieditPath = (toolUse.params?.path || (toolUse.params as any)?.file_path) as string || '';
 					if (multieditPath) { this.fileReadCount.delete(this.fileOperations.resolveFilePath(multieditPath)); }
 					result = await this.executeMultiedit(toolUse);
 					break;
@@ -1275,8 +1282,39 @@ export class ToolExecutorImpl implements IToolExecutor {
 		return true;
 	}
 
+	/**
+	 * 参数名标准化：模型可能使用驼峰或别名，统一映射到工具期望的参数名
+	 */
+	private normalizeToolParams(toolUse: ToolUse): void {
+		const p = toolUse.params as any;
+		// path 别名: file_path, filePath, target_file
+		if (!p.path && (p.file_path || p.filePath || p.target_file)) {
+			p.path = p.file_path || p.filePath || p.target_file;
+		}
+		// old_string 别名: oldString, old_text, oldText
+		if (!p.old_string && (p.oldString || p.old_text || p.oldText)) {
+			p.old_string = p.oldString || p.old_text || p.oldText;
+		}
+		// new_string 别名: newString, new_text, newText
+		if (!p.new_string && (p.newString || p.new_text || p.newText)) {
+			p.new_string = p.newString || p.new_text || p.newText;
+		}
+		// replace_all 别名: replaceAll
+		if (!p.replace_all && p.replaceAll !== undefined) {
+			p.replace_all = p.replaceAll;
+		}
+		// file_pattern 别名: filePattern, pattern, glob
+		if (!p.file_pattern && (p.filePattern || p.pattern || p.glob)) {
+			p.file_pattern = p.filePattern || p.pattern || p.glob;
+		}
+		// recursive 别名: isRecursive
+		if (p.recursive === undefined && p.isRecursive !== undefined) {
+			p.recursive = p.isRecursive;
+		}
+	}
+
 	private getAffectedPaths(toolUse: ToolUse): string[] {
-		const path = toolUse.params.path || toolUse.params.target_file;
+		const path = toolUse.params.path || toolUse.params.target_file || (toolUse.params as any).file_path;
 		if (path) {
 			return [this.fileOperations.resolveFilePath(path)];
 		}
@@ -1696,6 +1734,17 @@ ${formatTodoList(todos)}`;
 	private async executeEdit(toolUse: ToolUse): Promise<ToolResponse> {
 		const params = toolUse.params;
 
+		// 兼容参数名变体：file_path→path, oldString→old_string, newString→new_string
+		if (!params.path && (params as any).file_path) {
+			params.path = (params as any).file_path;
+		}
+		if (!params.old_string && (params as any).oldString) {
+			params.old_string = (params as any).oldString;
+		}
+		if (!params.new_string && (params as any).newString) {
+			params.new_string = (params as any).newString;
+		}
+
 		// 验证参数
 		const validation = validateEditParams({
 			path: params.path,
@@ -1761,11 +1810,11 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 
 			// 写入修改后的内容
 			// edit 后模型已知"原文 + 自己的 diff" = 完整新内容，标 'full' 让 manifest 归入 ✅，
-			// 避免模型在收尾时被引导重读自己刚改完的文件
+			// edit 后标 'derived'：模型知道 diff 但后续 read_file 应返回完整最新内容
 			const writeResult = await this.fileOperations.writeToFile({
 				type: 'tool_use',
 				name: 'write_to_file',
-				params: { path: editParams.path, content: result.newContent, write_visibility: 'full' },
+				params: { path: editParams.path, content: result.newContent, write_visibility: 'derived' },
 				partial: false,
 			} as any);
 			if (this.isFailureText(this.toTextResult(writeResult))) {
@@ -1880,7 +1929,14 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 	 * 参考 OpenCode multiedit.ts 实现
 	 */
 	private async executeMultiedit(toolUse: ToolUse): Promise<ToolResponse> {
-		const { path, edits } = toolUse.params;
+		// JSON 解析失败时，直接返回解析错误让模型换策略
+		if ((toolUse.params as any)?.__parseError) {
+			return `错误: multiedit 参数 JSON 解析失败，请改用 edit 工具逐个修改。原因: ${(toolUse.params as any).__parseError}`;
+		}
+
+		// 兼容 path / file_path 两种参数名
+		const path = toolUse.params.path || (toolUse.params as any).file_path;
+		const edits = toolUse.params.edits;
 
 		if (!path) {
 			return '错误: multiedit 工具需要 path 参数';
@@ -1954,11 +2010,12 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 			}
 
 			// 写入修改后的内容
-			// multiedit 后模型已知"原文 + 一组 diff" = 完整新内容，标 'full' 避免被引导重读
+			// multiedit 后标 'derived'：模型知道 diff 但不一定拥有完整文件的最新视图，
+			// 后续 read_file 应返回完整内容而非 FILE_UNCHANGED_STUB
 			const writeResult = await this.fileOperations.writeToFile({
 				type: 'tool_use',
 				name: 'write_to_file',
-				params: { path, content: result.finalContent, write_visibility: 'full' },
+				params: { path, content: result.finalContent, write_visibility: 'derived' },
 				partial: false,
 			} as any);
 			if (this.isFailureText(this.toTextResult(writeResult))) {
@@ -1977,7 +2034,13 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 	}
 
 	private async preflightMultieditToolUse(toolUse: ToolUse): Promise<ToolExecutionResult | null> {
-		const { path, edits } = toolUse.params;
+		if ((toolUse.params as any)?.__parseError) {
+			return this.createExecutionResult(toolUse, false, 'error',
+				`错误: multiedit 参数 JSON 解析失败，请改用 edit 工具逐个修改。原因: ${(toolUse.params as any).__parseError}`,
+				'multiedit JSON 解析失败');
+		}
+		const path = toolUse.params.path || (toolUse.params as any).file_path;
+		const edits = toolUse.params.edits;
 		if (!path) {
 			return this.createExecutionResult(toolUse, false, 'error', '错误: multiedit 工具需要 path 参数', 'multiedit 工具需要 path 参数');
 		}

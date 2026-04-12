@@ -523,7 +523,7 @@ export function registerBuiltinTools(): void {
 				type: 'object',
 				properties: {
 					path: { type: 'string', description: '文件路径' },
-					edits: { type: 'array', description: '编辑操作数组' },
+					edits: { type: 'array', description: '编辑操作数组，每个元素为 {old_string: string, new_string: string, replace_all?: boolean}。同一文件的所有修改点必须放在一个 edits 数组中一次性提交，禁止拆分为多次 multiedit 调用' },
 				},
 				required: ['path', 'edits'],
 			},

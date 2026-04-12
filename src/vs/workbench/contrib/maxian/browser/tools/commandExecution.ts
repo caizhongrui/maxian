@@ -64,6 +64,18 @@ export class CommandExecutionTool {
 	 * 通过 ICommandExecutionService 执行（主进程 IPC，完整输出捕获）
 	 * AbortSignal 不可通过 IPC 序列化，使用 commandId + cancel() 实现取消。
 	 */
+	/**
+	 * 检测命令是否是 dev server / 长时间运行进程
+	 */
+	private isDevServerCommand(cmd: string): boolean {
+		const c = cmd.trim().toLowerCase();
+		if (/\b(npm|pnpm|yarn|bun|npx)\b[^&;|]*\b(run\s+)?(dev|serve|start|preview)\b/.test(c)) { return true; }
+		if (/(^|[\s;&|`(])vite(\s+(dev|serve|preview))?(\s|$)/.test(c)) { return true; }
+		if (/(^|[\s;&|`(])(next|nuxt|remix|astro)\s+(dev|start|serve)/.test(c)) { return true; }
+		if (/python[23]?\s+manage\.py\s+runserver/.test(c)) { return true; }
+		return false;
+	}
+
 	private async executeWithService(command: string, cwd?: string, abortSignal?: AbortSignal): Promise<ToolResponse> {
 		const commandId = generateUuid();
 
@@ -84,10 +96,15 @@ export class CommandExecutionTool {
 			abortSignal.addEventListener('abort', abortHandler, { once: true });
 		}
 
+		// dev server 类命令：用短超时（15秒），启动成功后立即返回
+		const isDevServer = this.isDevServerCommand(command);
+		const timeout = isDevServer ? 15_000 : 60_000;
+
 		try {
 			const result = await this.commandExecutionService!.execute(command, {
 				cwd,
-				commandId
+				commandId,
+				timeout,
 			});
 
 			const outputParts: string[] = [];
@@ -99,8 +116,15 @@ export class CommandExecutionTool {
 			}
 
 			const metadata: string[] = [];
-			if (result.timedOut) {
-				metadata.push('命令超时（120秒后终止）');
+			if (result.timedOut && isDevServer) {
+				// dev server 超时 = 启动成功（进程仍在后台运行）
+				const output = (result.stdout || '') + (result.stderr || '');
+				const hasReadySignal = /ready|listening|started|running|Local:/i.test(output);
+				metadata.push(hasReadySignal
+					? '✅ 服务已启动成功（进程在后台运行）'
+					: '⚠️ 服务启动中（未检测到 ready 信号，请手动确认）');
+			} else if (result.timedOut) {
+				metadata.push('命令超时后终止');
 			}
 			if (result.aborted || abortSignal?.aborted) {
 				metadata.push('命令被用户中止');

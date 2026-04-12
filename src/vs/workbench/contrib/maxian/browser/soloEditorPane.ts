@@ -1414,7 +1414,7 @@ export class SoloEditorPane extends EditorPane {
 		try {
 			const stored = this._sessions.map(s => {
 				const history = this.maxianService.getSoloSessionHistory(s.id);
-				console.log(`[ToolTrace] [Solo-Save] session=${s.id.slice(-6)}, historyLen=${history.length}`);
+				// Solo-Save 日志已移除
 				return {
 					id: s.id,
 					title: s.title,
@@ -1513,6 +1513,10 @@ export class SoloEditorPane extends EditorPane {
 				else { this._updateSessionStatus(event.sessionId!, 'done'); }
 				break;
 
+			case 'progress':
+				if (isCurrentSession) { this._updateProgressHint(event.content); }
+				break;
+
 			case 'error':
 				this._appendErrorBubble(event.content);
 				if (isCurrentSession) { this._setRunning(false); }
@@ -1530,6 +1534,7 @@ export class SoloEditorPane extends EditorPane {
 					break;
 				case 'completion_result':
 					this._closeToolBatch();
+					this._appendCompletionDone(msg.text || '');
 					break;
 				case 'file_changes':
 					this._appendFileChangesSummary(msg.text || '');
@@ -1543,7 +1548,7 @@ export class SoloEditorPane extends EditorPane {
 	private _handleAskMessage(msg: ClineMessage, isCurrentSession: boolean = true): void {
 		switch (msg.ask) {
 			case 'completion_result':
-				this._appendCompletionDone();
+				this._appendCompletionDone(msg.text || '');
 				this._pendingAskTs = null;
 				this.maxianService.handleAskResponse(msg.ts, 'yesButtonClicked', undefined, undefined, this._currentSessionId || undefined);
 				if (isCurrentSession) { this._setRunning(false); }
@@ -1578,8 +1583,9 @@ export class SoloEditorPane extends EditorPane {
 	}
 
 	/** Solo 模式任务完成提示（无需用户确认，自动接受） */
-	private _appendCompletionDone(): void {
+	private _appendCompletionDone(text?: string): void {
 		this._closeToolBatch();
+		this._collapseReasoning();
 		const container = this._getCurrentMsgContainer();
 
 		const bar = document.createElement('div');
@@ -1590,9 +1596,12 @@ export class SoloEditorPane extends EditorPane {
 			background: rgba(78,201,176,0.06);
 			border: 1px solid rgba(78,201,176,0.2);
 			display: flex;
-			align-items: center;
-			gap: 8px;
+			flex-direction: column;
+			gap: 6px;
 		`;
+
+		const headerRow = document.createElement('div');
+		headerRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
 
 		const icon = document.createElement('span');
 		icon.className = 'codicon codicon-check-all';
@@ -1602,8 +1611,23 @@ export class SoloEditorPane extends EditorPane {
 		label.style.cssText = 'font-weight:600;color:var(--vscode-charts-green,#4EC9B0);font-size:13px;';
 		label.textContent = '任务已完成';
 
-		bar.appendChild(icon);
-		bar.appendChild(label);
+		headerRow.appendChild(icon);
+		headerRow.appendChild(label);
+		bar.appendChild(headerRow);
+
+		if (text) {
+			const desc = document.createElement('div');
+			desc.style.cssText = `
+				font-size: 13px;
+				line-height: 1.6;
+				color: var(--vscode-foreground);
+				word-break: break-word;
+				padding-left: 2px;
+			`;
+			this._renderMarkdown(text, desc);
+			bar.appendChild(desc);
+		}
+
 		container.appendChild(bar);
 		this._scrollToBottom();
 	}
@@ -1765,10 +1789,10 @@ export class SoloEditorPane extends EditorPane {
 			const filePath: string = parsed.path || '';
 			if (!filePath) { return; }
 
-			const fileTools = ['write_to_file', 'create_file', 'read_file', 'edit_file', 'apply_diff', 'str_replace'];
+			const fileTools = ['write_to_file', 'create_file', 'read_file', 'edit_file', 'edit', 'multiedit', 'apply_diff', 'str_replace', 'patch'];
 			if (!fileTools.some(t => tool.includes(t))) { return; }
 
-			const isWrite = ['write_to_file', 'create_file', 'edit_file', 'apply_diff', 'str_replace'].some(t => tool.includes(t));
+			const isWrite = ['write_to_file', 'create_file', 'edit_file', 'edit', 'multiedit', 'apply_diff', 'str_replace', 'patch'].some(t => tool.includes(t));
 			const uri = URI.file(filePath);
 
 			if (isWrite) {
@@ -2042,6 +2066,7 @@ export class SoloEditorPane extends EditorPane {
 	}
 
 	private _appendOrUpdateAIText(text: string): void {
+		this._clearProgressHint();
 		if (!this.lastAiBubble) {
 			// 新建 AI 气泡：关闭当前工具批次和思考过程
 			this._closeToolBatch();
@@ -2195,6 +2220,7 @@ export class SoloEditorPane extends EditorPane {
 	 * 新的 AI 文本气泡或用户消息出现时，自动关闭当前批次
 	 */
 	private _appendToolLog(msg: ClineMessage): void {
+		this._clearProgressHint(); // 工具到达时清除生成进度提示
 		let toolName = '';
 		let toolTarget = '';
 
@@ -2374,19 +2400,52 @@ export class SoloEditorPane extends EditorPane {
 		if (!text) { return; }
 		const container = this._getCurrentMsgContainer();
 
+		// 尝试解析 JSON 格式的文件变更
+		let written: string[] = [];
+		let deleted: string[] = [];
+		try {
+			const parsed = JSON.parse(text);
+			written = (parsed.written || []).map((f: string) => f.split('/').pop() || f);
+			deleted = (parsed.deleted || []).map((f: string) => f.split('/').pop() || f);
+		} catch {
+			// 非 JSON 格式，跳过
+			return;
+		}
+
+		if (written.length === 0 && deleted.length === 0) { return; }
+
 		const row = document.createElement('div');
 		row.className = 'solo-file-changes';
 		row.style.cssText = `
-			padding: 8px 12px;
+			padding: 6px 10px;
 			border-radius: 6px;
-			background: rgba(128,128,128,0.06);
-			border: 1px solid rgba(128,128,128,0.15);
+			background: rgba(128,128,128,0.04);
+			border: 1px solid rgba(128,128,128,0.12);
 			font-size: 11px;
 			color: var(--vscode-descriptionForeground);
-			white-space: pre-wrap;
-			word-break: break-word;
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			flex-wrap: wrap;
 		`;
-		row.textContent = text;
+
+		const icon = document.createElement('span');
+		icon.className = 'codicon codicon-file';
+		icon.style.cssText = 'font-size:11px;flex-shrink:0;opacity:0.6;';
+		row.appendChild(icon);
+
+		if (written.length > 0) {
+			const span = document.createElement('span');
+			span.textContent = `已修改 ${written.join('、')}`;
+			row.appendChild(span);
+		}
+		if (deleted.length > 0) {
+			const span = document.createElement('span');
+			span.style.color = 'var(--vscode-errorForeground, #f44)';
+			span.textContent = `已删除 ${deleted.join('、')}`;
+			row.appendChild(span);
+		}
+
 		container.appendChild(row);
 		this._scrollToBottom();
 	}
@@ -2418,6 +2477,46 @@ export class SoloEditorPane extends EditorPane {
 		row.appendChild(errText);
 		container.appendChild(row);
 		this._scrollToBottom();
+	}
+
+	/** 工具参数生成进度提示（流式更新，工具完成后自动消失） */
+	private _progressHintEl: HTMLElement | null = null;
+
+	private _updateProgressHint(text: string): void {
+		const container = this._getCurrentMsgContainer();
+
+		if (!this._progressHintEl) {
+			this._progressHintEl = document.createElement('div');
+			this._progressHintEl.style.cssText = `
+				padding: 4px 10px;
+				font-size: 11px;
+				color: var(--vscode-descriptionForeground);
+				opacity: 0.7;
+				display: flex;
+				align-items: center;
+				gap: 6px;
+			`;
+			const spinner = document.createElement('span');
+			spinner.className = 'codicon codicon-loading codicon-modifier-spin';
+			spinner.style.cssText = 'font-size:11px;flex-shrink:0;';
+			this._progressHintEl.appendChild(spinner);
+			const label = document.createElement('span');
+			label.setAttribute('data-role', 'progress-text');
+			this._progressHintEl.appendChild(label);
+			container.appendChild(this._progressHintEl);
+		}
+
+		const label = this._progressHintEl.querySelector('[data-role="progress-text"]') as HTMLSpanElement;
+		if (label) { label.textContent = text; }
+		this._scrollToBottom();
+	}
+
+	/** 工具完成后清除进度提示 */
+	private _clearProgressHint(): void {
+		if (this._progressHintEl) {
+			this._progressHintEl.remove();
+			this._progressHintEl = null;
+		}
 	}
 
 	// ── Markdown 渲染 ──────────────────────────────────────────────────────────

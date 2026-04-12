@@ -570,30 +570,28 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 			this._register(this.windowTitle.onDidChange(() => this.updateWorkspaceButton()));
 		}
 
-		// IDE / CODING mode segmented toggle pill
+		// IDE / CODING mode segmented toggle pill（图标版）
 		if (!this.isAuxiliary) {
 			const modePill = append(this.leftContent, $('div.mode-toggle-pill'));
 			modePill.setAttribute('role', 'group');
 			modePill.setAttribute('aria-label', 'Mode Toggle');
 			modePill.style.setProperty('-webkit-app-region', 'no-drag');
 
-			// IDE 段
+			// IDE 段 — 图标
 			const ideSegEl = append(modePill, $('span.mode-seg.ide-seg'));
-			ideSegEl.textContent = 'IDE';
+			const ideIcon = append(ideSegEl, $('span.codicon.codicon-comment-discussion'));
+			ideIcon.style.fontSize = '13px';
 			ideSegEl.setAttribute('role', 'button');
 			ideSegEl.setAttribute('tabindex', '0');
-			ideSegEl.title = '切换到 IDE 模式';
+			ideSegEl.title = 'IDE 模式';
 
-			// 分隔线
-			const dividerEl = append(modePill, $('span.mode-seg-divider'));
-			dividerEl.setAttribute('aria-hidden', 'true');
-
-			// CODING 段
+			// CODING 段 — 图标
 			const codingSegEl = append(modePill, $('span.mode-seg.coding-seg'));
-			codingSegEl.textContent = 'CODING';
+			const codingIcon = append(codingSegEl, $('span.codicon.codicon-zap'));
+			codingIcon.style.fontSize = '13px';
 			codingSegEl.setAttribute('role', 'button');
 			codingSegEl.setAttribute('tabindex', '0');
-			codingSegEl.title = '切换到 Coding Agent 模式';
+			codingSegEl.title = 'Coding 模式（自动批准）';
 
 			const updateModePill = () => {
 				const isSolo = this.editorService.activeEditor?.typeId === 'maxian.solo.input';
