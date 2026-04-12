@@ -292,6 +292,8 @@ export class TaskService extends Disposable {
 
 	// 全局 API 轮次计数器：recursivelyMakeClineRequests 每次递归调用 +1，超过上限强制终止
 	private totalApiRounds = 0;
+	// manifest hash：只在文件清单变化时追加，避免每轮重复
+	private _lastManifestKey = '';
 	private static readonly MAX_TOTAL_API_ROUNDS = 80; // 超过80轮 API 调用，强制询问用户
 
 	// 功能2: Debug 自动测试循环计数器
@@ -920,11 +922,14 @@ export class TaskService extends Disposable {
 			}
 
 			noProgressRounds++;
-			if (noProgressRounds <= 2) {
-				this.pushHistory({
-					role: 'user',
-					content: '[SYSTEM] 上一轮没有形成可交付结果。请立即选择一种推进方式：1) 若已完成，调用 attempt_completion 并给出结果摘要；2) 若未完成，调用必要工具继续推进（避免重复读写同一文件）。'
-				});
+			if (noProgressRounds <= 3) {
+				// 放宽到 3 轮：模型可能在分析文件内容后决定下一步，不需要被提前打断
+				if (noProgressRounds === 3) {
+					this.pushHistory({
+						role: 'user',
+						content: '[SYSTEM] 连续 3 轮无工具调用。请立即调用工具推进或 attempt_completion。'
+					});
+				}
 				continue;
 			}
 
@@ -1776,8 +1781,7 @@ export class TaskService extends Disposable {
 		}
 
 		// 每轮在最后一个 tool_result 尾部追加"已读文件上下文清单"
-		// 引导模型复用历史中的内容，避免重复 read_file；随着当轮 tool_result 一起进历史，
-		// 不额外占用独立消息，也不破坏 prefix cache 前缀稳定性
+		// 优化：只在清单实际变化时追加，避免每轮重复相同信息浪费 tokens
 		try {
 			const execAny = this.toolExecutor as any;
 			if (toolResults.length > 0 && typeof execAny?.getFileStateCache === 'function') {
@@ -1785,34 +1789,32 @@ export class TaskService extends Disposable {
 				if (cache && typeof cache.buildManifest === 'function') {
 					const manifest = cache.buildManifest(this.workspaceRoot);
 					if (manifest.unchanged.length > 0 || manifest.modifiedByTool.length > 0 || manifest.partial.length > 0) {
-						const lines: string[] = ['', '---', '# 已读文件上下文（每轮自动更新，复用规则）'];
-						if (manifest.unchanged.length > 0) {
-							lines.push('');
-							lines.push('✅ 下列文件的完整内容已在对话历史中且未被修改——禁止再次 read_file，直接从历史中引用内容构造 edit/multiedit 的 old_string：');
-							for (const f of manifest.unchanged) { lines.push(`  - ${f}`); }
-						}
-						if (manifest.modifiedByTool.length > 0) {
-							lines.push('');
-							lines.push('⚠️ 下列文件你已通过工具写入/修改，历史中是旧内容；若需要当前完整状态必须重新 read_file：');
-							for (const f of manifest.modifiedByTool) { lines.push(`  - ${f}`); }
-						}
-						if (manifest.partial.length > 0) {
-							lines.push('');
-							lines.push('⚠️ 下列文件你只看过局部范围；若要改其他位置需补读：');
-							for (const f of manifest.partial) { lines.push(`  - ${f}`); }
-						}
-						const manifestText = lines.join('\n');
-						const last: any = toolResults[toolResults.length - 1];
-						if (last && last.type === 'tool_result') {
-							if (typeof last.content === 'string') {
-								last.content = last.content + manifestText;
-							} else if (Array.isArray(last.content)) {
-								// 尝试在最后一个 text block 追加，否则新增 text block
-								const lastBlock = last.content[last.content.length - 1];
-								if (lastBlock && lastBlock.type === 'text' && typeof lastBlock.text === 'string') {
-									lastBlock.text = lastBlock.text + manifestText;
-								} else {
-									last.content.push({ type: 'text', text: manifestText });
+						// 只在 manifest 实际变化时追加，避免每轮重复浪费 tokens
+						const manifestKey = [...manifest.unchanged, '|', ...manifest.modifiedByTool, '|', ...manifest.partial].join(',');
+						if (manifestKey !== this._lastManifestKey) {
+							this._lastManifestKey = manifestKey;
+							const lines: string[] = ['', '---', '# 已读文件上下文'];
+							if (manifest.unchanged.length > 0) {
+								lines.push('✅ 已读未改（直接引用历史内容）: ' + manifest.unchanged.join(', '));
+							}
+							if (manifest.modifiedByTool.length > 0) {
+								lines.push('⚠️ 已修改（需重新 read_file）: ' + manifest.modifiedByTool.join(', '));
+							}
+							if (manifest.partial.length > 0) {
+								lines.push('⚠️ 局部读取: ' + manifest.partial.join(', '));
+							}
+							const manifestText = lines.join('\n');
+							const last: any = toolResults[toolResults.length - 1];
+							if (last && last.type === 'tool_result') {
+								if (typeof last.content === 'string') {
+									last.content = last.content + manifestText;
+								} else if (Array.isArray(last.content)) {
+									const lastBlock = last.content[last.content.length - 1];
+									if (lastBlock && lastBlock.type === 'text' && typeof lastBlock.text === 'string') {
+										lastBlock.text = lastBlock.text + manifestText;
+									} else {
+										last.content.push({ type: 'text', text: manifestText });
+									}
 								}
 							}
 						}

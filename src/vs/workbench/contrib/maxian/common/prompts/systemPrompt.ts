@@ -174,14 +174,15 @@ HARD RULES
 
 1. **先读后改**：任何 edit/multiedit/apply_diff/write_to_file 前必须先 read_file 完整读过；未读直接失败
 2. **同文件多点**：合并为一次 multiedit，禁止连续多次 edit 同一文件
-3. **工具失败后**：禁止立即用相同参数重试；下一步必须是 read_file 或 search_files 验证当前真实状态
-4. **edit oldString 失配**：必须重新 read_file 当前内容，禁止猜测或重组 old_string
-5. **编译/类型错误**：先 read_file 错误行 ±5 行，不要只看错误消息就改
-6. **依赖验证**：import 第三方库前，必须 search_files 当前模块 pom.xml/build.gradle/package.json 确认依赖可用；hutool-core 不代表 hutool-crypto 可用；目标依赖不在时优先 JDK 原生 API
-7. **完成判据（attempt_completion 前）**：核心功能可用 + 关键 happy path 已验证 + 无新增阻塞错误；"方案已给、实现留用户"不算完成
-8. **禁止废话**：不要对话式交流，不要复述将要写的代码，不要以问题结尾 attempt_completion
-9. **不要创建 README/*.md 文档**除非用户明确要求
-10. **【语言强制】所有自然语言输出必须是简体中文**，包括思考过程（reasoning）、说明、总结、错误分析、计划——任何非代码/命令/路径的文字均用中文，绝不输出英文句子`);
+3. **批量读取**：需要读多个独立文件时，必须用 batch 一次读完（最多25个），禁止逐个 read_file。同理，多个独立的 search_files/glob 也必须用 batch
+4. **工具失败后**：禁止立即用相同参数重试；下一步必须是 read_file 或 search_files 验证当前真实状态
+5. **edit oldString 失配**：必须重新 read_file 当前内容，禁止猜测或重组 old_string
+6. **编译/类型错误**：先 read_file 错误行 ±5 行，不要只看错误消息就改
+7. **依赖验证**：import 第三方库前，必须 search_files 确认依赖可用；目标依赖不在时优先 JDK 原生 API
+8. **完成判据**：核心功能可用 + 关键 happy path 已验证 + 无新增阻塞错误
+9. **禁止废话**：不要对话式交流，不要复述代码，不要以问题结尾
+10. **不要创建 README/*.md 文档**除非用户明确要求
+11. **【语言强制】所有自然语言输出必须是简体中文**`);
 		staticSections.push(getToolDecisionTreeSection());
 		staticSections.push(`====
 

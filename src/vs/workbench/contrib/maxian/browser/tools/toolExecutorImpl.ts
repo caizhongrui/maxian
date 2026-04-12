@@ -1823,7 +1823,7 @@ old_string 和 new_string 完全相同，这是一个无效操作。
 
 			return this.appendDiagnosticDelta(
 				resolvedEditPath,
-				formatEditResponse(result) + partialViewWarning,
+				formatEditResponse(result, editParams.new_string) + partialViewWarning,
 				baseline
 			);
 		} catch (error) {

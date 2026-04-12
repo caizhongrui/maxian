@@ -43,9 +43,9 @@ TOOL USE GUIDELINES
 - 禁止把“完整结构 / 所有文件 / 整个模块 / 完整返回每个文件内容”这种宽泛普查直接交给 explore
 - 禁止为了“更稳妥”把 controller / service / mapper / dto / xml 全部先搜完再动手
 
-## batch工具（并行执行，主要用于只读探索）
+## batch工具（并行执行，减少 API 往返）
 
-需要执行多个彼此独立的只读操作时，可以用 batch 合并。简单任务、有关联的步骤、以及写入操作，不要为了使用 batch 而强行重组步骤。
+多个独立的只读操作（read_file、search_files、glob、list_files）**必须**放入 batch 并行执行。这是减少往返次数最有效的方式——5个文件从5轮变为1轮。写操作不要放入 batch。
 
 定位阶段（搜索并行）：
 \`\`\`json

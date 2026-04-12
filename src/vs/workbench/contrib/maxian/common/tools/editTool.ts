@@ -226,15 +226,35 @@ export function executeEdit(
  * 格式化 Edit 结果为响应文本
  * 成功时包含文件名和行数统计，帮助模型了解当前状态
  */
-export function formatEditResponse(result: EditResult): string {
+export function formatEditResponse(result: EditResult, newString?: string): string {
 	if (!result.success || !result.newContent || !result.path) {
 		return result.message;
 	}
 
 	const filename = result.path.split('/').pop() || result.path;
-	const totalLines = result.newContent.split('\n').length;
+	const lines = result.newContent.split('\n');
+	const totalLines = lines.length;
 	const strategyHint = result.strategy === 'fuzzy' ? ' (fuzzy match)' : '';
-	return `Edit applied successfully.${strategyHint} File: ${filename} (${totalLines} lines)`;
+
+	let contextSnippet = '';
+	if (newString && result.newContent) {
+		// 定位修改区域：找到 new_string 首行在新内容中的位置
+		const newFirstLine = newString.split('\n')[0].trim();
+		if (newFirstLine.length > 5) {
+			const lineIdx = lines.findIndex(l => l.trim().includes(newFirstLine));
+			if (lineIdx >= 0) {
+				// 提取修改区域前后各 3 行
+				const start = Math.max(0, lineIdx - 2);
+				const end = Math.min(lines.length, lineIdx + newString.split('\n').length + 2);
+				const snippet = lines.slice(start, end)
+					.map((l, i) => `${start + i + 1} | ${l}`)
+					.join('\n');
+				contextSnippet = `\n\nContext (lines ${start + 1}-${end}):\n${snippet}`;
+			}
+		}
+	}
+
+	return `Edit applied successfully.${strategyHint} File: ${filename} (${totalLines} lines)${contextSnippet}`;
 }
 
 /**
