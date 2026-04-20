@@ -310,6 +310,9 @@ export class ToolExecutorImpl implements IToolExecutor {
 	}
 
 	async preflightToolUse(toolUse: ToolUse): Promise<ToolExecutionResult | null> {
+		// 预检查前先标准化参数名（file_path→path、oldString→old_string 等），
+		// 否则模型使用驼峰/别名时会误报"未提供文件路径"
+		this.normalizeToolParams(toolUse);
 		switch (toolUse.name) {
 			case 'write_to_file':
 				return this.preflightWriteToFileToolUse(toolUse);
